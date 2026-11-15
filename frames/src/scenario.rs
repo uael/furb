@@ -515,7 +515,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("b", &[Act::Type("Read the trace of the open."), Act::Key("Enter")], "3%"),
         // The share is the head of the box beside the list, or the ring of the launcher while the
         // list hides: either opens each part of the box.
-        step("x-top", &[Act::Pointer { on: "3%", button: 0 }], "From the cache"),
+        step("x-top", &[Act::Pointer { on: "3%", button: 0 }], "Engine"),
+        // A click on the bar shows the cache, and the key of the context steps the box to fold.
+        step("e", &[Act::Pointer { on: "━━━━", button: 0 }], "From the cache"),
+        step("f", &[Act::Key("C-x"), Act::Key("c")], "3%"),
       ],
     }),
   },

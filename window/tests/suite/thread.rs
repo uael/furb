@@ -335,8 +335,25 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   let counts = "124k of 1M · 98k cached       $0.75";
   assert_eq!(boxed(&app), ["Context ▸                       12%", &bar, counts]);
   // The pointer lights the text of the box and leaves the colors of its bar; a click opens one
-  // row for each part, with its size and its share, and a click folds them again.
+  // row for each kind of content that the answer read, with its size and its share.
   clicked(&app, "Context", LEFT, 0);
+  shows(&app, "Engine");
+  // The script reads 124k at its one answer: so the engine holds what its few turns do not.
+  let kinds = [
+    "Context ▾                       12%",
+    &bar,
+    "■ Turns                   226   <1%",
+    "■ Doctrine               1.1k   <1%",
+    "■ Engine                 122k   12%",
+    "■ Free                   876k   88%",
+    counts,
+  ];
+  assert_eq!(boxed(&app), kinds);
+  screen("thread-context", &app);
+  // A click on the bar, whose cells keep their colors under the pointer, shows what came from the
+  // cache, and a click on the head folds the box.
+  let (x, y) = at(&app, &bar, LEFT);
+  app.click(x, y);
   shows(&app, "From the cache");
   let parts = [
     "Context ▾                       12%",
@@ -348,7 +365,6 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
     counts,
   ];
   assert_eq!(boxed(&app), parts);
-  screen("thread-context", &app);
   clicked(&app, "Context", LEFT, 0);
   let folded = app.wait_until(PATIENCE, || !app.text().contains("From the cache"));
   assert!(folded, "{}", app.text());
@@ -359,5 +375,5 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   shows(&app, "○ 12%");
   screen("thread-context-ring", &app);
   clicked(&app, "○ 12%", 0, 0);
-  shows(&app, "From the cache");
+  shows(&app, "Engine");
 }

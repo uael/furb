@@ -191,6 +191,10 @@ impl Model {
         self.client.restore = self.unopened(at, id, why);
       }
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
+      (Asked::Parts(key, read), Ok(Frame::Reply { answer, .. })) => {
+        self.client.parted(&key, read, Some(answer));
+      }
+      (Asked::Parts(key, read), _) => self.client.parted(&key, read, None),
       (Asked::Back(text), Ok(Frame::Reply { .. })) => {
         self.client.restore = Some(self.before_draft(text));
       }
@@ -319,11 +323,13 @@ impl Model {
         // A click on a thread shows its end, also when it is open already.
         self.jump();
       }
-      Some(Row::Context(_)) => {
-        if let Some(opened) = self.client.thread.as_mut() {
-          opened.fold(Fold::Context);
-        }
+      // The bar of an open box shows its other split, and each other row folds it.
+      Some(Row::Context(1))
+        if self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context)) =>
+      {
+        self.client.split_again();
       }
+      Some(Row::Context(_)) => self.fold_context(),
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
         // The resolved threads end the list, so the list moves to its end to show them.

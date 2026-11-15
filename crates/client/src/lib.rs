@@ -8,6 +8,7 @@
 
 mod changes;
 mod complete;
+mod context;
 mod history;
 mod input;
 mod machine;
@@ -31,6 +32,7 @@ use furb_wire::{
 
 pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer};
+pub use context::{Content, Parts, Split};
 pub use history::{History, Walk};
 pub use input::Draft;
 pub use machine::{Heard, Key, Link, Listing, Told};
@@ -73,6 +75,8 @@ pub struct Client {
   pub completion: Option<Completion>,
   /// The commands that a slash at the start of a message offers, which a client gives.
   pub commands: Vec<Offer>,
+  /// How the box of the context splits what the last answer of the open thread read.
+  pub split: Split,
   /// The review of the changes of a project, while the operator reads it.
   pub review: Option<Review>,
   /// The views that the client mounted, in the order that it mounted them.

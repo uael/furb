@@ -23,8 +23,8 @@
 
                                                                Context ▾                       12%
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-┃ A reply opens this thread again                              ■ From the cache          98k   10%
-┃                                                              ■ Written to the cache   8.4k    1%
-┃  Message  Python    → read the… ▾     opus  high   + ⌃N      ■ New                     17k    2%
+┃ A reply opens this thread again                              ■ Turns                   226   <1%
+┃                                                              ■ Doctrine               1.1k   <1%
+┃  Message  Python    → read the… ▾     opus  high   + ⌃N      ■ Engine                 122k   12%
 ┃                                                              ■ Free                   876k   88%
   This computer · ~/src/furb-try                ⌃P commands    124k of 1M · 98k cached       $0.75

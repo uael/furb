@@ -52,7 +52,7 @@ impl Client {
   /// The verbs of the views that are due, each with its machine and what it asks: the mount of
   /// each skill of the life of the target that has no view, the end of each view of another life
   /// or of a skill that left, and what the operator did to a node.
-  pub fn views_due(&mut self) -> Vec<(usize, Verb, Asked)> {
+  pub(crate) fn views_due(&mut self) -> Vec<(usize, Verb, Asked)> {
     let target = self.target_life();
     let views = mem::take(&mut self.views);
     let (kept, gone): (Vec<View>, Vec<View>) =

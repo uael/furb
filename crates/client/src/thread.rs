@@ -11,7 +11,7 @@ use furb_wire::{
   protocol::{Card, Verb},
 };
 
-use crate::{Asked, Client, Form, Key};
+use crate::{Asked, Client, Form, Key, Parts};
 
 /// How many exchanges a page holds.
 pub const PAGE: usize = 20;
@@ -113,6 +113,8 @@ pub struct Thread {
   pub again: bool,
   /// The context of the chain of the thread at its last answer.
   pub context: Option<Context>,
+  /// The kinds of what an answer of the chain read, once the client parted its turns.
+  pub parts: Option<Parts>,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the

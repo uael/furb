@@ -477,7 +477,7 @@ impl Model {
         None
       }
       Click::Context => {
-        self.ringed();
+        self.context_step();
         None
       }
       Click::Press { viewer, node } => {

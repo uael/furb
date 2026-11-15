@@ -506,8 +506,7 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
-  let due = [model.client.views_due(), model.client.controls_due(), model.client.changes_due()];
-  for (at, verb, asked) in due.concat() {
+  for (at, verb, asked) in model.client.asks_due() {
     if let Some(id) = ask(askers, model, at, verb) {
       model.client.asked.insert((at, id), asked);
     }
@@ -802,6 +801,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
+    Does::Context => Model::context_step,
     Does::Running => Model::act_on_open,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,

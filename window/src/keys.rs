@@ -55,6 +55,7 @@ pub(crate) enum Does {
   Model,
   Effort,
   Changes,
+  Context,
   Running,
 }
 
@@ -142,6 +143,12 @@ const THREAD: &[Bound] = &[
     &[&led('r')],
   ),
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
+  bound(
+    Does::Context,
+    "the context of the thread, by kind, by cache, then folded",
+    Some("context"),
+    &[&led('c')],
+  ),
   bound(
     Does::Agent,
     "the next agent of the thread",

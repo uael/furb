@@ -46,7 +46,7 @@ impl Client {
   /// The asks of changes that are due, each with its machine: the folder of the target of the
   /// input and of each card whose changes the client does not hold or that a life changed, and the
   /// diff of the file that the review reads. A folder that the client asked waits for its answer.
-  pub fn changes_due(&self) -> Vec<(usize, Verb, Asked)> {
+  pub(crate) fn changes_due(&self) -> Vec<(usize, Verb, Asked)> {
     let asking = |at: usize, folder: &str| {
       self
         .asked

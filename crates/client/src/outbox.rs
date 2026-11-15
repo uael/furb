@@ -112,6 +112,9 @@ pub enum Asked {
   View,
   /// What the operator did to a session that runs: its pause, its kill or its pin.
   Running,
+  /// The turns of the chain of a thread, for the kinds of what its answer of a count of tokens
+  /// read.
+  Parts(Key, u64),
 }
 
 impl Client {
@@ -125,6 +128,16 @@ impl Client {
       self.next += 1;
       Request { id, verb }
     })
+  }
+
+  /// Each ask of a list that is due, with its machine and what it asks: a verb of a view, a
+  /// control of a session, the changes of a folder, and the turns of the box of the context.
+  pub fn asks_due(&mut self) -> Vec<(usize, Verb, Asked)> {
+    let mut due = self.views_due();
+    due.extend(self.controls_due());
+    due.extend(self.changes_due());
+    due.extend(self.parts_due());
+    due
   }
 
   /// The first message of the queue of the input, once no message waits for its answer and the

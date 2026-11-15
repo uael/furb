@@ -1,12 +1,14 @@
 //! The box of the context of the open thread, under the list and in line with the input: how full
 //! the window of its chain is at its last answer, a bar in a segment for each part of what that
 //! answer read, and its counts, which stand in the row of the hints. A click opens one row for
-//! each part, with its size and its share, and folds it again.
+//! each part, with its size and its share, and folds it again. The parts are the kinds of content
+//! that the answer read, or what came from the cache, what it wrote there and what was new: a
+//! click on the bar, or the key of the context, shows the other.
 
 use furb::view::{Context, Portion, percent, share, tokens};
 use opentui::style::{Color, Style};
 
-use furb_client::Fold;
+use furb_client::{Content, Fold, Split};
 
 use crate::{
   line::{Line, run, spread},
@@ -82,18 +84,62 @@ impl Model {
   }
 
   /// The ring taken: the list shows, with each part of the box of the context.
-  pub(crate) fn ringed(&mut self) {
+  fn ringed(&mut self) {
     self.toggle();
     if let Some(opened) = self.client.thread.as_mut() {
       opened.unfolded.insert(Fold::Context);
     }
+    self.client.split = Split::Kinds;
+  }
+
+  /// The key of the context, the command `/context` and the ring step the box: it opens on the
+  /// kinds of content, then shows the cache, then folds.
+  pub(crate) fn context_step(&mut self) {
+    if !self.listed() {
+      return self.ringed();
+    }
+    let open = self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context));
+    if open && self.client.split == Split::Kinds {
+      self.client.split = Split::Cache;
+    } else {
+      self.fold_context();
+    }
+  }
+
+  /// The box folded when it was open, and open on the kinds of content when it was folded.
+  pub(crate) fn fold_context(&mut self) {
+    if let Some(opened) = self.client.thread.as_mut() {
+      opened.fold(Fold::Context);
+    }
+    self.client.split = Split::Kinds;
   }
 
   /// The parts of what the last answer read, in the order of the bar, each with its name and its
-  /// color.
+  /// color: its kinds of content once the client parted its turns, else what came from the cache.
   fn kinds(&self, context: &Context) -> Vec<Kind> {
     let t = &self.tokens;
-    let [purple, rose, teal, _] = t.hues;
+    let [purple, rose, teal, slate] = t.hues;
+    let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
+    if let Some(parts) =
+      parts.filter(|one| self.client.split == Split::Kinds && !one.kinds.is_empty())
+    {
+      let kind = |&(content, tokens): &(Content, u64)| {
+        let color = match content {
+          Content::Turns => t.accent,
+          Content::Extensions => purple,
+          Content::Skills => teal,
+          Content::Mcp => slate,
+          Content::Memory => rose,
+          Content::Doctrine => t.text,
+          Content::Engine => t.muted,
+        };
+        Kind { name: content.name(), tokens, color }
+      };
+      let mut kinds: Vec<Kind> = parts.kinds.iter().map(kind).collect();
+      let free = context.window.map(|window| window.saturating_sub(context.read.tokens));
+      kinds.extend(free.map(|tokens| Kind { name: "Free", tokens, color: t.border }));
+      return kinds;
+    }
     let kind = |(portion, tokens)| {
       let (name, color) = match portion {
         Portion::Cached => ("From the cache", teal),

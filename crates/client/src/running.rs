@@ -102,7 +102,7 @@ impl Client {
   }
 
   /// The verbs of what the operator did to sessions, each with its machine, once each.
-  pub fn controls_due(&mut self) -> Vec<(usize, Verb, Asked)> {
+  pub(crate) fn controls_due(&mut self) -> Vec<(usize, Verb, Asked)> {
     self.controls.drain(..).map(|(at, verb)| (at, verb, Asked::Running)).collect()
   }
 
