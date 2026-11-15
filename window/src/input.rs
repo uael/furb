@@ -11,7 +11,7 @@
 use std::mem;
 
 use furb::view::{Act, Maker, RunState, Standing};
-use furb_host::protocol::{Answer, Verb};
+use furb_host::protocol::{Answer, Card, Verb};
 use jiff::Timestamp;
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
@@ -537,19 +537,16 @@ impl Model {
   /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
   /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
-    let mut rows = match self.form() {
-      Some(_) => {
-        let mut rows = self.form_rows(self.grown()).0;
-        rows.push(self.launcher());
-        rows
-      }
-      None => {
-        let band = |_| self.band(Vec::new());
-        let bands = (0..self.grown() + 2).map(band);
-        let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
-        rows.extend([self.launcher(), self.band(Vec::new())]);
-        rows
-      }
+    let mut rows = if self.form().is_some() {
+      let mut rows = self.form_rows(self.grown()).0;
+      rows.push(self.launcher());
+      rows
+    } else {
+      let band = |_| self.band(Vec::new());
+      let bands = (0..self.grown() + 2).map(band);
+      let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
+      rows.extend([self.launcher(), self.band(Vec::new())]);
+      rows
     };
     rows.push(self.hints());
     rows
@@ -581,7 +578,7 @@ impl Model {
   fn launcher(&self) -> Row {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
-    let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
+    let muted = t.style(Role::Muted).bg(t.raised);
     let on = t.style(Role::Button);
     let (message, python) = if self.draft.python { (muted, on) } else { (on, muted) };
     let switch = [run(" Message ", message), run(" Python ", python)];
@@ -593,31 +590,12 @@ impl Model {
     };
     let mut left: Line = switch.into();
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
-    let turn = match (&self.aim, &self.thread) {
-      (None, Some(_)) => Some(("+ New thread", "+")),
-      (Some(_), Some(_)) => Some(("↩ Back to the thread", "↩")),
-      (_, None) => None,
-    };
-    let ring = self.ring();
+    let (turn, ring) = (self.turned(), self.ring());
     let room = self.wide().saturating_sub(6);
     let wanted = left.last().map_or(0, |one| one.content.width());
     // The target says where the message goes, so it keeps its words first: the turn gives way to
     // its mark and its key, then the effort, then the target to a few words.
-    let right = |short: usize| {
-      let mut right: Line = Vec::new();
-      if let Some((model, effort)) = self.maker() {
-        right.push(run(model, prose));
-        right.extend(effort.filter(|_| short < 2).map(|one| run(format!("  {one}"), muted)));
-      }
-      if let Some((words, mark)) = turn {
-        let key = run(format!(" {}", self.key(Does::NewThread)), muted);
-        right.extend([gap(), run(if short > 0 { mark } else { words }, raised.fg(t.accent)), key]);
-      }
-      if let Some(ring) = &ring {
-        right.extend([gap(), run(ring.clone(), prose)]);
-      }
-      right
-    };
+    let right = |short| self.controls(short);
     // The target leaves room for the mark before it and the arrow of its picker after it.
     let fits = |right: &Line| room.saturating_sub(width(right) + 2 + width(&left[..3]) + 2 + 2);
     let right = [right(0), right(1)]
@@ -646,6 +624,38 @@ impl Model {
     }
     let Row { line, .. } = self.band(line);
     Row { hot, ..Row::of(line) }
+  }
+
+  /// The words of the control that turns the input to a new thread and back, and its mark alone.
+  fn turned(&self) -> Option<(&'static str, &'static str)> {
+    match (&self.aim, &self.thread) {
+      (None, Some(_)) => Some(("+ New thread", "+")),
+      (Some(_), Some(_)) => Some(("↩ Back to the thread", "↩")),
+      (_, None) => None,
+    }
+  }
+
+  /// The controls at the right of the launcher: the model and its effort, the turn to a new thread
+  /// and its key, and the ring of the context while the list hides. A short form gives the turn its
+  /// mark alone, and a shorter one drops the effort too.
+  fn controls(&self, short: usize) -> Line {
+    let t = &self.tokens;
+    let raised = Style::new().bg(t.raised);
+    let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
+    let gap = || run(" ".repeat(APART), raised);
+    let mut right: Line = Vec::new();
+    if let Some((model, effort)) = self.maker() {
+      right.push(run(model, prose));
+      right.extend(effort.filter(|_| short < 2).map(|one| run(format!("  {one}"), muted)));
+    }
+    if let Some((words, mark)) = self.turned() {
+      let key = run(format!(" {}", self.key(Does::NewThread)), muted);
+      right.extend([gap(), run(if short > 0 { mark } else { words }, raised.fg(t.accent)), key]);
+    }
+    if let Some(ring) = self.ring() {
+      right.extend([gap(), run(ring, prose)]);
+    }
+    right
   }
 
   /// The project and the session that the input sends to.
@@ -738,31 +748,12 @@ impl Model {
         self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2))
       }
       (None, None) if works => {
-        // The time of the work of the open thread counts each second, as the time of a line that
-        // runs, where a card says its age in minutes.
-        let worked = card.map(|card| self.now.saturating_sub(card.since)).filter(|one| *one > 0);
-        let age = worked.map(|seconds| format!(" {}", timer(seconds)));
-        let working = format!("    Working{}", age.unwrap_or_default());
-        let stop = format!(" · {} stop", self.key(Does::Stop));
-        let working = vec![run(working, Style::new().fg(t.accent)), run(stop, muted)];
+        let (working, loader) = self.working(card);
         let at = columns(&working);
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
-        // The mark of the row is the mark of the work of the thread: a model, a command or agents.
-        let loader = match card.map(|card| &card.thread.standing) {
-          Some(Standing::Runs) => Loader::Command,
-          Some(Standing::Delegates) => Loader::Agent,
-          _ => Loader::Model,
-        };
         (working, Some((2, loader)))
       }
-      (None, None) => {
-        let at = match self.target() {
-          Target::Thread(key) => key.0,
-          Target::Session(at, _) | Target::New(at) => at,
-        };
-        let machine = if at == 0 { "This computer" } else { &self.machines[at].name };
-        (vec![run(format!("  {machine} · {}", self.folder_shown()), muted)], None)
-      }
+      (None, None) => (self.place(true), None),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
@@ -772,8 +763,7 @@ impl Model {
     let right: Line = others.iter().chain(&key).cloned().collect();
     // A place that does not fit says its folder alone, which tells more than the machine.
     let fits = width(&left) + 2 + width(&right) <= self.wide().saturating_sub(2);
-    let left =
-      if place && !fits { vec![run(format!("  {}", self.folder_shown()), muted)] } else { left };
+    let left = if place && !fits { self.place(false) } else { left };
     let line = spread(left, right.clone(), self.wide().saturating_sub(2), Style::new());
     let end = width(&line);
     let start = end - width(&right);
@@ -782,6 +772,38 @@ impl Model {
     }
     hot.push((end - width(&key)..end, Some(Click::Key(does))));
     Row { hot, loader, ..Row::of(line) }
+  }
+
+  /// The hint of the work of the open thread: its time, which counts each second as the time of a
+  /// line that runs, where a card says its age in minutes, the key that stops it, and the mark of
+  /// that work: a model, a command or agents.
+  fn working(&self, card: Option<&Card>) -> (Line, Loader) {
+    let t = &self.tokens;
+    let worked = card.map(|card| self.now.saturating_sub(card.since)).filter(|one| *one > 0);
+    let age = worked.map(|seconds| format!(" {}", timer(seconds)));
+    let working = format!("    Working{}", age.unwrap_or_default());
+    let stop = format!(" · {} stop", self.key(Does::Stop));
+    let loader = match card.map(|card| &card.thread.standing) {
+      Some(Standing::Runs) => Loader::Command,
+      Some(Standing::Delegates) => Loader::Agent,
+      _ => Loader::Model,
+    };
+    (vec![run(working, Style::new().fg(t.accent)), run(stop, t.style(Role::Muted))], loader)
+  }
+
+  /// Where the input runs: the machine and the folder, or the folder alone.
+  fn place(&self, machine: bool) -> Line {
+    let at = match self.target() {
+      Target::Thread(key) => key.0,
+      Target::Session(at, _) | Target::New(at) => at,
+    };
+    let name = if at == 0 { "This computer" } else { &self.machines[at].name };
+    let text = if machine {
+      format!("  {name} · {}", self.folder_shown())
+    } else {
+      format!("  {}", self.folder_shown())
+    };
+    vec![run(text, self.tokens.style(Role::Muted))]
   }
 
   /// The hints of the word that the window ran, in a room of columns: a mark that moves while it

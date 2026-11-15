@@ -475,7 +475,11 @@ impl<'a> Reader<'a> {
     let thought = streamed.and_then(|wrote| {
       let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began) / 1000);
       let since = wrote.began / 1000;
-      (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), since, took })
+      (!wrote.thinking.trim().is_empty()).then(|| Thought {
+        text: wrote.thinking.clone(),
+        since,
+        took,
+      })
     });
     let block = answers.rungs.last().map(|last| Block {
       maker: last.maker.clone(),

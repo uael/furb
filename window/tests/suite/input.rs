@@ -363,7 +363,7 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   // he read its end.
   shows(&app, "Resolved 1");
   clicked(&app, " Python ", 0, 1);
-  let frame = shows(&app, "┃ A word of Python to run");
+  shows(&app, "┃ A word of Python to run");
   app.paste("answer = 41 + 1");
   screen("input-python", &app);
   app.press("enter");
