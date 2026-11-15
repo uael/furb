@@ -323,9 +323,10 @@ daemon answers requests in any order.
   The page of the end also makes the peer hear a frame `thread` with the `life`, the `thread` and a `page` at each
   change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The page
   of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above`, `agents` and
-  `context` as they stand. The daemon asks the life a page at most once in 100 ms, after an act of the life, a part that a model wrote or
-  a retry of its call. What a model thought, when each work began and when each agent ended are no facts of the
-  record: the life holds them while it lives, so a life that opens again shows no thought of the words before it.
+  `context` as they stand. The daemon asks the life a page at once after an act of the life, a part that a model wrote
+  or a retry of its call, and then at most once in 33 ms. What a model thought, when each work began and when each agent
+  ended are no facts of the record: the life holds them while it lives, so a life that opens again shows no thought of
+  the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - While a life opens, the daemon pushes to each window of the life a frame
