@@ -17,14 +17,14 @@
 
 
 
-
-
-
-
+┃
 ┃ ◆ opus/high asks
 ┃ How many rows does the form take?
 ┃
 ┃ many
-┃ Refused: "many" is no int: invalid digit found in string     Context               No answer yet
-┃  Message  Python    → how many… ▾     opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃ Refused: "many" is no int: invalid digit found in
+┃ string
+┃
+┃  Message  Python    → how many… ▾     opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⏎ answer                                        ⌃C refuse

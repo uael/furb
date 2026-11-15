@@ -17,14 +17,14 @@
 
 
 
-
-
-
+┃
 ┃ ◆ opus/high asks
 ┃ Where does the list of cards stand?
 ┃
 ┃   right
 ┃   left
-┃ › at the top                                                 Context               No answer yet
-┃  Message  Python    → where does… ▾   opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃ › at the top
+┃
+┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer                            ⌃C refuse

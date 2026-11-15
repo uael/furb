@@ -429,7 +429,8 @@ impl Model {
   pub(crate) fn input(&self) -> Vec<Row> {
     let mut rows = if self.form().is_some() {
       let mut rows = self.form_rows(self.grown()).0;
-      rows.push(self.launcher());
+      let blank = || self.band(Vec::new(), None);
+      rows.extend([blank(), self.launcher(), blank()]);
       rows
     } else {
       // The row above the text says where a walk through what he sent stands.
@@ -449,10 +450,11 @@ impl Model {
     rows
   }
 
-  /// The bar of the input: the color of the thread that it replies to, or the accent for a new
-  /// thread.
+  /// The bar of the input: the color of his turn while it holds the form of a question, else the
+  /// color of the thread that it replies to, or the accent for a new thread.
   pub(crate) fn bar(&self) -> Color {
     match self.client.target() {
+      _ if self.form().is_some() => self.tokens.attention,
       Target::Thread(key) => self.hue(&key),
       Target::Session(..) | Target::New(..) => self.tokens.accent,
     }
@@ -595,7 +597,7 @@ impl Model {
       }
     }
     if let Some((words, mark)) = self.turned() {
-      let turn = run(if short > 0 { mark } else { words }, raised.fg(t.accent));
+      let turn = run(if short > 0 { mark } else { words }, prose);
       let named = run(format!(" {}", self.key(Does::NewThread)), muted);
       right.extend([gap(), (turn, key(Does::NewThread)), (named, key(Does::NewThread))]);
     }

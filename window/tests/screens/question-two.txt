@@ -17,14 +17,14 @@
 
 
 
-
-
-
-┃ ◆ opus/high asks                                   1 of 2
+┃
+┃ ◆ opus/high asks                                 1 of 2
 ┃ Does the head count the questions?
 ┃
 ┃ › yes
 ┃   no
-┃   type another answer                                        Context               No answer yet
-┃  Message  Python    → what does… ▾    opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃   type another answer
+┃
+┃  Message  Python    → what does… ▾    opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer · ⇥ next                   ⌃C refuse

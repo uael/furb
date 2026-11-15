@@ -251,14 +251,15 @@ impl Model {
     }
   }
 
-  /// The rows of the form above the launcher: who asks and how many questions wait, the whole
+  /// The rows of the form above the launcher, in the box of the input with its padding: who asks and
+  /// how many questions wait, the whole
   /// question, then each value and the row of his own words, or the rows of the line, and why the
   /// daemon refused his last answer. The row where the editor of the input shows, when it shows.
   pub(crate) fn form_rows(&self, grown: usize) -> (Vec<Row>, Option<usize>) {
     let Some((form, question)) = self.form() else { return (Vec::new(), None) };
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
-    let room = self.wide().saturating_sub(4);
+    let room = self.wide().saturating_sub(6);
     let questions = self.questions();
     let at = questions.iter().position(|one| one.act == form.act).unwrap_or_default();
     let asks = question.by.map_or_else(|| "furb".to_owned(), Maker::shown);
@@ -267,7 +268,8 @@ impl Model {
       1 => Vec::new(),
       count => vec![run(format!("{} of {count}", at + 1), muted)],
     };
-    let mut lines: Vec<(Line, Option<Click>)> = vec![(spread(head, of, room, Style::new()), None)];
+    let mut lines: Vec<(Line, Option<Click>)> =
+      vec![(Vec::new(), None), (spread(head, of, room, Style::new()), None)];
     let text = self.homed(question.text);
     let words = text.lines().flat_map(|line| wrapped(line, room));
     lines.extend(words.map(|line| (vec![run(line, prose)], None)));
@@ -296,7 +298,8 @@ impl Model {
       let wide = width(&line);
       let line = line.into_iter().map(|one| run(one.content, one.style.bg(t.raised))).collect();
       let mut row = vec![bar.clone(), run(" ", band)];
-      row.extend(spread(line, Vec::new(), self.wide().saturating_sub(3), band));
+      row.extend(spread(line, Vec::new(), self.wide().saturating_sub(6), band));
+      row.push(run("  ", band));
       let hot = click.map(|click| (2..2 + wide, Some(click))).into_iter().collect();
       Row { hot, ..Row::of(row) }
     };

@@ -16,15 +16,15 @@
 
 
 
-
-
-
+┃
 ┃ ◆ opus/high asks
 ┃ Which keys does the form take?
 ┃
 ┃   [x] up
 ┃   [ ] down
 ┃ › [x] tab
-┃   type another answer                                        Context               No answer yet
-┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃   type another answer
+┃
+┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse
