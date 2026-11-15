@@ -847,6 +847,38 @@
         },
         {
           "type": "object",
+          "description": "A fact that the process of a kit says of its own accord, as news that it learned: its kind,\nthe chain or the act that it is about, and its words, each written as the record writes a\nvalue. A life that names `fact` in its welcome takes it.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            },
+            "words": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "verb": {
+              "type": "string",
+              "const": "fact"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "kind",
+            "about",
+            "words"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The names that the module of a chain binds.",
           "properties": {
             "life": {
@@ -2635,6 +2667,24 @@
                 },
                 "build": {
                   "type": "string"
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "folders": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Folders"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -2649,7 +2699,7 @@
             "answer",
             "data"
           ],
-          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, and its build."
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, and its build. A life that answers the process of a kit names\ntoo each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the\nlife, as `initialize` gives them in LSP."
         },
         {
           "type": "object",
@@ -3099,6 +3149,28 @@
         "kind"
       ],
       "description": "A peer as the daemon knows it after its hello: its operator, the login that its transport\nproved, its role, its kind, and the name of a skill. No window is named apart from its\noperator, so two windows of one operator are one operator."
+    },
+    "Folders": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "config": {
+          "type": "string"
+        },
+        "images": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "project",
+        "config"
+      ],
+      "description": "The folders of a life that a kit reads: the folder of its project, the config folder of its\nuser, and the folder of its images, which a kit writes an image to as a turn names it."
     },
     "Listed": {
       "type": "object",

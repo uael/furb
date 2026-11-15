@@ -327,7 +327,7 @@ impl Opening {
       ("provider", provider),
       (skill::EAR, skill::telling(played, refused, places.clone())),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
-      ("kits", working(works.then(|| world::kits::kits(life, project, places)))),
+      ("kits", working(works.then(|| world::kits::kits(life, project, gallery.clone(), places)))),
       (
         "mcp",
         working(works.then(|| {

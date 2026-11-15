@@ -418,6 +418,21 @@ class Request35(TypedDict):
 
 class Request36(TypedDict):
   """
+  A fact that the process of a kit says of its own accord, as news that it learned: its kind,
+  the chain or the act that it is about, and its words, each written as the record writes a
+  value. A life that names `fact` in its welcome takes it.
+  """
+
+  id: int
+  life: str
+  kind: str
+  about: str
+  words: list[str]
+  verb: Literal["fact"]
+
+
+class Request37(TypedDict):
+  """
   The names that the module of a chain binds.
   """
 
@@ -427,7 +442,7 @@ class Request36(TypedDict):
   verb: Literal["names"]
 
 
-class Request37(TypedDict):
+class Request38(TypedDict):
   """
   The models that a life offers, in place of the roster of the life, which no word can say,
   since the roster is the World's: the life then stands on them, as after a change of its
@@ -440,7 +455,7 @@ class Request37(TypedDict):
   verb: Literal["roster"]
 
 
-class Request39(TypedDict):
+class Request40(TypedDict):
   """
   A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
   that asked it. It writes no config.
@@ -451,7 +466,7 @@ class Request39(TypedDict):
   verb: Literal["cancel_sign_in"]
 
 
-class Request40(TypedDict):
+class Request41(TypedDict):
   """
   The fact that the operator read a chain or a thread up to now, which each window and each
   later life reads in the record.
@@ -463,7 +478,7 @@ class Request40(TypedDict):
   verb: Literal["seen"]
 
 
-class Request41(TypedDict):
+class Request42(TypedDict):
   """
   The resolve of a thread of the operator: a close of each act that keeps it open, the last
   first, with the text `resolved` or with None, as its shape takes. A message on the thread
@@ -476,7 +491,7 @@ class Request41(TypedDict):
   verb: Literal["resolve"]
 
 
-class Request42(TypedDict):
+class Request43(TypedDict):
   """
   A follow-up that the operator queued on a chain, under an entry that the window chose. The
   life sends it as a prompt of its shape and its message once the chain rests, and a second
@@ -492,7 +507,7 @@ class Request42(TypedDict):
   verb: Literal["queue"]
 
 
-class Request43(TypedDict):
+class Request44(TypedDict):
   """
   A follow-up taken out of its queue before the life sent it.
   """
@@ -503,7 +518,7 @@ class Request43(TypedDict):
   verb: Literal["unqueue"]
 
 
-class Request44(TypedDict):
+class Request45(TypedDict):
   """
   The follow-ups that wait on a chain, in order.
   """
@@ -514,7 +529,7 @@ class Request44(TypedDict):
   verb: Literal["queued"]
 
 
-class Request45(TypedDict):
+class Request46(TypedDict):
   """
   What waits for the operator in a life, with each notice that the window still shows.
   """
@@ -525,7 +540,7 @@ class Request45(TypedDict):
   verb: Literal["desk"]
 
 
-class Request46(TypedDict):
+class Request47(TypedDict):
   """
   The threads of a chain with their meaning, now or as they stood just after a moment. `read`
   is the place up to which the window read the chain, from which the runs of notes count the
@@ -540,7 +555,7 @@ class Request46(TypedDict):
   verb: Literal["threads"]
 
 
-class Request47(TypedDict):
+class Request48(TypedDict):
   """
   The threads of every chain of a life but those it names, as one tree in the order of the
   list of the threads, now or as they stood just after a moment.
@@ -553,7 +568,7 @@ class Request47(TypedDict):
   verb: Literal["rail"]
 
 
-class Request49(TypedDict):
+class Request50(TypedDict):
   """
   The acts of a life as they stood just after a moment, each with its meaning then.
   """
@@ -564,7 +579,7 @@ class Request49(TypedDict):
   verb: Literal["as_of"]
 
 
-class Request50(TypedDict):
+class Request51(TypedDict):
   """
   A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
   before the end, at most `limit` of them, the newest page first, now or as they stood just
@@ -582,7 +597,7 @@ class Request50(TypedDict):
   verb: Literal["thread"]
 
 
-class Request51(TypedDict):
+class Request52(TypedDict):
   """
   Each moment of a life at which an act began or ended, in order.
   """
@@ -597,7 +612,7 @@ class Request51(TypedDict):
   verb: Literal["moments"]
 
 
-class Request52(TypedDict):
+class Request53(TypedDict):
   """
   Each chain of a life in time, in the order the chains began.
   """
@@ -1079,6 +1094,17 @@ class Peer(TypedDict):
   role: Role
   kind: Kind
   name: NotRequired[str | None]
+
+
+class Folders(TypedDict):
+  """
+  The folders of a life that a kit reads: the folder of its project, the config folder of its
+  user, and the folder of its images, which a kit writes an image to as a turn names it.
+  """
+
+  project: str
+  config: str
+  images: NotRequired[str | None]
 
 
 class Listed(TypedDict):
@@ -2012,7 +2038,7 @@ class Request17(TypedDict):
   verb: Literal["writes"]
 
 
-class Request48(TypedDict):
+class Request49(TypedDict):
   """
   The ladder of a chain, now or as it stood just after a moment: the steps that show and the
   folds of the others, with the folds that the window opened, the prompts that the operator
@@ -2154,12 +2180,16 @@ class Data(TypedDict):
   peer: Peer
   machine: str
   build: str
+  capabilities: NotRequired[list[str]]
+  folders: NotRequired[Folders | None]
 
 
 class Answer2(TypedDict):
   """
   The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  of the machine of the daemon, and its build.
+  of the machine of the daemon, and its build. A life that answers the process of a kit names
+  too each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the
+  life, as `initialize` gives them in LSP.
   """
 
   answer: Literal["welcome"]
@@ -2436,7 +2466,7 @@ class Event5(TypedDict):
   data: Data4
 
 
-class Request38(TypedDict):
+class Request39(TypedDict):
   """
   The configs of the folder of the life, in their layers: what each key holds, a change of a
   key, or a stand on them as the disk holds them now.

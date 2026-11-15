@@ -127,6 +127,9 @@ interface Way extends Pick<Route, "role" | "reach" | "heard" | "explain"> {
 export class Connection extends EventEmitter {
   /** The peer as the daemon knows it after the hello. */
   peer!: Peer;
+  /** What the welcome gave: the folders of the life of a kit, and each verb that it takes past the first protocol of a
+   * kit. */
+  welcome!: Welcome;
   readonly closed: Promise<void>;
   private socket!: Link;
   private next = 0;
@@ -204,6 +207,7 @@ export class Connection extends EventEmitter {
     const { kind, name, role } = this.route;
     const welcome = await this.send({ verb: "hello", protocol: PROTOCOL, kind, name, role });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
+    this.welcome = welcome.data;
     this.peer = welcome.data.peer;
   }
 
@@ -391,6 +395,14 @@ export class Skill {
     return this.connection.ask({ ...verb, life: this.life } as Verb);
   }
 
+  /** A fact said to the life of its own accord, of a kind, about a chain or an act, with words of JSON, which a life
+   * that names the capability `fact` in its welcome takes. */
+  async fact(kind: string, about: string, ...words: unknown[]): Promise<void> {
+    if (!this.connection.welcome.capabilities?.includes("fact"))
+      throw new Error("This life takes no fact from a kit: it is older than the capability fact.");
+    await this.say({ verb: "fact", kind, about, words: words.map((one) => JSON.stringify(one)) });
+  }
+
   /** A word run on a chain, the root unless it names one: the name of its rung. */
   async run(word: string, on?: string): Promise<string> {
     return named(await this.say({ verb: "run", word, on }));
@@ -419,6 +431,9 @@ export class Skill {
     for (const listener of this.facts) listener(fact, frame.seq);
   }
 }
+
+/** What a welcome gives. */
+type Welcome = Extract<Answer, { answer: "welcome" }>["data"];
 
 /** The act that a verb made, as the reply of the life names it. */
 function named(answer: Answer): string {

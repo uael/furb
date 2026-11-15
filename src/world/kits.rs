@@ -7,7 +7,9 @@
 //! act before the tip. It takes that act, says that it started, and speaks to the process on its
 //! stdin and its stdout, one frame of JSON for each line, as LSP, DAP and MCP do: the frames of
 //! the protocol of the daemon that a kit speaks, its hello, its attach, and the verbs peek, close,
-//! run and prompt, which the ear answers under its own name. Once the process attached, the ear
+//! fact, run and prompt, which the ear answers under its own name. Its welcome names the folders of
+//! the life, and each verb past the protocol of the first kit, as `fact`, by which a process says
+//! what it learned of its own accord. Once the process attached, the ear
 //! tells it each fact that it hears, as an event, the act that it takes among them, and the done
 //! of that act, so a process ends the work of an act that a control ended.
 //!
@@ -29,7 +31,7 @@ use std::{
 use furb_wire::{
   error::ProtocolError,
   event::Event as Told,
-  protocol::{Answer, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
+  protocol::{Answer, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
 };
 use futures::{StreamExt, stream};
 use serde_json::{Value, json};
@@ -117,11 +119,21 @@ impl Running {
   }
 }
 
-/// The ear of the kits of a life whose record is `life` and whose folder is `here`, with the
-/// skills of the user in `places`.
-pub(crate) fn kits(life: String, here: PathBuf, places: Places) -> Box<dyn Ear> {
+/// The verbs that a life takes from a kit past those of the protocol [`KITS`], which its welcome
+/// names: a new verb is a capability, never a new version.
+const CAPABILITIES: [&str; 1] = ["fact"];
+
+/// The ear of the kits of a life whose record is `life`, whose folder is `here` and whose images
+/// stand in `images`, with the skills of the user in `places`.
+pub(crate) fn kits(
+  life: String,
+  here: PathBuf,
+  images: Option<PathBuf>,
+  places: Places,
+) -> Box<dyn Ear> {
   ear(move |mut co: Co<Worked>| async move {
-    let mut kits = Kits { life, here, places, played: Vec::new(), held: HashMap::new(), seq: 0 };
+    let mut kits =
+      Kits { life, here, images, places, played: Vec::new(), held: HashMap::new(), seq: 0 };
     let kept = co.keeps(Vec::<(String, Option<String>)>::new())?;
     for (name, program) in kept.borrow().iter() {
       kits.learn(name, program.as_deref());
@@ -151,6 +163,7 @@ pub(crate) fn kits(life: String, here: PathBuf, places: Places) -> Box<dyn Ear> 
 struct Kits {
   life: String,
   here: PathBuf,
+  images: Option<PathBuf>,
   places: Places,
   played: Vec<Played>,
   held: HashMap<String, String>,
@@ -271,6 +284,32 @@ impl Kits {
     }
   }
 
+  /// The welcome of the process of a kit: the kit as a peer that writes, the verbs that the life
+  /// takes past the first protocol of a kit, and the folders of the life.
+  fn welcome(&self, name: &str) -> Answer {
+    let peer = Peer {
+      operator: String::new(),
+      role: Role::Write,
+      kind: Kind::Skill,
+      name: Some(name.to_owned()),
+    };
+    let shown = |one: &Path| one.display().to_string();
+    let folders = Folders {
+      project: shown(&self.here),
+      config: shown(&self.places.config),
+      images: self.images.as_deref().map(shown),
+    };
+    // A kit runs on the machine of its life, which names no other.
+    Answer::Welcome {
+      protocol: PROTOCOL,
+      peer,
+      machine: String::new(),
+      build: env!("CARGO_PKG_VERSION").to_owned(),
+      capabilities: CAPABILITIES.map(str::to_owned).to_vec(),
+      folders: Some(folders),
+    }
+  }
+
   /// What a verb of the process of a kit comes to.
   async fn answered(&self, co: &mut Co<Worked>, name: &str, verb: Verb) -> Result<Answer, String> {
     let fault = |no: Fault| no.message();
@@ -279,15 +318,7 @@ impl Kits {
         if !(KITS..=PROTOCOL).contains(&hello.protocol) {
           return Err(format!("This life speaks the protocol {KITS} to {PROTOCOL} to a kit."));
         }
-        let peer = Peer {
-          operator: String::new(),
-          role: Role::Write,
-          kind: Kind::Skill,
-          name: Some(name.to_owned()),
-        };
-        // A kit runs on the machine of its life, which names no other.
-        let build = env!("CARGO_PKG_VERSION").to_owned();
-        Ok(Answer::Welcome { protocol: PROTOCOL, peer, machine: String::new(), build })
+        Ok(self.welcome(name))
       }
       Verb::Attach { .. } => Ok(Answer::Done),
       Verb::Peek { act, .. } => {
@@ -308,6 +339,11 @@ impl Kits {
         }
         Ok(Answer::Done)
       }
+      Verb::Fact { kind, about, words, .. } => {
+        let words = words.iter().map(|one| parsed(one)).collect::<Result<Vec<_>, _>>();
+        say(co, Fact::says(&kind, &about, words.map_err(fault)?));
+        Ok(Answer::Done)
+      }
       Verb::Run { word, on, .. } => {
         let on = vec![("on", Object::string(on.unwrap_or_else(|| ROOT.to_owned())))];
         let made = co.call("rung", vec![Object::string(word)], on).await.map_err(fault)?;
@@ -323,9 +359,9 @@ impl Kits {
       Verb::ViewTree(_) | Verb::ViewEffect(_) => {
         Err("A kit draws its views through its word, and its process draws none.".to_owned())
       }
-      other => {
-        Err(format!("A kit says hello, attach, peek, close, run and prompt, and no {other:?}."))
-      }
+      other => Err(format!(
+        "A kit says hello, attach, peek, close, fact, run and prompt, and no {other:?}."
+      )),
     }
   }
 

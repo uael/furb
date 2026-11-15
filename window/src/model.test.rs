@@ -110,7 +110,14 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   // A new connection says its hello, then its cards.
   let peer = Peer { operator: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None };
   let (machine, build) = ("mac".to_owned(), String::new());
-  let welcome = Answer::Welcome { protocol: PROTOCOL, peer, machine, build };
+  let welcome = Answer::Welcome {
+    protocol: PROTOCOL,
+    peer,
+    machine,
+    build,
+    capabilities: Vec::new(),
+    folders: None,
+  };
   assert!(model.hear(0, Ok(Frame::Reply { id: 8, answer: welcome })));
   assert_eq!(model.client.machines[0].link, Link::Dialing);
   assert!(model.hear(0, Ok(Frame::Reply { id: 9, answer: Answer::Cards(Vec::new()) })));

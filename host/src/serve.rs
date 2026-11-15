@@ -201,7 +201,14 @@ fn spoken(hello: &Hello) -> bool {
 /// The welcome of a peer: who it is to the daemon, the machine and its build.
 fn welcome(peer: &Peer) -> Answer {
   let (machine, build) = (machine(), BUILD.to_owned());
-  Answer::Welcome { protocol: PROTOCOL, peer: peer.clone(), machine, build }
+  Answer::Welcome {
+    protocol: PROTOCOL,
+    peer: peer.clone(),
+    machine,
+    build,
+    capabilities: Vec::new(),
+    folders: None,
+  }
 }
 
 /// The build of the daemon: the version of furb that serves it.

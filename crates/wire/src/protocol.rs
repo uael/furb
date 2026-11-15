@@ -84,6 +84,15 @@ pub struct Draft {
   pub on: Option<String>,
 }
 
+/// The folders of a life that a kit reads: the folder of its project, the config folder of its
+/// user, and the folder of its images, which a kit writes an image to as a turn names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Folders {
+  pub project: String,
+  pub config: String,
+  pub images: Option<String>,
+}
+
 /// One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
 /// `act`, since `id` is the key of the request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -309,6 +318,15 @@ pub enum Verb {
     act: String,
     value: String,
   },
+  /// A fact that the process of a kit says of its own accord, as news that it learned: its kind,
+  /// the chain or the act that it is about, and its words, each written as the record writes a
+  /// value. A life that names `fact` in its welcome takes it.
+  Fact {
+    life: String,
+    kind: String,
+    about: String,
+    words: Vec<String>,
+  },
   /// The names that the module of a chain binds.
   Names {
     life: String,
@@ -499,6 +517,7 @@ impl Verb {
       | Self::Cancel { life, .. }
       | Self::Run { life, .. }
       | Self::Close { life, .. }
+      | Self::Fact { life, .. }
       | Self::Names { life, .. }
       | Self::Roster { life, .. }
       | Self::Config { life, .. }
@@ -681,12 +700,18 @@ impl Frame {
 pub enum Answer {
   Done,
   /// The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  /// of the machine of the daemon, and its build.
+  /// of the machine of the daemon, and its build. A life that answers the process of a kit names
+  /// too each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the
+  /// life, as `initialize` gives them in LSP.
   Welcome {
     protocol: u32,
     peer: Peer,
     machine: String,
     build: String,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    folders: Option<Folders>,
   },
   Lives(Vec<Listed>),
   Projects(Vec<Project>),

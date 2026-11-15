@@ -75,7 +75,7 @@ for line in sys.stdin:
 /// A life on the ear of the kits, with the kit `note` of a folder enabled.
 fn life(at: &Path, program: &Path) -> Engine {
   let places = Places { config: at.join("user"), home: None };
-  let ears = [("stand", standing()), ("kits", kits(String::new(), at.to_owned(), places))];
+  let ears = [("stand", standing()), ("kits", kits(String::new(), at.to_owned(), None, places))];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   enable(&mut engine, program);
   engine
@@ -199,7 +199,7 @@ fn the_hop_to_the_process_of_a_kit_costs_less_than_the_start_of_the_least_progra
   let at = place("speed");
   let program = noted(&at, ADDS);
   let places = Places { config: at.join("user"), home: None };
-  let kits = kits(String::new(), at, places);
+  let kits = kits(String::new(), at, None, places);
   let ears = [("stand", standing()), ("here", here()), ("kits", kits)];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let words = ["note", "", "", "", "", "", &program.display().to_string()].map(Object::string);

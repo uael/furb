@@ -3,7 +3,9 @@
 A life starts the process of a kit at the first act of a kind that the manifest of the kit names under `furb-acts`,
 with `FURB_LIFE` and `FURB_SKILL`, and speaks to it on its stdin and its stdout, one frame of JSON for each line.
 `Skill.attach` says its hello and attaches the life. The kit then answers the acts of its kinds, hears the facts of
-the kinds that it asks, and says verbs that the life takes. A kit draws nothing: its word draws its views.
+the kinds that it asks, and says verbs that the life takes, as a fact that it learned of its own accord. The welcome of
+the life names the folders of the life and each verb past those of the first protocol of a kit. A kit draws nothing:
+its word draws its views.
 
     skill = await Skill.attach(kinds=[])
     skill.answers("note_add", lambda fact: f"added {fact[4]}")
@@ -22,7 +24,7 @@ import threading
 from collections.abc import Callable, Collection, Mapping
 from typing import Protocol
 
-from furb.protocol import PROTOCOL, Answer, Frame, Kind, Peer
+from furb.protocol import PROTOCOL, Answer, Data, Frame, Kind, Peer
 
 LIFE = "FURB_LIFE"
 SKILL = "FURB_SKILL"
@@ -87,6 +89,7 @@ class Connection:
   side, and each verb that waits then raises `Closed`."""
 
   peer: Peer
+  welcome: Data
   closed: asyncio.Future[None]
 
   def __init__(self, reader: asyncio.StreamReader, writer: Writer) -> None:
@@ -106,7 +109,8 @@ class Connection:
       self.close()
       why = f"The life gave {welcome['answer']}, and no welcome."
       raise Refused(why)
-    self.peer = welcome["data"]["peer"]
+    self.welcome = welcome["data"]
+    self.peer = self.welcome["peer"]
 
   async def ask(self, verb: Mapping[str, object]) -> Answer:
     """The answer of the life to a verb, or its refusal as a `Refused`. A field that is None is not said."""
@@ -225,6 +229,15 @@ class Skill:
   async def say(self, verb: Mapping[str, object]) -> Answer:
     """The answer of the life to a verb that the kit says."""
     return await self.connection.ask({**verb, "life": self.life})
+
+  async def fact(self, kind: str, about: str, *words: object) -> None:
+    """A fact said to the life of its own accord, of a kind, about a chain or an act, with words of JSON, which a life
+    that names the capability `fact` in its welcome takes."""
+    if "fact" not in self.connection.welcome.get("capabilities", []):
+      why = "This life takes no fact from a kit: it is older than the capability fact."
+      raise Refused(why)
+    said = [json.dumps(one) for one in words]
+    await self.say({"verb": "fact", "kind": kind, "about": about, "words": said})
 
   async def run(self, word: str, on: str | None = None) -> str:
     """A word run on a chain, the root unless it names one: the name of its rung."""

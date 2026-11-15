@@ -191,6 +191,13 @@ export type Request1 =
     }
   | {
       life: string;
+      kind: string;
+      about: string;
+      words: string[];
+      verb: "fact";
+    }
+  | {
+      life: string;
       on?: string | null;
       verb: "names";
     }
@@ -602,6 +609,8 @@ export type Answer =
         peer: Peer;
         machine: string;
         build: string;
+        capabilities?: string[];
+        folders?: Folders | null;
       };
     }
   | {
@@ -1132,6 +1141,15 @@ export interface Peer {
   role: Role;
   kind: Kind;
   name?: string | null;
+}
+/**
+ * The folders of a life that a kit reads: the folder of its project, the config folder of its
+ * user, and the folder of its images, which a kit writes an image to as a turn names it.
+ */
+export interface Folders {
+  project: string;
+  config: string;
+  images?: string | null;
 }
 /**
  * A record of the machine: the main checkout of the project whose sessions hold it, when the
