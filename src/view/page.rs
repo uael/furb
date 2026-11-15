@@ -3,7 +3,7 @@
 //! agents that the thread made. A page reads the acts of its thread through the lists of the
 //! acts by maker, so it takes the time of the thread and not of the life.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -161,7 +161,8 @@ impl Answered {
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
 /// thought for a rung, and the second of the epoch at which each act that lives began. The record
 /// holds neither: the turn of a reply keeps its thought sealed, and a fact tells no time, so a
-/// host keeps it in the image of the life.
+/// host keeps it in the image of the life, once [`Held::shown`] let go of each thought that no
+/// page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
   wrote: HashMap<String, Wrote>,
@@ -211,6 +212,32 @@ impl Streamed {
   }
 }
 
+impl Held {
+  /// Lets go of each thought that no page of these acts shows: a page shows the thought of the
+  /// last rung of an exchange that thought, so the thought of a rung before it in that exchange,
+  /// and of a rung that answers no thread, never shows again. What a model writes for a rung
+  /// that has no word yet stays.
+  pub fn shown(&self, streams: &mut Streamed) {
+    let reader = Reader { held: self, streams };
+    let mut threads = HashSet::new();
+    for rung in streams.wrote.keys().filter_map(|id| self.act(id)) {
+      if let Some(prompt) = self.act(&rung.by) {
+        threads.insert(message_of(prompt, &self).unwrap_or(&prompt.id));
+      }
+    }
+    let shown: HashSet<String> = threads
+      .into_iter()
+      .filter_map(|thread| reader.told(thread))
+      .flat_map(|told| {
+        told.answers.iter().filter_map(|one| reader.thinker(one)).collect::<Vec<_>>()
+      })
+      .map(|rung| rung.id.clone())
+      .collect();
+    let writes = |id: &str| self.act(id).is_none_or(|rung| rung.word.is_none() && !rung.done());
+    streams.wrote.retain(|id, _| shown.contains(id) || writes(id));
+  }
+}
+
 /// Which exchanges of a thread a page holds: those before the one at `before`, or before the end,
 /// at most `limit` of them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,11 +271,45 @@ impl Held {
   }
 }
 
+/// A thread as a page reads it: its prompts, what answers each message of it, and its rungs, in
+/// the order they began.
+struct Told<'a> {
+  prompts: Vec<&'a Act>,
+  answers: Vec<Answers<'a>>,
+  rungs: Vec<&'a Act>,
+}
+
 impl<'a> Reader<'a> {
   fn page(self, thread: &str, Reach { before, limit }: Reach) -> Page {
-    let Some(prompt) = self.held.act(thread).filter(|act| act.kind == Kind::Prompt) else {
+    let Some(Told { prompts, mut answers, rungs }) = self.told(thread) else {
       return Page::default();
     };
+    let end = before.unwrap_or(answers.len()).min(answers.len());
+    let start = end.saturating_sub(limit);
+    let mut number: usize = answers[..start]
+      .iter()
+      .flat_map(|one| &one.rungs)
+      .map(|rung| count(rung, self.streams))
+      .sum();
+    // More comes after the last message, and in the block of a rung that lives.
+    let busy = prompts.iter().any(|one| !one.done() && State::of(one).busy());
+    let messages = answers.len();
+    for (at, one) in answers.iter_mut().enumerate() {
+      one.more = busy && (at + 1 == messages || one.rungs.last().is_some_and(|rung| lives(rung)));
+    }
+    let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
+    let agents = rungs.iter().flat_map(|rung| {
+      self
+        .held
+        .made_by(&rung.id)
+        .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain && !act.asks_operator())
+    });
+    Page { exchanges, above: start, agents: agents.map(|agent| self.agent(agent)).collect() }
+  }
+
+  /// A thread, its prompt, as a page reads it: none for a prompt that is no thread.
+  fn told(self, thread: &str) -> Option<Told<'a>> {
+    let prompt = self.held.act(thread).filter(|act| act.kind == Kind::Prompt)?;
     let on = |act: &&Act| {
       act.kind == Kind::Prompt && act.id != thread && message_of(act, &self.held) == Some(thread)
     };
@@ -285,27 +346,12 @@ impl<'a> Reader<'a> {
         answers[after(ended)].closes.push(message);
       }
     }
-    let end = before.unwrap_or(messages.len()).min(messages.len());
-    let start = end.saturating_sub(limit);
-    let mut number: usize = answers[..start]
-      .iter()
-      .flat_map(|one| &one.rungs)
-      .map(|rung| count(rung, self.streams))
-      .sum();
-    // More comes after the last message, and in the block of a rung that lives.
-    let busy = prompts.iter().any(|one| !one.done() && State::of(one).busy());
-    for (at, one) in answers.iter_mut().enumerate() {
-      one.more =
-        busy && (at + 1 == messages.len() || one.rungs.last().is_some_and(|rung| lives(rung)));
-    }
-    let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
-    let agents = rungs.iter().flat_map(|rung| {
-      self
-        .held
-        .made_by(&rung.id)
-        .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain && !act.asks_operator())
-    });
-    Page { exchanges, above: start, agents: agents.map(|agent| self.agent(agent)).collect() }
+    Some(Told { prompts, answers, rungs })
+  }
+
+  /// The rung whose thought an exchange shows: the last of its rungs that thought.
+  fn thinker(self, answers: &Answers<'a>) -> Option<&'a Act> {
+    answers.rungs.iter().rev().copied().find(|rung| self.streams.wrote.contains_key(&rung.id))
   }
 
   /// The rungs that advance on a prompt, in order.
@@ -338,7 +384,7 @@ impl<'a> Reader<'a> {
       said.push((closed.ended.unwrap_or(closed.began), one));
     }
     said.sort_by_key(|(place, _)| *place);
-    let streamed = answers.rungs.iter().rev().find_map(|rung| self.streams.wrote.get(&rung.id));
+    let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&rung.id));
     let thought = streamed.and_then(|wrote| {
       let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began));
       (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), took })

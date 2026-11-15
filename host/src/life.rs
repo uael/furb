@@ -1222,6 +1222,7 @@ async fn ended(engine: Engine, life: &mut Life, mut imaging: Imaging) -> Option<
     life.put(unimaged(&no));
   }
   life.told(None);
+  life.kept.held.shown(&mut life.kept.streams);
   // The index stands before the image: a daemon that ends between them leaves a record whose
   // next daemon reads its cards from the index, where none would fold the whole record for them.
   life.indexed();
@@ -1242,6 +1243,7 @@ fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>, imagin
   let Some(record) = record.filter(|_| owed) else { return };
   life.told(None);
   life.kept.watch.imaged();
+  life.kept.held.shown(&mut life.kept.streams);
   match image::take(engine, Path::new(record)) {
     Ok(Some(taken)) => imaging.start(taken, Part { build: BUILD.into(), kept: life.kept.clone() }),
     Ok(None) => {}

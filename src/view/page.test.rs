@@ -405,3 +405,46 @@ fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command() 
     block.lines.iter().map(|line| matches!(line.mark, Mark::Failed { .. })).collect();
   assert_eq!(marks, [true, false], "{block:?}");
 }
+
+#[test]
+fn a_host_keeps_only_the_thoughts_that_a_page_shows() {
+  let mut streams = Streamed::default();
+  let mut fold = Fold::default();
+  let mut held = Held::default();
+  let mut hear = |fact: Value, streams: &mut Streamed| {
+    for act in fold.recorded(&fact) {
+      streams.heard(&act, 100);
+      held.heard(&act);
+    }
+  };
+  for fact in [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "where does the time go", ""]),
+    json!(["chain", "chain2", "operator", "", "worker", ""]),
+    json!(["prompt", "prompt2", "chain1", "chain2", "str", "study the boot", ""]),
+  ] {
+    hear(fact, &mut streams);
+  }
+  // Two rungs answer the thread and one answers the prompt of another chain, each with a thought:
+  // the page of each prompt shows the thought of its last rung alone.
+  for (rung, prompt, chain) in
+    [("rung1", "prompt1", "chain1"), ("rung2", "prompt1", "chain1"), ("rung3", "prompt2", "chain2")]
+  {
+    hear(json!(["rung", rung, prompt, chain, "", "", "claude-cli:opus"]), &mut streams);
+    streams.wrote(rung, ["", &format!("The thought of {rung}.")], 100);
+    streams.wrote(rung, ["x = 1", ""], 101);
+    hear(json!(["run", format!("run{rung}"), chain, chain, rung, "x = 1", ""]), &mut streams);
+    hear(json!(["done", format!("run{rung}"), chain, null]), &mut streams);
+    hear(json!(["done", rung, chain, null]), &mut streams);
+  }
+  // A rung that its model still writes keeps what it wrote.
+  hear(json!(["rung", "rung4", "prompt1", "chain1", "", "", "claude-cli:opus"]), &mut streams);
+  streams.wrote("rung4", ["", "The thought of rung4."], 102);
+  let page = |streams: &Streamed| held.page(streams, "prompt1", Reach { before: None, limit: 10 });
+  let before = page(&streams);
+  held.shown(&mut streams);
+  assert_eq!(page(&streams), before, "the page is the same");
+  let mut kept: Vec<&str> = streams.wrote.keys().map(String::as_str).collect();
+  kept.sort_unstable();
+  assert_eq!(kept, ["rung3", "rung4"]);
+}
