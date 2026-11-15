@@ -119,7 +119,7 @@ no network.
 | `src/world/provider/thinking.rs` | The most tokens of thought of a model in one turn, and how a model takes them. |
 | `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, the default actor, and the roster. |
 | `src/world/provider/local.rs` | The local server: its address, its key, the models it lists, and the window of each. |
-| `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
+| `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `cargo xtask catalog` makes again. |
 | `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude/` | The provider `claude-cli`: the claude command line as a model of rig, its accounts and its models. |

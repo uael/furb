@@ -7,6 +7,7 @@
 
 mod budget;
 mod caches;
+mod catalog;
 mod deepswe;
 mod jobs;
 mod links;
@@ -278,6 +279,13 @@ enum Task {
     #[arg(long, default_value_t = 60)]
     runs: u32,
   },
+  /// Make the snapshot of the catalog of models that the crate carries again, from models.dev and
+  /// from the latest release of pi-ai.
+  ///
+  /// It writes src/world/provider/catalog.json, one model on each line, and the file of its
+  /// sources beside it only when the snapshot or the version of pi-ai changed, so a run with no
+  /// change in the data makes no change in the tree.
+  Catalog,
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -321,6 +329,8 @@ enum Fault {
   Running { pid: u32, file: PathBuf },
   #[error("the watch of the refs failed: {0}")]
   Watch(#[from] notify::Error),
+  #[error("{url} cannot be fetched: {stderr}")]
+  Fetch { url: String, stderr: String },
   #[error("the watch of the refs ended")]
   Unwatched,
   #[error("the pattern of the paths failed: {0}")]
@@ -391,6 +401,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::Catalog => catalog::refresh(&root),
     Task::Budget { part, command } => budget::check(&root, &part, &command),
     Task::JobBudgets { runs } => jobs::set(&root, runs),
     Task::Unused { tests } => unused::check(&root, tests),

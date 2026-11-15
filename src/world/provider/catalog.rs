@@ -2,12 +2,12 @@
 //! efforts, its price, its class, and whether it takes an image.
 //!
 //! The crate carries a snapshot of the catalog, cut down to the providers that pi-ai serves, which
-//! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does
-//! not list, from the data of pi-ai. A life reads the models of a provider from the caches of furb
-//! when they hold them newer than the snapshot, and a life updates the caches in the background
-//! when they are a day old, so no life waits on the network and a life with no network reads the
-//! snapshot. [`update`] says how a source is fetched and kept. The claude command line is the
-//! provider `claude-cli`, whose models are opus, sonnet, haiku and fable.
+//! `cargo xtask catalog` makes again from models.dev and, for the two providers that models.dev
+//! does not list, from the data of pi-ai. A life reads the models of a provider from the caches of
+//! furb when they hold them newer than the snapshot, and a life updates the caches in the
+//! background when they are a day old, so no life waits on the network and a life with no network
+//! reads the snapshot. [`update`] says how a source is fetched and kept. The claude command line is
+//! the provider `claude-cli`, whose models are opus, sonnet, haiku and fable.
 //!
 //! The snapshot gives each model its class, cheap or dear. It lists the families that a program of
 //! their own serves, the claude command line and Codex, with the class of each of their models

@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: python3 script/catalog.py
+      - run: cargo xtask catalog
       - name: open the pull request
         env:
           # A pull request that GITHUB_TOKEN opens starts no workflow, so the gates run only with a token of a person

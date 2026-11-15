@@ -489,7 +489,7 @@ fix what your change broke, and report what was broken before.
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own
   words, with a word of furb that asks one prompt per batch, and with the claude command line, and scores each arm on
   the totals of the server and the share of right labels. It asks a model and spends what the server serves.
-- `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
+- `cargo xtask catalog`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life updates its own copy of models.dev and of the providers of
   pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.
   `furb catalog [--update]` shows where the models came from and updates them at once; a source that fails leaves the

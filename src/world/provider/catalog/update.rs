@@ -40,7 +40,7 @@ const REGISTRY: &str = "https://registry.npmjs.org/@earendil-works/pi-ai/latest"
 /// Where the files of one exact release of pi-ai are served.
 const FILES: &str = "https://cdn.jsdelivr.net/npm/@earendil-works/pi-ai";
 
-/// What the snapshot says of its sources, which `script/catalog.py` writes.
+/// What the snapshot says of its sources, which `cargo xtask catalog` writes.
 const SOURCES: &str = include_str!("../catalog.sources.json");
 
 /// The copy of models.dev in the cache.
@@ -324,7 +324,7 @@ async fn pi_ai(dir: &Path) -> Result<String, Error> {
   Ok(version)
 }
 
-/// A model of the data of pi-ai in the words of models.dev, as `script/catalog.py` makes it.
+/// A model of the data of pi-ai in the words of models.dev, as `cargo xtask catalog` makes it.
 fn pi(listing: &Value) -> Option<Value> {
   let window = listing.get("contextWindow")?.as_u64()?;
   let output = listing.get("maxTokens")?.as_u64()?;
