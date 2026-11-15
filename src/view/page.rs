@@ -450,7 +450,7 @@ impl<'a> Reader<'a> {
         .or_else(|| raised.and_then(|at| made[at].1))
         .unwrap_or_else(|| word.split('\n').count());
       if let Some(at) = line(&lines, Some(source)) {
-        lines[at].mark = Mark::Failed { why: why.clone() };
+        lines[at].mark = Mark::Failed { why: readable(why, made) };
       }
     } else if let RunState::Cancelled(_) = run {
       // The stop ended the word on the line of the act that it cut, or else on its last line.
@@ -576,6 +576,15 @@ impl<'a> Reader<'a> {
       line: stands.or(lines.len().checked_sub(1)).map(|at| lines[at].clone()),
     }
   }
+}
+
+/// Why a word failed, as a person reads it at the line that raised: a refusal of furb says its
+/// reason alone, with no name of its class, and with no name of the act that the line made, which
+/// the line shows as code.
+fn readable(why: &str, made: &[(&Act, Option<usize>)]) -> String {
+  let reason = why.strip_prefix("Refused: ").unwrap_or(why);
+  let named = made.iter().find_map(|(act, _)| reason.strip_prefix(&format!("{} ", act.id)));
+  named.unwrap_or(reason).to_owned()
 }
 
 /// The text of a word of an act, or nothing.

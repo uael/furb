@@ -365,6 +365,10 @@ impl Feed<'_> {
       Mark::Failed { .. } if line.text.is_empty() && !under.is_empty() => {
         vec![run(under.remove(0), look)]
       }
+      // A model asked for a line that it has not begun says so, so the lit row is never empty.
+      Mark::Runs { work: Work::Writes, .. } if line.text.is_empty() => {
+        vec![run("writes", self.style(Role::Muted).italic())]
+      }
       _ => colors,
     };
     let ground = if loader.is_some() { t.lifted } else { t.raised };

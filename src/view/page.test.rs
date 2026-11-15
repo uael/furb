@@ -470,7 +470,7 @@ fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_
 }
 
 #[test]
-fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command() {
+fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command_with_its_reason() {
   // The reason of the refusal names no line, and the command is done with its exit, no fault.
   let mut streams = Streamed::default();
   let word = "await bash('exit 3')\nclose('done')";
@@ -492,6 +492,7 @@ fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command() 
   let marks: Vec<bool> =
     block.lines.iter().map(|line| matches!(line.mark, Mark::Failed { .. })).collect();
   assert_eq!(marks, [true, false], "{block:?}");
+  assert_eq!(block.lines[0].mark, Mark::Failed { why: "exited 3".to_owned() });
 }
 
 #[test]
