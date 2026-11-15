@@ -761,15 +761,22 @@ impl Life {
   }
 
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
-  /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
-  /// A fact that kept a checkpoint or a fact made stays, since the log of the record holds that
-  /// entry as its number alone.
+  /// passed, and each fact that kept a checkpoint, which holds each turn of each chain, hundreds
+  /// of MB on a large life, that the log and each image of it would else hold again. The log
+  /// keeps an empty place for each, which [`Life::since`] fills from the record. A fact that kept
+  /// a fact made stays, since the log of the record holds that entry as its number alone, and the
+  /// fact made that an open says under another speaker.
   fn let_go(&mut self) {
     let opened = mem::take(&mut self.kept.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
     for (at, slot) in self.kept.log.iter_mut().enumerate().skip(self.kept.gone.scanned) {
       let fact = slot.as_ref().and_then(Slot::fact);
-      let Some(fact) = fact.filter(|fact| !kept(at) && !kept_checkpoint(fact)) else { continue };
+      let gone = |fact: &&Value| match kept_kind(fact) {
+        Some(checkpoint::CHECKPOINT) => true,
+        Some(world::MADE) => false,
+        _ => !kept(at),
+      };
+      let Some(fact) = fact.filter(gone) else { continue };
       self.kept.gone.places.push((at as Seq, Digest::of(fact)));
       *slot = None;
     }
@@ -819,10 +826,14 @@ impl Life {
 /// fact of its digest, with that speaker. The file of the
 /// record holds that entry as its number alone, so a reader makes the fact again from the fact
 /// that the entry holds.
+///
+/// The keep of a checkpoint is apart: the file of the log of the record holds no fact of a
+/// checkpoint, so a reader finds it among the checkpoints of the record, read from its end.
 #[derive(Clone, Serialize, Deserialize)]
 enum Digest {
   Fact(u64),
   Keep(u64, String),
+  Checkpoint(u64, String),
 }
 
 impl Digest {
@@ -832,7 +843,11 @@ impl Digest {
       Some([kind, about, by, Value::Array(entry)])
         if kind == "keep" && about == "" && entry.len() == 1 =>
       {
-        Self::Keep(digest(&entry[0]), by.as_str().unwrap_or_default().to_owned())
+        let by = by.as_str().unwrap_or_default().to_owned();
+        match kept_kind(fact) {
+          Some(checkpoint::CHECKPOINT) => Self::Checkpoint(digest(&entry[0]), by),
+          _ => Self::Keep(digest(&entry[0]), by),
+        }
       }
       _ => Self::Fact(digest(fact)),
     }
@@ -914,11 +929,16 @@ impl Retell {
     for (at, one) in &self.wanted {
       let (key, by) = match one {
         Digest::Fact(one) => ((false, *one), None),
-        Digest::Keep(one, by) => ((true, *one), Some(by.clone())),
+        Digest::Keep(one, by) | Digest::Checkpoint(one, by) => ((true, *one), Some(by.clone())),
       };
       places.entry(key).or_default().push_back((*at, by));
     }
     let mut order: VecDeque<Seq> = self.wanted.iter().map(|one| one.0).collect();
+    let checkpoints = self.wanted.iter().filter_map(|one| match one.1 {
+      Digest::Checkpoint(digest, _) => Some(digest),
+      _ => None,
+    });
+    let checkpoints: Vec<u64> = checkpoints.collect();
     // The facts that wait for a place before them. The journal tells the keep of each fact of a
     // run at the end of that run, so the keeps of a whole run wait here while the read passes the
     // run. No bound cuts the wait, since a place that is given up before the read reaches its
@@ -947,7 +967,7 @@ impl Retell {
       !order.is_empty() && !sender.is_closed()
     };
     let (read, name) = match &self.from {
-      Source::Record(record) => (read_record(record, &mut take), record),
+      Source::Record(record) => (read_record(record, checkpoints, &mut take), record),
       Source::Log(log) => (read_log(log, &mut take), log),
     };
     if read.is_none()
@@ -970,15 +990,29 @@ type Take<'a> = dyn FnMut(u64, &dyn Fn() -> Value) -> bool + 'a;
 
 /// Each fact of the whole record: a fact that a life said as it wrote its checkpoint may stand
 /// after that checkpoint in the record. Once each place is filled, the rest of
-/// the record is read and left.
-fn read_record(record: &str, take: &mut Take<'_>) -> Option<()> {
-  let mut goes = true;
-  let each = &mut |one: Object| {
+/// the record is read and left. What the record tells holds no fact of a checkpoint when it is the
+/// log of the record, so each checkpoint whose digest a place wants is read first, from the end of
+/// the record, which passes no checkpoint before the first of them.
+fn read_record(record: &str, mut checkpoints: Vec<u64>, take: &mut Take<'_>) -> Option<()> {
+  let (mut goes, wanted) = (true, !checkpoints.is_empty());
+  // Each fact given to a place, and whether a checkpoint that a place wants is still to read.
+  let mut each = |one: Object| {
     if let Some(fact) = Fact::of(one.as_ref()).map(|a| json_of(&a)).filter(|_| goes) {
-      goes = take(digest(&fact), &|| fact.clone());
+      let one = digest(&fact);
+      checkpoints.retain(|wanted| *wanted != one);
+      goes = take(one, &|| fact.clone());
     }
+    goes && !checkpoints.is_empty()
   };
-  world::retold_live(record).ok()?.each(&mut |one| each(one)).ok()
+  if wanted {
+    world::checkpoints_back(Path::new(record), &mut each).ok()?;
+  }
+  world::retold_live(record)
+    .ok()?
+    .each(&mut |one| {
+      each(one);
+    })
+    .ok()
 }
 
 /// Each line of the file of the log, until each place is filled: a line is a fact as JSON writes
@@ -1002,14 +1036,10 @@ fn birth(opening: &mut bool, fact: &Value) -> bool {
   *opening
 }
 
-/// Whether a fact tells that the record kept a checkpoint, or a fact made, which a life keeps
-/// after its checkpoint and the store at the birth of a record.
-fn kept_checkpoint(fact: &Value) -> bool {
+/// The kind of the entry that a fact tells the record kept, when it is a fact `keep`.
+fn kept_kind(fact: &Value) -> Option<&str> {
   let entry = fact.get(3).and_then(|one| one.get(0)).and_then(|one| one.get(0));
-  fact.get(0).and_then(Value::as_str) == Some("keep")
-    && entry
-      .and_then(Value::as_str)
-      .is_some_and(|kind| [checkpoint::CHECKPOINT, world::MADE].contains(&kind))
+  (fact.get(0).and_then(Value::as_str) == Some("keep")).then(|| entry?.as_str()).flatten()
 }
 
 /// The digest of a fact, by which the log knows a fact that it told.
@@ -1247,6 +1277,8 @@ async fn moved(
   while let Ok(event) = life.heard.try_recv() {
     life.told(Some(event));
   }
+  // The checkpoint of the move passed each fact of the log, so the record holds each of them.
+  life.let_go();
   let ears = ears(told.clone(), journal);
   let (engine, _) = opening.open(ears, progress.clone(), &mut |_| false, lease).await?;
   let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();

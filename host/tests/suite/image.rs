@@ -480,3 +480,27 @@ async fn a_life_on_an_earlier_engine_shows_then_moves_to_this_build_before_a_wor
   assert!(moved < ran, "no word runs before the move");
   ended(life).await;
 }
+
+#[tokio::test]
+async fn a_checkpoint_stands_in_the_record_alone_and_a_reader_of_the_past_reads_it_there() {
+  let at = place("image-checkpoint-once");
+  let first = Life::spawn(kept(&at)).expect("the first life");
+  let mut events = Box::pin(first.events(0));
+  let id = made(&first, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  ended(first).await;
+  // The life opens on an earlier engine and moves to this build, which writes a checkpoint.
+  elsewhere(&at, "crossed = True");
+  let life = Life::spawn(kept(&at)).expect("the life that moves");
+  let id = made(&life, rung("y = 2")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let keeps = |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "keep" && fact[3][0][0] == "checkpoint");
+  let read = log_of(&life).await;
+  assert!(read.iter().any(|one| keeps(&one.1)), "a reader of the past reads the keep of the move");
+  ended(life).await;
+  let image = fs::read(at.join("record.jsonl.image")).expect("the image");
+  let (_, host) = host_part(&image);
+  let copied = br#"[["checkpoint","#;
+  let held = image[host..].windows(copied.len()).any(|part| part == copied);
+  assert!(!held, "the part of the host holds no copy of the checkpoint that the record holds");
+}

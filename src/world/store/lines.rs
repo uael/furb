@@ -220,6 +220,26 @@ pub(super) fn before(path: &Path, head: &[u8], to: u64) -> Result<Option<Object>
   Ok(parsed(&line(path, at)?))
 }
 
+/// Each entry of the file of lines at a path whose line starts with a head, from the last to the
+/// first, until `take` says to stop. The read goes from the end of the file, so it reads no line
+/// before the last entry that `take` takes.
+pub(super) fn back(
+  path: &Path,
+  head: &[u8],
+  take: &mut dyn FnMut(Object) -> bool,
+) -> Result<(), StoreError> {
+  let mut to = u64::MAX;
+  while let Some(at) = start(path, head, to)? {
+    if let Some(entry) = parsed(&line(path, at)?)
+      && !take(entry)
+    {
+      return Ok(());
+    }
+    to = at;
+  }
+  Ok(())
+}
+
 /// Whether the last line of the file of lines at a path starts with a head and is no entry: a stop
 /// tore it as the store wrote it, so it has no end and does not parse.
 pub(super) fn torn(path: &Path, head: &[u8]) -> Result<bool, StoreError> {

@@ -278,6 +278,31 @@ pub fn checkpoints(path: impl AsRef<Path>) -> Result<Vec<usize>, Fault> {
   Ok(places)
 }
 
+/// Each checkpoint of the record at a path, as the engine gives the fact, until `take` says to
+/// stop, read with no lease and changed in nothing: a file of lines from its last checkpoint to its
+/// first, read from its end, so no line before the last checkpoint that `take` takes is read, and
+/// a database in its order. The log of a record holds a checkpoint as its number alone, so a reader
+/// of the past finds it here.
+pub fn checkpoints_back(path: &Path, take: &mut dyn FnMut(Object) -> bool) -> Result<(), Fault> {
+  let fact = |entry: &Object| entry.as_ref().items()?.first().map(|one| super::reader::plain(*one));
+  let mut each = |entry: Object| {
+    let fact = fact(&entry)
+      .filter(|one| Fact::of(one.as_ref()).is_some_and(|a| a.kind() == checkpoint::CHECKPOINT));
+    fact.is_none_or(&mut *take)
+  };
+  match Format::of(path) {
+    Format::Lines => {
+      let head = format!("[[\"{}\",", checkpoint::CHECKPOINT);
+      lines::back(path, head.as_bytes(), &mut each)?;
+    }
+    Format::Sqlite => {
+      let mut goes = true;
+      sqlite::each(path, &mut |entry| goes = goes && each(entry))?;
+    }
+  }
+  Ok(())
+}
+
 /// The start of each line of the file of lines at a path that starts before a byte, and the entry
 /// of each line that `wanted` says to parse, as [`lines::heads`] gives them: what a reader takes of
 /// the entries before the last ones with no parse of them, each entry as this build reads it. A
