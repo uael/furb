@@ -164,7 +164,10 @@ impl Model {
       Target::Session(at, life) => (at, life, None),
       Target::New(at) => (at, self.record(), None),
     };
-    self.fault = self.away(at);
+    self.fault = self.away(at).or_else(|| {
+      let why = self.fault_of(at, &life)?;
+      Some(format!("Nothing went: {why}"))
+    });
     if self.fault.is_some() {
       return false;
     }
@@ -493,6 +496,8 @@ impl Model {
   /// operator writes.
   pub(crate) fn area(&self) -> Area {
     let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
+    let reads =
+      self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
     let ended = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
@@ -508,6 +513,7 @@ impl Model {
         let says = match self.target() {
           _ if self.draft.python => "A word of Python to run",
           Target::Thread(_) if opens => "Your message goes once the session is open",
+          Target::Thread(_) if reads => "The window sends nothing to this session",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_) if self.thread.as_ref().is_some_and(|one| one.from.is_some()) => {
             "Write to this agent"
@@ -724,10 +730,12 @@ impl Model {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
     let card = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
-    let works = card.is_some_and(|card| card.thread.works());
+    let ended =
+      self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
+    let works = card.is_some_and(|card| card.thread.works()) && !ended;
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.
-    let shown = self.thread.as_ref().and_then(|one| one.fault.as_ref());
+    let shown = self.thread.as_ref().and_then(|one| self.why(one));
     let notice = self.notice.clone().map(|one| (one, t.muted));
     let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
     let (does, name) = match (&self.aim, &self.thread) {
@@ -739,7 +747,7 @@ impl Model {
       (_, None) => (Does::List, "the list"),
     };
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
-    let fault = self.fault.as_ref().filter(|one| Some(*one) != shown);
+    let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     let place = fault.is_none() && says.is_none() && self.form().is_none() && self.word.is_none();
     let place = place && !works;
     let (left, loader) = match (fault, says) {

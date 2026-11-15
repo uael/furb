@@ -363,13 +363,6 @@ impl Opened {
   pub(crate) fn root(&self) -> &Self {
     self.from.as_deref().map_or(self, Self::root)
   }
-
-  /// The parts of the feed. The head shows until the first exchange of the thread is held, and
-  /// holds the messages of a thread that the daemon did not make yet.
-  pub(crate) fn items(&self) -> Items<'_, Exchange> {
-    let head = self.fault.is_some() || self.above != Some(0) || self.exchanges.is_empty();
-    Items { held: &self.exchanges, head }
-  }
 }
 
 impl Model {
@@ -432,19 +425,26 @@ impl Model {
     leaves
   }
 
-  /// Whether an escape goes back from the open thread: it is the thread of an agent, it opens, or
-  /// its page did not come.
+  /// Whether an escape goes back from the open thread: it is the thread of an agent, it opens, its
+  /// page did not come, or a fault ended its life.
   pub(crate) fn leaves(&self) -> bool {
     self
       .thread
       .as_ref()
-      .is_some_and(|one| one.from.is_some() || one.fault.is_some() || self.opens(one))
+      .is_some_and(|one| one.from.is_some() || self.why(one).is_some() || self.opens(one))
   }
 
-  /// Whether the life of an open thread opens and its page did not come.
+  /// Why the open thread says that it went wrong: the daemon gave no page, or a fault ended its
+  /// life.
+  pub(crate) fn why<'a>(&'a self, opened: &'a Opened) -> Option<&'a str> {
+    opened.fault.as_deref().or_else(|| self.fault_of(opened.key.0, &opened.key.1))
+  }
+
+  /// Whether the life of an open thread opens and its page did not come. A life that a fault
+  /// ended opens no more.
   pub(crate) fn opens(&self, opened: &Opened) -> bool {
     let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
-    opened.above.is_none() && hold.is_some_and(|hold| !hold.stood)
+    opened.above.is_none() && hold.is_some_and(|hold| !hold.stood && hold.failed().is_none())
   }
 
   /// Whether the window says that the open thread opens: from [`QUIET`] on, as the bar of the open,
@@ -458,7 +458,7 @@ impl Model {
   /// Whether the row of hints offers the key that goes back: from an agent, from a fault, and from
   /// an open that the window says.
   pub(crate) fn says_leaves(&self) -> bool {
-    let says = |one: &Opened| one.from.is_some() || one.fault.is_some() || self.says_opens(one);
+    let says = |one: &Opened| one.from.is_some() || self.why(one).is_some() || self.says_opens(one);
     self.thread.as_ref().is_some_and(says)
   }
 
@@ -468,8 +468,8 @@ impl Model {
     let opened = self.thread.as_ref()?;
     let held =
       opened.above.is_some() && !opened.again || !opened.asked.is_empty() || opened.fault.is_some();
-    let stands = self.stands(opened.key.0, &opened.key.1);
-    (!opened.key.2.is_empty() && !held && stands).then(|| opened.page(None))
+    let reads = self.reads(opened.key.0, &opened.key.1);
+    (!opened.key.2.is_empty() && !held && reads).then(|| opened.page(None))
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
@@ -511,7 +511,7 @@ impl Model {
   pub(crate) fn scroll_feed(&mut self, by: isize) -> Option<Verb> {
     let room = self.feed_room();
     let feed = self.feed()?;
-    let items = feed.opened.items();
+    let items = feed.items();
     let now = items.shown(feed.opened.top, room, |item| feed.rows(item));
     let moved = now.top.map(|top| Anchor { at: top.at, row: top.row + by });
     let then = items.shown(moved, room, |item| feed.rows(item));
@@ -580,7 +580,7 @@ impl Model {
       None => self.home(),
       Some(feed) => {
         let room = self.feed_room();
-        let shown = feed.opened.items().shown(feed.opened.top, room, |item| feed.rows(item));
+        let shown = feed.items().shown(feed.opened.top, room, |item| feed.rows(item));
         let mut rows = vec![feed.head()];
         rows.extend(self.open_rows());
         let above = rows.len();
@@ -611,9 +611,15 @@ impl Model {
   /// What the operator saw, once the feed of the open thread follows its end and its card says
   /// that the thread ended and that he did not read it. The card shows him as a reader at once, as
   /// the daemon will, so the thread that he reads never shows as unread, and the window says it
-  /// once each time the thread ends.
+  /// once each time the thread ends. A page with no exchange shows him nothing to see, and a life
+  /// that a fault ended takes nothing, this neither.
   pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| one.top.is_none() && one.above.is_some())?;
+    let shows =
+      |one: &&Opened| one.top.is_none() && one.above.is_some() && !one.exchanges.is_empty();
+    let opened = self.thread.as_ref().filter(shows)?;
+    if self.fault_of(opened.key.0, &opened.key.1).is_some() {
+      return None;
+    }
     let key = opened.key.clone();
     let login = self.machines[key.0].login.clone();
     // A card that the daemon told before it read the last Seen says unread once more.

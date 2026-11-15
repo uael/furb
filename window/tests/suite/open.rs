@@ -322,7 +322,7 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   app.paste("a draft");
   File::create(&go).unwrap();
   let frame = shows(&app, "Another process owns");
-  assert!(frame.contains("The record stays as it was. ⎋ goes back."), "{frame}");
+  assert!(frame.contains("The window reads this session and sends it nothing."), "{frame}");
   assert!(!frame.contains("Opening"), "{frame}");
   let frame = shows(&app, "┃ and the replay");
   assert!(frame.contains("┃ a draft"), "{frame}");
@@ -355,4 +355,33 @@ fn a_session_that_a_life_holds_opens_with_no_bar_and_its_other_window_goes_on() 
   assert!(matches!(peer.ask(reply), Answer::Act(_)));
   shows(&app, "┃ and the replay");
   shows(&app, "3  found = 2");
+}
+
+/// A session whose record stands before the stable cut opens in no life: the window still reads
+/// its thread, says why it ended with no work that moves, and takes no message for it.
+#[cfg(unix)]
+#[test]
+fn a_session_that_a_fault_ended_shows_its_thread_and_why_and_takes_no_message() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.project("furb");
+  daemon.served();
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
+  fs::copy(before, record(&daemon, 0)).unwrap();
+  open(&app, vec![daemon.machine("mac")], homed(&daemon));
+  let card = row(&app, "FU furb") - 1;
+  app.click(70, card);
+  shows(&app, "1  b = await bash('echo a')");
+  let frame = shows(&app, "The window reads this session and sends it nothing.");
+  let left: Vec<String> = frame.lines().map(|line| line.chars().take(LEFT).collect()).collect();
+  assert_eq!(
+    left[1].trim_end(),
+    "  The record comes from a build before the stable cut of",
+    "{frame}"
+  );
+  assert!(frame.contains("The window sends nothing to this session"), "{frame}");
+  assert!(!frame.contains("Working") && !frame.contains("Resolve"), "{frame}");
+  app.paste("Run it.");
+  app.press("enter");
+  shows(&app, "Nothing went: the record comes from");
 }

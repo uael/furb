@@ -14,12 +14,12 @@ use crate::{
   code::Gutter,
   input::Armed,
   keys::Does,
-  line::{self, Line, clipped, run, spread, wrapped},
+  line::{self, Line, capital, clipped, run, spread, wrapped},
   list::project,
   model::Model,
   prose,
   question::closed,
-  thread::{Click, Fold, Item, Opened, Row, rests, width},
+  thread::{Click, Fold, Item, Items, Opened, Row, rests, width},
   tokens::{APART, Loader, Role},
 };
 
@@ -54,7 +54,7 @@ impl Feed<'_> {
         self.opened.exchanges.get(&at).map(|one| self.exchange(one)).unwrap_or_default()
       }
     };
-    if self.opened.items().last() == Some(item) {
+    if self.items().last() == Some(item) {
       rows.extend(self.opened.pending.iter().flat_map(|one| self.message(&one.text, true)));
     }
     rows
@@ -64,9 +64,48 @@ impl Feed<'_> {
     self.model.tokens.style(role)
   }
 
-  /// What stands above the exchanges that the window holds: why the daemon gave no page, the wait
-  /// for the first page, or how many messages come before.
+  /// Why a fault ended the life of the thread, which then only reads.
+  fn fault(&self) -> Option<&str> {
+    self.model.fault_of(self.opened.key.0, &self.opened.key.1)
+  }
+
+  /// Whether a fault ended the life of the thread.
+  fn ended(&self) -> bool {
+    self.fault().is_some()
+  }
+
+  /// The parts of the feed. The head shows until the first exchange of the thread is held, and
+  /// holds the messages of a thread that the daemon did not make yet, and why a fault ended the
+  /// life of the thread.
+  pub(crate) fn items(&self) -> Items<'_, Exchange> {
+    let opened = self.opened;
+    let head = self.ended() || opened.fault.is_some() || opened.above != Some(0);
+    Items { held: &opened.exchanges, head: head || opened.exchanges.is_empty() }
+  }
+
+  /// What stands above the exchanges that the window holds: why a fault ended the life, whose
+  /// threads the window still reads, then why the daemon gave no page, the wait for the first page, or how
+  /// many messages come before.
   fn before(&self) -> Vec<Row> {
+    let Some(why) = self.fault() else { return self.above() };
+    let room = self.wide.saturating_sub(4);
+    let said = |text: &str, style: Style| -> Vec<Row> {
+      wrapped(text, room).iter().map(|line| says(line, style)).collect()
+    };
+    let mut rows =
+      said(&capital(&self.model.homed(why)), Style::new().fg(self.model.tokens.danger));
+    rows.push(Row::default());
+    let key = self.model.key(Does::Close);
+    let read = format!("The window reads this session and sends it nothing. {key} goes back.");
+    rows.extend(said(&read, self.style(Role::Muted)));
+    rows.push(Row::default());
+    rows.extend(self.above());
+    rows
+  }
+
+  /// What stands above the exchanges that the window holds in a life that reads: why the daemon
+  /// gave no page, the wait for the first page, or how many messages come before.
+  fn above(&self) -> Vec<Row> {
     let muted = self.style(Role::Muted);
     let mut rows: Vec<Row> = match (&self.opened.fault, self.opened.above) {
       (Some(why), _) => {
@@ -115,7 +154,8 @@ impl Feed<'_> {
     };
     let left =
       vec![run(format!(" {project} · {mark}"), muted), run(title, self.style(Role::Title))];
-    let made = !self.opened.key.2.is_empty() && !self.model.leaves();
+    // A life that a fault ended takes no resolve: it only reads.
+    let made = !self.opened.key.2.is_empty() && !self.model.leaves() && !self.ended();
     let (mark, button) = match card.map(|card| &card.thread) {
       _ if self.opened.from.is_some() => (None, Some((run(" Back ", button), Does::Close))),
       _ if !made => (None, None),
@@ -253,9 +293,14 @@ impl Feed<'_> {
   fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
+    // A line that the record left at work in a life that a fault ended works no more.
+    let mark = match &line.mark {
+      Mark::Runs { .. } | Mark::Retries(_) if self.ended() => &Mark::Ran,
+      mark => mark,
+    };
     // What stands at the right of the line: the time of its work, or how long ago a stop ended it,
     // from one minute on, as the age of a card.
-    let right = match line.mark {
+    let right = match *mark {
       Mark::Runs { began: Some(began), .. } => self.model.since(began).map(timer),
       Mark::Stopped { at } => {
         let age = at.and_then(|at| self.model.age(at / 1000));
@@ -263,7 +308,7 @@ impl Feed<'_> {
       }
       _ => None,
     };
-    let (number, color, loader) = match &line.mark {
+    let (number, color, loader) = match mark {
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
       Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
       Mark::Asks => ("◆".to_owned(), t.attention, None),
@@ -272,12 +317,12 @@ impl Feed<'_> {
       Mark::Ran => (line.number.to_string(), t.muted, None),
     };
     let room = inner.saturating_sub(gutter + 2);
-    let (mut under, look) = match &line.mark {
+    let (mut under, look) = match mark {
       Mark::Failed { why } => (wrapped(why, room), Style::new().fg(t.danger)),
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
       _ => (Vec::new(), Style::new()),
     };
-    let colors = match &line.mark {
+    let colors = match mark {
       Mark::Retries(retry) => self.retry(retry),
       Mark::Failed { .. } if line.text.is_empty() && !under.is_empty() => {
         vec![run(under.remove(0), look)]
@@ -408,6 +453,7 @@ impl Feed<'_> {
     let time = agent.took.map_or(since, |took| Some(took).filter(|one| *one > 0)).map(timer);
     let working = |loader| (Some(loader), "  Working", t.accent);
     let (mark, word, color) = match &card.standing {
+      _ if self.ended() && card.works() => (None, "Ended", t.muted),
       Standing::Asks { .. } => (None, "◆ Input", t.attention),
       Standing::Failed => (None, "✗ Failed", t.danger),
       Standing::Paused { .. } => (None, "‖ Paused", t.attention),

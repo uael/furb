@@ -449,7 +449,9 @@ impl Model {
 
   /// Whether a mark of the window moves, or an open runs, whose time counts.
   pub(crate) fn moves(&self) -> bool {
-    let works = |one: &(Part, Key, Card)| one.2.thread.works() && self.confirmed(&one.1);
+    let works = |one: &(Part, Key, Card)| {
+      one.2.thread.works() && self.confirmed(&one.1) && self.fault_of(one.1.0, &one.1.1).is_none()
+    };
     let opens = self.holds.values().any(Hold::runs);
     self.slow && !self.known() || opens || self.settled.iter().any(works)
   }

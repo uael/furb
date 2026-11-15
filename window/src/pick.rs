@@ -15,7 +15,7 @@ use opentui::style::Style;
 use crate::{
   input::Target,
   keys::{self, Bound, Does},
-  line::{Line, run, spread},
+  line::{Line, capital, run, spread},
   list::project,
   model::{Key, Model},
   thread::{Click, Row, hued},
@@ -537,10 +537,4 @@ fn stem(life: &str) -> String {
 /// The last part of a path of a folder.
 fn tail(path: &str) -> &str {
   path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(path)
-}
-
-/// A text with its first letter in upper case.
-fn capital(text: &str) -> String {
-  let mut chars = text.chars();
-  chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }

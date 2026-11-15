@@ -259,6 +259,10 @@ impl Model {
       let opens = format!("{} Opening{share}", Loader::Model.frame(self.moved));
       return vec![run(opens, colored(t.accent))];
     }
+    // A life that a fault ended works no more, whatever the record left at work.
+    if card.thread.works() && self.fault_of(key.0, &card.life).is_some() {
+      return vec![run("Ended", muted)];
+    }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
     let since = || Some(age.clone().unwrap_or_else(|| "now".to_owned()));
     let working =

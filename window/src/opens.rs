@@ -35,12 +35,14 @@ const BAR: usize = 12;
 pub(crate) type Life = (usize, String);
 
 /// Where the open of a life that the window holds stands with the daemon: to be asked, asked
-/// under the id of its request, or answered, so each verb of the life may go.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// under the id of its request, answered, so each verb of the life may go, or ended by a fault,
+/// with why, so only its views answer: the window reads its threads and sends it nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Ask {
   Due,
   Sent(u64),
   Answered,
+  Failed(String),
 }
 
 /// A life that the window holds: the folder that it opens in when no life holds its record, where
@@ -92,9 +94,17 @@ impl Hold {
     (last.stage == Stage::Log && last.done == last.of).then_some(last.at)
   }
 
-  /// Whether the open of the life runs.
+  /// Whether the open of the life runs: a life that a fault ended opens no more.
   pub(crate) fn runs(&self) -> bool {
-    !self.stood && self.ended().is_none()
+    !self.stood && self.ended().is_none() && self.failed().is_none()
+  }
+
+  /// Why a fault ended the life, which then only reads.
+  pub(crate) fn failed(&self) -> Option<&str> {
+    match &self.ask {
+      Ask::Failed(why) => Some(why),
+      _ => None,
+    }
   }
 
   /// The share of the stage that runs, while it counts work that is not done: a stage whose work
@@ -149,6 +159,17 @@ impl Model {
     self.holds.get(&(at, life.to_owned())).is_some_and(|hold| hold.ask == Ask::Answered)
   }
 
+  /// Whether the views of a life answer: it stands, or a fault ended it and it still shows.
+  pub(crate) fn reads(&self, at: usize, life: &str) -> bool {
+    let hold = self.holds.get(&(at, life.to_owned()));
+    hold.is_some_and(|hold| hold.ask == Ask::Answered || hold.failed().is_some())
+  }
+
+  /// Why a fault ended a life that the window holds, which then only reads.
+  pub(crate) fn fault_of(&self, at: usize, life: &str) -> Option<&str> {
+    self.holds.get(&(at, life.to_owned()))?.failed()
+  }
+
   /// The open of a life that runs and that the window says, from [`QUIET`] on.
   pub(crate) fn shown_open(&self, at: usize, life: &str) -> Option<&Hold> {
     let hold = self.holds.get(&(at, life.to_owned()))?;
@@ -179,17 +200,25 @@ impl Model {
     (!self.outgoing.is_empty()).then(|| self.refused(why))
   }
 
-  /// The end of a life that a fault ended, which its machine tells a window that attached past the
-  /// tip, as when its open failed: the window lets the life go, the open thread says why, and a
-  /// message that waited for it comes back to the input, so nothing waits for ever.
+  /// The end of a life that a fault ended, which its machine tells a window that attached: the
+  /// window still reads its threads, which say why, and sends it nothing, so a message that waited
+  /// for it comes back to the input, and nothing waits for ever. The end can come before the answer
+  /// to the open, which then leaves the life as it is, and after its machine said that no life
+  /// holds the record, which let the life go: the window holds it again while its thread is open,
+  /// so the thread shows the same whatever came first.
   pub(crate) fn failed(&mut self, at: usize, life: &str, fault: String) -> bool {
-    let held = self.holds.remove(&(at, life.to_owned())).is_some();
-    let open = self.thread.as_mut().filter(|one| (one.key.0, one.key.1.as_str()) == (at, life));
-    let shown = open.map(|opened| opened.fault = Some(fault.clone())).is_some();
-    if held && !self.outgoing.is_empty() {
+    let key = (at, life.to_owned());
+    let open = self.thread.as_ref().is_some_and(|one| (one.key.0, &one.key.1) == (at, &key.1));
+    if !open && !self.holds.contains_key(&key) {
+      return false;
+    }
+    let since = self.moved;
+    let gone = || Hold { cwd: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
+    self.holds.entry(key).or_insert_with(gone).ask = Ask::Failed(fault.clone());
+    if !self.outgoing.is_empty() {
       self.restore = Some(self.refused(fault));
     }
-    held || shown
+    true
   }
 
   /// A stage of the open of a life that a machine told, as the window hears it now: whether the

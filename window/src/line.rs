@@ -125,6 +125,12 @@ pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
   out
 }
 
+/// A text with its first letter in upper case.
+pub(crate) fn capital(text: &str) -> String {
+  let mut chars = text.chars();
+  chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
 #[cfg(test)]
 #[path = "line.test.rs"]
 mod test;
