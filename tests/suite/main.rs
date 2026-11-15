@@ -6,10 +6,13 @@
 #[expect(clippy::expect_used, reason = "a test fails by a panic where its process fails")]
 mod pipes;
 
+#[path = "../common/drive.rs"]
+mod drive;
 #[path = "../common/yard.rs"]
 mod yard;
 
 mod async_open;
+mod engine;
 mod examples;
 mod promise;
 mod tip;

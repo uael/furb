@@ -432,9 +432,10 @@ fix what your change broke, and report what was broken before.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo nextest run
   --workspace`: the gates of the crate and of the command line. cargo-nextest runs each test in a process of its own,
   as `.config/nextest.toml` sets it, so a test that leans on what another left in its process fails alone, and one past
-  60 s ends and fails. The tests of a module stand beside it, `src/engine.test.rs` beside `src/engine.rs`, and those of
-  the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
-  a process, on a claude command line that answers from a script.
+  60 s ends and fails. The tests of a package stand in its `tests/suite`, one binary, and reach it through its public
+  API as a host does: `tests/suite/engine.rs` drives the real engine on ears in rust, and `cli/tests/suite/furb.rs`
+  runs `furb` as a process, on a claude command line that answers from a script. A test that no door reaches stands
+  beside its module, as `src/engine.test.rs`, and its module doc says why.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `git commit` verifies only the form of its files, and ends in about 2 seconds. Its hook, `script/hooks/pre-commit`,
   which `git config core.hooksPath script/hooks` turns on, runs only the hooks that read the staged files alone and end

@@ -10,6 +10,10 @@
 //! it, and [`binding`] gives the host API to python and to TypeScript. [`view`] folds the facts of
 //! a life into the meaning that every window shows.
 
+// The tests beside the engine share a harness with the suite, which names the crate furb.
+#[cfg(test)]
+extern crate self as furb;
+
 pub mod checkpoint;
 pub mod ear;
 pub mod engine;

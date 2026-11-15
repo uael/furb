@@ -57,7 +57,7 @@ R1, no drift on the same engine:
 - `test/test_boot.py::test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the_same_ids`
 - `test/test_boot.py::test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds`
 - `test/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
-- `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
+- `tests/suite/engine.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
 - `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_at_a_crossing_opens_as_the_entries_written_whole`, at a
   random byte of a random line, of the done of the stand of the first word of the root and of the last fact made,
   from a seed that it prints
@@ -91,7 +91,7 @@ R3, no drift within a major, on the texts that each record holds:
 The schemas (P7, P8):
 
 - `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
-- `src/world/store/schema.test.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
+- `tests/suite/world/schema.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
 - `src/life.test.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
 - `host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
 
