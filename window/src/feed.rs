@@ -7,13 +7,13 @@ use furb::view::{
   Block, Exchange, Line as Code, Maker, Mark, Retrying, Said, Saying, Standing, Thought, Work,
 };
 use opentui::style::{Color, Style};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  code,
+  code::Gutter,
   input::Armed,
   keys::Does,
-  line::{self, Line, run, spread, wrapped},
+  line::{self, Line, clipped, run, spread, wrapped},
   list::project,
   model::Model,
   prose,
@@ -199,7 +199,8 @@ impl Feed<'_> {
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
-    let gutter = code::gutter(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
+    let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
+    let gutter = numbers.width;
     let head = vec![run(format!("{:gutter$}  {}", "", maker(&block.maker)), muted)];
     let mut rows = vec![Row::of(self.boxed(head, t.raised))];
     let code = self.style(Role::Prose).bg(t.raised);
@@ -219,7 +220,7 @@ impl Feed<'_> {
       rows.push(Row::clicked(self.boxed(line, t.raised), Click::Fold(fold)));
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
-      rows.extend(self.code(line, colors.clone(), gutter));
+      rows.extend(self.code(line, colors.clone(), numbers));
     }
     if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
@@ -236,9 +237,9 @@ impl Feed<'_> {
   /// and its time after one second, and the line whose model is asked again says the attempt that
   /// comes and its wait. Why a line failed, or why its model is asked again, stands under it, or
   /// in its place when its model wrote none of it.
-  fn code(&self, line: &Code, colors: Line, gutter: usize) -> Vec<Row> {
+  fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
-    let inner = self.inner();
+    let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
     let since = match line.mark {
       Mark::Runs { since: Some(since), .. } if self.model.now > since => {
         Some(self.model.now - since)
@@ -397,35 +398,6 @@ impl Feed<'_> {
 /// A row of prose from the column of the text.
 fn says(text: &str, style: Style) -> Row {
   Row::of(vec![run(format!("  {text}"), style)])
-}
-
-/// The runs of a line of code cut to a count of columns: a cut line ends with `…+` and the count of
-/// the characters that it hides, in a muted look.
-pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
-  if width(&line) <= room {
-    return line;
-  }
-  let chars: usize = line.iter().map(|one| one.content.chars().count()).sum();
-  // The mark is as wide as the count of all the characters at most, so the cut leaves it room.
-  let mut left = room.saturating_sub(format!("…+{chars}").width());
-  let (mut out, mut kept) = (Vec::new(), 0);
-  for one in line {
-    let fits = |char: &char| {
-      let wide = char.width().unwrap_or_default();
-      let fits = wide <= left;
-      left = if fits { left - wide } else { 0 };
-      fits
-    };
-    let part: String = one.content.chars().take_while(fits).collect();
-    let whole = part.len() == one.content.len();
-    kept += part.chars().count();
-    out.push(run(part, one.style));
-    if !whole {
-      break;
-    }
-  }
-  out.push(run(format!("…+{}", chars - kept), muted));
-  out
 }
 
 /// The last words of a text that fit a count of columns.
