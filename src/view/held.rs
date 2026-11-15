@@ -75,7 +75,7 @@ impl Held {
   /// that he started and that ended after it.
   pub fn noted(&mut self, fact: &Value, at: u64) {
     let text = |n: usize| fact.get(n).and_then(Value::as_str).unwrap_or_default();
-    if text(0) == "seen" && (super::act::operator(text(2)) || text(2) == "journal") {
+    if text(0) == "seen" && (super::operator(text(2)) || text(2) == "journal") {
       self.seen.entry(text(2).to_owned()).or_default().insert(text(1).to_owned(), at);
     }
   }

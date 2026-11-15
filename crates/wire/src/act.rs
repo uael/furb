@@ -2,15 +2,11 @@
 
 use std::fmt;
 
-use crate::{
-  engine::OPERATOR,
-  world::{catalog::leveled, interruption},
-};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::state::State;
+use crate::state::State;
 
 /// The kind of an act, read once from its fact: each kind that the view reads by name, and any
 /// other as its text. It serializes to that text, so a window reads the string of the fact.
@@ -87,6 +83,15 @@ impl fmt::Display for Kind {
   }
 }
 
+/// The name of the operator in the engine, which `engine::OPERATOR` of the crate furb holds too,
+/// as a test of that crate proves.
+pub const OPERATOR: &str = "operator";
+
+/// The refusal of an act that a life ended before the act did.
+pub fn interruption(id: &str) -> String {
+  format!("{id} was interrupted: the life that ran it ended before it did")
+}
+
 /// The speaker of the watch of the daemon, which tells a chain that stalled: a notice that no one
 /// of the operator made.
 pub const WATCH: &str = "watch";
@@ -128,33 +133,6 @@ impl Maker {
       Self::Operator | Self::Member { .. } => "operator".to_owned(),
       Self::Skill => "skill".to_owned(),
       Self::Engine => "furb".to_owned(),
-    }
-  }
-
-  /// The maker that an actor names, as a chain or a reply names it: the operator, a member when
-  /// the operator after `operator/` is one of these members, else the operator in one of his
-  /// sessions; a model else, read as [`leveled`] reads it, unless the models hold the whole
-  /// name. No actor is the engine.
-  pub fn of(actor: &str, models: &[String], members: &[String]) -> Self {
-    let model = |model: &str, effort: Option<&str>| Self::Model {
-      model: model.to_owned(),
-      effort: effort.map(str::to_owned),
-    };
-    match actor {
-      "" => Self::Engine,
-      _ if operator(actor) => {
-        match actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/')) {
-          Some(login) if members.iter().any(|one| one == login) => {
-            Self::Member { operator: login.to_owned() }
-          }
-          _ => Self::Operator,
-        }
-      }
-      _ if models.iter().any(|one| one == actor) => model(actor, None),
-      _ => {
-        let (name, effort) = leveled(actor);
-        model(name, effort)
-      }
     }
   }
 }
@@ -312,7 +290,7 @@ impl Pause {
 }
 
 /// The class and the arguments of a value that is a fault, as the engine gives one.
-pub(crate) fn fault(value: &Value) -> Option<(&str, &[Value])> {
+pub fn fault(value: &Value) -> Option<(&str, &[Value])> {
   Some((value.get("is")?.as_str()?, value.get("args")?.as_array()?.as_slice()))
 }
 

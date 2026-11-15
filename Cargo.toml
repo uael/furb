@@ -44,7 +44,7 @@ include = [
 # holds each life of a machine, on the public API of the crate alone. The window draws the daemon of the host, and
 # only the frames of the window depend on it, so only a build of those two needs Zig. `bind/typescript` is the addon of
 # N-API of the npm package, and `xtask` the tasks of a developer, which `cargo xtask` runs.
-members = ["bind/typescript", "cli", "frames", "host", "window", "xtask"]
+members = ["bind/typescript", "cli", "crates/wire", "frames", "host", "window", "xtask"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
@@ -121,6 +121,8 @@ extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive"]
 
 [dependencies]
+# What crosses the wire: the shapes of the meaning of a life, which the view folds and each client reads.
+furb-wire = { path = "crates/wire", version = "0.4.2" }
 # The sandbox the engine runs in. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
 monty = { git = "https://github.com/uael/monty", rev = "3b32acfb" }

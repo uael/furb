@@ -10,7 +10,7 @@ use crate::{
   world::{Shape, named},
 };
 
-use super::act::Act;
+use super::Act;
 
 /// A prompt to the operator that waits for him. A question waits for an answer of its shape. A
 /// notice is a prompt of None, which the console closed as it took it, and which waits only until

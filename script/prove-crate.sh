@@ -3,7 +3,7 @@
 # crate that stands on git, and furb stands on the fork of monty by git, so the proof stands in for the day when monty
 # stands on crates.io with what furb needs: it copies this checkout, and there it gives each dependency on monty the
 # version of the fork at the revision that Cargo.toml names. cargo packs the crates of the fork that furb runs at that
-# revision, and furb, furb-host and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io,
+# revision, and furb-wire, furb, furb-host and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io,
 # and cargo takes every other crate from crates.io and resolves each version afresh, with no lock of furb, as a user
 # gets them. A new crate takes furb as cargo add writes it, runs the example chains of docs/examples/rust there, on a
 # claude command line that answers from a script, and cargo install puts furb-cli on it and runs furb --help. The first
@@ -42,6 +42,8 @@ unpack() {
 for crate in $monty; do
   unpack "$CARGO_TARGET_DIR/package/$crate-$fork.crate"
 done
+(cd "$work/furb" && cargo --config "$work/config.toml" package --quiet --no-verify -p furb-wire)
+unpack "$CARGO_TARGET_DIR/package/furb-wire-$version.crate"
 (cd "$work/furb" && cargo --config "$work/config.toml" package --quiet --no-verify -p furb)
 unpack "$CARGO_TARGET_DIR/package/furb-$version.crate"
 cargo new --quiet --vcs none "$work/demo"

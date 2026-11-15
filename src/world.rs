@@ -1,4 +1,5 @@
-//! The World that the crate writes: ears of the outside that serve the machine, one for each concern.
+//! The World that the crate writes: ears of the outside that serve the machine, one for each
+//! concern.
 //!
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These
 //! are the ones every host shares, written once in rust: [`files`] reads and writes a path, the
@@ -14,8 +15,8 @@
 //! the configs that the provider and the extensions read, for each host and each window.
 //! [`spawn`] starts the child of a host in a group that ends with it.
 //!
-//! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
-//! its place, and an ear that takes a question and asks it again wraps it.
+//! Each is an ear like any other, so an ear that comes before one of them in the order of boot
+//! takes a question in its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
 mod child;
@@ -42,6 +43,7 @@ pub use bash::{bash, program, shell};
 pub use child::{Group, Unborn, spawn};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
+pub(crate) use furb_wire::interruption;
 pub use log::{log, logged};
 pub(crate) use log::{logging, logging_on};
 pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
@@ -94,9 +96,9 @@ pub fn free(_: &Path) -> Option<u64> {
   None
 }
 
-/// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
-/// the directory the life stands on, each read as a path of the machine where it names the home of the user with `~`,
-/// as the World writes it.
+/// The directory a chain stands in, which a path of it resolves against: where the chain went last,
+/// resolved against the directory the life stands on, each read as a path of the machine where it
+/// names the home of the user with `~`, as the World writes it.
 pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf, Fault> {
   let on = vec![("on", Object::string(on))];
   let cwd = co.call("cwd", vec![], on).await?;
@@ -118,13 +120,8 @@ pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<
   co.call("close", vec![Fault::refused(interruption(a.about())).object()], id).await.map(drop)
 }
 
-/// The refusal of an act that a life ended before the act did.
-pub(crate) fn interruption(id: &str) -> String {
-  format!("{id} was interrupted: the life that ran it ended before it did")
-}
-
-/// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path
-/// itself when it is absolute, with every `.` and `..` read.
+/// A path resolved against a directory, as a path of the machine: the directory with the path after
+/// it, or the path itself when it is absolute, with every `.` and `..` read.
 pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
   let mut out = PathBuf::new();
   for part in directory.join(path).components() {

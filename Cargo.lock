@@ -1447,6 +1447,7 @@ dependencies = [
  "anstream",
  "base64 0.22.1",
  "bytes",
+ "furb-wire",
  "futures",
  "getrandom 0.3.4",
  "google-cloud-auth",
@@ -1575,6 +1576,15 @@ dependencies = [
  "tree-sitter-python",
  "unicode-width",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "furb-wire"
+version = "0.4.2"
+dependencies = [
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

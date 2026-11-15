@@ -9,17 +9,46 @@ use crate::{fact::named, skill};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{
-  act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, operator},
+use furb_wire::{
+  OPERATOR,
+  act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, interruption, operator},
   state::{State, chain_state},
 };
-use crate::world::{CONSOLE, interruption};
+
+use crate::world::{CONSOLE, catalog::leveled};
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
 /// is answered for the act that asked it, which shows what it came to. A record of an earlier build
 /// holds the questions of the kind gate.
 const STEPS: [&str; 11] =
   ["setup", "stand", "clock", "chance", "gate", "cd", "merged", "run", "writing", "wants", "reply"];
+
+/// The maker that an actor names, as a chain or a reply names it: the operator, a member when
+/// the operator after `operator/` is one of these members, else the operator in one of his
+/// sessions; a model else, read as [`leveled`] reads it, unless the models hold the whole
+/// name. No actor is the engine.
+pub(crate) fn maker_of(actor: &str, models: &[String], members: &[String]) -> Maker {
+  let model = |model: &str, effort: Option<&str>| Maker::Model {
+    model: model.to_owned(),
+    effort: effort.map(str::to_owned),
+  };
+  match actor {
+    "" => Maker::Engine,
+    _ if operator(actor) => {
+      match actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/')) {
+        Some(login) if members.iter().any(|one| one == login) => {
+          Maker::Member { operator: login.to_owned() }
+        }
+        _ => Maker::Operator,
+      }
+    }
+    _ if models.iter().any(|one| one == actor) => model(actor, None),
+    _ => {
+      let (name, effort) = leveled(actor);
+      model(name, effort)
+    }
+  }
+}
 
 /// Whether a person follows an act of a kind, so that a pause can hold it.
 pub fn followed(kind: &str) -> bool {
@@ -249,9 +278,9 @@ impl Fold {
     let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
     match (kind, by, self.acts.get(by)) {
       (Kind::Rung, ..) if text(1).is_empty() && !text(3).is_empty() => {
-        Maker::of(text(3), &self.models, &self.members)
+        maker_of(text(3), &self.models, &self.members)
       }
-      (_, by, _) if operator(by) => Maker::of(by, &self.models, &self.members),
+      (_, by, _) if operator(by) => maker_of(by, &self.models, &self.members),
       (_, skill::EAR, _) => Maker::Skill,
       (_, _, Some(made)) if made.kind != Kind::Chain => made.maker.clone(),
       _ => Maker::Engine,

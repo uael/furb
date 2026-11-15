@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::act::{Act, Kind, RunState};
+use crate::act::{Act, Kind, RunState};
 
 /// The state of work: it asks the operator, it ended while the operator looked away, it failed, a
 /// pause holds it, its model thinks or writes its word, a word or a command of it runs, its word

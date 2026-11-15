@@ -43,6 +43,8 @@ API of its own:
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
   they stood at a moment. It depends on the crate alone, so the host and each door read one fold. `Fold` hears each
   fact, and `Held` keeps the acts that a host told, from which it draws the desk, the threads and the moments.
+  The plain shapes that it folds into, an act with its state, and the words in which a person reads a time, a size
+  and a count, stand in `crates/wire`, the crate `furb-wire`, which a client links with no engine and no daemon.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
   boot, while `gathered` and `seed` of the checkpointer write and read its data. A life writes one through

@@ -5,7 +5,8 @@ use serde_json::{Value, json};
 
 use std::collections::HashMap;
 
-use super::Fold;
+use super::{Fold, maker_of};
+use crate::engine;
 use crate::view::{Maker, Pause, RunState, State};
 use crate::world::catalog::leveled;
 
@@ -202,22 +203,22 @@ fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_nam
     model: model.to_owned(),
     effort: effort.map(str::to_owned),
   };
-  assert_eq!(Maker::of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", None));
+  assert_eq!(maker_of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", None));
   assert_eq!(
-    Maker::of("claude-cli:org/plain/high", &[], &[]),
+    maker_of("claude-cli:org/plain/high", &[], &[]),
     model("claude-cli:org/plain", Some("high"))
   );
   let whole = ["claude-cli:org/high".to_owned()];
-  assert_eq!(Maker::of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", None));
+  assert_eq!(maker_of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", None));
   // The id of a model of a local server holds a slash, and the one parse of the catalog reads it.
   for (actor, name, level) in [
     ("local:org/qwen3", "local:org/qwen3", None),
     ("local:org/qwen3/low", "local:org/qwen3", Some("low")),
   ] {
     assert_eq!(leveled(actor), (name, level), "{actor}");
-    assert_eq!(Maker::of(actor, &[], &[]), model(name, level), "{actor}");
+    assert_eq!(maker_of(actor, &[], &[]), model(name, level), "{actor}");
   }
-  assert_eq!(Maker::of("", &[], &[]), Maker::Engine);
+  assert_eq!(maker_of("", &[], &[]), Maker::Engine);
 }
 
 #[test]
@@ -378,4 +379,9 @@ fn a_checkpoint_ends_each_run_of_a_word_and_a_run_that_it_cut_did_not_fail() {
   let cut = moved.iter().find(|act| act.id == "run2").and_then(|act| act.value().cloned());
   let why = "run2 was interrupted: the life that ran it ended before it did";
   assert_eq!(cut, Some(json!({"is": "Refused", "args": [why]})));
+}
+
+#[test]
+fn the_wire_names_the_operator_as_the_engine_does() {
+  assert_eq!(furb_wire::OPERATOR, engine::OPERATOR);
 }
