@@ -1,5 +1,5 @@
 //! The kinds of what the last answer of the chain of a thread read: the engine, which is its system
-//! prompt, the doctrine, the code of the extensions, the skills, the tools of MCP, the memory files
+//! prompt, the doctrine, the code of the kits, the skills, the tools of MCP, the memory files
 //! and the turns of the work, which the client parts from the turns of the chain while the box of
 //! the context shows them.
 
@@ -15,7 +15,7 @@ use crate::{Asked, Client, Fold, Key};
 pub enum Content {
   Engine,
   Doctrine,
-  Extensions,
+  Kits,
   Skills,
   Mcp,
   Memory,
@@ -28,7 +28,7 @@ impl Content {
   pub const ALL: [Self; 7] = [
     Self::Engine,
     Self::Doctrine,
-    Self::Extensions,
+    Self::Kits,
     Self::Skills,
     Self::Mcp,
     Self::Memory,
@@ -40,7 +40,7 @@ impl Content {
     match self {
       Self::Engine => "Engine",
       Self::Doctrine => "Doctrine",
-      Self::Extensions => "Extensions",
+      Self::Kits => "Kits",
       Self::Skills => "Skills",
       Self::Mcp => "MCP",
       Self::Memory => "Memory files",
@@ -123,15 +123,15 @@ fn kinds(turns: &[Value]) -> Vec<(Content, u64)> {
   };
   let mut characters = [0.0; Content::ALL.len()];
   let mut before = 0.0;
-  let mut extension = false;
+  let mut kit = false;
   for (at, turn) in turns[..last].iter().enumerate() {
     let python = turn[1].as_str().unwrap_or_default();
     let parts = if turn[0] == "assistant" {
-      // The setup reads the code of each extension in a rung of its own, and tells it whole.
-      extension = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
+      // The setup reads the code of each kit in a rung of its own, and tells it whole.
+      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
       vec![(Content::Turns, python)]
-    } else if mem::take(&mut extension) {
-      vec![(Content::Extensions, python)]
+    } else if mem::take(&mut kit) {
+      vec![(Content::Kits, python)]
     } else {
       paragraphs(python).into_iter().map(|paragraph| (kind(paragraph), paragraph)).collect()
     };

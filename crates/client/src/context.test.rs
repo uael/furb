@@ -9,7 +9,7 @@ fn turn(role: &str, python: &str, read: Option<f64>) -> Value {
 #[test]
 fn the_kinds_of_an_answer_sum_to_what_it_read_and_the_engine_takes_what_no_turn_holds() {
   let doctrine = format!("#read1\nread1_path = '/x/DOCTRINE.md'\n{}", "d".repeat(400));
-  let extension = format!("NAMES = 1\n{}", "e".repeat(200));
+  let kit = format!("NAMES = 1\n{}", "e".repeat(200));
   // A heading of markdown in a memory file starts no paragraph of its own.
   let told = format!(
     "#chain1\nchain1_label = 'root'\n\n#read2\nread2_path = '/p/AGENTS.md'\n# Title\n\n# Heading\n{}",
@@ -21,7 +21,7 @@ fn the_kinds_of_an_answer_sum_to_what_it_read_and_the_engine_takes_what_no_turn_
     turn("assistant", "read('/x/DOCTRINE.md')", None),
     turn("user", &doctrine, None),
     turn("assistant", "rung(read('/x/memory.py', HIDDEN).content)", None),
-    turn("user", &extension, None),
+    turn("user", &kit, None),
     turn("user", &told, None),
     turn("assistant", "close('a')", Some(1225.75)),
     turn("user", "#prompt2\nprompt2_message = 'more'", None),
@@ -30,7 +30,7 @@ fn the_kinds_of_an_answer_sum_to_what_it_read_and_the_engine_takes_what_no_turn_
   let parted = [
     (Content::Engine, 1000),
     (Content::Doctrine, 109),
-    (Content::Extensions, 53),
+    (Content::Kits, 53),
     (Content::Memory, 39),
     (Content::Turns, 36),
   ];

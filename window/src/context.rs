@@ -126,7 +126,7 @@ impl Model {
       let kind = |&(content, tokens): &(Content, u64)| {
         let color = match content {
           Content::Turns => t.accent,
-          Content::Extensions => purple,
+          Content::Kits => purple,
           Content::Skills => teal,
           Content::Mcp => slate,
           Content::Memory => rose,
