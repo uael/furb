@@ -364,7 +364,8 @@ impl Feed<'_> {
       .lines()
       .flat_map(|line| wrapped(line, self.wide.saturating_sub(6)))
       .collect::<Vec<_>>();
-    // An image that the message names stands as its mark, as the input shows it.
+    // An image that the message names, and a file that it mentions, stand as marks, as the input
+    // shows them.
     let (plain, mark) =
       (self.style(Role::Prose).bg(t.raised), Style::new().fg(t.accent).bg(t.lifted));
     let text = lines.into_iter().map(|line| banded(picture::marked(&line, plain, mark)));

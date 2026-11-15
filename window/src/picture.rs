@@ -1,10 +1,10 @@
 //! The images of the input and of his messages: the image file of a path that he pastes, as a
 //! terminal pastes a file that he drags on it, and the mark that stands for an image in a text.
 
-use std::{fs, path::Path};
+use std::{fs, ops::Range, path::Path};
 
 use furb::world::images;
-use furb_client::PICTURE;
+use furb_client::{PICTURE, mentioned};
 use opentui::style::Style;
 
 use crate::line::{Line, run};
@@ -37,22 +37,31 @@ pub(crate) fn shown(text: &str) -> String {
   })
 }
 
-/// A line of text in a style, with each mark of an image in the style of a mark: from its sign to
-/// the next space.
+/// A line of text in a style, with each mark of an image, from its sign to the next space, and
+/// each file that it mentions in the style of a mark, as the input shows them.
 pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
+  let images = line.match_indices(PICTURE).map(|(at, _)| {
+    let after = &line[at + PICTURE.len()..];
+    at..at + PICTURE.len() + after.find(' ').unwrap_or(after.len())
+  });
+  let mut spans: Vec<Range<usize>> =
+    images.chain(mentioned(line).into_iter().map(|(span, _)| span)).collect();
+  spans.sort_by_key(|span| span.start);
   let mut out = Vec::new();
-  let mut rest = line;
-  while let Some(at) = rest.find(PICTURE) {
-    let after = &rest[at + PICTURE.len()..];
-    let end = at + PICTURE.len() + after.find(' ').unwrap_or(after.len());
-    if at > 0 {
-      out.push(run(&rest[..at], plain));
+  let mut from = 0;
+  for span in spans {
+    // A mark inside another one, as an @ in the name of an image, is part of it.
+    if span.start < from {
+      continue;
     }
-    out.push(run(&rest[at..end], mark));
-    rest = &rest[end..];
+    if span.start > from {
+      out.push(run(&line[from..span.start], plain));
+    }
+    out.push(run(&line[span.clone()], mark));
+    from = span.end;
   }
-  if !rest.is_empty() || out.is_empty() {
-    out.push(run(rest, plain));
+  if from < line.len() || out.is_empty() {
+    out.push(run(&line[from..], plain));
   }
   out
 }
