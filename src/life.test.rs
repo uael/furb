@@ -2071,3 +2071,29 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   assert!(told.iter().any(|one| within(&one)), "the replay counts entries as it passes them");
   drop(later);
 }
+
+/// An open whose image does not load, as one whose part of the host the host does not take, opens
+/// by its record on what it waited for: it tells no stage again and waits for its catalog once.
+#[test]
+fn an_open_whose_image_does_not_load_tells_no_stage_again() {
+  let at = yard("stages-image");
+  let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut first, "x = 1\nclose(x)");
+  assert!(image::keep(&mut first, &at.join("record.jsonl"), &()).unwrap(), "the life has an image");
+  drop(first);
+  let told = Arc::new(Mutex::new(Vec::new()));
+  let heard = Arc::clone(&told);
+  let progress =
+    Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let (mut later, replayed) =
+    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| false)).unwrap();
+  assert!(!replayed.is_empty(), "the life opens by its record");
+  assert_eq!(closed(&mut later, "close(x)").as_ref().py_repr(), "1");
+  let told = told.lock().unwrap().clone();
+  let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
+  stages.dedup();
+  assert!(stages.is_sorted_by(|a, b| a < b), "no stage comes again: {told:?}");
+  let starts = told.iter().filter(|one| **one == (Stage::Find, 0, told[0].2)).count();
+  assert_eq!(starts, 1, "the open waits for its catalog once: {told:?}");
+}

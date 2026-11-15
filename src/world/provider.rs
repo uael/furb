@@ -88,7 +88,9 @@ pub type Search = Arc<dyn Fn(&str) -> Option<Searches> + Send + Sync>;
 
 /// The provider: the directory the life stands on, the models it offers, the default actor, the
 /// most tokens of thought of a model in one turn, the directory of the images that a turn names,
-/// whom it tells what a model writes, and the extensions that it gives in the standing.
+/// whom it tells what a model writes, and the extensions that it gives in the standing. A clone
+/// shares the models.
+#[derive(Clone)]
 pub struct Provider {
   directory: String,
   config: Option<PathBuf>,

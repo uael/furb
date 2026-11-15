@@ -4972,7 +4972,7 @@
         {
           "type": "string",
           "const": "seed",
-          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it, or the sandbox loads the session of the image of the life, which then boots on\nno entry. It counts nothing."
+          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it, or the sandbox loads the session of the image of the life, which then boots on\nno entry. An open whose image does not load reads its record from its last checkpoint in this\nstage, then seeds it. It counts nothing."
         },
         {
           "type": "string",

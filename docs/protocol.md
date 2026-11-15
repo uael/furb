@@ -311,7 +311,7 @@ daemon answers requests in any order.
     | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Entries of the record that the facts told stand after, of its entries as far as that checkpoint. Both are 0 until the daemon found the checkpoint. |
     | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
     | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
-    | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
+    | `seed` | The sandbox loads the engine and makes the entries of the checkpoint, or it loads the image of the life. When the image does not load, the record is read from its last checkpoint in this stage. | Both are 0: the stage counts nothing. |
     | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
     | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |
 
