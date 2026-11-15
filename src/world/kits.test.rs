@@ -2,21 +2,24 @@
 //! shell that speaks the frames of a kit on its stdin and its stdout.
 
 use std::{
-  env, fs,
+  env, fs, future,
   path::{Path, PathBuf},
   process,
+  time::{Duration, Instant},
 };
 
+use futures::stream;
+
 use super::kits;
+#[cfg(unix)]
+use crate::testing::pause;
 use crate::{
   Ear, Engine, Fact, Object,
-  ear::{ear, hear, say},
+  ear::{Co, Next, ear, hear, say},
   skill::Places,
   testing::block_on,
   verbs,
 };
-#[cfg(unix)]
-use {crate::testing::pause, std::time::Duration};
 
 /// The ear that answers a stand with the operator alone, in the directory of the tests.
 fn standing() -> Box<dyn Ear> {
@@ -194,4 +197,77 @@ fn a_process_that_ends_before_its_life_refuses_the_act_that_it_held_with_why() {
   let why = format!("The process {} of the kit note ended with ", program.display());
   assert!(no.contains(&why), "{no}");
   assert!(no.contains("The last lines of its stderr:\nboom"), "{no}");
+}
+
+/// The acts that a run awaits, so a hop is a part of the difference of two runs: the acts of a
+/// kit and the acts of an ear of this process, which each answer later through the same facts.
+const HOPS: u32 = 10;
+
+/// The least time of each of `runs` runs of a step.
+fn least(runs: usize, mut step: impl FnMut()) -> Duration {
+  (0..runs)
+    .map(|_| {
+      let at = Instant::now();
+      step();
+      at.elapsed()
+    })
+    .min()
+    .unwrap()
+}
+
+/// The least program of the system: `true`, or an exit of `cmd` on Windows.
+fn least_program() -> process::Command {
+  #[cfg(unix)]
+  let program = process::Command::new("true");
+  #[cfg(windows)]
+  let program = {
+    let mut program = process::Command::new("cmd");
+    program.args(["/c", "exit"]);
+    program
+  };
+  program
+}
+
+/// The ear that answers each act `note_later` in this process as a kit answers its acts: it says
+/// that it started, and its work says the done.
+fn later() -> Box<dyn Ear> {
+  ear(move |mut co: Co<String>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) if a.kind() == "note_later" && a.question() => {
+          say(&mut co, Fact::says("started", a.about(), []));
+          co.work(stream::once(future::ready(a.about().to_owned())));
+        }
+        Next::Worked(id) => say(&mut co, Fact::says("done", &id, [Object::string("added")])),
+        _ => {}
+      }
+    }
+  })
+}
+
+#[test]
+fn the_hop_to_the_process_of_a_kit_costs_less_than_the_start_of_the_least_program() {
+  let at = place("speed");
+  let program = noted(&at, ADDS);
+  let places = Places { config: at.join("user"), home: None };
+  let kits = kits(String::new(), at, None, places);
+  let ears = [("stand", standing()), ("later", later()), ("kits", kits)];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let words = ["note", "", "", "", "", "", &program.display().to_string()].map(Object::string);
+  engine.say("enable", "chain1", words.into()).unwrap();
+  let mut ran = |kind: &str| {
+    let word =
+      format!("for _ in range({HOPS}):\n  await act('{kind}', '', None, 'milk')\nclose(None)");
+    least(10, || drop(closed(&mut engine, &word).unwrap()))
+  };
+  ran("note_add");
+  let (kit, here) = (ran("note_add"), ran("note_later"));
+  let start = least(10, || {
+    least_program().status().unwrap();
+  });
+  let hop = kit.saturating_sub(here) / HOPS;
+  assert!(
+    hop < start,
+    "the hop took {hop:?} ({kit:?} less {here:?}, over {HOPS}), and the start of the least program {start:?}"
+  );
 }
