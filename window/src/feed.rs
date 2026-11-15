@@ -528,15 +528,11 @@ impl Feed<'_> {
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
       _ => (Vec::new(), Style::new()),
     };
-    let writes = matches!(mark, Mark::Runs { work: Work::Writes, .. }) && line.text.is_empty();
     let colors = match mark {
-      Mark::Retries(retry) => self.retry(retry),
       Mark::Failed { .. } if line.text.is_empty() && !under.is_empty() => {
         vec![run(under.remove(0), look)]
       }
-      // A model asked for a line that it has not begun says so, so the lit row is never empty.
-      _ if writes => vec![run(WRITES, self.style(Role::Muted).italic())],
-      _ => colors,
+      _ => self.written(line, mark).unwrap_or(colors),
     };
     let ground = if loader.is_some() { t.lifted } else { t.raised };
     let muted = self.style(Role::Muted);
@@ -580,6 +576,20 @@ impl Feed<'_> {
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
     rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// What a line shows in place of its code: the attempt that comes while its model is asked
+  /// again, and a word while its model has not begun it, so the lit row is never empty, or once a
+  /// stop came before it began one.
+  fn written(&self, line: &Code, mark: &Mark) -> Option<Line> {
+    let said = |word| vec![run(word, self.style(Role::Muted).italic())];
+    match mark {
+      Mark::Retries(retry) => Some(self.retry(retry)),
+      _ if !line.text.is_empty() => None,
+      Mark::Runs { work: Work::Writes, .. } => Some(said(WRITES)),
+      Mark::Stopped { .. } => Some(said("wrote nothing")),
+      _ => None,
+    }
   }
 
   /// The loaders of a line at work, at the columns of the row that shows it first. The light

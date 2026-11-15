@@ -4,7 +4,7 @@
 ┃ (the model works on it)                     FU furb                    opus
 ┃                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                             opus/high     ▐ ● Debug stuck TUI…       ✗ Failed ▌
-    ■                         stopped     ▐   FU furb                    opus ▌
+    ■  wrote nothing          stopped     ▐   FU furb                    opus ▌
                                           ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
                                            Working 2
 

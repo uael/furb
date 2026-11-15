@@ -4,7 +4,7 @@
 ┃ (the model works on it)
 ┃
                                                                    opus/high
-    ■                                                                stopped
+    ■  wrote nothing                                                 stopped
 
 
 
