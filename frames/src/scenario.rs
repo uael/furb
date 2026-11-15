@@ -615,6 +615,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[
         "out = await bash('for i in 1 2 3 4 5 6 7 8 9 10; do echo step $i of 10; sleep 1; done')\nclose(out.stdout.content)",
         "out = await bash('seq 1 300')\nclose(f'It printed {len(out.stdout.lines)} lines.')",
+        "fast, slow = bash('echo fast'), bash('sleep 4; echo slow')\nfirst = await fast\nlast = await slow\nclose(f'Both ran: {first.stdout.content.strip()} and {last.stdout.content.strip()}.')",
       ],
       pace: &[],
       reads: false,
@@ -628,6 +629,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Print three hundred lines."), Act::Key("Enter")],
           "It printed 300 lines.",
         ),
+        // A line that awaits two commands at once says how many of them ended while it runs.
+        step("d", &[Act::Type("Run the two checks at once."), Act::Key("Enter")], "1 of 2 ended"),
+        step("e", &[], "Both ran: fast and slow."),
       ],
     }),
   },

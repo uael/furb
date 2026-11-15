@@ -51,6 +51,16 @@ fn output_of([stdout, stderr]: &[Kept; 2], took: Option<u64>) -> Option<Output> 
   (!tail.is_empty() || took.is_some()).then_some(Output { tail, more, took })
 }
 
+/// The output of a line that awaited more than one command: what each wrote, in the order that
+/// the line made them, with its last `TAIL` lines, and the time of the slowest once each ended.
+fn joined(before: Output, after: Output) -> Output {
+  let mut tail = [before.tail, after.tail].concat();
+  let skip = tail.len().saturating_sub(TAIL);
+  tail.drain(..skip);
+  let took = before.took.zip(after.took).map(|(one, other)| one.max(other));
+  Output { tail, more: before.more + after.more + skip, took }
+}
+
 /// The end of what one stream of a command wrote: its last lines, at most `KEPT` bytes of them, and
 /// how many lines came before them.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -462,7 +472,10 @@ impl<'a> Reader<'a> {
         lines[at].made.push(outcome(act));
       }
       if let Some(output) = self.output(act) {
-        lines[at].output = Some(output);
+        lines[at].output = Some(match lines[at].output.take() {
+          Some(before) => joined(before, output),
+          None => output,
+        });
       }
       if act.kind == Kind::Other("write".to_owned())
         && let Some((path, after)) = self.held.filed(act)

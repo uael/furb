@@ -813,6 +813,25 @@ fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_e
   assert_eq!(output(&facts), (None, Some(Output { tail, more: 3, took: Some(0) })));
 }
 
+#[test]
+fn a_line_that_awaited_two_commands_carries_what_each_wrote_and_the_time_of_the_slowest() {
+  let mut facts = thread();
+  let word = "a, b = bash('echo a'), bash('echo b')\nawait b";
+  facts[10] = json!(["run", "run2", "chain1", "chain1", "rung2", word, ""]);
+  facts[11] = json!(["bash", "bash1", "rung2", "chain1", "echo a", "", 120.0, null]);
+  facts.push(json!(["bash", "bash2", "rung2", "chain1", "echo b", "", 120.0, null]));
+  let text = |content: &str| json!({"is": "Text", "path": "bash/out", "content": content});
+  let exit = |out: &str| json!({"is": "Exit", "code": 0, "stdout": text(out), "stderr": text("")});
+  facts.push(json!(["done", "bash1", "bash", exit("a\n")]));
+  facts.push(json!(["done", "bash2", "bash", exit("b\n")]));
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let tail = ["a", "b"].map(str::to_owned).to_vec();
+  assert_eq!(block.lines[0].output, Some(Output { tail, more: 0, took: Some(0) }));
+}
+
 /// The last line of the last block of the thread of these facts: its number, its text and its mark.
 fn last(facts: &[Value]) -> Option<(usize, String, Mark)> {
   let mut streams = Streamed::default();
