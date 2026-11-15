@@ -84,7 +84,8 @@ impl Model {
     // thread steps through its time.
     let said = says.width().max(back(last).width());
     let play = if time.played.is_some() { "❚❚" } else { "▶ " };
-    let room = self.wide().saturating_sub(BEFORE + said + 2);
+    // The words end at the column of the text, as each label at the right of the feed.
+    let room = self.wide().saturating_sub(BEFORE + said + 4);
     let axis = Axis { last, span: room.max(2) - 1, room };
     let text = Style::new().fg(t.text);
     let mut line: Line = vec![run("  ", muted), run(play, text), run(" ", muted)];
