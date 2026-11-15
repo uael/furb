@@ -16,7 +16,7 @@ use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Outgoing, Pending, Target, Thread};
+use furb_client::{Asked, Outgoing, Target};
 
 use crate::{
   keys::Does,
@@ -111,32 +111,26 @@ impl Model {
   /// goes to it. A machine that the window dials again takes nothing, and the text stays in the
   /// input. Whether the text went.
   pub(crate) fn send(&mut self, text: String) -> bool {
-    let python = self.draft.python;
     let (at, life, thread) = match self.target() {
       Target::Thread(key) => (key.0, key.1, Some(key.2)),
       Target::Session(at, life) => (at, life, None),
       Target::New(at) => (at, self.record(), None),
     };
-    self.fault = self.away(at).or_else(|| {
-      let why = self.client.fault_of(at, &life)?;
-      Some(format!("Nothing went: {why}"))
-    });
-    if self.fault.is_some() {
-      return false;
-    }
-    self.client.hold((at, life.clone()), self.cwd(at, &life), self.moved);
-    let made = thread.is_none() && !python;
-    if made {
-      let key = (at, life.clone(), String::new());
-      let thread = Thread { key: key.clone(), above: Some(0), started: true, ..Thread::default() };
+    let cwd = self.cwd(at, &life);
+    let sent = Outgoing { at, life, thread, text, python: self.draft.python };
+    let open = self.thread.as_mut().map(|one| &mut one.thread);
+    let made = match self.client.send(sent, cwd, self.moved, open) {
+      Ok(made) => made,
+      Err(why) => {
+        self.fault = Some(why);
+        return false;
+      }
+    };
+    if let Some(thread) = made {
+      (self.selected, self.aim) = (Some(thread.key.clone()), None);
       self.thread = Some(Opened { thread, ..Opened::default() });
-      (self.selected, self.aim) = (Some(key), None);
     }
-    if !python && let Some(opened) = self.thread.as_mut() {
-      opened.thread.pending.push(Pending { act: None, text: text.clone() });
-    }
-    self.client.outgoing.push_back(Outgoing { at, life, thread, text, python });
-    self.walk = None;
+    (self.fault, self.walk) = (None, None);
     true
   }
 

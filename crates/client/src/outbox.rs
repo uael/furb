@@ -5,10 +5,12 @@
 //! message goes after the one before it, and a message that goes to the thread that the message
 //! before it made knows that thread when it goes.
 
+use std::time::Duration;
+
 use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
 
 use crate::{
-  Client, Key, Life, Link,
+  Client, Key, Life, Link, Pending, Thread,
   opens::{Ask, Hold},
 };
 
@@ -75,6 +77,44 @@ impl Client {
       self.next += 1;
       Request { id, verb }
     })
+  }
+
+  /// A message of the operator sent: it waits in the queue, the client holds its life, opened in
+  /// the folder `cwd` when no life holds its record, and the thread that it goes to shows it at
+  /// once. A message to no thread starts one, which the client gives back, and a message to a
+  /// thread shows in `open`, the thread that the operator reads. A word of python shows in no
+  /// thread. A machine that the client dials again, or a life that a fault ended, takes nothing,
+  /// and the client says why.
+  #[expect(clippy::too_many_arguments, reason = "a message takes where its life opens, and when")]
+  pub fn send(
+    &mut self,
+    sent: Outgoing,
+    cwd: Option<String>,
+    since: Duration,
+    open: Option<&mut Thread>,
+  ) -> Result<Option<Thread>, String> {
+    if let Some(away) = self.away(sent.at) {
+      return Err(away);
+    }
+    if let Some(why) = self.fault_of(sent.at, &sent.life) {
+      return Err(format!("Nothing went: {why}"));
+    }
+    self.hold((sent.at, sent.life.clone()), cwd, since);
+    let pending = Pending { act: None, text: sent.text.clone() };
+    let made = match (&sent.thread, sent.python, open) {
+      (_, true, _) | (Some(_), false, None) => None,
+      (None, false, _) => {
+        let key = (sent.at, sent.life.clone(), String::new());
+        let pending = vec![pending];
+        Some(Thread { key, above: Some(0), started: true, pending, ..Thread::default() })
+      }
+      (Some(_), false, Some(open)) => {
+        open.pending.push(pending);
+        None
+      }
+    };
+    self.outgoing.push_back(sent);
+    Ok(made)
   }
 
   /// The first message of the queue of the input, once no message waits for its answer and the

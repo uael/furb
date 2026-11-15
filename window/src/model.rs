@@ -199,14 +199,6 @@ impl Model {
     true
   }
 
-  /// Why the window asks nothing of a machine now: it lost its connection, which it dials again.
-  pub(crate) fn away(&self, at: usize) -> Option<String> {
-    let told = self.client.machines.get(at)?;
-    matches!(told.link, Link::Lost(_)).then(|| {
-      format!("{} is away, so nothing went. The window dials it until it answers.", told.name)
-    })
-  }
-
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     match (asked, heard) {

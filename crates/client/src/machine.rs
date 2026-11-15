@@ -54,6 +54,13 @@ pub enum Listing {
 }
 
 impl Client {
+  /// Why a machine takes no request now: the client dials it again until it answers.
+  pub fn away(&self, at: usize) -> Option<String> {
+    let told = self.machines.get(at)?;
+    matches!(told.link, Link::Lost(_))
+      .then(|| format!("{} is away, so nothing went. furb dials it until it answers.", told.name))
+  }
+
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,
   /// at the second `now`. A machine whose connection ended hears nothing until its daemon welcomes
   /// the client again, so the first cause of a loss stays.

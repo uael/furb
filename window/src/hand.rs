@@ -543,7 +543,7 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
       let Window { askers, screen, .. } = &mut *held;
       match ask(askers, &mut screen.model, at, verb) {
         Some(id) => drop(screen.model.client.asked.insert((at, id), Asked::Answer)),
-        None => screen.model.unanswered(screen.model.away(at).unwrap_or_default()),
+        None => screen.model.unanswered(screen.model.client.away(at).unwrap_or_default()),
       }
       drop(held);
       tell(app, window, |_| ());
@@ -673,7 +673,7 @@ fn controlled(
   let Window { askers, screen, .. } = &mut *held;
   match ask(askers, &mut screen.model, at, verb) {
     Some(id) => drop(screen.model.client.asked.insert((at, id), waits)),
-    None => screen.model.fault = screen.model.away(at),
+    None => screen.model.fault = screen.model.client.away(at),
   }
   drop(held);
   tell(app, window, |_| ());

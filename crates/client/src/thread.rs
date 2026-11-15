@@ -6,9 +6,12 @@ use std::{
   time::Duration,
 };
 
-use furb_wire::{Agent, Context, Exchange, Page, protocol::Verb};
+use furb_wire::{
+  Agent, Context, Exchange, OPERATOR, Page,
+  protocol::{Card, Verb},
+};
 
-use crate::Key;
+use crate::{Asked, Client, Key};
 
 /// How many exchanges a page holds.
 pub const PAGE: usize = 20;
@@ -71,5 +74,46 @@ impl Thread {
   pub fn page(&self, before: Option<usize>) -> Verb {
     let (life, thread) = (self.key.1.clone(), self.key.2.clone());
     Verb::Thread { life, thread, before, limit: PAGE }
+  }
+}
+
+impl Client {
+  /// The page of the end of a thread that the operator reads, when the client holds none of it and
+  /// asked none, once the daemon answered the open of its life. The daemon holds it until that
+  /// life stands.
+  pub fn page_due(&self, thread: &Thread) -> Option<Verb> {
+    let held =
+      thread.above.is_some() && !thread.again || !thread.asked.is_empty() || thread.fault.is_some();
+    let reads = self.reads(thread.key.0, &thread.key.1);
+    (!thread.key.2.is_empty() && !held && reads).then(|| thread.page(None))
+  }
+
+  /// What the operator saw of a thread whose end he reads, with its machine: the card says that
+  /// the thread ended and that he did not read it. The card shows him as a reader at once, as the
+  /// daemon will, so the thread that he reads never shows as unread, and the client says it once
+  /// each time the thread ends. A page with no exchange shows him nothing to see, and a life that
+  /// a fault ended takes nothing, this neither.
+  pub fn seen_due(&mut self, thread: &Thread) -> Option<(usize, Verb)> {
+    if thread.above.is_none() || thread.exchanges.is_empty() {
+      return None;
+    }
+    let key = &thread.key;
+    if self.fault_of(key.0, &key.1).is_some() {
+      return None;
+    }
+    let login = self.machines[key.0].login.clone();
+    // A card that the daemon told before it read the last Seen says unread once more.
+    let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
+    if saying || !self.card(key)?.thread.unread(&login) {
+      return None;
+    }
+    let reader = format!("{OPERATOR}/{login}");
+    let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
+    let settled = self.settled.iter_mut().map(|one| &mut one.2);
+    for card in self.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card)) {
+      card.thread.readers.push(reader.clone());
+    }
+    let (life, about) = (key.1.clone(), key.2.clone());
+    Some((key.0, Verb::Seen { life, about }))
   }
 }

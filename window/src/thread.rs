@@ -21,7 +21,7 @@ use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Hold, Thread};
+use furb_client::{Hold, Thread};
 
 use crate::{
   keys::Does,
@@ -423,15 +423,9 @@ impl Model {
     self.thread.as_ref().is_some_and(says)
   }
 
-  /// The page of the end of the open thread, when the window holds none of it and asked none, once
-  /// the daemon answered the open of its life. The daemon holds it until that life stands.
+  /// The page of the end of the open thread, as the core asks it.
   pub(crate) fn page_due(&self) -> Option<Verb> {
-    let opened = self.thread.as_ref()?;
-    let held = opened.thread.above.is_some() && !opened.thread.again
-      || !opened.thread.asked.is_empty()
-      || opened.thread.fault.is_some();
-    let reads = self.client.reads(opened.thread.key.0, &opened.thread.key.1);
-    (!opened.thread.key.2.is_empty() && !held && reads).then(|| opened.thread.page(None))
+    self.client.page_due(&self.thread.as_ref()?.thread)
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
@@ -577,37 +571,10 @@ impl Model {
     usize::from(self.size.1).saturating_sub(taken)
   }
 
-  /// What the operator saw, once the feed of the open thread follows its end and its card says
-  /// that the thread ended and that he did not read it. The card shows him as a reader at once, as
-  /// the daemon will, so the thread that he reads never shows as unread, and the window says it
-  /// once each time the thread ends. A page with no exchange shows him nothing to see, and a life
-  /// that a fault ended takes nothing, this neither.
+  /// What the operator saw, once the feed of the open thread follows its end, as the core says it.
   pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
-    let shows = |one: &&Opened| {
-      one.top.is_none() && one.thread.above.is_some() && !one.thread.exchanges.is_empty()
-    };
-    let opened = self.thread.as_ref().filter(shows)?;
-    if self.client.fault_of(opened.thread.key.0, &opened.thread.key.1).is_some() {
-      return None;
-    }
-    let key = opened.thread.key.clone();
-    let login = self.client.machines[key.0].login.clone();
-    // A card that the daemon told before it read the last Seen says unread once more.
-    let saying =
-      self.client.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
-    if saying || !self.client.card(&key)?.thread.unread(&login) {
-      return None;
-    }
-    let reader = format!("{OPERATOR}/{login}");
-    let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
-    let settled = self.client.settled.iter_mut().map(|one| &mut one.2);
-    for card in
-      self.client.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card))
-    {
-      card.thread.readers.push(reader.clone());
-    }
-    let (at, life, about) = key;
-    Some((at, Verb::Seen { life, about }))
+    let opened = self.thread.as_ref().filter(|one| one.top.is_none())?;
+    self.client.seen_due(&opened.thread)
   }
 
   /// The card of the thread that the window started, while its machine told none: the daemon
