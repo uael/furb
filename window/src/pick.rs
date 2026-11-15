@@ -306,27 +306,23 @@ impl Model {
     if searches {
       let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
       all.extend(self.client.settled.iter().filter(rest).map(|one| thread("Threads", one)));
-      all.extend(sessions.iter().map(session));
+    }
+    // A session named after a thread of it that the list holds would be the same row twice.
+    let twice = |one: &&Session| {
+      all.iter().any(|entry| {
+        let of =
+          matches!(&entry.choice, Choice::Thread(key) if key.0 == one.at && key.1 == one.life);
+        of && entry.left == one.name
+      })
+    };
+    let kept: Vec<Entry> = sessions.iter().filter(|one| !twice(one)).map(session).collect();
+    if searches {
+      all.extend(kept);
       all.extend(self.lists());
     } else {
-      all.extend(sessions.iter().take(RECENT).map(session));
+      all.extend(kept.into_iter().take(RECENT));
     }
-    let mut projects: Vec<(&str, usize)> = Vec::new();
-    for one in sessions.iter().filter(|one| !one.project.is_empty()) {
-      if let Some(project) = projects.iter_mut().find(|project| project.0 == one.project) {
-        project.1 += 1;
-      } else {
-        projects.push((&one.project, 1));
-      }
-    }
-    all.extend(projects.into_iter().map(|(name, count)| Entry {
-      part: "Projects".into(),
-      project: Some(name.to_owned()),
-      left: name.to_owned(),
-      right: format!("{count} session{}", if count == 1 { "" } else { "s" }),
-      choice: Choice::Project(name.to_owned()),
-      ..Entry::default()
-    }));
+    all.extend(projects(&sessions));
     all.extend(self.commands());
     all
   }
@@ -886,4 +882,25 @@ fn stem(life: &str) -> String {
 /// The last part of a path of a folder.
 fn tail(path: &str) -> &str {
   path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// The rows of the projects of Go to: each project of a session, with its count of sessions.
+fn projects(sessions: &[Session]) -> Vec<Entry> {
+  let mut projects: Vec<(&str, usize)> = Vec::new();
+  for one in sessions.iter().filter(|one| !one.project.is_empty()) {
+    if let Some(project) = projects.iter_mut().find(|project| project.0 == one.project) {
+      project.1 += 1;
+    } else {
+      projects.push((&one.project, 1));
+    }
+  }
+  let row = |(name, count): (&str, usize)| Entry {
+    part: "Projects".into(),
+    project: Some(name.to_owned()),
+    left: name.to_owned(),
+    right: format!("{count} session{}", if count == 1 { "" } else { "s" }),
+    choice: Choice::Project(name.to_owned()),
+    ..Entry::default()
+  };
+  projects.into_iter().map(row).collect()
 }
