@@ -250,7 +250,7 @@ async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_li
 
 
 async def test_the_turns_of_a_chain_keep_each_told_rung_of_the_chain() -> None:
-  """The turns of a chain keep each told rung of the chain, so the chain born on them tells what it heard after its last told rung and did not tell."""
+  """The turns of a chain keep each told rung of the chain."""
   _, _, root = born()
   assert await engine.rung("t = read('a.txt')", on=root) is None
   told = [x for x in engine.reading(root) if x[0] == "run" and str(x[4]).endswith("_told")]

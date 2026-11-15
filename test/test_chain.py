@@ -1884,8 +1884,8 @@ async def test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_t
   assert 0 < await work("x = 1") <= first
 
 
-async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_told_rung_that_the_cut_kept() -> None:
-  """After a cut, the chain reads what it heard after the last told rung or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again."""
+async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_reply_that_the_cut_kept() -> None:
+  """After a cut, the chain reads what it heard after the last reply or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again."""
   heard = "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
   for keeps, tells in [(True, [engine.unquoted(heard)]), (False, [])]:
     _, log, root = born()
@@ -1896,6 +1896,15 @@ async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_told_run
     later = engine.rung("u = 1", on=root)
     assert await later is None
     assert [a[5] for a in said(log, "run") if a[4] == f"{later}_told"] == tells
+  _, log, root = born("t = read('a.txt')", "read1_text = 'changed'\nclose(1)")
+  assert await engine.rung("x = 1", on=root) is None
+  assert await engine.prompt(int, "count", on=root) == 1
+  engine.say("tell", root, ["#note\nnote_x = 2"])
+  engine.say("cut", root, [x for x in engine.reading(root) if not (x[0] == "run" and str(x[4]).endswith("_told"))])
+  later = engine.rung("u = 1", on=root)
+  assert await later is None
+  assert [a[5] for a in said(log, "run") if a[4] == f"{later}_told"] == ["#note\nnote_x = 2"]
+  assert (engine.module(root)["read1_text"], engine.module(root)["note_x"]) == ("changed", 2)
 
 
 async def lingered(log: list[tuple]) -> None:

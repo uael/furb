@@ -482,12 +482,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           note = bind(step)
         case ("cut", *_):
           bound = len(a[3]) - next(
-            (
-              n
-              for n, x in enumerate(reversed(a[3]))
-              if (x[0] == "run" and "_told" in x[4]) or (x[0] == "tell" and not heard(x))
-            ),
-            0,
+            (n for n, x in enumerate(reversed(a[3])) if x[0] == "reply" or (x[0] == "tell" and not heard(x))), 0
           )
         case ("done", about, *_) if about == note and step in waiting:
           if (p := get(step)[2]) in barren:
