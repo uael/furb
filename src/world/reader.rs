@@ -87,16 +87,18 @@ impl Retold {
     self.said.as_deref().or(self.given.as_deref())
   }
 
-  /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
-  /// of a large record than it keeps of each fact.
-  pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+  /// Each fact of the file, in the order that the life said them, as the line of JSON that holds
+  /// it, read one line at a time, so a reader holds no more of a large record than it keeps of each
+  /// fact, and parses each line once, in the form that it needs.
+  pub fn each(&self, take: &mut dyn FnMut(&str)) -> Result<(), Fault> {
     self.lines(None, None, &mut |_, one| take(one))
   }
 
   /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
-  /// in order, with the count of the entries that the record had kept when the life said it, so a
-  /// reader finds where each entry of the record, as a checkpoint, stands among the facts.
-  pub fn before_kept(&self, n: usize, take: &mut dyn FnMut(usize, Object)) -> Result<(), Fault> {
+  /// in order, as the line of JSON that holds it, with the count of the entries that the record had
+  /// kept when the life said it, so a reader finds where each entry of the record, as a checkpoint,
+  /// stands among the facts.
+  pub fn before_kept(&self, n: usize, take: &mut dyn FnMut(usize, &str)) -> Result<(), Fault> {
     self.lines(None, Some(&keep(n)), take)
   }
 
@@ -106,7 +108,7 @@ impl Retold {
     &self,
     mut from: Option<&str>,
     until: Option<&str>,
-    take: &mut dyn FnMut(usize, Object),
+    take: &mut dyn FnMut(usize, &str),
   ) -> Result<(), Fault> {
     let failed =
       |no: io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
@@ -129,7 +131,7 @@ impl Retold {
       if from.is_some() {
         from = from.filter(|mark| *mark != text);
       } else if text.starts_with('[') && !matches!(head, Line::Keep(_)) {
-        take(kept, parsed(text)?);
+        take(kept, text);
       }
     }
   }
@@ -137,8 +139,12 @@ impl Retold {
   /// The facts of the file, in the order that the life said them.
   pub fn facts(&self) -> Result<Vec<Object>, Fault> {
     let mut facts = Vec::new();
-    self.each(&mut |one| facts.push(one))?;
-    Ok(facts)
+    let mut fault = None;
+    self.each(&mut |one| match parsed(one) {
+      Ok(fact) => facts.push(fact),
+      Err(no) => fault = fault.take().or(Some(no)),
+    })?;
+    fault.map_or(Ok(facts), Err)
   }
 }
 

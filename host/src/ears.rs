@@ -115,6 +115,21 @@ pub(crate) fn json_of(a: &Fact) -> Value {
   }
 }
 
+/// A fact as [`json_of`] gives it, read from a line of JSON of what a record tells, as the log of
+/// a life writes it: one parse, and no value of the sandbox made. Nothing for a line that holds no
+/// fact.
+pub(crate) fn json_of_line(line: &str) -> Option<Value> {
+  let mut fact: Value = serde_json::from_str(line).ok()?;
+  let held = fact.as_array_mut()?;
+  if held.len() < 2 || !held[..2].iter().all(Value::is_string) {
+    return None;
+  }
+  if held[0] == "module" {
+    held.resize(3, json!(""));
+  }
+  Some(fact)
+}
+
 /// What the engine alone says of a fact: each live act that a pause or a wake covers, and the pause
 /// that holds a new act, which is the last control that covers it when that control is a pause.
 async fn covered<W: 'static>(

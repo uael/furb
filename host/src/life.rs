@@ -63,7 +63,7 @@ use crate::{
   backlog::{self, Backlog},
   cards::{self, Session, Times},
   changes::{Journal, journal},
-  ears::{ears, json_of},
+  ears::{ears, json_of, json_of_line},
   error::LifeError,
   event::{Event, Seq},
   opens::{Heard, Opens, Told},
@@ -727,12 +727,11 @@ impl Life {
     let mut fold = Fold::default();
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
     // life holds the acts of its past, and no list of its facts.
-    let mut take = |kept: usize, one: Object| {
-      let Some(a) = Fact::of(one.as_ref()) else { return };
-      let fact = json_of(&a);
+    let mut take = |kept: usize, line: &str| {
+      let Some(fact) = json_of_line(line) else { return };
       // A checkpoint ends each run of the past, which the record holds no end of: the fold hears
       // it, and no reader hears the fact itself.
-      if a.kind() == checkpoint::CHECKPOINT {
+      if fact[0] == checkpoint::CHECKPOINT {
         for act in fold.hear(&fact, &[], None) {
           self.put(Event::Act(Arc::new(act)));
         }
@@ -1007,12 +1006,13 @@ fn read_record(record: &str, mut checkpoints: Vec<u64>, take: &mut Take<'_>) -> 
   if wanted {
     world::checkpoints_back(Path::new(record), &mut each).ok()?;
   }
-  world::retold_live(record)
-    .ok()?
-    .each(&mut |one| {
-      each(one);
-    })
-    .ok()
+  let told = &mut |line: &str| {
+    if goes && let Some(fact) = json_of_line(line) {
+      let one = digest(&fact);
+      goes = take(one, &|| fact.clone());
+    }
+  };
+  world::retold_live(record).ok()?.each(told).ok()
 }
 
 /// Each line of the file of the log, until each place is filled: a line is a fact as JSON writes

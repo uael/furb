@@ -15,14 +15,14 @@ use std::{
 };
 
 use furb::{
-  Fact, Fault, Object,
+  Fault,
   view::{self, Fold, Held, Sent, Skill, Standing},
   world::{self, Tip},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  ears::json_of,
+  ears::json_of_line,
   protocol::{Card, Frame},
   serve::Outbox,
 };
@@ -119,9 +119,8 @@ pub(crate) fn folded(record: &Path) -> Result<(), Error> {
   let since = changed(record);
   let retold = world::retold(record).map_err(Error::Read)?;
   let (mut fold, mut held, mut at) = (Fold::default(), Held::default(), 0);
-  let mut take = |one: Object| {
-    let Some(fact) = Fact::of(one.as_ref()) else { return };
-    let fact = json_of(&fact);
+  let mut take = |line: &str| {
+    let Some(fact) = json_of_line(line) else { return };
     at += 1;
     held.noted(&fact, at);
     for act in fold.recorded(&fact) {
