@@ -384,7 +384,8 @@ impl Peer {
       on: None,
     };
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
-    let stands = if [WORKS, THINKS, PONDERS, RETRIES].iter().any(|one| message.contains(one)) {
+    let stands = if [WORKS, THINKS, PONDERS, RETRIES, FANS].iter().any(|one| message.contains(one))
+    {
       "thinks"
     } else if [LONG, DELEGATES, AWAITS].iter().any(|one| message.contains(one)) {
       "runs"
@@ -515,10 +516,14 @@ pub(crate) const OPENS: &str = "(the model opens a file)";
 /// lines into two, and close.
 pub(crate) const EDITS: &str = "(the model edits a file)";
 
+/// The words of a message of a test that make the model start two agents on one line, of which
+/// one answers at once and one works for ever.
+pub(crate) const FANS: &str = "(the model fans out)";
+
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
 /// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
 /// and the second waits on its chain.
-const ANSWERED: [(&str, &str); 8] = [
+const ANSWERED: [(&str, &str); 9] = [
   (DELEGATES, DELEGATE),
   (
     TABLES,
@@ -531,6 +536,10 @@ const ANSWERED: [(&str, &str); 8] = [
   ("(the agent answers)", "close('README.md has 3 lines.')"),
   ("(the agent waits)", "n = 2\nawait wait(600, chain)"),
   (READS, "close('The trace holds the open of each chain.')"),
+  (
+    FANS,
+    "read = prompt(str, 'Read\\n(the agent answers)', on=chain('read')); count = await prompt(str, 'Count\\n(the model works on it)', on=chain('count'))",
+  ),
   (
     OPENS,
     "write(Text('notes.md', 'a\\nb\\nc\\n'))\nfound = read('notes.md')\nclose('It holds 3 lines.')",

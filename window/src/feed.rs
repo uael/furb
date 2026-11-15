@@ -625,11 +625,17 @@ impl Feed<'_> {
     }
   }
 
-  /// What stands at the right of a line: the time of its work, or how long ago a stop ended it,
-  /// from one minute on, as the age of a card, or the time that its command took.
+  /// What stands at the right of a line: the time of its work, after how many of its acts ended
+  /// while it awaits more than one, or how long ago a stop ended it, from one minute on, as the age
+  /// of a card, or the time that its command took.
   fn right(&self, line: &Code, mark: &Mark) -> Option<String> {
     match *mark {
-      Mark::Runs { began: Some(began), .. } => self.model.since(began).map(timer),
+      Mark::Runs { began, .. } => {
+        let ended = line.made.iter().filter(|one| !matches!(one, Made::Works)).count();
+        let count = (line.made.len() > 1).then(|| format!("{ended} of {} ended", line.made.len()));
+        let time = began.and_then(|began| self.model.since(began)).map(timer);
+        count.into_iter().chain(time).reduce(|count, time| format!("{count} · {time}"))
+      }
       Mark::Stopped { at } => {
         let age = at.and_then(|at| self.model.age(at / 1000));
         Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))

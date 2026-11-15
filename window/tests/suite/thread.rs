@@ -14,8 +14,8 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 use crate::{
   cards::{app, options, row, shows},
   daemon::{
-    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS,
-    WORKS,
+    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, FANS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES,
+    THINKS, WORKS,
   },
   screens::screen,
 };
@@ -670,4 +670,10 @@ fn a_click_on_the_mark_of_a_cut_line_shows_it_whole_and_a_click_on_it_cuts_it_ag
   app.click(x, y);
   assert!(app.wait_until(PATIENCE, || !app.text().contains(whole)), "{}", app.text());
   shows(&app, "…+");
+}
+
+#[test]
+fn a_line_that_awaits_more_than_one_act_says_how_many_ended() {
+  let (app, _daemon, _peer) = opened(&format!("Run both checks\n{FANS}"), "1 agent done");
+  shows(&app, "1 of 2 ended");
 }
