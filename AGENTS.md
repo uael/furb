@@ -485,8 +485,8 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask inert <record>`: the proof that a replay is inert. It replays a copy of the record in a life that only
   inspects it, and fails when the life puts an act on to the World that the record answers, or an ear of the World
   says that it started one. The test of the corpus proves the same on each record of `tests/corpus`.
-- `python script/bench/loop.py make|furb|furb-own|furb-batch|claude|score <dir>`: the bench of a loop, which its
-  docstring says how to run. It makes support tickets from a seed with a known label each, triages them on the same
+- `cargo xtask bench-loop make|furb|furb-own|furb-batch|claude|score <dir>`: the bench of a loop, which its
+  help says how to run. It makes support tickets from a seed with a known label each, triages them on the same
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own
   words, with a word of furb that asks one prompt per batch, and with the claude command line, and scores each arm on
   the totals of the server and the share of right labels. It asks a model and spends what the server serves.

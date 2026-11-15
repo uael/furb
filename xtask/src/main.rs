@@ -12,6 +12,7 @@ mod deepswe;
 mod jobs;
 mod links;
 mod lives;
+mod loops;
 mod memwatch;
 mod opens;
 mod paths;
@@ -325,6 +326,16 @@ enum Task {
     #[arg(long)]
     once: bool,
   },
+  /// The bench of a loop: furb that triages support tickets against the claude command line, on
+  /// the same local server, scored on the totals of the server and the share of right labels.
+  ///
+  /// `make` writes the tickets of a seed with a known label each. The arms run alone on the server,
+  /// which counts every client: `furb` asks one prompt per ticket, `furb-own` gives the life the
+  /// task as one prompt so its model writes its own words, `furb-batch` asks one prompt per batch,
+  /// and `claude` runs the claude command line through a wrapper that points it at the server.
+  /// The arms read `FURB_LOCAL_URL` and `FURB_LOCAL_KEY`. `score` compares each label with the
+  /// known one. It asks a model and spends what the server serves.
+  BenchLoop(loops::Loop),
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -442,6 +453,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::BenchLoop(bench) => bench.run(&root),
     Task::Memwatch { once } => memwatch::watch(once),
     Task::ProveCrate { folder } => prove::crates(&root, folder),
     Task::Opens(opens) => opens.run(&root),
