@@ -3,7 +3,7 @@
                                                                 No thread yet in this project.
 
     Models                                                      ⌃P  other projects and sessions
-    ▌Search a model                                 2 / 6
+    ▌Search a model                                2 / 6
 
     Claude
      opus    1M context · images                    high

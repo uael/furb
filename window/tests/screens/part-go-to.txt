@@ -3,7 +3,7 @@
   Nothing needs you.                                           Working 1
 
     Go to                                                       ● run the bench of…     ⠋ Working
-    ▌setup                                          1 / 1         FU furb                    opus
+    ▌setup                                         1 / 1          FU furb                    opus
 
     ▌FU setup-only                                  furb       Resolved 1 ▸
 

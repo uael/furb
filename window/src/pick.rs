@@ -760,9 +760,10 @@ impl Model {
     let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
     let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
     let asked = entries.iter().map(|one| one.width(badged(entries)) + 4).max().unwrap_or_default();
-    // The row of the filter holds its hint whole beside the widest count, `12 / 12`.
+    // The row of the filter holds its hint whole beside the widest count, `12 / 12`, and the column
+    // after the count.
     let hint = self.picker.as_ref().map(|one| one.of.placeholder().width());
-    let count = 2 * entries.len().to_string().len() + 3;
+    let count = 2 * entries.len().to_string().len() + 4;
     let asked = asked.max(hint.map_or(0, |hint| 1 + hint + 2 + count + 4));
     let asked = u16::try_from(asked).unwrap_or(PARTS).clamp(PART, PARTS);
     (columns, if rises { input } else { asked.min(columns.saturating_sub(4)) })
@@ -803,7 +804,9 @@ impl Model {
       many => format!("{} / {many}", takes.partition_point(|at| *at < picker.at) + 1),
     };
     let filter = vec![run("▌", Style::new().fg(t.accent)), filter];
-    let filter = Row::of(padded(spread(filter, vec![run(count, muted)], room, Style::new())));
+    // The count ends in the column of what each entry says at its right, one inside its ground.
+    let count = vec![run(count, muted), run(" ", Style::new())];
+    let filter = Row::of(padded(spread(filter, count, room, Style::new())));
     if !rises {
       rows.extend([filter.clone(), Row::default()]);
     }
