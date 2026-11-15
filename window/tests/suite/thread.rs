@@ -252,8 +252,9 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   let message = format!("measure the open on three chains\n{DELEGATES}");
   let (app, _daemon, _peer) = opened(&message, "README.md");
   shows(&app, "✓ Resolved");
-  // Each agent stands under the line of the block that made it, with its state and its model,
-  // and the line where it stands while it lives. The card counts the agents that work.
+  // Each agent stands in the box under the line of the block that made it, at the column of its
+  // code, with the line where it stands while it lives and else its title, then its state and its
+  // model. The card counts the agents that work.
   let frame = app.text();
   let agents: Vec<String> = frame
     .lines()
@@ -265,12 +266,12 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
     agents,
     [
       "    1  bench = prompt(str, 'Run the bench of the repl…+42",
-      "  └ Run the bench of the replay             ◐ Working  opus",
-      "    await wait(600, chain)",
+      "       └ await wait(600, chain)           ◐ Working  opus",
       "    2  boot = prompt(str, 'Read the boot of the host\\…+44",
-      "  └ Read the boot of the host               ⠋ Working  opus",
+      "       └ Read the boot of the host        ⠋ Working  opus",
       "    3  lines = await prompt(str, 'Count the lines of …+51",
-      "  └ Count the lines of README.md           ✓ Resolved  opus",
+      "       └ Count the lines of README.md    ✓ Resolved  opus",
+      "    ◐  await wait(600, bench)",
     ]
     .map(str::to_owned),
     "{frame}"
@@ -279,7 +280,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   screen("thread-agents", &app);
 
   // A click on an agent opens its thread in place: its head says that it is one.
-  clicked(&app, "└ Run the bench", 0, 2);
+  clicked(&app, "└ await wait(600, chain)", 0, 2);
   shows(&app, " Back ");
   // The head names the agent once its card or its page came, which can follow the button.
   let head = || app.text().lines().next().unwrap().to_owned();

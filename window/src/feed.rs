@@ -325,7 +325,7 @@ impl Feed<'_> {
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
       rows.extend(self.code(line, colors.clone(), numbers));
-      rows.extend(self.agents(Some(line.number)));
+      rows.extend(self.agents(Some((line.number, numbers))));
     }
     if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
@@ -513,27 +513,68 @@ impl Feed<'_> {
     rows
   }
 
-  /// The agents that a line made, or those of the dock: from the first that does not rest to the
-  /// last, so an agent that ends among others that work keeps its row with its mark, and one row
-  /// that counts the agents before them. Each agent takes a row with its title, its state, its time
-  /// and its model, and one more with the line where it stands while it lives. A click on an agent
-  /// opens its thread in place.
-  fn agents(&self, at: Option<usize>) -> Vec<Row> {
-    let (done, shown) = self.opened.made(at);
-    let mut rows: Vec<Row> = shown.into_iter().flat_map(|agent| self.agent(agent)).collect();
+  /// The agents that a line made, in the box of its block at the column of its code, or those of
+  /// the dock across the thread: from the first that does not rest to the last, so an agent that
+  /// ends among others that work keeps its row with its mark, and one row that counts the agents
+  /// before them. A click on an agent opens its thread in place.
+  fn agents(&self, under: Option<(usize, Gutter)>) -> Vec<Row> {
+    let (done, shown) = self.opened.made(under.map(|(line, _)| line));
+    let mut rows: Vec<Row> = shown.into_iter().flat_map(|agent| self.agent(agent, under)).collect();
     if done > 0 {
       let noun = if done == 1 { "agent" } else { "agents" };
-      rows.insert(0, says(&format!("└ {done} {noun} done"), self.style(Role::Muted)));
+      let (muted, ground) = (self.style(Role::Muted), self.model.tokens.raised);
+      rows.insert(
+        0,
+        match under {
+          Some((_, numbers)) => {
+            let said = format!("{:>width$}  └ {done} {noun} done", "", width = numbers.width);
+            Row::of(self.boxed(vec![run(said, muted)], ground))
+          }
+          None => says(&format!("└ {done} {noun} done"), muted),
+        },
+      );
     }
     rows
   }
 
-  /// The rows of one agent of the dock: its title with its state, its time and its model, then
-  /// the line where it stands while it lives. Each takes a click that opens its thread.
-  fn agent(&self, agent: &Agent) -> Vec<Row> {
-    let t = &self.model.tokens;
-    let card = &agent.card;
+  /// The rows of one agent, each a click that opens its thread. In the dock its title leads, with
+  /// the line where it stands on a row under it while it lives. Under the line that made it, which
+  /// says its prompt already, it takes one row in the box at the column of the code, which says the
+  /// line where it stands while it has one, and else its title.
+  fn agent(&self, agent: &Agent, under: Option<(usize, Gutter)>) -> Vec<Row> {
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
+    let (mark, right) = self.status(agent);
+    // The line that its model has not begun to write says nothing that its state does not say.
+    let stands = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty());
+    let stands = stands.map(|one| vec![run(self.model.homed(&one.text), muted)]);
+    let title = if rest { muted } else { self.style(Role::Prose) };
+    let title = vec![run(agent.card.title.clone(), title)];
+    let open = Click::Agent(agent.card.prompt.clone());
+    let Some((_, numbers)) = under else {
+      let left = [run("  └ ", muted)].into_iter().chain(title).collect();
+      let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
+      let x = width(&line) - width(&right);
+      let mut rows = vec![titled(Row::clicked(line, open.clone()), x, &right, mark)];
+      if let Some(text) = stands {
+        let mut line = vec![run("    ", Style::new())];
+        line.extend(clipped(text, self.wide.saturating_sub(8), muted));
+        rows.push(Row::clicked(line, open));
+      }
+      return rows;
+    };
+    let lead = vec![run(format!("{:>width$}  └ ", "", width = numbers.width), muted)];
+    let room = numbers.inside(self.inner());
+    let left = lead.into_iter().chain(clipped(stands.unwrap_or(title), room, muted)).collect();
+    let line = spread(left, right.clone(), room, Style::new());
+    let x = PAD + width(&line) - width(&right);
+    vec![titled(Row::clicked(self.boxed(line, self.model.tokens.raised), open), x, &right, mark)]
+  }
+
+  /// The state of an agent with its time and its model, and the mark that moves before its word
+  /// while it works.
+  fn status(&self, agent: &Agent) -> (Option<Loader>, Line) {
+    let t = &self.model.tokens;
+    let (card, muted) = (&agent.card, self.style(Role::Muted));
     // An agent that ended says how long it took, from one second on, as one that works does.
     let since = agent.began.and_then(|began| self.model.since(began));
     let time = agent.took.map_or(since, |took| Some(took).filter(|one| *one > 0)).map(timer);
@@ -550,33 +591,20 @@ impl Feed<'_> {
       Standing::Rests | Standing::Resolved => (None, "✓ Resolved", t.muted),
     };
     let model = card.model.as_deref().and_then(|one| one.rsplit(':').next()).unwrap_or_default();
-    let title = if rest { muted } else { self.style(Role::Prose) };
-    let left = vec![run("  └ ", muted), run(card.title.clone(), title)];
     // A mark that moves stands in the two cells before its word.
     let word = if mark.is_some() { format!("  {word}") } else { word.to_owned() };
     let mut right = vec![run(word, Style::new().fg(color))];
     right.extend(time.map(|time| run(format!(" {time}"), muted)));
     right.push(run(format!("  {model}"), muted));
-    let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
-    let x = width(&line) - width(&right);
-    let open = Click::Agent(card.prompt.clone());
-    // Under the pointer the title goes bright, and the state keeps the color that says it.
-    let keeps = x..x + width(&right[..1]);
-    let mut rows = vec![Row {
-      keeps: Some(keeps),
-      loaders: mark.map(|one| (x, one)).into_iter().collect(),
-      ..Row::clicked(line, open.clone())
-    }];
-    // The line that its model has not begun to write says nothing that its state does not say.
-    if let Some(stands) = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty()) {
-      let text = vec![run(self.model.homed(&stands.text), muted)];
-      let room = self.wide.saturating_sub(8);
-      let mut line = vec![run("    ", Style::new())];
-      line.extend(clipped(text, room, muted));
-      rows.push(Row::clicked(line, open));
-    }
-    rows
+    (mark, right)
   }
+}
+
+/// The row of an agent whose state stands at a column: its mark moves there, and under the pointer
+/// its text goes bright while its state keeps the color that says it.
+fn titled(row: Row, x: usize, right: &Line, mark: Option<Loader>) -> Row {
+  let keeps = x..x + width(&right[..1]);
+  Row { keeps: Some(keeps), loaders: mark.map(|one| (x, one)).into_iter().collect(), ..row }
 }
 
 /// A row of prose from the column of the text.
