@@ -349,6 +349,14 @@ impl Model {
       let mark = (!mark.is_empty()).then(|| run(format!("{mark} "), style));
       return mark.into_iter().chain(time.map(|time| run(time, muted))).collect();
     }
+    // The word of a thread at work takes the light that passes over `Working` in the row of hints,
+    // so each place that says that a thread works moves in one way, on one beat.
+    if loader(standing).is_some() {
+      let lit = Loader::Light(WORKS).cells(self.client.moved, t.accent, t);
+      let word = lit.into_iter().map(|(letter, color)| run(letter, colored(color)));
+      let time = time.map(|time| run(format!(" {time}"), style));
+      return [run(format!("{mark} "), style)].into_iter().chain(word).chain(time).collect();
+    }
     let parts = [mark.to_owned(), word].into_iter().chain(time);
     vec![run(parts.filter(|one| !one.is_empty()).collect::<Vec<_>>().join(" "), style)]
   }
