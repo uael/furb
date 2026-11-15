@@ -237,6 +237,12 @@ export type Request1 =
     }
   | {
       life: string;
+      writes: string[];
+      on?: string | null;
+      verb: "revert";
+    }
+  | {
+      life: string;
       entry: string;
       shape: string;
       message: string;
@@ -1662,7 +1668,7 @@ export interface Output {
   took?: number | null;
 }
 /**
- * What a write of a file that a line made changed: the path of the file, the lines that it added
+ * What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added
  * and removed against the text of the path that the life knew before it, from a read or a write
  * of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
  * line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
@@ -1670,6 +1676,7 @@ export interface Output {
  * not know what stood there.
  */
 export interface Written {
+  act: string;
   path: string;
   added: number;
   removed: number;
@@ -1764,4 +1771,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 61;
+export const PROTOCOL = 62;

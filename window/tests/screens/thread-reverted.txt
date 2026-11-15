@@ -1,0 +1,30 @@
+● furb · edit the notes of the day            ✓ Resolved       All projects ▾        This computer
+┃
+┃ edit the notes of the day                                    Resting 1
+┃ (the model edits a file)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ ● edit the notes of the day   now ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    1  write(Text('notes.md', 'a\nb\nc\n'))                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       notes.md  wrote 3 lines
+    2  m = read('notes.md')
+    3  write(m.replace('b\n', 'B\nb2\n'))
+       notes.md  +2 −1
+    4  close('notes.md has 4 lines.')
+
+  notes.md has 4 lines.
+
+┃
+┃   5  write(Text('notes.md', 'a\nb\nc\n'))
+┃      notes.md  +1 −2
+┃
+  ↶ Revert notes.md  ⌃X D
+
+
+
+
+┃
+┃ A reply opens this thread again
+┃
+┃  Message  Python    → edit the… ▾     opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                  ⌃P find

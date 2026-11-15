@@ -66,6 +66,7 @@ use crate::{
   backlog::{self, Backlog},
   cards::{self, Session, Times},
   changes::{Journal, journal},
+  door::Door,
   ears::{ears, json_of_line},
   error::LifeError,
   event::{Event, Seq},
@@ -155,6 +156,9 @@ pub enum Command {
   /// The resolve of a thread of the operator: a close of each act that keeps it open, the last
   /// first, with the text `resolved` or with None, as its shape takes.
   Resolve { thread: String },
+  /// A word of the operator that writes back what the life knew before a list of writes, at each
+  /// path that the first of them wrote, as `Verb::Revert` says.
+  Revert { writes: Vec<String>, on: Option<String> },
   /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
   /// which the life sends as a prompt of its shape and its message once the chain rests.
   Queue { entry: String, shape: String, message: String, on: Option<String> },
@@ -223,7 +227,8 @@ impl Command {
       | Self::Halt
       | Self::Close { .. }
       | Self::Seen { .. }
-      | Self::Resolve { .. } => Self::By { speaker, command: Box::new(self) },
+      | Self::Resolve { .. }
+      | Self::Revert { .. } => Self::By { speaker, command: Box::new(self) },
       // A read of the threads tells the window of the speaker what it has not seen.
       Self::Threads { on, at, read, .. } => Self::Threads { on, at, read, site: Some(speaker) },
       other => other,
@@ -1456,6 +1461,7 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
   match command {
     Command::By { speaker, command } => spoken(engine, life, &speaker, *command).await,
     Command::Resolve { thread } => resolved(engine, life, &thread),
+    Command::Revert { writes, on } => revert(engine, life, &writes, on),
     Command::Halt => {
       for id in life.kept.held.open_work() {
         engine.cancel(&id, verbs::Cancel { why: None })?;
@@ -1545,6 +1551,32 @@ async fn spoken(
   let reply = Box::pin(commanded(engine, life, command)).await;
   engine.site(Some(&before))?;
   reply
+}
+
+/// The revert of a list of writes: a word of his that writes back what the life knew at each path
+/// that they wrote, which the transcript shows as his turn, as each act of a person. The word names
+/// each path in the folder where it runs from that folder, as a model would.
+fn revert(
+  engine: &mut Engine,
+  life: &Life,
+  writes: &[String],
+  on: Option<String>,
+) -> Result<Reply, LifeError> {
+  let root = engine.root().to_owned();
+  let cwd = engine.cwd(verbs::Cwd { on: Some(on.clone().unwrap_or(root)) }).ok();
+  let texts = life.kept.held.reverted(writes);
+  if texts.is_empty() {
+    let why = "No file that these writes wrote was known before them.";
+    return Err(LifeError::Refused(why.to_owned()));
+  }
+  let from = |path: String| {
+    let inside = cwd.as_deref().and_then(|cwd| path.strip_prefix(cwd)?.strip_prefix('/'));
+    inside.map_or_else(|| path.clone(), str::to_owned)
+  };
+  let doors =
+    texts.into_iter().map(|(path, content)| Door::Write { path: from(path), content }.word());
+  let word = doors.collect::<Vec<_>>().join("\n");
+  answered_by(engine, Command::Rung { word, on })
 }
 
 /// The resolve of a thread of the operator: a close of each act that keeps it open, the last

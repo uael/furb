@@ -467,7 +467,11 @@ impl<'a> Reader<'a> {
       if act.kind == Kind::Other("write".to_owned())
         && let Some((path, after)) = self.held.filed(act)
       {
-        lines[at].writes.push(changed(path, self.held.text_before(path, &act.id), after));
+        lines[at].writes.push(changed(
+          &act.id,
+          (path, self.held.text_before(path, &act.id)),
+          after,
+        ));
       }
     }
     lines
@@ -717,9 +721,9 @@ fn outcome(act: &Act) -> Made {
   }
 }
 
-/// What a write changed in a file, from the text that the life knew there before it, if any, to the
-/// text that the disk holds after it.
-fn changed(path: &str, before: Option<&str>, after: &str) -> Written {
+/// What a write act changed in a file, from the text that the life knew at its path before it, if
+/// any, to the text that the disk holds after it.
+fn changed(act: &str, (path, before): (&str, Option<&str>), after: &str) -> Written {
   let diff = TextDiff::from_lines(before.unwrap_or_default(), after);
   let (mut added, mut removed, mut lines) = (0, 0, Vec::new());
   for (at, hunk) in diff.unified_diff().context_radius(1).iter_hunks().enumerate() {
@@ -738,7 +742,8 @@ fn changed(path: &str, before: Option<&str>, after: &str) -> Written {
   }
   let more = lines.len().saturating_sub(DIFF);
   lines.truncate(DIFF);
-  Written { path: path.to_owned(), added, removed, known: before.is_some(), diff: lines, more }
+  let (act, path, known) = (act.to_owned(), path.to_owned(), before.is_some());
+  Written { act, path, added, removed, known, diff: lines, more }
 }
 
 /// The line of a word, numbered from the count of the lines of the thread before it, that shows

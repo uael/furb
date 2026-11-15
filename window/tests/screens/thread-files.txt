@@ -18,9 +18,9 @@
          +b2
           c
     4  close('notes.md has 4 lines.')
+  ↶ Revert notes.md  ⌃X D
 
   notes.md has 4 lines.
-
 
 ┃
 ┃ A reply opens this thread again

@@ -994,6 +994,7 @@ fn a_line_that_wrote_a_file_says_what_it_changed_against_the_text_that_the_life_
   let writes: Vec<&[Written]> = block.lines.iter().map(|line| line.writes.as_slice()).collect();
   let diff = |lines: &[&str]| lines.iter().map(|one| (*one).to_owned()).collect();
   let changed = Written {
+    act: "write1".to_owned(),
     path: "~/w/a.py".to_owned(),
     added: 1,
     removed: 1,
@@ -1003,6 +1004,7 @@ fn a_line_that_wrote_a_file_says_what_it_changed_against_the_text_that_the_life_
   };
   // The life never read b.py, so it does not know what stood there: each line counts as added.
   let added = Written {
+    act: "write2".to_owned(),
     path: "/w/b.py".to_owned(),
     added: 1,
     removed: 0,

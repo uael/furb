@@ -519,6 +519,22 @@ class Request44(TypedDict):
 
 class Request45(TypedDict):
   """
+  A word of the operator on the thread `on`, or on the root, that writes back at each path that
+  the writes that `writes` names wrote the text that the life knew there before the first of
+  them, in their order. A path that the life did not know before stays as it is, and a revert of
+  writes that wrote no such path is refused. A revert of the word of a revert writes again what
+  it reverted.
+  """
+
+  id: int
+  life: str
+  writes: list[str]
+  on: NotRequired[str | None]
+  verb: Literal["revert"]
+
+
+class Request46(TypedDict):
+  """
   A follow-up that the operator queued on a chain, or on a thread, under an entry that the
   window chose. The life sends it as a prompt of its shape and its message once the chain rests,
   on the chain, or on the thread as a message of it once the chain of the thread rests, and a
@@ -534,7 +550,7 @@ class Request45(TypedDict):
   verb: Literal["queue"]
 
 
-class Request46(TypedDict):
+class Request47(TypedDict):
   """
   A follow-up taken out of its queue before the life sent it.
   """
@@ -545,7 +561,7 @@ class Request46(TypedDict):
   verb: Literal["unqueue"]
 
 
-class Request47(TypedDict):
+class Request48(TypedDict):
   """
   The follow-ups that wait on a chain, or on a thread, in order.
   """
@@ -556,7 +572,7 @@ class Request47(TypedDict):
   verb: Literal["queued"]
 
 
-class Request48(TypedDict):
+class Request49(TypedDict):
   """
   What waits for the operator in a life, with each notice that the window still shows.
   """
@@ -567,7 +583,7 @@ class Request48(TypedDict):
   verb: Literal["desk"]
 
 
-class Request49(TypedDict):
+class Request50(TypedDict):
   """
   The threads of a chain with their meaning, now or as they stood just after a moment. `read`
   is the place up to which the window read the chain, from which the runs of notes count the
@@ -582,7 +598,7 @@ class Request49(TypedDict):
   verb: Literal["threads"]
 
 
-class Request50(TypedDict):
+class Request51(TypedDict):
   """
   The threads of every chain of a life but those it names, as one tree in the order of the
   list of the threads, now or as they stood just after a moment.
@@ -595,7 +611,7 @@ class Request50(TypedDict):
   verb: Literal["rail"]
 
 
-class Request52(TypedDict):
+class Request53(TypedDict):
   """
   The acts of a life as they stood just after a moment, each with its meaning then.
   """
@@ -606,7 +622,7 @@ class Request52(TypedDict):
   verb: Literal["as_of"]
 
 
-class Request53(TypedDict):
+class Request54(TypedDict):
   """
   A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
   before the end, at most `limit` of them, the newest page first, now or as they stood just
@@ -624,7 +640,7 @@ class Request53(TypedDict):
   verb: Literal["thread"]
 
 
-class Request54(TypedDict):
+class Request55(TypedDict):
   """
   Each moment of a life at which an act began or ended, in order.
   """
@@ -639,7 +655,7 @@ class Request54(TypedDict):
   verb: Literal["moments"]
 
 
-class Request55(TypedDict):
+class Request56(TypedDict):
   """
   Each chain of a life in time, in the order the chains began.
   """
@@ -649,7 +665,7 @@ class Request55(TypedDict):
   verb: Literal["tracks"]
 
 
-class Request56(TypedDict):
+class Request57(TypedDict):
   """
   The turn that the peer gave for a request of a model of a life that it answers, written as
   the record writes a value, or why it gives none.
@@ -663,7 +679,7 @@ class Request56(TypedDict):
   verb: Literal["answered"]
 
 
-class Request57(TypedDict):
+class Request58(TypedDict):
   """
   What the peer added to the text and to the thought of the turn of a request, as it writes.
   """
@@ -676,7 +692,7 @@ class Request57(TypedDict):
   verb: Literal["wrote"]
 
 
-class Request58(TypedDict):
+class Request59(TypedDict):
   """
   The place of the daemon given to the daemon of a new build: each life written to its image
   and ended, and the lives with their pins in the answer, once the daemon stopped to
@@ -687,7 +703,7 @@ class Request58(TypedDict):
   verb: Literal["handover"]
 
 
-class Request63(TypedDict):
+class Request64(TypedDict):
   """
   The end of a view in its window.
   """
@@ -1686,7 +1702,7 @@ literal of python cut to `LITERAL` characters.
 
 class Written(TypedDict):
   """
-  What a write of a file that a line made changed: the path of the file, the lines that it added
+  What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added
   and removed against the text of the path that the life knew before it, from a read or a write
   of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
   line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
@@ -1694,6 +1710,7 @@ class Written(TypedDict):
   not know what stood there.
   """
 
+  act: str
   path: str
   added: int
   removed: int
@@ -2112,7 +2129,7 @@ class Request18(TypedDict):
   verb: Literal["writes"]
 
 
-class Request51(TypedDict):
+class Request52(TypedDict):
   """
   The ladder of a chain, now or as it stood just after a moment: the steps that show and the
   folds of the others, with the folds that the window opened, the prompts that the operator
@@ -2130,7 +2147,7 @@ class Request51(TypedDict):
   verb: Literal["ladder"]
 
 
-class Request59(TypedDict):
+class Request60(TypedDict):
   """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
@@ -2143,7 +2160,7 @@ class Request59(TypedDict):
   verb: Literal["view.mount"]
 
 
-class Request61(TypedDict):
+class Request62(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -2156,7 +2173,7 @@ class Request61(TypedDict):
   verb: Literal["view.event"]
 
 
-class Request62(TypedDict):
+class Request63(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -2980,7 +2997,7 @@ class Protocol(TypedDict):
   frame: Frame
 
 
-class Request60(TypedDict):
+class Request61(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -3057,6 +3074,7 @@ type Request = (
   | Request61
   | Request62
   | Request63
+  | Request64
 )
 """
 One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
@@ -3144,4 +3162,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 61
+PROTOCOL = 62

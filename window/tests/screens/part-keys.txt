@@ -3,7 +3,7 @@
   Nothing needs you.
   ● 1 session ru
                   Each key
-  ⌃P          go  ▌Search a key                                             1 / 30
+  ⌃P          go  ▌Search a key                                             1 / 31
   ⌃X ?        ea
                   Go                                                               ┃
                   ▌⌃P or ⌃O    go to anything, or run a command                    ┃
@@ -20,8 +20,8 @@
                    ⇟           a page down
                    ⎋ ⎋         stop the work of the thread
                    ⌃X R        resolve the thread
+                   ⌃X D        revert the files that the last answer wrote
                    ⌃X Z        pause the thread, or resume it
-                   ⌃X S        pause, kill or keep the session
 ┃
 ┃ Ask for a chan  ↑↓ move · ⏎ run · ⎋ close
 ┃

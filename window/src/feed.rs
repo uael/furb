@@ -17,7 +17,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
   code::Gutter,
-  input::Armed,
+  input::{Armed, named},
   keys::Does,
   line::{self, Line, capital, clipped, run, spread, wrapped},
   list::project,
@@ -343,6 +343,27 @@ impl Feed<'_> {
           rows.extend(self.block(&exchange.message, block));
         }
       }
+    }
+    // The last answer that wrote a file that furb knew before offers to revert it, under its
+    // block, before the blank row that ends the block, to a window that may write.
+    let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
+    if let Some((message, writes)) = self.model.reverts()
+      && message == exchange.message
+      && !reads
+    {
+      let mut files: Vec<&str> =
+        writes.iter().filter(|one| one.known).map(|one| &*one.path).collect();
+      files.sort_unstable();
+      files.dedup();
+      let said = match files.as_slice() {
+        [one] => format!("↶ Revert {}", named(one)),
+        many => format!("↶ Revert {} files", many.len()),
+      };
+      let muted = self.style(Role::Muted);
+      let line = vec![run("  ", Style::new()), run(said, muted), run("  ", muted)];
+      let key = run(self.model.key(Does::Revert), muted);
+      let row = Row::clicked([line, vec![key]].concat(), Click::Key(Does::Revert));
+      rows.insert(rows.len().saturating_sub(1), row);
     }
     for said in &exchange.said {
       rows.extend(self.said(said));

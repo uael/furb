@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+use std::fs;
+
 use furb_host::protocol::{Answer, Draft, Frame, Role, Verb};
 use furb_window::{
   Machine, open,
@@ -346,6 +348,30 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
     ]
   );
   screen("thread-files", &app);
+}
+
+#[test]
+fn a_revert_writes_back_what_the_last_answer_wrote_as_a_word_of_his_and_a_second_restores_it() {
+  let message = format!("edit the notes of the day\n{EDITS}");
+  let (app, daemon, _peer) = opened(&message, "notes.md has 4 lines.");
+  let notes = daemon.file("furb").join("notes.md");
+  assert_eq!(fs::read_to_string(&notes).unwrap(), "a\nB\nb2\nc\n");
+  clicked(&app, "↶ Revert notes.md", 0, 0);
+  let reverted = app.wait_until(PATIENCE, || fs::read_to_string(&notes).unwrap() == "a\nb\nc\n");
+  assert!(reverted, "{}", app.text());
+  // The revert is a word of his on the thread, which says what it wrote back, and which a second
+  // revert reverts.
+  let shown = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.contains("notes.md  +1 −2") && frame.matches("↶ Revert notes.md").count() == 1
+  });
+  assert!(shown, "{}", app.text());
+  println!("{}", app.text());
+  screen("thread-reverted", &app);
+  clicked(&app, "↶ Revert notes.md", 0, 0);
+  let restored =
+    app.wait_until(PATIENCE, || fs::read_to_string(&notes).unwrap() == "a\nB\nb2\nc\n");
+  assert!(restored, "{}", app.text());
 }
 
 #[test]

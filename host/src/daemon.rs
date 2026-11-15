@@ -659,6 +659,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Plays { life } => (life, Command::Plays),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Resolve { life, thread } => (life, Command::Resolve { thread }),
+    Verb::Revert { life, writes, on } => (life, Command::Revert { writes, on }),
     Verb::Queue { life, entry, shape, message, on } => {
       (life, Command::Queue { entry, shape, message, on })
     }

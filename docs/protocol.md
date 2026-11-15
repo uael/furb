@@ -154,6 +154,7 @@ daemon answers requests in any order.
 | `image` | `life`, `name`, `data` (the bytes of a PNG, a JPEG, a GIF or a WebP, in base64): the life keeps it beside its record and answers the text `![name](furb-image://…)` by which a message names it | write |
 | `seen` | `life`, `about` | write |
 | `resolve` | `life`, `thread` | write |
+| `revert` | `life`, `writes`, `on` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
@@ -256,6 +257,11 @@ daemon answers requests in any order.
   keeps the thread open, its prompt and each message on it that is not done, the last first, with `None` for a shape
   `None` and with the text `resolved` for a shape that takes a text. A close cancels the work under each act. An act of
   another shape refuses the resolve, since only its model gives that value. A message on the thread opens it again.
+- `revert` runs a word of the operator on the thread `on`, or on the root, that writes back at each path that the
+  write acts that `writes` names wrote the text that the life knew there before the first of them, from a read or a
+  write, in their order. The word names a path in its folder from that folder, and the transcript shows it as his
+  turn. A path that the life did not know before stays as it is, and a revert of writes that wrote no such path is
+  refused. A revert of the word of a revert writes again what it reverted. Its answer is the act of the word.
 - `queue` puts a follow-up of the operator in the queue of a chain, or of a thread when `on` names its prompt, under
   an `entry` that the window chooses, and a
   second `queue` of the same entry, from any window, changes nothing. The life sends the first follow-up of a chain as
@@ -383,11 +389,11 @@ daemon answers requests in any order.
     absent on each other line: what each act but a chain came to, in the order the line made them, one for each pass
     of a loop: `works`, `failed`, or `done` with its value as a literal of python of at most 80 characters, the last
     of which is the value that the line bound. A line that wrote files has `writes`, which is absent on each other
-    line: for each write of a file, in the order the line made them, its `path`, the lines that it `added` and
-    `removed` against the text of the path that the life knew before it, from a read or a write, whether the life
-    `known` that text, and the first 8 lines of the `diff`, as git writes a unified diff with one line around each
-    change but the header of its first hunk, with `more`, the count of the lines past them. A write of a path that the life did not know counts each
-    of its lines as added;
+    line: for each write of a file, in the order the line made them, the name of its `act`, its `path`, the lines
+    that it `added` and `removed` against the text of the path that the life knew before it, from a read or a write,
+    whether the life `known` that text, and the first 8 lines of the `diff`, as git writes a unified diff with one
+    line around each change but the header of its first hunk, with `more`, the count of the lines past them. A write
+    of a path that the life did not know counts each of its lines as added;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or

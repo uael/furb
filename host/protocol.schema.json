@@ -1048,6 +1048,36 @@
         },
         {
           "type": "object",
+          "description": "A word of the operator on the thread `on`, or on the root, that writes back at each path that\nthe writes that `writes` names wrote the text that the life knew there before the first of\nthem, in their order. A path that the life did not know before stays as it is, and a revert of\nwrites that wrote no such path is refused. A revert of the word of a revert writes again what\nit reverted.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "writes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "revert"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "writes"
+          ]
+        },
+        {
+          "type": "object",
           "description": "A follow-up that the operator queued on a chain, or on a thread, under an entry that the\nwindow chose. The life sends it as a prompt of its shape and its message once the chain rests,\non the chain, or on the thread as a message of it once the chain of the thread rests, and a\nsecond queue of the same entry, from any window, changes nothing.",
           "properties": {
             "life": {
@@ -5154,6 +5184,9 @@
     "Written": {
       "type": "object",
       "properties": {
+        "act": {
+          "type": "string"
+        },
         "path": {
           "type": "string"
         },
@@ -5183,6 +5216,7 @@
         }
       },
       "required": [
+        "act",
         "path",
         "added",
         "removed",
@@ -5190,7 +5224,7 @@
         "diff",
         "more"
       ],
-      "description": "What a write of a file that a line made changed: the path of the file, the lines that it added\nand removed against the text of the path that the life knew before it, from a read or a write\nof the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one\nline around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life\ndid not know before counts each of its lines as added, and is not `known`, since the life does\nnot know what stood there."
+      "description": "What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added\nand removed against the text of the path that the life knew before it, from a read or a write\nof the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one\nline around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life\ndid not know before counts each of its lines as added, and is not `known`, since the life does\nnot know what stood there."
     },
     "Thought": {
       "type": "object",
@@ -6165,5 +6199,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 61
+  "x-protocol": 62
 }

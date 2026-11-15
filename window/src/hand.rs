@@ -969,7 +969,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
     Does::Close => return escaped(app, window, forgot),
-    Does::Stop | Does::Resolve | Does::Pause => {
+    Does::Stop | Does::Resolve | Does::Revert | Does::Pause => {
       return controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
     }
     Does::Send => return sent(app, window),

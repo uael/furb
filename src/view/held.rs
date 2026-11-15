@@ -223,6 +223,23 @@ impl Held {
     self.made.get(id).into_iter().flatten().map(|at| &*self.acts[*at])
   }
 
+  /// The text to write back at each path that a list of writes wrote, to revert them: the text
+  /// that the life knew there before the first of them, in their order. A path that the life did
+  /// not know before has none.
+  pub fn reverted(&self, writes: &[String]) -> Vec<(String, String)> {
+    let mut texts: Vec<(String, String)> = Vec::new();
+    for id in writes {
+      let Some((path, _)) = (&self).act(id).and_then(|act| self.filed(act)) else { continue };
+      if texts.iter().any(|one| one.0 == path) {
+        continue;
+      }
+      if let Some(before) = self.text_before(path, id) {
+        texts.push((path.to_owned(), before.to_owned()));
+      }
+    }
+    texts
+  }
+
   /// The text that the life knew at the path of a file before an act: what the last read or write
   /// of that path that was told before the act came to. A read gives the whole file, whatever
   /// lines it tells, so its text is what stood there.

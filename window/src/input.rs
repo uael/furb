@@ -4,7 +4,7 @@
 
 use std::{mem, ops::Range, path::Path};
 
-use furb::view::{Act, Maker, RunState, Standing, operator, reason, timer};
+use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
@@ -110,6 +110,7 @@ impl Model {
     match does {
       Does::Stop => self.stop(),
       Does::Resolve => self.resolve(),
+      Does::Revert => self.revert(),
       Does::Pause => self.pause(),
       _ => None,
     }
@@ -161,6 +162,37 @@ impl Model {
     self.armed = None;
     let (at, life, thread) = opened.thread.key.clone();
     Some((at, Verb::Resolve { life, thread }))
+  }
+
+  /// The writes of the last answer of the open thread that wrote a file that the life knew before
+  /// it, with the message of that answer: what a revert writes back.
+  pub(crate) fn reverts(&self) -> Option<(&str, Vec<&Written>)> {
+    let opened = self.client.thread.as_ref()?;
+    opened.thread.exchanges.values().rev().find_map(|exchange| {
+      let lines = exchange.block.iter().flat_map(|block| &block.lines);
+      let writes: Vec<&Written> = lines.flat_map(|line| &line.writes).collect();
+      writes.iter().any(|one| one.known).then_some((exchange.message.as_str(), writes))
+    })
+  }
+
+  /// The revert of the files that the last answer of the open thread wrote, as a word of his on the
+  /// thread. A file that furb knew before none of its writes stays, and the window says so.
+  pub(crate) fn revert(&mut self) -> Option<(usize, Verb)> {
+    let Some((_, writes)) = self.reverts() else {
+      self.client.notice = Some("No answer here wrote a file that furb knew before.".to_owned());
+      return None;
+    };
+    let known = |path: &str| writes.iter().any(|one| one.known && one.path == path);
+    let mut kept: Vec<String> =
+      writes.iter().filter(|one| !known(&one.path)).map(|one| one.path.clone()).collect();
+    kept.dedup();
+    let writes = writes.iter().map(|one| one.act.clone()).collect();
+    let (at, life, thread) = self.client.thread.as_ref()?.thread.key.clone();
+    self.client.notice = (!kept.is_empty()).then(|| {
+      let kept: Vec<String> = kept.iter().map(|one| named(one)).collect();
+      format!("{} stays as it is: furb did not know it before.", kept.join(", "))
+    });
+    Some((at, Verb::Revert { life, writes, on: Some(thread) }))
   }
 
   /// A key that he pressed: what a first press of another key named goes, and so does what the key

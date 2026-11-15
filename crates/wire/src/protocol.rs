@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 61;
+pub const PROTOCOL: u32 = 62;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -385,6 +385,16 @@ pub enum Verb {
     life: String,
     thread: String,
   },
+  /// A word of the operator on the thread `on`, or on the root, that writes back at each path that
+  /// the writes that `writes` names wrote the text that the life knew there before the first of
+  /// them, in their order. A path that the life did not know before stays as it is, and a revert of
+  /// writes that wrote no such path is refused. A revert of the word of a revert writes again what
+  /// it reverted.
+  Revert {
+    life: String,
+    writes: Vec<String>,
+    on: Option<String>,
+  },
   /// A follow-up that the operator queued on a chain, or on a thread, under an entry that the
   /// window chose. The life sends it as a prompt of its shape and its message once the chain rests,
   /// on the chain, or on the thread as a message of it once the chain of the thread rests, and a
@@ -548,6 +558,7 @@ impl Verb {
       | Self::CancelSignIn { life }
       | Self::Seen { life, .. }
       | Self::Resolve { life, .. }
+      | Self::Revert { life, .. }
       | Self::Queue { life, .. }
       | Self::Unqueue { life, .. }
       | Self::Queued { life, .. }
