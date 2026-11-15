@@ -2657,7 +2657,9 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   // What he read is told as a change of the card, and a later peer gets the card as it stands.
   let seen = Verb::Seen { life: life.clone(), about: prompt };
   assert_eq!(window.ask(seen).await, Ok(Answer::Done));
-  let read = card(&mut window, |card| card.thread.read_by(&operator)).await;
+  // The window kept each card that came before the resolved one, as one of the thread while it
+  // worked, which a member who wrote its last message reads already: the wait is for the end read.
+  let read = card(&mut window, |card| resolved(card) && card.thread.read_by(&operator)).await;
   assert_eq!(read.place(&operator).0, Part::Resolved);
   let mut late = Window::dialed(&local).await;
   assert_eq!(cards(&mut late).await, vec![read]);
