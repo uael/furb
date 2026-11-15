@@ -885,12 +885,11 @@ fn an_open_that_inspects_a_record_that_crossed_replays_the_life_words_that_ask_t
   let inspects = Opening { inspecting: Some(true), ..scripted(&at, &[]) };
   let mut inspected =
     inspects.boot::<String>([]).expect("the open replays to its tip with no drift").0;
-  let refused =
-    "len([x for x in transcript('chain1', 'clock') if isinstance(peek(x[1], None), Refused)])";
-  let refused = inspected.word(refused, vec![]).unwrap().as_ref().as_int().unwrap_or_default();
+  let clocks = "[peek(x[1], None) for x in transcript('chain1', 'clock')]";
+  let asked = inspected.word(clocks, vec![]).unwrap().as_ref().py_repr();
   assert!(
-    refused > 0,
-    "the birth asks the clock again, and the open that inspects hears it silent"
+    !asked.contains("Refused") && !asked.contains("None"),
+    "the life that crossed kept the clock that its birth asked, which the open that inspects reads: {asked}"
   );
   // Each turn up to the tip is as in the life that wrote it and as in a live reopen.
   let seen = upto(&mut inspected, n);
@@ -898,6 +897,50 @@ fn an_open_that_inspects_a_record_that_crossed_replays_the_life_words_that_ask_t
   assert_eq!(seen, tip, "the open that inspects stands at the tip");
   let mut live = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(upto(&mut live, n), seen, "the open that inspects stands where a live reopen stands");
+  let again = live.word(clocks, vec![]).unwrap().as_ref().py_repr();
+  assert!(
+    again.starts_with(&asked[..asked.len() - 1]),
+    "a live reopen reads the same clocks: {again}"
+  );
+}
+
+/// A record whose last segment another engine, Kernel or checkpointer made crosses to this build
+/// in a life that keeps it, whose birth starts the parts that live, as the kit catchup asks the
+/// clock. Each later open, which inspects the record or keeps it, replays that life from its record
+/// to the same turns with no drift, since the record keeps what that birth asked of the World.
+#[test]
+fn a_record_that_crossed_onto_other_texts_opens_again_with_no_drift() {
+  for text in 0..3 {
+    let at = yard(&format!("crossed-texts-{text}"));
+    let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+    assert_eq!(closed(&mut first, "n = 1\nclose(n)").as_ref().as_int(), Some(1));
+    drop(first);
+    let mut held =
+      [furb::ENGINE.to_owned(), furb::KERNEL.to_owned(), furb::CHECKPOINTER.to_owned()];
+    held[text].push_str("\n# another build\n");
+    let other = named(&[&held[0], &held[1], &held[2]]).0;
+    changed(&at, &ours(), |line| line.replace(&ours(), &other));
+    let turns =
+      "repr([turns(on=c) for c in [f'chain{n}' for n in range(1, 9) if get(f'chain{n}')]])";
+    let clocks = "repr([peek(x[1], None) for x in transcript('chain1', 'clock')])";
+    let mut crossing = opening(&at, true).boot::<String>([]).unwrap().0;
+    let read = |life: &mut Engine, word: &str| {
+      let text = life.word(word, vec![]).unwrap().as_ref().as_str().unwrap().to_owned();
+      text[..text.len() - 1].to_owned()
+    };
+    let (tip, asked) = (read(&mut crossing, turns), read(&mut crossing, clocks));
+    drop(crossing);
+    for keeps in [false, true] {
+      let open = Opening { inspecting: Some(!keeps), ..opening(&at, keeps) };
+      let mut later = open.boot::<String>([]).unwrap_or_else(|no| panic!("{text} {keeps}: {no}")).0;
+      // A later life that keeps the record says more after the tip, as the clock that its stand
+      // asks.
+      let seen = read(&mut later, turns);
+      assert!(seen.starts_with(&tip), "{text} {keeps}: the open stands at the tip");
+      let seen = read(&mut later, clocks);
+      assert!(seen.starts_with(&asked), "{text} {keeps}: the clocks {seen} begin with {asked}");
+    }
+  }
 }
 
 #[test]

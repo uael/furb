@@ -89,14 +89,17 @@ pub(crate) fn ours() -> String {
 /// The record of the life of a test at a directory, as if another build had made its last segment:
 /// its last fact made of this build names this engine with one more line, so the next life that
 /// keeps the record crosses there, and each later open carries the life across that place. Each
-/// call names another engine, so the record crosses at each.
+/// call names another engine, so the record crosses at each. The line is a comment, so the engine
+/// that a model reads is the same: a fact that a life keeps after a crossing, as a turn that tells
+/// a chain the lines of the engine that differ, holds the texts that the facts made name, and this
+/// change of a fact made after the fact must not change it.
 pub(crate) fn crossing(at: &Path) {
   static ENGINES: AtomicUsize = AtomicUsize::new(0);
   let record = at.join("record.jsonl");
   let text = fs::read_to_string(&record).unwrap();
   let (ours, n) = (ours(), ENGINES.fetch_add(1, Relaxed));
   let place = text.rfind(&ours).expect("the record names this build");
-  let made = elsewhere(&format!("crossed = {n}")).0;
+  let made = elsewhere(&format!("# crossed {n}")).0;
   fs::write(&record, format!("{}{made}{}", &text[..place], &text[place + ours.len()..])).unwrap();
 }
 

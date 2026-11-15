@@ -116,15 +116,32 @@ def __seed(data):
   return [x[:2] for (x,) in __seeded]
 
 def __boot(entries, **ears):
-  # The fact made of the segment after a carry stands before the wakes that end its seed, so the work that a wake
-  # starts is the life's own, past its tip, at each open.
+  # The rungs that start the parts that live and the wakes end the seed of a carry and start the work of the life. A
+  # life that crosses says them after its fact made, as facts of its own that its record keeps, so each later open
+  # replays them and their work from the record, an act of the World that a part makes as it starts among them. A
+  # record that crossed before keeps none of them, and its open plays them as the end of its seed.
   woke = len(__seeded)
   while woke and __seeded[woke - 1][0][0] == "wake":
     woke -= 1
+  while woke and __seeded[woke - 1][0][0] == "rung" and len(__seeded[woke - 1][0]) > 4:
+    woke -= 1
+  tail = [x[0] for x in __seeded[woke:]]
   made = int(bool(entries) and entries[0][0][0] == "made")
-  record = __record["recorded"](__engine, __seeded[:woke] + entries[:made] + __seeded[woke:] + entries[made:])
+  # A rung that ends the seed takes the next free name when the life says it, so the record holds it by its words.
+  key = lambda a: (a[0], *a[2:]) if a[0] == "rung" else tuple(a)
+  kept = bool(tail) and any(key(x[0]) == key(tail[0]) for x in entries[made:])
+  late = made == len(entries) and bool(tail)
+  start = [] if kept or late else __seeded[woke:]
+  record = __record["recorded"](__engine, __seeded[:woke] + entries[:made] + start + entries[made:])
   __seeded.clear()
-  return __engine["boot"](record, **ears, birth=__checkpointer["birth"](__engine))
+  root = __engine["boot"](record, **ears, birth=__checkpointer["birth"](__engine))
+  for kind, about, by, *words in tail if late else ():
+    with __engine["site"].set(by):
+      if kind == "wake":
+        __engine["say"](kind, about, *words)
+      else:
+        __engine["rung"](*words[1:], on=words[0])
+  return root
 
 def __settles(got):
   # The Kernel says why an await of the operator cannot end.
