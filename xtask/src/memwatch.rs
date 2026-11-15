@@ -241,6 +241,3 @@ fn names(command: &str, trees: &[String]) -> bool {
   })
 }
 
-#[cfg(test)]
-#[path = "memwatch.test.rs"]
-mod test;

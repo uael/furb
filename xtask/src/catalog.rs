@@ -317,7 +317,7 @@ fn written(providers: &[Provider]) -> String {
 
 /// A value as `json.dumps` of python writes it: a space after each comma and colon, each letter
 /// past ASCII escaped, and each float as python reads it back.
-pub(crate) fn python(value: &Value) -> String {
+fn python(value: &Value) -> String {
   match value {
     Value::Number(number) if number.is_f64() => float(number.as_f64().unwrap_or_default()),
     Value::String(text) => {
@@ -442,7 +442,3 @@ fn utc(seconds: u64) -> String {
     rest % 60
   )
 }
-
-#[cfg(test)]
-#[path = "catalog.test.rs"]
-mod test;

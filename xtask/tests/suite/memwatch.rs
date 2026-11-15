@@ -5,13 +5,13 @@
 
 use std::{
   env, fs,
-  os::unix::{fs::PermissionsExt, process::ExitStatusExt},
+  os::unix::process::ExitStatusExt,
   path::{Path, PathBuf},
   process::{self, Child, Command, Output},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::yard::Yard;
+use crate::{shim, shimmed, yard::Yard};
 use wait_timeout::ChildExt;
 
 const MB: u64 = 1024;
@@ -77,22 +77,16 @@ fn me() -> u64 {
 /// A fake machine: ps lists the given processes as pid, size in KB, command and user, with no
 /// process that ended, and on macOS sysctl gives the given pressure level of the kernel.
 fn machine(yard: &Path, level: Option<u64>, rows: &[(u32, u64, &str, u64)]) {
-  let shim = yard.join("shim");
-  fs::create_dir_all(&shim).unwrap_or_else(|no| panic!("{no}"));
   let table: Vec<String> =
     rows.iter().map(|(pid, kb, command, uid)| format!("{uid} {pid} {kb} {command}\n")).collect();
   fs::write(yard.join("table"), table.concat()).unwrap_or_else(|no| panic!("{no}"));
   let lister = format!(
-    "#!/bin/sh\nwhile read -r uid pid rest; do kill -0 \"$pid\" 2>/dev/null && echo \"$uid $pid $rest\"; done < {}\n",
+    "while read -r uid pid rest; do kill -0 \"$pid\" 2>/dev/null && echo \"$uid $pid $rest\"; done < {}\n",
     yard.join("table").display()
   );
-  let sysctl =
-    level.map_or("#!/bin/sh\nexit 1\n".to_owned(), |level| format!("#!/bin/sh\necho {level}\n"));
-  for (name, text) in [("ps", lister), ("sysctl", sysctl)] {
-    fs::write(shim.join(name), text).unwrap_or_else(|no| panic!("a shim: {no}"));
-    fs::set_permissions(shim.join(name), fs::Permissions::from_mode(0o755))
-      .unwrap_or_else(|no| panic!("a shim runs: {no}"));
-  }
+  let sysctl = level.map_or("exit 1\n".to_owned(), |level| format!("echo {level}\n"));
+  shim(yard, "ps", &lister);
+  shim(yard, "sysctl", &sysctl);
 }
 
 /// The watch, once or in its loop, in a folder, with a test process of 1 KB as a runaway unless a
@@ -103,8 +97,10 @@ fn watch(yard: &Path, folder: &Path, once: bool, more: &[(&str, &str)]) -> Comma
   for (name, _) in env::vars().filter(|(name, _)| name.starts_with("FURB_WATCH_")) {
     run.env_remove(name);
   }
-  let path = format!("{}:{}", yard.join("shim").display(), env::var("PATH").unwrap_or_default());
-  run.env("PATH", path).env("FURB_WATCH_LOG", yard.join("watch.log")).env("FURB_WATCH_MIN", "1");
+  run
+    .env("PATH", shimmed(yard))
+    .env("FURB_WATCH_LOG", yard.join("watch.log"))
+    .env("FURB_WATCH_MIN", "1");
   run.envs(more.iter().copied());
   run
 }

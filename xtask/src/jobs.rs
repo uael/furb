@@ -61,7 +61,7 @@ pub(crate) fn set(root: &Path, runs: u32) -> Result<ExitCode, Fault> {
 /// any value. A job of a workflow that a job of the gates calls is named under the name of the job
 /// that calls it, as GitHub names it, and the job that calls has no budget of its own. The job that
 /// only holds the check of the others has no budget.
-pub(crate) fn named(workflow: &Path) -> Result<Vec<Regex>, Fault> {
+fn named(workflow: &Path) -> Result<Vec<Regex>, Fault> {
   let matrix = Regex::new(r"\$\{\{.*?\}\}")?;
   let mut made = Vec::new();
   for name in names(workflow, "")? {
@@ -155,7 +155,3 @@ fn seconds(stamp: &str) -> i64 {
   let days = era * 146_097 + of_era * 365 + of_era / 4 - of_era / 100 + of_year - 719_468;
   days * 86_400 + hour * 3600 + minute * 60 + second
 }
-
-#[cfg(test)]
-#[path = "jobs.test.rs"]
-mod test;

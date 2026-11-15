@@ -4,7 +4,9 @@
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
+mod catalog;
 mod clean_caches;
+mod jobs;
 mod links;
 mod memwatch;
 mod pack;
@@ -15,6 +17,8 @@ mod tree;
 mod unused;
 mod width;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
   env,
   ffi::OsStr,
@@ -68,4 +72,21 @@ fn held(folder: &Path, files: &[(&str, &str)]) {
   }
   git(folder, &["init", "-q"]);
   git(folder, &["add", "-A"]);
+}
+
+/// A program of the shell in the folder `shim` of a yard, which a task finds before the program of
+/// the machine of that name, as the PATH of [`shimmed`] says.
+#[cfg(unix)]
+fn shim(yard: &Path, name: &str, script: &str) {
+  let path = yard.join("shim").join(name);
+  let made = fs::create_dir_all(yard.join("shim"))
+    .and_then(|()| fs::write(&path, format!("#!/bin/sh\n{script}")))
+    .and_then(|()| fs::set_permissions(&path, fs::Permissions::from_mode(0o755)));
+  made.unwrap_or_else(|no| panic!("the shim {name} was not made: {no}"));
+}
+
+/// The PATH that finds the shims of a yard first.
+#[cfg(unix)]
+fn shimmed(yard: &Path) -> String {
+  format!("{}:{}", yard.join("shim").display(), env::var("PATH").unwrap_or_default())
 }

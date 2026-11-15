@@ -8,7 +8,8 @@ use crate::{ended, xtask, yard::Yard};
 /// yet, which stands in no file.
 const PAGE: &str = "# The promise\n\n## The proofs that a machine runs\n\n\
   - `test_proof.py::test_holds`\n- `src/lib.rs::in_lib`\n- `tests/suite/promise.rs::in_suite`\n\
-  - `host/tests/suite/main.rs::in_host`\n\nWhat no machine proves yet:\n\n- `rollback.py::test_later`\n";
+  - `host/tests/suite/main.rs::in_host`\n\n\
+  What no machine proves yet:\n\n- `rollback.py::test_later`\n";
 
 /// The files of the workspace: the crates furb and furb-host, each test that the page names
 /// passing, or failing for the names given.
