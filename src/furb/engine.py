@@ -280,7 +280,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
     running, waiting, last, bound, held, due = set(), {}, standing(), 0, {}, set()
-    barren, wrote, inbox, owed, took, awaited, did = {}, {}, {}, {}, {}, {}, {}
+    barren, wrote, inbox, owed, took, awaited, did, seen = {}, {}, {}, {}, {}, {}, {}, {}
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
@@ -443,7 +443,13 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         barren[p] = (barren[p] + 1) * bool(
           broke
           or debt
-          or (not waited and (word in written or kinds <= {"started", "ready", "done", "reply", "tell", "ran"}))
+          or (
+            not waited
+            and (
+              word in written
+              or (kinds <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(a[1]) == module())
+            )
+          )
         )
         written.append(word)
         if barren[p] // 3:
@@ -488,6 +494,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           if (p := get(step)[2]) in barren:
             due.discard(p)
             took[step] = [*inbox.get(p, [])]
+          seen[step] = {**module()}
           with site.set(step):
             waiting[step] = reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
@@ -514,7 +521,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           awaited[rid] = r[4]
       elif a[0] == "done":
         running.discard(a[1])
-        for fold in (took, awaited, did):
+        for fold in (took, awaited, did, seen):
           fold.pop(a[1], None)
       if running:
         continue

@@ -1616,12 +1616,24 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
 
 
 async def test_a_step_is_barren_when_it_raises_makes_nothing_repeats_a_word_or_leaves_a_message_owed() -> None:
-  """A step is barren when it raises, when it made no act, closed no prompt and no act that it awaited ended, as a step that only passes, binds a name or debugs, when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended, and when it leaves a message of a person owed, whatever else it did."""
-  for word in ("raise ValueError('x')", "1/0", "The answer stands.", "close('a')", "pass", "x = 1", "debug(t'{1}')"):
+  """A step is barren when it raises, when it made no act, closed no prompt, changed no name of the module of its chain and no act that it awaited ended, as a step that only passes or debugs, when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended, and when it leaves a message of a person owed, whatever else it did."""
+  for word in ("raise ValueError('x')", "1/0", "The answer stands.", "close('a')", "pass", "debug(t'{1}')"):
     assert await looped(word) == (3, True, ["made nothing"]), word
-  for word in ("prompt(None, 'working', to=OPERATOR)", "x = read('a.txt')", "x = clock()"):
+  for word in ("prompt(None, 'working', to=OPERATOR)", "x = read('a.txt')", "x = clock()", "x = 1"):
     assert await looped(word) == (4, True, ["made nothing"]), word
-  _, log, root = born("b = bash('ls')\nawait b", "await b", "await b\nx = 1", "await b\nx = 2", "await b\nx = 3")
+  steps = (
+    "s1 = 'a'\ndebug(t'{s1}')",
+    "s2 = s1 + 'b'\ndebug(t'{s2}')",
+    "s3 = s2 + 'c'",
+    "s4 = s3 + 'd'",
+    "close(len(s4))",
+  )
+  _, log, root = born(*steps)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(8):
+    await settle()
+  assert (engine.peek(one), said(log, "pause")) == (4, [])
+  _, log, root = born("b = bash('ls')\nawait b", "await b", "await b\n1", "await b\n2", "await b\n3")
   one = engine.prompt(int, "count", on=root)
   for _ in range(12):
     await settle()
@@ -2352,13 +2364,13 @@ async def test_an_act_of_a_step_is_each_question_that_it_made_and_each_control_t
   for n in range(3):
     await settle()
     step, reply = said(log, "rung")[-1][1], said(log, "reply")[-1][1]
-    wrote(step, f"x = {n}\n", 0)
+    wrote(step, f"{n}\n", 0)
     await settle()
-    world_says("done", reply, ("assistant", f"x = {n}", (0, 0, 0, 0, 0.0), None))
+    world_says("done", reply, ("assistant", f"{n}", (0, 0, 0, 0, 0.0), None))
   for _ in range(4):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (3, True, "made nothing")
-  _, log, root = born("b = bash('ls')\nawait b", "await b", "await b\nx = 1", "await b\nx = 2", "await b\nx = 3")
+  _, log, root = born("b = bash('ls')\nawait b", "await b", "await b\n1", "await b\n2", "await b\n3")
   one = engine.prompt(int, "count", on=root)
   for _ in range(12):
     await settle()
