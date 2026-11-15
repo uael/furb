@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → ……opus   + ⌃N      Context               No answer yet
 ┃                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-…    ◆ 1 other thread asks   ⌃P go to
+  ~…  ◆ 1 other thread asks   ⌃P find

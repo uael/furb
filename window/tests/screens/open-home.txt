@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This computer ▾   FU furb ▾    opus
 ┃
-  ~/furb                                         ⌃P go to
+  ~/furb                                          ⌃P find

@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ‖ Paused · ⌃X Z or a message resumes it        ⌃P go to
+  ‖ Paused · ⌃X Z or a message resumes it         ⌃P find

@@ -27,4 +27,4 @@
 ┃                                                                 Ground the…        ‖ Paused 11h
 ┃  Message  Python    This… ▾   FT furb-try ▾  opus  high         FU furb                    opus
 ┃
-  ~/src/furb-try                                 ⌃P go to      Resolved 1 ▸
+  ~/src/furb-try                                  ⌃P find      Resolved 1 ▸
