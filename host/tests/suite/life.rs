@@ -34,7 +34,7 @@ use furb::{
   },
 };
 use furb_host::{Command, Door, Event, Life, LifeError, LifeHandle, Reply, Seq};
-use futures::{Stream, StreamExt};
+use futures::{Stream, StreamExt, future};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio::{task, time};
@@ -1228,5 +1228,56 @@ async fn a_lone_wake_of_a_chain_that_the_provider_paused_asks_its_model_again_an
   assert!(calls.load(Ordering::SeqCst) > asked, "the wake asks the model again");
   assert!(matches!(life.send(Command::Standing).await, Ok(Reply::Value(_))), "the life goes on");
   life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
+
+/// A life that keeps its record at a place, whose model works for ever on each message that says
+/// so, and closes each other request.
+fn working(at: &Path) -> Opening {
+  let answer = Answer(Arc::new(move |request, _| {
+    let works = request.to_string().contains("(works)");
+    Box::pin(async move {
+      if works {
+        future::pending::<()>().await;
+      }
+      let word = ["assistant", "close(None)"].map(Object::string);
+      Ok(Object::tuple([word[0].clone(), word[1].clone(), Object::none(), Object::none()]))
+    })
+  }));
+  Opening { answer: Some(answer), ..kept(at) }
+}
+
+#[tokio::test]
+async fn a_message_that_the_operator_takes_back_while_its_chain_works_on_another_ends_cancelled() {
+  let at = place("take-back");
+  let life = Life::spawn(working(&at)).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let said = |message: &str, on: Option<&str>| Command::Prompt {
+    shape: "str".to_owned(),
+    message: message.to_owned(),
+    to: None,
+    on: on.map(str::to_owned),
+  };
+  let first = made(&life, said("Read the boot (works)", None)).await;
+  let replies =
+    |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Reply && !act.done());
+  until(&mut events, replies).await;
+  // The rung of the second message waits behind the rung of the first, whose model works.
+  let second = made(&life, said("Then the replay (works)", Some(&first))).await;
+  life.send(Command::Cancel { id: second.clone(), why: None }).await.unwrap();
+  let got = until(&mut events, done(&second)).await;
+  let Some(Event::Act(ended)) = got.last().map(|one| &*one.1) else { panic!("an act") };
+  assert!(ended.cancelled(), "{ended:?}");
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+  // A later life on the record holds the message as cancelled, and the first as it was.
+  let later = Life::spawn(working(&at)).unwrap();
+  let mut events = Box::pin(later.events(0));
+  let got = until(&mut events, done(&second)).await;
+  let Some(Event::Act(ended)) = got.last().map(|one| &*one.1) else { panic!("an act") };
+  assert!(ended.cancelled(), "{ended:?}");
+  let first_done = got.iter().any(|one| done(&first)(&one.1));
+  assert!(!first_done, "the first message still runs");
+  later.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }
