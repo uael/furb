@@ -10,9 +10,10 @@ use crate::yard;
 
 use std::{
   collections::BTreeMap,
+  env,
   fmt::Write as _,
   fs,
-  path::{Path, PathBuf},
+  path::{MAIN_SEPARATOR, Path, PathBuf},
   process,
   sync::{
     Arc, Mutex,
@@ -44,6 +45,16 @@ pub(crate) type Logged = (Seq, Arc<Event>);
 /// A directory of one test, empty.
 pub(crate) fn place(name: &str) -> yard::Yard {
   yard::Yard::new(format!("furb-host-{name}-{}", process::id()))
+}
+
+/// A path as the World writes it for a model: `~` in place of the home of the user that it stands
+/// under, as the temporary folder of Windows does, and the path as it stands otherwise.
+fn told(path: &Path) -> String {
+  let home = env::home_dir().filter(|home| home.parent().is_some());
+  match home.and_then(|home| path.strip_prefix(home).ok().map(Path::to_path_buf)) {
+    Some(rest) => format!("~{MAIN_SEPARATOR}{}", rest.display()),
+    None => path.display().to_string(),
+  }
 }
 
 /// A life with no record and no skill, whose model answers each request with the next word of a
@@ -480,7 +491,7 @@ async fn each_door_of_a_person_runs_as_his_word_that_the_transcript_shows() {
   assert_eq!(labels, [&json!("bench"), &json!("rewind")]);
   assert_eq!(chains[1][5], json!("chain1"), "the rewind stands on the chain, which stays");
   let cwd = life.send(Command::Cwd { on: None }).await.unwrap();
-  assert_eq!(cwd, Reply::Value(json!(at.join("work").display().to_string())));
+  assert_eq!(cwd, Reply::Value(json!(told(&at.join("work")))));
   let inspect = |name: &str| Command::Inspect { name: text(name), on: None };
   let Reply::Inspected { repr, .. } = life.send(inspect("actor")).await.unwrap() else {
     panic!("a name is inspected")
