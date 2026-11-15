@@ -28,10 +28,12 @@ API of its own:
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life opens at the exact state of its tip, from its
   image or by its record, on the engine and the Kernel that the image or the last segment of its record holds, as
-  `src/image.rs` and `src/checkpoint.rs` say. An image holds those of the build that wrote it, which alone reads it.
-  When those of the record are not the ones of this build and the life keeps its record, the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
-  the lines of the engine that differ, then the fact made of this build, and the life goes on with this build. A
-  life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 2
+  `src/image.rs` and `src/checkpoint.rs` say. An image holds those of the build that wrote it, and a build of the same
+  digest of what its session calls reads it. When those of the record are not the ones of this build and the life
+  keeps its record, the life crosses: a checkpoint, which tells each chain the lines of the engine that differ, then the
+  fact made of this build, after which the life goes on with this build. `Opening::boot` crosses before the open, by a
+  life that inspects; a host opens the life on those texts first, shows it, and then moves it as an open of its own,
+  `Engine::cross`, before any word runs. A life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 2
   of the schema of the record, opens in no life, which says why: the host tells each of its facts, and a window reads
   its threads, read only. Each chain reads as its system prompt the engine
   that it read first, and a new chain with no source the engine that the life runs. `tests/replay` holds records of

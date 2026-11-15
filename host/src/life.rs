@@ -1059,7 +1059,8 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
   heard_as_events(&mut opening, &told);
   let folder = PathBuf::from(&opening.directory);
   let journal = life.record.clone().map(|one| Journal::spawn(folder, journal(&one), told.clone()));
-  let end = lives(opening, &mut life, &mut received, &told, journal.as_ref()).await;
+  // The open, the move and the life hold large futures, which stay on the heap.
+  let end = Box::pin(lives(opening, &mut life, &mut received, &told, journal.as_ref())).await;
   let fault = flushed(end.fault, journal.as_ref()).await;
   for asked in end.asked {
     asked.send(fault.clone().map_or(Ok(Reply::Done), |one| Err(LifeError::Refused(one)))).ok();
@@ -1165,6 +1166,7 @@ async fn lives(
     kept = read.filter(|one| images && one.build == BUILD).map(|one| one.kept);
     kept.is_some()
   };
+  let again = opening.clone();
   let engine = match opening.open(ears, progress.clone(), &mut stands).await {
     Ok((engine, _)) => engine,
     Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: false },
@@ -1182,8 +1184,44 @@ async fn lives(
       life.opened(birth, born, &progress);
     }
   }
+  let engine = match record.as_deref().filter(|_| engine.crosses()) {
+    Some(_) => match moved(engine, again, life, told, journal, &progress).await {
+      Ok(engine) => engine,
+      Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: true },
+    },
+    None => engine,
+  };
   let (fault, asked) = driven(engine, life, received, record.as_deref()).await;
   End { fault: fault.map(|one| one.to_string()), asked, stood: true }
+}
+
+/// The life that opened on the texts of an earlier build, as its image or its record holds them,
+/// moved to this build once each reader heard it: its checkpoint, which tells each chain the
+/// lines of the engine that differ, and the fact made of this build, then the open again on that
+/// checkpoint, as an open of its own, whose stages each window shows. Each command waits in the
+/// inbox meanwhile, so no word runs on the texts that the life leaves.
+async fn moved(
+  engine: Engine,
+  opening: Opening,
+  life: &mut Life,
+  told: &UnboundedSender<Event>,
+  journal: Option<&Journal>,
+  progress: &Progress,
+) -> Result<Engine, Fault> {
+  life.opens.born();
+  (progress.0)(Stage::Cross, 0, 0);
+  engine.cross()?;
+  if let Some(lost) = flushed(None, journal).await {
+    return Err(Fault::refused(lost));
+  }
+  while let Ok(event) = life.heard.try_recv() {
+    life.told(Some(event));
+  }
+  let (engine, _) =
+    opening.open(ears(told.clone(), journal), progress.clone(), &mut |_| false).await?;
+  let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
+  life.opened(birth, true, progress);
+  Ok(engine)
 }
 
 /// What woke the thread of a life.

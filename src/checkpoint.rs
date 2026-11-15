@@ -187,13 +187,35 @@ impl Engine {
   /// the checkpoint on the same texts. A life that is born from a checkpoint makes acts of its own
   /// at its birth, so a fact that this life said after the checkpoint would not replay there. The
   /// life ends too when it keeps no record, which it refuses.
-  pub fn checkpoint(mut self) -> Result<(), Fault> {
+  pub fn checkpoint(self) -> Result<(), Fault> {
+    let next = self.running().clone();
+    self.ended(next)
+  }
+
+  /// The move of a life that opened on the texts of another engine, Kernel or checkpointer to those
+  /// of this build, as a step of its own: its checkpoint at its tip, which tells each chain the lines
+  /// of the engine that differ, then the fact made of this build, which the ear of its store keeps
+  /// as [`Engine::checkpoint`] says, so the life born on them runs this build. The life ends with
+  /// them.
+  pub fn cross(self) -> Result<(), Fault> {
+    self.ended(world::running(&[]))
+  }
+
+  /// Whether the life runs the texts of another engine, Kernel or checkpointer than this build, as
+  /// a life that opened on the image of another build does until it crosses.
+  pub fn crosses(&self) -> bool {
+    world::texts(slice::from_ref(self.running())).ok() != world::texts(&[]).ok()
+  }
+
+  /// The checkpoint of the life at its tip, then the fact made of the texts of the life born on it,
+  /// kept by the ear of its store, and the end of the life.
+  fn ended(mut self, next: Object) -> Result<(), Fault> {
     if !self.hears("store") {
       return Err(Fault::refused("a life that keeps no record keeps no checkpoint"));
     }
-    let (entry, made) = (written(&mut self)?, self.running().clone());
+    let entry = written_before(&mut self, &next)?;
     let word = "(say('keep', '', __entry), say('keep', '', __made))";
-    self.word(word, vec![("__entry", entry), ("__made", made)]).map(drop)
+    self.word(word, vec![("__entry", entry), ("__made", next)]).map(drop)
   }
 }
 

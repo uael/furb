@@ -267,7 +267,7 @@ impl Opening {
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
     let untold = Progress::default();
-    let prepared = self.prepared(&untold, false)?;
+    let prepared = self.prepared(&untold, false, true)?;
     self.parted(prepared, &untold)
   }
 
@@ -378,13 +378,9 @@ impl Opening {
   /// What the life waits for before it boots: the extensions that the configs turn on, and the
   /// provider of the models, whose catalog asks the servers and the command lines of the models. A
   /// host with a runtime waits for it on a blocking thread.
-  fn prepared(&self, told: &Progress, images: bool) -> Result<Prepared, Fault> {
+  fn prepared(&self, told: &Progress, images: bool, crosses: bool) -> Result<Prepared, Fault> {
     let works = self.works();
-    // The first stage is told at once, also for a record that is not there yet, so a host never
-    // waits for the first one behind the catalog.
-    let bytes = self.record.as_deref().map_or(0, size);
-    (told.0)(Stage::Find, 0, bytes);
-    let (image, last) = self.tip(told, images, bytes)?;
+    let (image, last) = self.tip(told, images, crosses)?;
     // The models of a life read the engine that the life runs: the one that its image holds, or
     // the one that the last segment of its record holds; and each chain that read another engine
     // first reads that one, as the image or the last checkpoint says.
@@ -463,14 +459,20 @@ impl Opening {
   /// The image of the record when one agrees with it, else the last entries of the record, which
   /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
   /// or checkpointer than this build crosses first, as [`Opening::crossed`] says, and then opens by
-  /// its record. A record of a schema that this build does not open, as one from before the stable
-  /// cut, is refused, by its image too.
+  /// its record, but for a life that `crosses` not: it opens on those texts, by its image or by its
+  /// record, and its host moves it to this build after, by [`Engine::cross`]. A record of a schema
+  /// that this build does not open, as one from before the stable cut, is refused, by its image
+  /// too.
   fn tip(
     &self,
     told: &Progress,
     images: bool,
-    bytes: u64,
+    crosses: bool,
   ) -> Result<(Option<Image>, Option<world::Last>), Fault> {
+    // The first stage is told at once, also for a record that is not there yet, so a host never
+    // waits for the first one behind the catalog.
+    let bytes = self.record.as_deref().map_or(0, size);
+    (told.0)(Stage::Find, 0, bytes);
     let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
     let last = match image {
       Some(_) => None,
@@ -480,7 +482,7 @@ impl Opening {
       world::readable(slice::from_ref(&image.half.made))?;
     }
     let texts = Self::texts(image.as_ref(), last.as_ref())?;
-    if !self.keeps() || texts == Self::texts(None, None)? {
+    if !self.keeps() || !crosses || texts == Self::texts(None, None)? {
       return Ok((image, last));
     }
     (told.0)(Stage::Cross, 0, 0);
@@ -600,7 +602,7 @@ impl Opening {
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let untold = Progress::default();
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
-    let prepared = self.prepared(&untold, true)?;
+    let prepared = self.prepared(&untold, true, true)?;
     match self.imaged(host, prepared, &mut |_| true)? {
       Imaged::Life(engine) => Ok((engine, Vec::new())),
       Imaged::Back(host, prepared) => self.booted(host, prepared, &untold),
@@ -616,6 +618,11 @@ impl Opening {
   /// Before the life loads its image, `stands` is given the part of the host that the image holds,
   /// as the host of the life before gave it to [`image::keep`], on the thread that awaits: it
   /// says whether the host stands on it, and the life opens by its record when it does not.
+  ///
+  /// A life that keeps its record opens on the texts that its image or the last segment of its
+  /// record holds, as those of an earlier build, so its host shows it at once: the host then moves
+  /// it to this build as a stage of its own, before any word runs, by [`Engine::cross`] and an open
+  /// again, while [`Engine::crosses`] says that it runs other texts.
   pub async fn open<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
@@ -638,7 +645,7 @@ impl Opening {
   async fn waited(self, told: &Progress) -> Result<(Self, Prepared), Fault> {
     let waits = told.clone();
     let waited = task::spawn_blocking(move || {
-      let prepared = self.prepared(&waits, true);
+      let prepared = self.prepared(&waits, true, false);
       (self, prepared)
     });
     match waited.await {
@@ -777,7 +784,7 @@ impl Opening {
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
-      let prepared = inspects.prepared(&Progress::default(), false)?;
+      let prepared = inspects.prepared(&Progress::default(), false, true)?;
       let ears = inspects.eared(prepared.waited, Some(&before), checkpoint::stood(&before))?;
       let mut engine = Engine::boot(before, ears)?;
       if let Some(no) = engine.raised() {

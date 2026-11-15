@@ -2114,3 +2114,41 @@ fn an_open_whose_image_does_not_load_tells_no_stage_again() {
   let starts = told.iter().filter(|one| **one == (Stage::Find, 0, told[0].2)).count();
   assert_eq!(starts, 1, "the open waits for its catalog once: {told:?}");
 }
+
+/// A life on the image of an earlier build, whose engine alone differs, opens on the texts that
+/// the image holds, with no checkpoint and no word, then moves to this build as a step of its own:
+/// the checkpoint that tells each chain the lines of the engine that differ, after the turns that
+/// it had, and the fact made of this build, after which its next word runs on this build.
+#[test]
+fn a_life_opens_on_the_image_of_another_engine_and_then_moves_to_this_build() {
+  let at = yard("image-moves");
+  let (made, named) = elsewhere("crossed = True");
+  let (record, _) = made_elsewhere(&at, &made);
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let open = || {
+    let opening = Opening { skills: Some(false), ..opening(&at, true) };
+    reactor.block_on(opening.open::<String>([], Progress::default(), &mut |_| true)).unwrap().0
+  };
+  let read =
+    |life: &mut Engine| closed(life, "close([x, globals().get('crossed')])").as_ref().py_repr();
+  let mut first = open();
+  assert!(first.crosses(), "a life opens on the texts of its record");
+  assert_eq!(read(&mut first), "[1, True]");
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  let mut shown = open();
+  assert!(shown.crosses() && image::agrees(&record), "the life opens on its image");
+  let before = shown.word("turns(on='chain1')", vec![]).unwrap();
+  assert!(world::checkpoints(&record).unwrap().is_empty(), "the open writes no checkpoint");
+  shown.cross().unwrap();
+  assert_eq!(world::checkpoints(&record).unwrap().len(), 1, "the move writes one checkpoint");
+  assert_eq!(builds(&record), [named, world::engine()], "the move ends with this build");
+  let mut moved = open();
+  assert!(!moved.crosses(), "the life runs this build");
+  // Each turn stays, and the last one goes on with the lines of the engine that differ.
+  let kept = "(t := turns(on='chain1'))[:-1] == __b[:-1] and t[-1][1].startswith(__b[-1][1]) \
+              and t[-1][1][len(__b[-1][1]):].startswith('\\n\\n#chain1 crossed\\n')";
+  let kept = moved.word(kept, vec![("__b", before)]).unwrap();
+  assert_eq!(kept.as_ref().py_repr(), "True", "the move appends the engine that differs");
+  assert_eq!(read(&mut moved), "[1, None]", "the next word runs on this build");
+}

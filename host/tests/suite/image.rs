@@ -429,3 +429,54 @@ async fn a_life_that_opens_from_its_image_shows_each_thread_as_the_life_before_i
   assert_eq!(after, before, "the line runs since the second that the life before saw it begin");
   ended(life).await;
 }
+
+/// The record at a place as a build whose engine holds one more line wrote it: each fact made names
+/// that engine, under the digest of its texts, as an earlier build of the major names its own.
+fn elsewhere(at: &Path, line: &str) {
+  let record = at.join("record.jsonl");
+  let text = fs::read_to_string(&record).expect("the record");
+  let mut lines = Vec::new();
+  for one in text.lines() {
+    let mut entry: Value = serde_json::from_str(one).expect("an entry");
+    if entry[0][0] == "made" {
+      let engine = format!("{}\n{line}\n", entry[0][7].as_str().expect("the engine"));
+      entry[0][7] = Value::from(engine);
+      let mut hash = Sha256::new();
+      for text in [7, 8, 9].map(|at| entry[0][at].as_str().expect("a text").to_owned()) {
+        hash.update(text.as_bytes());
+        hash.update([0]);
+      }
+      entry[0][3] = Value::from(format!("{:x}", hash.finalize()));
+    }
+    lines.push(entry.to_string());
+  }
+  fs::write(&record, lines.join("\n") + "\n").expect("the record is written");
+  fs::remove_file(at.join("record.jsonl.image")).ok();
+}
+
+#[tokio::test]
+async fn a_life_on_an_earlier_engine_shows_then_moves_to_this_build_before_a_word_runs() {
+  let at = place("image-moved");
+  let first = Life::spawn(kept(&at)).expect("the first life");
+  let mut events = Box::pin(first.events(0));
+  let id = made(&first, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  ended(first).await;
+  elsewhere(&at, "crossed = True");
+  let life = Life::spawn(kept(&at)).expect("the life on the earlier engine");
+  // The word is said as the life opens, so it waits for the move and runs on this build.
+  let id = made(&life, rung("y = [x, globals().get('crossed')]")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let read = life.send(Command::Inspect { name: "y".to_owned(), on: None }).await;
+  let Ok(Reply::Inspected { repr, .. }) = read else { panic!("y is bound: {read:?}") };
+  assert_eq!(repr, "[1, None]", "the word runs on the engine of this build");
+  let checkpoints = recorded_all(&at, "checkpoint");
+  assert_eq!(checkpoints.len(), 1, "the move writes one checkpoint");
+  let turns = checkpoints[0][3]["chains"][0]["turns"].to_string();
+  assert!(turns.contains("#chain1 crossed"), "the move tells the root the engine that differs");
+  let record = fs::read_to_string(at.join("record.jsonl")).expect("the record");
+  let (moved, ran) =
+    (record.find("\"checkpoint\"").unwrap(), record.find("y = [x, globals()").unwrap());
+  assert!(moved < ran, "no word runs before the move");
+  ended(life).await;
+}
