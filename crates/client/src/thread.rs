@@ -26,7 +26,7 @@ pub struct Opened {
   /// The place at the top of the view while the operator reads away from its end, and none while
   /// the view follows its end.
   pub top: Option<Anchor>,
-  /// The blocks and the thoughts that the operator opened.
+  /// The blocks, the thoughts and the whole lines that the operator opened.
   pub unfolded: HashSet<Fold>,
   /// The form of the question of the thread that the input answers.
   pub form: Option<Form>,
@@ -88,11 +88,12 @@ pub struct Anchor {
 }
 
 /// What the operator opens or folds in a thread: the block or the thought of the answer to a
-/// message, or the parts of the context.
+/// message, a line of a block whole, by its number in the thread, or the parts of the context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Fold {
   Block(String),
   Thought(String),
+  Line(usize),
   /// The parts of the context.
   Context,
 }

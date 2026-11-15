@@ -656,3 +656,18 @@ fn a_message_queued_while_the_chain_works_shows_as_a_chip_and_a_cross_takes_it_b
   assert!(back, "the follow-up stays:\n{}", app.text());
   shows(&app, "then rebase on main");
 }
+
+#[test]
+fn a_click_on_the_mark_of_a_cut_line_shows_it_whole_and_a_click_on_it_cuts_it_again() {
+  let message = format!("where does the time go\n{ANSWERS}");
+  let (app, _daemon, _peer) = opened(&message, "See the trace");
+  let whole = "furb/issues/988).')";
+  assert!(!app.text().contains(whole), "{}", app.text());
+  let (x, y) = place(&app.text(), "…+", 0);
+  app.click(x, y);
+  let frame = shows(&app, whole);
+  assert!(!frame.contains("…+"), "{frame}");
+  app.click(x, y);
+  assert!(app.wait_until(PATIENCE, || !app.text().contains(whole)), "{}", app.text());
+  shows(&app, "…+");
+}

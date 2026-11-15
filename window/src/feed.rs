@@ -22,7 +22,7 @@ use crate::{
   code::Gutter,
   input::{Armed, named},
   keys::Does,
-  line::{self, Line, capital, clipped, run, spread, wrapped},
+  line::{self, Line, capital, clipped, marked, run, sliced, spread, wrapped},
   list::project,
   model::Model,
   picture, prose,
@@ -519,19 +519,8 @@ impl Feed<'_> {
   fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
-    // A line that the record left at work in a life that a fault ended works no more.
-    let mark = match &line.mark {
-      Mark::Runs { .. } | Mark::Retries(_) if self.ended() => &Mark::Ran,
-      mark => mark,
-    };
-    let (number, color, loader) = match mark {
-      Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
-      Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
-      Mark::Asks => ("◆".to_owned(), t.attention, None),
-      Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
-      Mark::Stopped { .. } => ("■".to_owned(), t.muted, None),
-      Mark::Ran => (line.number.to_string(), t.muted, None),
-    };
+    let mark = self.mark(line);
+    let (number, color, loader) = self.number(line, mark);
     let room = inner.saturating_sub(gutter + 2);
     let output = line.output.as_ref().map(|one| self.output(one, gutter, room));
     let (mut under, look) = match mark {
@@ -554,32 +543,86 @@ impl Feed<'_> {
     let timer = self.right(line, mark).map(|right| vec![run(right, muted)]).unwrap_or_default();
     let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
     let head = run(format!("{number:>gutter$}  "), Style::new().fg(color));
-    let lined = |colors: Line| {
-      let text = [head.clone()].into_iter().chain(clipped(colors, room, muted)).collect();
-      self.boxed(spread(text, timer.clone(), inner, Style::new()), ground)
+    let row = |lead: Span<'static>, part: Line, right: Line| {
+      self.boxed(spread([vec![lead], part].concat(), right, inner, Style::new()), ground)
     };
-    let pointed =
-      self.gave(line, matches!(mark, Mark::Ran)).map(|gave| lined([colors.clone(), gave].concat()));
-    // The light passes over the word that says that the model writes, as over each word of work,
-    // and over the call of `prompt` that the line awaits while its agent works: the one call that
-    // makes code and value in furb.
-    let code = PAD + gutter + 2;
-    let writes = (writes && loader.is_some()).then_some((code, Loader::Light(WRITES)));
-    let shines = matches!(mark, Mark::Runs { work: Work::Agent, .. }).then(|| {
-      let shown: String =
-        clipped(colors.clone(), room, muted).iter().map(|one| one.content.as_ref()).collect();
-      let at = shown.find(&format!("{PROMPT}("))?;
-      Some((code + shown[..at].width(), Loader::Light(PROMPT)))
+    let pointed = self.gave(line, matches!(mark, Mark::Ran)).map(|gave| {
+      row(head.clone(), clipped([colors.clone(), gave].concat(), room, muted), timer.clone())
     });
-    let loaders = loader.map(|one| (PAD + gutter - 1, one));
-    let loaders = loaders.into_iter().chain(writes).chain(shines.flatten()).collect();
-    let mut rows = vec![Row { loaders, pointed, ..Row::of(lined(colors)) }];
+    // A line cut to its row says how many characters it cut, and a click there shows it whole: its
+    // code wraps on the rows under its first, and a click on any of them cuts it again, while its
+    // code keeps the colors of its grammar under the pointer and its number lights.
+    let fold = Fold::Line(line.number);
+    let cut = width(&colors) > room;
+    let whole = cut && self.opened.unfolded.contains(&fold);
+    let parts = if whole { sliced(&colors, room) } else { vec![clipped(colors, room, muted)] };
+    let loaders = self.loaders(line, parts.first(), gutter);
+    let pad = run(" ".repeat(gutter + 2), Style::new());
+    let mut rows: Vec<Row> = (parts.into_iter().enumerate())
+      .map(|(at, part)| {
+        let (lead, right) = if at == 0 { (&head, timer.clone()) } else { (&pad, Vec::new()) };
+        let shown = row(lead.clone(), part, right);
+        let click = Click::Fold(fold.clone());
+        if whole {
+          Row { keeps: Some(PAD + gutter + 2..usize::MAX), ..Row::clicked(shown, click) }
+        } else {
+          let hot = cut.then(|| marked(&shown)).flatten().map(|at| (at, Some(click)));
+          Row { hot: hot.into_iter().collect(), ..Row::of(shown) }
+        }
+      })
+      .collect();
+    if let Some(first) = rows.first_mut() {
+      (first.loaders, first.pointed) = (loaders, pointed.filter(|_| !whole));
+    }
     rows.extend(output.into_iter().flatten());
     let under = under
       .iter()
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
     rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// The loaders of a line at work, at the columns of the row that shows it first. The light
+  /// passes over the word that says that the model writes, as over each word of work, and over the
+  /// call of `prompt` that the line awaits while its agent works: the one call that makes code and
+  /// value in furb.
+  fn loaders(&self, line: &Code, shown: Option<&Line>, gutter: usize) -> Vec<(usize, Loader)> {
+    let mark = self.mark(line);
+    let Some(loader) = self.number(line, mark).2 else { return Vec::new() };
+    let code = PAD + gutter + 2;
+    let shown: String = shown.into_iter().flatten().map(|one| one.content.as_ref()).collect();
+    let light = match mark {
+      Mark::Runs { work: Work::Writes, .. } if line.text.is_empty() => {
+        Some((code, Loader::Light(WRITES)))
+      }
+      Mark::Runs { work: Work::Agent, .. } => shown
+        .find(&format!("{PROMPT}("))
+        .map(|at| (code + shown[..at].width(), Loader::Light(PROMPT))),
+      _ => None,
+    };
+    [(PAD + gutter - 1, loader)].into_iter().chain(light).collect()
+  }
+
+  /// How a line stands: a line that the record left at work in a life that a fault ended works no
+  /// more.
+  fn mark<'a>(&self, line: &'a Code) -> &'a Mark {
+    match &line.mark {
+      Mark::Runs { .. } | Mark::Retries(_) if self.ended() => &Mark::Ran,
+      mark => mark,
+    }
+  }
+
+  /// What stands in the gutter of a line, in its color, and the loader of the line at work.
+  fn number(&self, line: &Code, mark: &Mark) -> (String, Color, Option<Loader>) {
+    let t = &self.model.tokens;
+    match mark {
+      Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
+      Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
+      Mark::Asks => ("◆".to_owned(), t.attention, None),
+      Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
+      Mark::Stopped { .. } => ("■".to_owned(), t.muted, None),
+      Mark::Ran => (line.number.to_string(), t.muted, None),
+    }
   }
 
   /// What stands at the right of a line: the time of its work, or how long ago a stop ended it,

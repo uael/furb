@@ -1,7 +1,11 @@
 //! A row of text as its runs, and how a row fills its columns.
 
+use std::{mem, ops::Range};
+
 use opentui::style::{Color, Span, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+use crate::thread::columns;
 
 /// A row of text, as its runs.
 pub(crate) type Line = Vec<Span<'static>>;
@@ -129,6 +133,41 @@ pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
   }
   out.push(run(format!("…+{}", chars - kept), muted));
   out
+}
+
+/// The column of the mark that says how many characters a cut line lost, as `clipped` writes it.
+pub(crate) fn marked(line: &Line) -> Option<Range<usize>> {
+  let mut marks = columns(line).into_iter().zip(line);
+  marks.rfind(|(_, one)| one.content.starts_with("…+")).map(|(at, _)| at)
+}
+
+/// A line as rows of a count of columns at most, each run in its style. A row breaks after the
+/// last blank that it holds, else where it is full, as a text wraps.
+pub(crate) fn sliced(line: &[Span<'static>], room: usize) -> Vec<Line> {
+  let cells = line.iter().flat_map(|one| one.content.chars().map(|char| (char, one.style)));
+  let wide =
+    |row: &[(char, Style)]| -> usize { row.iter().map(|one| one.0.width().unwrap_or(0)).sum() };
+  let (mut rows, mut row) = (Vec::new(), Vec::new());
+  for cell in cells {
+    if wide(&row) + cell.0.width().unwrap_or(0) > room && !row.is_empty() {
+      let blank = row.iter().rposition(|one| one.0 == ' ').filter(|at| *at + 1 < row.len());
+      let rest = blank.map_or_else(Vec::new, |at| row.split_off(at + 1));
+      rows.push(mem::replace(&mut row, rest));
+    }
+    row.push(cell);
+  }
+  rows.push(row);
+  let runs = |row: Vec<(char, Style)>| {
+    let mut line: Line = Vec::new();
+    for (char, style) in row {
+      match line.last_mut() {
+        Some(last) if last.style == style => last.content.to_mut().push(char),
+        _ => line.push(run(char.to_string(), style)),
+      }
+    }
+    line
+  };
+  rows.into_iter().map(runs).collect()
 }
 
 /// A text with its first letter in upper case.

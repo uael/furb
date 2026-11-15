@@ -580,11 +580,20 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[PROSE],
       pace: &[],
       reads: false,
-      steps: &[step(
-        "b",
-        &[Act::Type("Where does the time of the open go?"), Act::Key("Enter")],
-        "See the trace",
-      )],
+      steps: &[
+        step(
+          "b",
+          &[Act::Type("Where does the time of the open go?"), Act::Key("Enter")],
+          "See the trace",
+        ),
+        // A click on the mark of a cut line shows the line whole under it. A page up brings the
+        // line in view where the answer fills the window.
+        step(
+          "x-whole",
+          &[Act::Key("PageUp"), Act::Pointer { on: "…+", button: 0 }],
+          r"55% |\n| boot",
+        ),
+      ],
     }),
   },
   Scenario {
