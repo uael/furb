@@ -1301,6 +1301,67 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
   }
 }
 
+/// Each record of the replays and of each folder of the corpus opens from the image that a life
+/// that keeps it wrote at its tip to the state that its record gives, in a life that inspects, in
+/// one that works and keeps nothing, and in one that keeps the record. An image is a cache of its
+/// record, so a record that a build cannot open by its image is a defect of that build. A record
+/// from before the stable cut of #1290 opens in no life that keeps it, so it has no image.
+#[test]
+fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
+  let folders =
+    fs::read_dir(corpus).unwrap().map(|one| one.unwrap().path()).filter(|one| one.is_dir());
+  let mut records: Vec<PathBuf> = folders
+    .chain([replays()])
+    .flat_map(|folder| fs::read_dir(folder).unwrap().map(|one| one.unwrap().path()))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
+    .collect();
+  records.sort();
+  let word = "[[c, turns(on=c), sorted(k for k in module(c) if not k.startswith('__'))] \
+              for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
+  for one in records {
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
+    let at = yard(&format!("imaged-{name}"));
+    laid(&one, &at.join("record.jsonl"));
+    if let Err(no) = opening(&at, true).boot::<String>([]) {
+      assert!(no.to_string().contains("before the stable cut of #1290"), "{name}: {no}");
+      continue;
+    }
+    for (how, inspecting, keeps) in
+      [("inspects", true, false), ("works", false, false), ("keeps", false, true)]
+    {
+      // The state of the life of the mode, opened by the image that a life that keeps the record
+      // wrote, or by the record once that image is gone.
+      let read = |imaged: bool| {
+        let at = yard(&format!("imaged-{name}-{how}"));
+        let record = at.join("record.jsonl");
+        laid(&one, &record);
+        let open = |inspecting, keeps| {
+          Opening { inspecting: Some(inspecting), ..opening(&at, keeps) }.boot::<String>([])
+        };
+        let mut first = open(false, true)
+          .unwrap_or_else(|no| panic!("{name}: a life that keeps it opens: {no}"))
+          .0;
+        assert!(
+          image::keep(&mut first, &record, &()).unwrap(),
+          "{name}: the life writes its image"
+        );
+        drop(first);
+        if !imaged {
+          image::drop_of(&record);
+        }
+        let mut life = open(inspecting, keeps)
+          .unwrap_or_else(|no| panic!("{name} {how}: the life opens: {no}"))
+          .0;
+        let shown = life.word(word, vec![]).unwrap().as_ref().py_repr();
+        shown
+          .replace(at.file_name().and_then(|one| one.to_str()).expect("a yard with a name"), "<at>")
+      };
+      assert_eq!(read(true), read(false), "{name} {how}: the image gives the state of the record");
+    }
+  }
+}
+
 /// A record whose checkpoint carries the enables of its root, on which a life that keeps it
 /// reloaded the words of the extensions that changed at its stand, opens again with no drift: a
 /// later life reads those enables at that stand too, which the journal says again, so it plays what
