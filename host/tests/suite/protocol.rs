@@ -95,7 +95,6 @@ fn verbs() -> Vec<Verb> {
     Verb::Pause { life: life(), act: id(), why: Some("later".to_owned()) },
     Verb::Wake { life: life(), act: id() },
     Verb::Cancel { life: life(), act: id(), why: None },
-    Verb::Chain { life: life(), label: Some("work".to_owned()), source: on(), on: on() },
     Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
     Verb::Handover,
   ]
@@ -112,12 +111,8 @@ fn acts() -> Vec<Verb> {
   let on = || Some("chain1".to_owned());
   vec![
     Verb::Close { life: life(), act: id(), value: "2.0".to_owned() },
-    Verb::Grant { life: life(), usd: Some(2.0), share: None, on: on() },
-    Verb::Bash { life: life(), command: "ls".to_owned(), stdin: None, feed: true, on: on() },
-    Verb::Read { life: life(), path: "a.txt".to_owned(), on: on() },
-    Verb::Write { life: life(), path: "a.txt".to_owned(), content: "a".to_owned(), on: on() },
     Verb::Names { life: life(), on: on() },
-    Verb::Stand { life: life(), roster: Some(vec!["claude-cli:sonnet".to_owned()]) },
+    Verb::Roster { life: life(), roster: vec!["claude-cli:sonnet".to_owned()] },
     Verb::Config { life: life(), config: Config::Get },
     Verb::Config {
       life: life(),
@@ -371,15 +366,10 @@ fn each_verb_that_writes_needs_the_role_to_write() {
     "pause",
     "wake",
     "cancel",
-    "chain",
     "run",
     "handover",
     "close",
-    "grant",
-    "bash",
-    "read",
-    "write",
-    "stand",
+    "roster",
     "config",
     "seen",
     "resolve",
@@ -465,6 +455,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "ad3dad0dd169cb4dee5c007ff809b9dd9fc03b1b69226620a1529bc3496e7fc5",
   "afa6a63760800b3bf4ef28664998d249ba7e70c74303bd276055fc9fd33f4130",
   "7d3c9dbf00b91ac7e84589fbef485f85aa2f5541ea30e82ca975b0514208d2b9",
+  "ea708f4ddfeb6f4f9f9ea7d609c28e6efd38fbea622ecebf32a0c49444ce7cc4",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

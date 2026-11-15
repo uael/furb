@@ -36,7 +36,7 @@ use furb::{
   world::{SchemaError, checkpoints},
 };
 use furb_host::{
-  DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
+  DaemonError, Door, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
   access::{Access, Ports},
   protocol::{
     Answer, Axis, Card, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node,
@@ -442,6 +442,15 @@ fn done(id: &str) -> impl Fn(&Frame) -> bool + '_ {
     matches!(frame, Frame::Event { event: Event::Act(act), .. }
       if act.id == id && matches!(act.phase, Phase::Done(_)))
   }
+}
+
+/// The command that a rung of a door made, once its fact is pushed.
+async fn bashed(window: &mut Window, rung: &str) -> String {
+  let made = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(f), .. } if f[0] == "bash" && f[2] == rung);
+  let Frame::Event { event: Event::Fact(fact), .. } = window.until(made).await else {
+    panic!("no fact")
+  };
+  fact[1].as_str().expect("the name of an act is a text").to_owned()
 }
 
 /// Whether a frame says that a count of windows is attached.
@@ -1707,31 +1716,21 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
-  let bash = |command: &str, stdin: Option<&str>, feed| Verb::Bash {
-    life: life.clone(),
-    command: command.to_owned(),
-    stdin: stdin.map(str::to_owned),
-    feed,
-    on: None,
-  };
-  let Ok(Answer::Act(given)) = window.ask(bash("cat", Some("given\n"), false)).await else {
-    panic!("no command")
-  };
+  let run = |door: Door| Verb::Run { life: life.clone(), word: door.word(), on: None };
+  let text = |one: &str| one.to_owned();
+  let given = Door::Bash { command: text("cat"), stdin: Some(text("given\n")) };
+  let Ok(Answer::Act(rung)) = window.ask(run(given)).await else { panic!("no command") };
+  let given = bashed(&mut window, &rung).await;
   let Frame::Event { event: Event::Act(act), .. } = window.until(done(&given)).await else {
     panic!("no act")
   };
   assert!(act.value().is_some_and(|exit| exit.to_string().contains("given")), "{act:?}");
-  let Ok(Answer::Act(fed)) = window.ask(bash("cat", None, true)).await else {
-    panic!("no command")
-  };
+  let fed = Door::Bash { command: text("cat"), stdin: None };
+  let Ok(Answer::Act(rung)) = window.ask(run(fed)).await else { panic!("no command") };
+  let fed = bashed(&mut window, &rung).await;
   for content in ["fed\n", ""] {
-    let write = Verb::Write {
-      life: life.clone(),
-      path: format!("{fed}/stdin"),
-      content: content.to_owned(),
-      on: None,
-    };
-    assert_eq!(window.ask(write).await, Ok(Answer::Done));
+    let write = Door::Write { path: format!("{fed}/stdin"), content: text(content) };
+    assert!(matches!(window.ask(run(write)).await, Ok(Answer::Act(_))));
   }
   let Frame::Event { event: Event::Act(act), .. } = window.until(done(&fed)).await else {
     panic!("no act")

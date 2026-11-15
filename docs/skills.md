@@ -120,7 +120,7 @@ reads it.
 - **`grant`** puts a ceiling on a chain. `grant(usd, share)` holds the ledger of the chain: at each answer of a model
   it tells the dollars since the grant, and it pauses the chain when they reach `usd`, or when the answer read more than
   `share` of the window. A later grant on the chain closes the one before it, and a wake lets the chain go on. A word
-  loads it with `await skill("grant")`, and the `grant` of each door and of the protocol runs that word on the chain.
+  loads it with `await skill("grant")`, and the `grant` of each door, and the `Grant` door of the host, run that word on the chain.
 
 `compaction`, `naming`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which
 the model reads on each chain where the extension plays.

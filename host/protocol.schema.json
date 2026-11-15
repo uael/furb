@@ -652,42 +652,7 @@
         },
         {
           "type": "object",
-          "description": "A chain made on a chain, under a label, or a fork of the chain `source` with its transcript\nand its program.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "label": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "source": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "chain"
-            }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
-        },
-        {
-          "type": "object",
-          "description": "A word that runs on a chain as a turn of the operator.",
+          "description": "A word that runs on a chain as a turn of the operator: each act of a person goes this way, as\nthe word that `Door` gives, so the transcript shows it as it shows the act of a model.",
           "properties": {
             "life": {
               "type": "string"
@@ -739,138 +704,6 @@
         },
         {
           "type": "object",
-          "description": "A ceiling of the spend of a chain, in dollars or in a share of its window.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "usd": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "share": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "grant"
-            }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
-        },
-        {
-          "type": "object",
-          "description": "A command that runs on a chain, with the text of its stdin, or with its stdin kept open for\nthe lines that a write to `<act>/stdin` feeds it.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "command": {
-              "type": "string"
-            },
-            "stdin": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "feed": {
-              "type": "boolean",
-              "default": false
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "bash"
-            }
-          },
-          "required": [
-            "verb",
-            "life",
-            "command"
-          ]
-        },
-        {
-          "type": "object",
-          "description": "The text at a path, read where a chain stands, as an act of the operator.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "read"
-            }
-          },
-          "required": [
-            "verb",
-            "life",
-            "path"
-          ]
-        },
-        {
-          "type": "object",
-          "description": "A text written at a path, where a chain stands, as an act of the operator.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "content": {
-              "type": "string"
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "write"
-            }
-          },
-          "required": [
-            "verb",
-            "life",
-            "path",
-            "content"
-          ]
-        },
-        {
-          "type": "object",
           "description": "The names that the module of a chain binds.",
           "properties": {
             "life": {
@@ -894,28 +727,26 @@
         },
         {
           "type": "object",
-          "description": "A stand of the life, which reads the roster and the actor again, on the names of models that\nit names in place of the roster of the life, when it names some. The life goes on, and the\nrecord keeps the answer of the stand.",
+          "description": "The models that a life offers, in place of the roster of the life, which no word can say,\nsince the roster is the World's: the life then stands on them, as after a change of its\nconfigs, and each later birth of it keeps them.",
           "properties": {
             "life": {
               "type": "string"
             },
             "roster": {
-              "type": [
-                "array",
-                "null"
-              ],
+              "type": "array",
               "items": {
                 "type": "string"
               }
             },
             "verb": {
               "type": "string",
-              "const": "stand"
+              "const": "roster"
             }
           },
           "required": [
             "verb",
-            "life"
+            "life",
+            "roster"
           ]
         },
         {
@@ -5358,5 +5189,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 31
+  "x-protocol": 32
 }

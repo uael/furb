@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 31;
+pub const PROTOCOL: u32 = 32;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -225,15 +225,8 @@ pub enum Verb {
     act: String,
     why: Option<String>,
   },
-  /// A chain made on a chain, under a label, or a fork of the chain `source` with its transcript
-  /// and its program.
-  Chain {
-    life: String,
-    label: Option<String>,
-    source: Option<String>,
-    on: Option<String>,
-  },
-  /// A word that runs on a chain as a turn of the operator.
+  /// A word that runs on a chain as a turn of the operator: each act of a person goes this way, as
+  /// the word that `Door` gives, so the transcript shows it as it shows the act of a model.
   Run {
     life: String,
     word: String,
@@ -246,47 +239,17 @@ pub enum Verb {
     act: String,
     value: String,
   },
-  /// A ceiling of the spend of a chain, in dollars or in a share of its window.
-  Grant {
-    life: String,
-    usd: Option<f64>,
-    share: Option<f64>,
-    on: Option<String>,
-  },
-  /// A command that runs on a chain, with the text of its stdin, or with its stdin kept open for
-  /// the lines that a write to `<act>/stdin` feeds it.
-  Bash {
-    life: String,
-    command: String,
-    stdin: Option<String>,
-    #[serde(default)]
-    feed: bool,
-    on: Option<String>,
-  },
-  /// The text at a path, read where a chain stands, as an act of the operator.
-  Read {
-    life: String,
-    path: String,
-    on: Option<String>,
-  },
-  /// A text written at a path, where a chain stands, as an act of the operator.
-  Write {
-    life: String,
-    path: String,
-    content: String,
-    on: Option<String>,
-  },
   /// The names that the module of a chain binds.
   Names {
     life: String,
     on: Option<String>,
   },
-  /// A stand of the life, which reads the roster and the actor again, on the names of models that
-  /// it names in place of the roster of the life, when it names some. The life goes on, and the
-  /// record keeps the answer of the stand.
-  Stand {
+  /// The models that a life offers, in place of the roster of the life, which no word can say,
+  /// since the roster is the World's: the life then stands on them, as after a change of its
+  /// configs, and each later birth of it keeps them.
+  Roster {
     life: String,
-    roster: Option<Vec<String>>,
+    roster: Vec<String>,
   },
   /// The configs of the folder of the life, in their layers: what each key holds, a change of a
   /// key, or a stand on them as the disk holds them now.
@@ -453,15 +416,10 @@ impl Verb {
       | Self::Pause { life, .. }
       | Self::Wake { life, .. }
       | Self::Cancel { life, .. }
-      | Self::Chain { life, .. }
       | Self::Run { life, .. }
       | Self::Close { life, .. }
-      | Self::Grant { life, .. }
-      | Self::Bash { life, .. }
-      | Self::Read { life, .. }
-      | Self::Write { life, .. }
       | Self::Names { life, .. }
-      | Self::Stand { life, .. }
+      | Self::Roster { life, .. }
       | Self::Config { life, .. }
       | Self::CancelSignIn { life }
       | Self::Seen { life, .. }

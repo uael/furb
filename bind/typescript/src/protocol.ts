@@ -150,13 +150,6 @@ export type Request1 =
     }
   | {
       life: string;
-      label?: string | null;
-      source?: string | null;
-      on?: string | null;
-      verb: "chain";
-    }
-  | {
-      life: string;
       word: string;
       on?: string | null;
       verb: "run";
@@ -169,41 +162,13 @@ export type Request1 =
     }
   | {
       life: string;
-      usd?: number | null;
-      share?: number | null;
-      on?: string | null;
-      verb: "grant";
-    }
-  | {
-      life: string;
-      command: string;
-      stdin?: string | null;
-      feed?: boolean;
-      on?: string | null;
-      verb: "bash";
-    }
-  | {
-      life: string;
-      path: string;
-      on?: string | null;
-      verb: "read";
-    }
-  | {
-      life: string;
-      path: string;
-      content: string;
-      on?: string | null;
-      verb: "write";
-    }
-  | {
-      life: string;
       on?: string | null;
       verb: "names";
     }
   | {
       life: string;
-      roster?: string[] | null;
-      verb: "stand";
+      roster: string[];
+      verb: "roster";
     }
   | {
       life: string;
@@ -1506,4 +1471,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 31;
+export const PROTOCOL = 32;

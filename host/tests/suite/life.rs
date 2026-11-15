@@ -118,6 +118,20 @@ pub(crate) fn rung(word: &str) -> Command {
   Command::Rung { word: word.to_owned(), on: None }
 }
 
+/// The act of a kind that a rung of a door made, once its fact is told.
+pub(crate) async fn under(
+  events: &mut (impl Stream<Item = Logged> + Unpin),
+  rung: &str,
+  kind: &str,
+) -> String {
+  let made = |event: &Event| matches!(event, Event::Fact(f) if f[0] == kind && f[2] == rung);
+  let got = until(events, made).await;
+  match got.last().map(|one| &*one.1) {
+    Some(Event::Fact(fact)) if let Some(name) = fact[1].as_str() => name.to_owned(),
+    other => panic!("no fact of a {kind}: {other:?}"),
+  }
+}
+
 #[tokio::test]
 async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_until_the_end() {
   let at = place("prompt");
@@ -391,12 +405,20 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   let life = Life::spawn(Opening { skills: Some(true), ..scripted(&at, &[]) }).unwrap();
   let mut events = Box::pin(life.events(0));
   let text = |path: &str| path.to_owned();
-  let write = Command::Write { path: text("note.txt"), content: text("hi\n"), on: None };
-  assert_eq!(life.send(write).await.unwrap(), Reply::Done);
-  let read = life.send(Command::Read { path: text("note.txt"), on: None }).await.unwrap();
-  assert!(matches!(&read, Reply::Value(got) if got["content"] == json!("hi\n")), "{read:?}");
-  let bash =
-    made(&life, Command::Bash { command: text("cat note.txt"), stdin: None, on: None }).await;
+  let door = |door: Door| rung(&door.word());
+  let write =
+    made(&life, door(Door::Write { path: text("note.txt"), content: text("hi\n") })).await;
+  until(&mut events, done(&write)).await;
+  let read = made(&life, door(Door::Read { path: text("note.txt") })).await;
+  let read = under(&mut events, &read, "read").await;
+  until(&mut events, done(&read)).await;
+  let Reply::Value(got) = life.send(Command::Peek { id: read }).await.unwrap() else {
+    panic!("a read comes to a value")
+  };
+  assert!(got.to_string().contains("hi\\n"), "{got}");
+  let cat = Door::Bash { command: text("cat note.txt"), stdin: Some(String::new()) };
+  let bash = made(&life, door(cat)).await;
+  let bash = under(&mut events, &bash, "bash").await;
   until(&mut events, done(&bash)).await;
   let Reply::Value(exit) = life.send(Command::Peek { id: bash }).await.unwrap() else {
     panic!("a command comes to a value")
@@ -408,11 +430,12 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
     panic!("the names are values")
   };
   assert!(names.contains(&json!("x")), "{names:?}");
-  let grant = made(&life, Command::Grant { usd: Some(2.0), share: None, on: None }).await;
+  let grant = made(&life, door(Door::Grant { usd: Some(2.0), share: None })).await;
   until(&mut events, done(&grant)).await;
   let other = Kind::Other("grant".to_owned());
   until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == other)).await;
-  let stand = made(&life, Command::Stand).await;
+  let stand = made(&life, door(Door::Stand)).await;
+  let stand = under(&mut events, &stand, "stand").await;
   until(&mut events, done(&stand)).await;
   // The scratch directory that a command of the life made goes as the thread of the life ends.
   life.send(Command::End).await.unwrap();
@@ -433,8 +456,8 @@ async fn each_door_of_a_person_runs_as_his_word_that_the_transcript_shows() {
     Door::Chain { label: text("bench") },
     Door::Fork { label: text("rewind"), source: text("chain1"), kept: Some(vec![prompt.clone()]) },
     Door::Cd { path: text("work") },
-    Door::Stand { actor: text("claude-cli:opus/low") },
-    Door::Edit { prompt: prompt.clone(), program: text("x = 2\nclose('two')") },
+    Door::Actor { actor: text("claude-cli:opus/low") },
+    Door::Write { path: prompt.clone(), content: text("x = 2\nclose('two')") },
   ];
   let mut ran = Vec::new();
   for door in &doors {
@@ -463,11 +486,11 @@ async fn each_door_of_a_person_runs_as_his_word_that_the_transcript_shows() {
     panic!("a name is inspected")
   };
   assert_eq!(repr, "'claude-cli:opus/low'");
-  let read = life.send(Command::Read { path: prompt.clone(), on: None }).await.unwrap();
-  assert!(
-    matches!(&read, Reply::Value(got) if got["content"] == json!("x = 2\nclose('two')")),
-    "{read:?}"
-  );
+  // The write of the door of the prompt runs its program again from the word that differs.
+  let Reply::Inspected { repr, .. } = life.send(inspect("x")).await.unwrap() else {
+    panic!("a name is inspected")
+  };
+  assert_eq!(repr, "2");
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }
@@ -720,20 +743,21 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   let at = place("words");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut events = Box::pin(life.events(0));
-  let given = Some(Some("hi\n".to_owned()));
-  let bash = made(&life, Command::Bash { command: "cat".to_owned(), stdin: given, on: None }).await;
+  let door = |door: Door| rung(&door.word());
+  let given = Door::Bash { command: "cat".to_owned(), stdin: Some("hi\n".to_owned()) };
+  let bash = made(&life, door(given)).await;
+  let bash = under(&mut events, &bash, "bash").await;
   until(&mut events, done(&bash)).await;
   let Reply::Value(exit) = life.send(Command::Peek { id: bash }).await.unwrap() else {
     panic!("a command comes to a value")
   };
   assert!(exit.to_string().contains("hi"), "{exit}");
-  let fed =
-    made(&life, Command::Bash { command: "cat".to_owned(), stdin: Some(None), on: None }).await;
-  let stdin =
-    Command::Write { path: format!("{fed}/stdin"), content: "fed\n".to_owned(), on: None };
-  life.send(stdin).await.unwrap();
-  let close = Command::Write { path: format!("{fed}/stdin"), content: String::new(), on: None };
-  life.send(close).await.unwrap();
+  let fed = made(&life, door(Door::Bash { command: "cat".to_owned(), stdin: None })).await;
+  let fed = under(&mut events, &fed, "bash").await;
+  let stdin = Door::Write { path: format!("{fed}/stdin"), content: "fed\n".to_owned() };
+  life.send(door(stdin)).await.unwrap();
+  let close = Door::Write { path: format!("{fed}/stdin"), content: String::new() };
+  life.send(door(close)).await.unwrap();
   until(&mut events, done(&fed)).await;
   let Reply::Value(exit) = life.send(Command::Peek { id: fed }).await.unwrap() else {
     panic!("a command comes to a value")
@@ -741,9 +765,9 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   assert!(exit.to_string().contains("fed"), "{exit}");
   let bound = made(&life, rung("x = 7")).await;
   until(&mut events, done(&bound)).await;
-  let label = Some("copy".to_owned());
-  let fork =
-    made(&life, Command::Chain { label, source: Some("chain1".to_owned()), on: None }).await;
+  let copy = Door::Fork { label: "copy".to_owned(), source: "chain1".to_owned(), kept: None };
+  let fork = made(&life, door(copy)).await;
+  let fork = under(&mut events, &fork, "chain").await;
   let Reply::Value(program) = life.send(Command::Program { on: Some(fork) }).await.unwrap() else {
     panic!("the program is a value")
   };
@@ -925,7 +949,8 @@ async fn a_reader_that_attaches_late_reads_each_line_that_a_running_command_prin
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut first = Box::pin(life.events(0));
   let command = "for i in $(seq 1 3000); do echo line$i; done; sleep 30".to_owned();
-  let id = made(&life, Command::Bash { command, stdin: None, on: None }).await;
+  let id = made(&life, rung(&Door::Bash { command, stdin: Some(String::new()) }.word())).await;
+  let id = under(&mut first, &id, "bash").await;
   let last = |event: &Event| matches!(event, Event::Fact(f) if f[0] == "out" && f[3].as_str().is_some_and(|t| t.contains("line3000")));
   until(&mut first, last).await;
   let mut late = Box::pin(life.events(0));

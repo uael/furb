@@ -30,11 +30,10 @@ use std::{
 };
 
 use furb::{
-  Engine, Fact, Fault, Object, Text, checkpoint,
+  Engine, Fact, Fault, Object, checkpoint,
   engine::ROOT,
   image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
-  skill::granted,
   verbs,
   view::{
     self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown, Streamed,
@@ -118,27 +117,16 @@ pub enum Command {
   Peek { id: String },
   /// The folder of a chain.
   Cwd { on: Option<String> },
-  /// A chain made on a chain, under a label: the act of the chain.
-  Chain { label: Option<String>, source: Option<String>, on: Option<String> },
   /// The acts that wait for a wake, each as its name and its kind.
   Pending,
   /// A close of an act with a value, as the record writes a value: `2.0` stays a float, and
   /// `{"is": "Refused", "args": ["why"]}` is a refusal.
   Close { id: String, value: String },
-  /// A ceiling of the spend of a chain, in dollars or in a share of its window: the act.
-  Grant { usd: Option<f64>, share: Option<f64>, on: Option<String> },
-  /// A command that runs on a chain: the act.
-  ///
-  /// Its stdin is the text given, the default of the engine when it is none, and open for a feed
-  /// when it is `None` within.
-  Bash { command: String, stdin: Option<Option<String>>, on: Option<String> },
-  /// The text at a path, read where a chain stands, as `{"path", "content"}`.
-  Read { path: String, on: Option<String> },
-  /// A text written at a path, where a chain stands.
-  Write { path: String, content: String, on: Option<String> },
   /// The names that the module of a chain binds.
   Names { on: Option<String> },
-  /// A stand of the life on its root, which reads the roster and the actor again: the act.
+  /// A stand of the life on its root, which the World makes after a change of its settings, as
+  /// boot makes one: it reads the roster and the actor again. A person stands a life with the
+  /// word `stand()`, as a model does.
   Stand,
   /// Each key of the configs of the folder of the life, with the value that wins for it and its
   /// layer.
@@ -217,15 +205,9 @@ impl Command {
       | Self::Pause { .. }
       | Self::Wake { .. }
       | Self::Cancel { .. }
-      | Self::Chain { .. }
       | Self::Close { .. }
-      | Self::Grant { .. }
-      | Self::Bash { .. }
-      | Self::Read { .. }
-      | Self::Write { .. }
       | Self::Seen { .. }
-      | Self::Resolve { .. }
-      | Self::Stand => Self::By { speaker, command: Box::new(self) },
+      | Self::Resolve { .. } => Self::By { speaker, command: Box::new(self) },
       // A read of the threads tells the window of the speaker what it has not seen.
       Self::Threads { on, at, read, .. } => Self::Threads { on, at, read, site: Some(speaker) },
       other => other,
@@ -1500,22 +1482,6 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
       engine.close(parsed(&value)?, verbs::Close { id: Some(id) })?;
       Reply::Done
     }
-    Command::Grant { usd, share, on: chain } => {
-      let word = Some(granted(usd, share));
-      id(engine.rung(verbs::Rung { word, on: on(chain), ..verbs::Rung::default() })?.id())
-    }
-    Command::Bash { command, stdin, on: chain } => {
-      let with = verbs::Bash { stdin, on: on(chain), ..verbs::Bash::default() };
-      id(engine.bash(&command, with)?.id())
-    }
-    Command::Read { path, on: chain } => {
-      let text = engine.read(&path, verbs::Read { on: on(chain), ..verbs::Read::default() })?;
-      Reply::Value(json!({ "path": text.path, "content": text.content }))
-    }
-    Command::Write { path, content, on: chain } => {
-      engine.write(&Text { path, content }, verbs::Write { on: on(chain) })?;
-      Reply::Done
-    }
     Command::Stand => id(engine.stand(verbs::Stand { on: on(None) })?.id()),
     Command::Seen { about } => {
       engine.say("seen", &about, vec![])?;
@@ -1534,10 +1500,6 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
     }
     control @ (Command::Pause { .. } | Command::Wake { .. } | Command::Cancel { .. }) => {
       controlled(engine, control)?
-    }
-    Command::Chain { label, source, on: chain } => {
-      let with = verbs::Chain { label, source, on: on(chain), ..verbs::Chain::default() };
-      id(engine.chain(with)?.id())
     }
     Command::End => Reply::Done,
     query => queried(engine, query, &root)?,

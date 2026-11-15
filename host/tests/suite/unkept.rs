@@ -59,7 +59,7 @@ mod unix {
     Object,
     life::{Answer, Opening},
   };
-  use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
+  use furb_host::{Command, Door, Event, Life, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
   use rustix::process::{Resource, getrlimit, setrlimit};
   use tokio::time::timeout;
@@ -173,15 +173,12 @@ mod unix {
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     ran(&life, &mut events, "n = 1").await;
-    let chain =
-      |label: &str| Command::Chain { label: Some(label.to_owned()), source: None, on: None };
-    let made = life.send(chain("apart")).await;
-    let Ok(Reply::Act(apart)) = made else { panic!("no chain: {made:?}") };
+    let apart = chained(&life, &mut events, "apart").await;
     let first = said(&life, "a = 1", &apart).await;
     until(&mut events, done(&[first])).await;
     // A chain that the operator pauses before the hold, one that he pauses in it, and one that he
     // wakes in it.
-    let [before, after, woken] = chains(&life, ["before", "after", "woken"]).await;
+    let [before, after, woken] = chains(&life, &mut events, ["before", "after", "woken"]).await;
     let pause = |id: &str| Command::Pause { id: id.to_owned(), why: Some("mine".to_owned()) };
     assert!(matches!(life.send(pause(&before)).await, Ok(Reply::Done)));
     // SAFETY: the test sets the action of one signal, and no handler of its own.
@@ -198,17 +195,15 @@ mod unix {
     let Event::Notice(told) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
     assert!(told.contains(&at.display().to_string()), "the notice names the folder: {told}");
     assert!(told.contains(" left"), "the notice names the space left: {told}");
-    // A word of the operator on each chain, the one made before the hold and one made in it, waits
-    // for the wake.
-    let made = life.send(chain("late")).await;
-    let Ok(Reply::Act(late)) = made else { panic!("no chain: {made:?}") };
+    // A word of the operator on each chain, and the word that makes a chain in the hold, waits for
+    // the wake.
     assert!(matches!(life.send(pause(&after)).await, Ok(Reply::Done)));
     assert!(matches!(life.send(Command::Wake { id: woken.clone() }).await, Ok(Reply::Done)));
     let root = "chain1".to_owned();
     let later = [
       said(&life, "m = 1", &root).await,
       said(&life, "a = 2", &apart).await,
-      said(&life, "b = 1", &late).await,
+      said(&life, &Door::Chain { label: "late".to_owned() }.word(), &root).await,
     ];
     let held = quiet(&mut events).await;
     let ran: Vec<&String> =
@@ -228,7 +223,7 @@ mod unix {
     let kept = lines(&at);
     let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
     assert_eq!(draws, 5 * DRAWS, "the record holds each fact that waited");
-    for one in [root.as_str(), &apart, &late] {
+    for one in [root.as_str(), &apart] {
       assert_eq!(controls(&kept, one), (1, 1), "the life paused and woke {one} once");
     }
     assert_eq!(controls(&kept, &before), (1, 0), "a pause of the operator before the hold stays");
@@ -236,13 +231,29 @@ mod unix {
     assert_eq!(controls(&kept, &woken), (1, 1), "the life wakes no chain that the operator woke");
   }
 
+  /// A chain made on the root under a label, by a word of the operator: its name.
+  async fn chained(
+    life: &LifeHandle,
+    events: &mut (impl Stream<Item = Logged> + Unpin),
+    label: &str,
+  ) -> String {
+    let logged = ran(life, events, &Door::Chain { label: label.to_owned() }.word()).await;
+    let made = logged.iter().find_map(|(_, event)| match &**event {
+      Event::Fact(f) if f[0] == "chain" && f[4] == label => f[1].as_str().map(str::to_owned),
+      _ => None,
+    });
+    made.expect("the word makes the chain")
+  }
+
   /// Chains made on the root under some labels: the name of each.
-  async fn chains<const N: usize>(life: &LifeHandle, labels: [&str; N]) -> [String; N] {
+  async fn chains<const N: usize>(
+    life: &LifeHandle,
+    events: &mut (impl Stream<Item = Logged> + Unpin),
+    labels: [&str; N],
+  ) -> [String; N] {
     let mut made = Vec::new();
     for label in labels {
-      let chain = Command::Chain { label: Some(label.to_owned()), source: None, on: None };
-      let Ok(Reply::Act(one)) = life.send(chain).await else { panic!("no chain {label}") };
-      made.push(one);
+      made.push(chained(life, events, label).await);
     }
     made.try_into().expect("a chain for each label")
   }

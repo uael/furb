@@ -16,11 +16,18 @@ pub enum Door {
   Fork { label: String, source: String, kept: Option<Vec<String>> },
   /// The folder where the chain works from then on.
   Cd { path: String },
+  /// A stand of the life, which reads the roster, the actor and the settings of the World again.
+  Stand,
   /// The actor that the chain asks from then on, as `claude-cli:sonnet/high`.
-  Stand { actor: String },
-  /// The program of a prompt written again: the rungs of its ladder that it keeps stand, and the
-  /// first word that differs runs again from there, with each word after it.
-  Edit { prompt: String, program: String },
+  Actor { actor: String },
+  /// A command, with the text that its stdin is fed whole, or with its stdin open for each write
+  /// to `<bash act>/stdin` when the text is none.
+  Bash { command: String, stdin: Option<String> },
+  /// The text at a path, which the transcript tells.
+  Read { path: String },
+  /// A text written at a path. The path of a prompt is the door of its program: the rungs of its
+  /// ladder whose words stay stand, and the first word that differs runs again from there.
+  Write { path: String, content: String },
   /// A ceiling of the spend of the chain, in dollars, in a share of its window, or both.
   Grant { usd: Option<f64>, share: Option<f64> },
 }
@@ -40,10 +47,17 @@ impl Door {
         format!("chain({label}, source={source}, filter=take({}))", kept.join(", "))
       }
       Self::Cd { path } => format!("cd({})", repr(path)),
-      Self::Stand { actor } => format!("actor = {}", repr(actor)),
-      Self::Edit { prompt, program } => {
-        format!("write(Text({}, {}))", repr(prompt), repr(program))
+      Self::Stand => "stand()".to_owned(),
+      Self::Actor { actor } => format!("actor = {}", repr(actor)),
+      Self::Bash { command, stdin: None } => format!("bash({}, stdin=None)", repr(command)),
+      Self::Bash { command, stdin: Some(stdin) } if stdin.is_empty() => {
+        format!("bash({})", repr(command))
       }
+      Self::Bash { command, stdin: Some(stdin) } => {
+        format!("bash({}, stdin={})", repr(command), repr(stdin))
+      }
+      Self::Read { path } => format!("read({})", repr(path)),
+      Self::Write { path, content } => format!("write(Text({}, {}))", repr(path), repr(content)),
       Self::Grant { usd, share } => granted(*usd, *share),
     }
   }

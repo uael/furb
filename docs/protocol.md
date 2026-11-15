@@ -123,15 +123,10 @@ daemon answers requests in any order.
 | `answer` | `life`, `act`, `line` | write |
 | `pause`, `cancel` | `life`, `act`, `why` | write |
 | `wake` | `life`, `act` | write |
-| `chain` | `life`, `label`, `source` (a chain to fork), `on` | write |
 | `run` | `life`, `word`, `on` | write |
 | `close` | `life`, `act`, `value` (a value as the record writes it) | write |
-| `grant` | `life`, `usd`, `share`, `on` | write |
-| `bash` | `life`, `command`, `stdin`, `feed` (its stdin open), `on` | write |
-| `read` | `life`, `path`, `on` | write |
-| `write` | `life`, `path`, `content`, `on` | write |
 | `names` | `life`, `on` | read |
-| `stand` | `life`, `roster` (names of models) | write |
+| `roster` | `life`, `roster` (names of models) | write |
 | `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
@@ -155,10 +150,13 @@ daemon answers requests in any order.
   else when its done comes. A window that ran a word asks it of the rung that `run` gave, and asks it again after a
   reconnect, since the record keeps the end. The `run` of the act says how the word ran: `done`, or `failed` with the
   fault that a person reads. A name that the fold of the life does not hold is refused.
-- `stand` makes the life stand again: it reads the catalog, the configs and the actor again, and the answer is the
-  act of the stand. A `roster` names the models that the life offers from that stand on, in place of its roster, as
-  the catalog names them, so a window offers a model that the roster lacks with no new life. The record keeps the
-  answer of the stand, so a later life of the record goes on with that roster.
+- `run` is the one path of each act of a person on a chain: a new chain, a fork, a `cd`, a stand, an actor, a
+  command, a read, a write, a grant. A window sends the word that a model would write for the act, as `Door` of
+  `furb-host` gives it, so the transcript of the chain shows his act as it shows the act of a model.
+- `roster` names the models that the life offers, in place of its roster, as the catalog names them, so a window
+  offers a model that the roster lacks with no new life. No word says it, since the roster is the World's: the life
+  stands on it, the answer is the act of the stand, and the record keeps the answer, so a later life of the record
+  goes on with that roster.
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
   one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as
@@ -423,7 +421,7 @@ once it listens. A second daemon refuses to start there.
   its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
   it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
-  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
+  a skill that says an act or a fact, as `run`, `prompt` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
   the verbs of a window speak under `operator/<login>`, the member that its transport proved, so a model asks one
   person with `to="operator/<login>"`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
