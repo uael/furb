@@ -262,7 +262,8 @@ impl Model {
     let initials: Vec<String> =
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
-    let agents = (card.thread.agents > 0).then(|| format!("└{}", card.thread.agents));
+    let agents = (card.thread.agents > 0)
+      .then(|| format!("{}{}", Loader::Agent.frames()[0], card.thread.agents));
     let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
     let files = changes.map(|one| one.files.len()).filter(|count| *count > 0);
     let marks = [files.map(|count| format!("±{count}")), model.map(str::to_owned), agents, alone];

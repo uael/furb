@@ -326,7 +326,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
     .map(str::to_owned),
     "{frame}"
   );
-  shows(&app, "opus └2");
+  shows(&app, "opus ↳2");
   screen("thread-agents", &app);
 
   // A click on an agent opens its thread in place: its head says that it is one.
