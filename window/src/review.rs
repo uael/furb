@@ -97,10 +97,19 @@ impl Model {
     let t = &self.tokens;
     let files = changes.map(|one| &one.files[..]).unwrap_or_default();
     let pointed = self.pointer.filter(|(x, _)| self.on_side(*x)).map(|(_, y)| y);
-    let row = |(at, one): (usize, &Changed)| {
+    let room = usize::from(LIST) - 5;
+    let row = |(place, slot): (usize, Slot<'_>)| {
+      let at = match slot {
+        Slot::Folder(folder) => {
+          let folder = if folder.is_empty() { "./".to_owned() } else { format!("{folder}/") };
+          return vec![run(format!("  {}", cut(&folder, room)), t.style(Role::Muted))];
+        }
+        Slot::File(at) => at,
+      };
+      let one = &files[at];
       let ground = (at == chosen).then_some(t.lifted);
       let on = |style: Style| ground.map_or(style, |bg| style.bg(bg));
-      let lit = pointed.and_then(|y| y.checked_sub(ABOVE)) == u16::try_from(at).ok();
+      let lit = pointed.and_then(|y| y.checked_sub(ABOVE)).map(usize::from) == Some(place);
       let (mark, color) = match one.state {
         Change::Added => ("A", t.added),
         Change::Modified => ("M", t.accent),
@@ -108,21 +117,18 @@ impl Model {
         Change::Renamed => ("R", t.accent),
         Change::Untracked => ("U", t.added),
       };
-      let (folder, name) = one.path.rsplit_once('/').unwrap_or(("", &one.path));
+      let name = one.path.rsplit_once('/').map_or(one.path.as_str(), |(_, name)| name);
       let name_style = if lit { t.style(Role::Prose).fg(t.hover) } else { t.style(Role::Prose) };
       let counts = self.counts(one.added, one.removed).into_iter();
       let counts: Line = counts.map(|one| run(one.content, on(one.style))).collect();
-      let room = usize::from(LIST) - 5;
-      let used = name.width() + 2 + counts.iter().map(|one| one.content.width()).sum::<usize>();
-      let folder = cut(folder, room.saturating_sub(used + 2));
+      let used = 6 + counts.iter().map(|one| one.content.width()).sum::<usize>();
       let left = vec![
-        run(format!("{mark} "), on(Style::new().fg(color))),
-        run(name.to_owned(), on(name_style)),
-        run(format!("  {folder}"), on(t.style(Role::Muted))),
+        run(format!("  {mark} "), on(Style::new().fg(color))),
+        run(cut(name, room.saturating_sub(used)), on(name_style)),
       ];
       edged(color, ground, spread(left, counts, room, on(Style::new())))
     };
-    let mut rows: Vec<Line> = files.iter().enumerate().map(row).collect();
+    let mut rows: Vec<Line> = slots(files).into_iter().enumerate().map(row).collect();
     if rows.is_empty() {
       let says = match changes {
         None => "Reading the changes…",
@@ -189,9 +195,38 @@ impl Model {
   pub(crate) fn review_at(&self, x: u16, y: u16) -> Option<usize> {
     let shown = self.reviewing()?;
     let row = usize::from(y.checked_sub(ABOVE)?);
-    let files = shown.side.map_or(0, |side| side.len() - usize::from(ABOVE));
-    (self.on_side(x) && row < files).then_some(row)
+    shown.side?;
+    let review = self.client.review.as_ref()?;
+    let files = self.client.changes(review.at, &review.folder).map(|one| &one.files[..]);
+    match slots(files.unwrap_or_default()).get(row) {
+      Some(Slot::File(at)) if self.on_side(x) => Some(*at),
+      _ => None,
+    }
   }
+}
+
+/// A row of the files of a review: the folder of the files under it, or a file by its place among
+/// the files.
+enum Slot<'a> {
+  Folder(&'a str),
+  File(usize),
+}
+
+/// The rows of the files of a review: each file under its folder, and each folder once, where it
+/// changes, as the tree of the files of a review of GitHub. A file at the top stands under `./`
+/// once a folder stood before it.
+fn slots(files: &[Changed]) -> Vec<Slot<'_>> {
+  let mut slots = Vec::new();
+  let mut last = "";
+  for (at, one) in files.iter().enumerate() {
+    let folder = one.path.rsplit_once('/').map_or("", |(folder, _)| folder);
+    if folder != last {
+      slots.push(Slot::Folder(folder));
+    }
+    last = folder;
+    slots.push(Slot::File(at));
+  }
+  slots
 }
 
 /// The keys that move the diff to the change before and after the one at its top.
