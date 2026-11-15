@@ -196,10 +196,10 @@ found = []
 for review in reviews:
   found.append(await review)
 fixer = chain('fix')
-tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+tests = await bash('python3 tests/test_report.py', ok=True)
 while tests.code:
-  await prompt(None, f'Fix this failure:\n{tests.stderr.content}', on=fixer)
-  tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+  await prompt(None, f'Fix this failure:\n{tests.stdout.content}', on=fixer)
+  tests = await bash('python3 tests/test_report.py', ok=True)
 close('\n\n'.join(found))";
 
 /// The word of the change before the review: a count on each item, a report of the total with a
@@ -208,19 +208,16 @@ const CHANGE: &str = r"m = read('src/inventory/models.py')
 write(m.replace('self.name = name', 'self.name = name\n    self.count = 0'))
 write(Text('src/inventory/report.py', 'def total(items):\n  return sum(one.name for one in items)\n'))
 write(Text('tests/test_report.py', '''import sys
-import unittest
 
 sys.path.insert(0, 'src')
 
 from inventory.models import Item
 from inventory.report import total
 
-
-class Total(unittest.TestCase):
-  def test_sums_the_counts(self):
-    a, b = Item('a'), Item('b')
-    a.count, b.count = 2, 3
-    self.assertEqual(total([a, b]), 5)
+a, b = Item('a'), Item('b')
+a.count, b.count = 2, 3
+assert total([a, b]) == 5
+print('The total is right.')
 '''))
 await bash('git add src tests')
 close('Each item has a count, and report.py sums them.')";

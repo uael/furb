@@ -47,10 +47,10 @@ found = []
 for review in reviews:
   found.append(await review)
 fixer = chain('fix')
-tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+tests = await bash('python3 tests/test_report.py', ok=True)
 while tests.code:
-  await prompt(None, f'Fix this failure:\n{tests.stderr.content}', on=fixer)
-  tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+  await prompt(None, f'Fix this failure:\n{tests.stdout.content}', on=fixer)
+  tests = await bash('python3 tests/test_report.py', ok=True)
 close('\n\n'.join(found))
 ```
 
