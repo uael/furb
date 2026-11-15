@@ -291,13 +291,19 @@ pub enum Next<W> {
 /// waits to be taken.
 type Queue<T> = Rc<RefCell<VecDeque<T>>>;
 
-/// What both sides of an ear of rust hold for the image of its life: each question that the ear
-/// heard and that is not done, the acts among them that it started, which are its acts in flight,
-/// the acts that an earlier life took and that no wake put to it yet, how its body gives what it
-/// keeps, and what an image gave of that until the body takes it.
+/// What both sides of an ear of rust hold for the image of its life: the question of each act
+/// that the ear started and that is not done, those acts, which are its acts in flight, the
+/// question that it hears now, the acts that an earlier life took and that no wake put to it yet,
+/// how its body gives what it keeps, and what an image gave of that until the body takes it.
+///
+/// A question goes to each ear in turn until one owns it, but its done goes only to the ears that
+/// wait for its kind or for every fact. So an ear keeps the question that it hears only when it
+/// starts its act in that step: else it would keep each question that another ear answered, for
+/// the whole life.
 #[derive(Default)]
 struct Imaged {
   asked: HashMap<String, Fact>,
+  hearing: Option<Fact>,
   started: Vec<String>,
   resumed: HashSet<String>,
   gives: Option<Box<dyn Fn() -> Option<Value>>>,
@@ -391,10 +397,11 @@ impl<W: 'static> Co<W> {
         imaged.resumed.insert(fact.about().to_owned());
       }
       _ if fact.question() => {
-        imaged.asked.insert(fact.about().to_owned(), fact.clone());
         if imaged.resumed.contains(fact.about()) {
+          imaged.asked.insert(fact.about().to_owned(), fact.clone());
           return Next::Resumed(fact);
         }
+        imaged.hearing = Some(fact.clone());
       }
       _ => {}
     }
@@ -466,6 +473,9 @@ impl<W: 'static> Co<W> {
       let mut imaged = self.imaged.borrow_mut();
       if !imaged.started.iter().any(|one| one == saying.about()) {
         imaged.started.push(saying.about().to_owned());
+      }
+      if let Some(question) = imaged.hearing.take_if(|one| one.about() == saying.about()) {
+        imaged.asked.insert(question.about().to_owned(), question);
       }
     }
     self.unsaid.set(self.unsaid.get() + 1);

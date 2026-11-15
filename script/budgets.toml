@@ -28,4 +28,4 @@ pytest = 180
 [bench]
 # The most heap, in MiB, that a life of the last size of LARGE in host/tests/suite/memory.rs may hold, when its test runs
 # as `memory::bench -- --ignored`.
-memory_heap_mib = 1024
+memory_heap_mib = 512
