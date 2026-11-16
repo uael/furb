@@ -389,3 +389,27 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
   assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
   assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
 }
+
+#[test]
+fn a_read_of_a_name_runs_no_code_of_the_life_and_says_the_representation_of_plain_values() {
+  let word = "seen = []\nclass Loud:\n  def __repr__(self):\n    seen.append(1)\n    return 'loud'\nloud = \
+              Loud()\nnumbers = [1, 'two']\nclose(0)";
+  let mut lived = Lived::new("inspected", &[word], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(0));
+  let facts = |engine: &mut Engine| {
+    engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap().len()
+  };
+  let before = facts(&mut lived.engine);
+  let (kind, repr, _) = lived.engine.inspect("numbers", None).unwrap();
+  assert_eq!((kind.as_str(), repr.as_str()), ("list", "[1, 'two']"));
+  // The representation of a value of a class of the life is code of the life, which a read never
+  // runs: the read says its type alone.
+  let (kind, repr, _) = lived.engine.inspect("loud", None).unwrap();
+  assert_eq!((kind.as_str(), repr.as_str()), ("Loud", ""));
+  let (_, seen, _) = lived.engine.inspect("seen", None).unwrap();
+  assert_eq!(seen, "[]");
+  assert_eq!(facts(&mut lived.engine), before);
+}

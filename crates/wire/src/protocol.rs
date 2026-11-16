@@ -788,7 +788,9 @@ pub enum Answer {
   Act(String),
   Value(Value),
   Values(Vec<Value>),
-  /// A name of a module: the name of its type, its representation, and its value as JSON.
+  /// A name of a module: the name of its type, its representation, and its value as JSON. The read
+  /// runs no code of the life, so the representation is empty for a value whose own representation
+  /// is code of the life.
   Inspected {
     kind: String,
     repr: String,

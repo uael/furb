@@ -664,6 +664,10 @@ impl Feed<'_> {
     let told = inspected.filter(|one| one.name == name && one.key == self.opened.thread.key);
     let said = match (names::verb(name), told.and_then(|one| one.told.as_ref())) {
       (Some((call, said)), _) => vec![run(call, prose), run(format!("  {said}"), muted)],
+      // A value whose representation is code of the life says its type alone.
+      (None, Some(Ok((kind, repr)))) if repr.is_empty() => {
+        vec![run(name.to_owned(), prose), run(format!(": {kind}"), muted)]
+      }
       (None, Some(Ok((kind, repr)))) => {
         let repr = self.model.homed(repr).replace('\n', "\\n");
         vec![run(name.to_owned(), prose), run(format!(": {kind} = "), muted), run(repr, prose)]

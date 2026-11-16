@@ -476,6 +476,13 @@ impl Kept {
   }
 }
 
+/// The read of a name of a module, which gives the name of the type of its value, its representation when no code of
+/// the life makes it, and the value. A value of the builtins or of the engine, or a list, a tuple, a set or a dict of
+/// them, has a representation that no model wrote.
+const INSPECT: &str = "(lambda x, plain: (type(x).__name__, repr(x) if plain(x) or type(x) in (list, tuple, set, \
+frozenset) and all(plain(one) for one in x) or type(x) is dict and all(plain(k) and plain(v) for k, v in x.items()) \
+else '', x))(module(__chain)[__name], lambda one: type(one) in (str, int, float, bool, bytes, type(None), Act, Text))";
+
 /// One life of the engine, as a host holds it.
 ///
 /// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
@@ -1011,7 +1018,10 @@ impl Engine {
   }
 
   /// One name that the module of a chain binds, the root when no chain is given, read without calling it: the name
-  /// of its type, its representation, and its value, which goes out as every value does.
+  /// of its type, its representation, and its value, which goes out as every value does. The read runs no code of
+  /// the life, so it makes no act and no fact: the representation is the one of a value of the builtins or of the
+  /// engine, or of a container of such values, and empty for any other value, whose own representation is code that
+  /// a model may have written.
   pub fn inspect(
     &mut self,
     name: &str,
@@ -1019,8 +1029,7 @@ impl Engine {
   ) -> Result<(String, String, Object), Fault> {
     let chain = Object::string(chain.unwrap_or(&self.root));
     let bound = vec![("__chain", chain), ("__name", Object::string(name))];
-    let got =
-      self.word("(lambda x: (type(x).__name__, repr(x), x))(module(__chain)[__name])", bound)?;
+    let got = self.word(INSPECT, bound)?;
     let got = got.as_ref();
     let text =
       |at| entry(&got, at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();

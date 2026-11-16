@@ -99,7 +99,8 @@ class Outcome(TypedDict):
 
 class Inspection(TypedDict):
   """One name of a chain, read without calling it: the name, the name of its type, its representation in the sandbox,
-  and its value."""
+  and its value. The read runs no code of the life, so the representation is empty for a value whose own
+  representation is code of the life, as an instance of a class that a model wrote."""
 
   name: str
   kind: str

@@ -1139,7 +1139,9 @@ class Data1(TypedDict):
 
 class Answer14(TypedDict):
   """
-  A name of a module: the name of its type, its representation, and its value as JSON.
+  A name of a module: the name of its type, its representation, and its value as JSON. The read
+  runs no code of the life, so the representation is empty for a value whose own representation
+  is code of the life.
   """
 
   answer: Literal["inspected"]
