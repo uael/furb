@@ -18,10 +18,10 @@ async def test_lane_fill_starts_rows_up_to_the_cap(laning: Bench) -> None:
   assert await laning.value("await lane_fill()") == []
 
 
-async def test_lane_fill_reads_main_as_red_when_its_gates_failed(laning: Bench) -> None:
-  """It reads main as red when the last run of the gates on main failed."""
-  laning.say("run list --repo uael/furb --branch main --workflow gates.yml", "failure\n")
-  await laning.word('lane_ask("a", "a", "s", hard=5, tree="ta")\nlane_ask("m", "m", "s", main=True, tree="tm")')
+async def test_lane_fill_reads_the_base_as_red_when_its_gates_failed(laning: Bench) -> None:
+  """It reads LANE_BASE as red when the last run of the gates on LANE_BASE failed."""
+  laning.say("run list --repo uael/furb --branch w/x --workflow gates.yml", "failure\n")
+  await laning.word('LANE_BASE = "w/x"\nlane_ask("a", "a", "s", hard=5, tree="ta")\nlane_ask("m", "m", "s", main=True, tree="tm")')
   assert await laning.value("await lane_fill()") == ["m"]
 
 

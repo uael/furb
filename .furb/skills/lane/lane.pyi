@@ -6,6 +6,12 @@ LANE_BASE: str
 LANE_ITEMS: str
 """LANE_ITEMS is the file of the rows of the lane, .furb/lane.json, which git excludes, until the root binds another path, which a new load of the kit keeps."""
 
+LANE_GUARD: str
+"""LANE_GUARD is a shell command that lane_land runs in the tree on the head that it is about to push, empty until the root binds one, which a new load of the kit keeps."""
+
+LANE_GROUND: str
+"""LANE_GROUND is a shell command that prints the rules of the owner whose ids it takes as arguments, empty until the root binds one, which a new load of the kit keeps."""
+
 def lane_ask(id: str, ask: str, source: str, done: str = "", **row: object) -> None:
   """lane_ask(id, ask, source, done) keeps the ask verbatim as an open row of LANE_ITEMS, with its source, the command that says it is done and each other key of row, and refuses an id that a row holds.
   It refuses a worker above high with no why, since the effort follows the kind of the work: medium for work, high for a hard row, and more only with a reason.
@@ -13,7 +19,7 @@ def lane_ask(id: str, ask: str, source: str, done: str = "", **row: object) -> N
 
 def lane_next(red: bool = False) -> str:
   """lane_next() gives the id of the hardest open row whose after list names only landed or void rows and whose tree and branch no running row holds, or an empty string.
-  When red says that main is red, it gives only a row whose key main says that it fixes main.
+  When red says that LANE_BASE is red, it gives only a row whose key main says that it fixes LANE_BASE.
   """
 
 async def lane_settled(job: Act, seconds: float) -> object:
@@ -25,6 +31,7 @@ async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli
   """lane_open(id, evidence, tree) makes the chain id, asks worker there, under the rules of the lane and with the ask of the row id verbatim, for its reading of the item and one shell command that fails now, and gives the chain, the reading and the command.
   It gives the chain, an empty reading and the refusal when the worker gives no pair of strings within patience seconds.
   It refuses an id whose label a chain that is not over holds with an open prompt or rung, and names that chain.
+  When the row names rules and LANE_GROUND is bound, it adds what LANE_GROUND prints for their ids to the brief, verbatim.
   """
 
 async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "claude-cli:sonnet/medium", breakers: list[str] | None = None, patience: float = 7200.0, accept_s: float = 3600.0, begun: bool = False) -> tuple[str, str]:
@@ -41,6 +48,7 @@ async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "c
 async def lane_land(tree: str, verdict: str, branch: str = "") -> tuple[bool, str]:
   """lane_land(tree, verdict) rebases the head of tree on origin/LANE_BASE and pushes it there, with no model, and gives True with the last lines of the push, and it refuses a verdict that is not accepted.
   It aborts a rebase that conflicts and gives False, and it tries a push that fails again, three times in all.
+  When LANE_GUARD is bound, it runs it in the tree after the rebase, and gives False with no push when it fails.
   Once it lands a tree on the branch of its own, it removes the tree and the branch when the tree is clean and origin holds its head.
   """
 
@@ -52,7 +60,7 @@ async def lane_item(id: str) -> tuple[str, str]:
 
 async def lane_fill() -> list[str]:
   """lane_fill() starts lane_item on the runner of each next row while fewer rows run than the key cap of the skill in the configs, and gives the ids that it started.
-  It reads main as red when the last run of the gates on main failed.
+  It reads LANE_BASE as red when the last run of the gates on LANE_BASE failed.
   It takes a running row back to open when no chain of its label or of its runner holds an open prompt or rung, since that row runs nowhere and holds no place.
   After three blocked rows in a row, it starts nothing and tells the operator once.
   It keeps cargo xtask memwatch running while a row runs, and ends it when none runs.
@@ -63,7 +71,7 @@ async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", mode
   """
 
 def lane_run(label: str, word: str) -> Act:
-  """lane_run(label, word) runs word on the runner chain of label, which it makes once, with the LANE_BASE and the LANE_ITEMS of its caller, so the lanes of two labels run at once.
+  """lane_run(label, word) runs word on the runner chain of label, which it makes once, with the LANE_BASE, the LANE_ITEMS, the LANE_GUARD and the LANE_GROUND of its caller, so the lanes of two labels run at once.
   It plays the word of the kit on the runner before, and again when the kit changed since, so a change of a function reaches each lane at its next word.
   """
 

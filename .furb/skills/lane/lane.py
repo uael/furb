@@ -29,6 +29,8 @@ from furb.engine import (
 
 LANE_BASE: str = globals().setdefault("LANE_BASE", "main")
 LANE_ITEMS: str = globals().setdefault("LANE_ITEMS", ".furb/lane.json")
+LANE_GUARD: str = globals().setdefault("LANE_GUARD", "")
+LANE_GROUND: str = globals().setdefault("LANE_GROUND", "")
 LANE_LOOK = 600.0
 LANE_CHECKS = {
   "the title": 'cargo xtask title "$(git log -1 --format=%s)"',
@@ -142,8 +144,11 @@ async def lane_settled(job: Act, seconds: float) -> object:
 async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli:sonnet/medium", branch: str = "", source: str = "", patience: float = 3600.0) -> tuple[str, str, str]:
   if held := lane_held(id):
     raise Refused(f"{held}, which is not over, holds the label {id}")
+  rules = next(x for x in lane_rows() if x["id"] == id).get("rules") or []
+  ground = (await bash(LANE_GROUND + " " + " ".join(lane_quoted(str(x)) for x in rules), show=HIDDEN, timeout=60.0)).stdout.content if LANE_GROUND and rules else ""
+  ruled = f"\nThe rules of the owner that this item names, verbatim. Strictly apply each one:\n{ground}\n" if ground else ""
   c = chain(id, source=source)
-  got = await lane_settled(prompt(tuple[str, str], lane_brief(id, evidence, tree, branch) + LANE_OPENING, to=worker, on=c), patience)
+  got = await lane_settled(prompt(tuple[str, str], lane_brief(id, evidence, tree, branch) + ruled + LANE_OPENING, to=worker, on=c), patience)
   if isinstance(got, tuple) and len(got) == 2:
     return str(c), str(got[0]), str(got[1])
   return str(c), "", repr(got)[:600]
@@ -221,11 +226,12 @@ async def lane_land(tree: str, verdict: str, branch: str = "") -> tuple[bool, st
     raise Refused(f"{tree} lands only an accepted item, and its verdict is {verdict}")
   tail = ""
   for _ in range(3):
-    ran = await bash(f"cd {lane_quoted(tree)} && git fetch -q origin && {{ git rebase origin/{LANE_BASE} || {{ git rebase --abort; exit 9; }}; }} && git push origin HEAD:{LANE_BASE}", ok=True, show=HIDDEN, timeout=2700.0)
+    guard = f" && {{ ( {LANE_GUARD} ) || exit 8; }}" if LANE_GUARD else ""
+    ran = await bash(f"cd {lane_quoted(tree)} && git fetch -q origin && {{ git rebase origin/{LANE_BASE} || {{ git rebase --abort; exit 9; }}; }}{guard} && git push origin HEAD:{LANE_BASE}", ok=True, show=HIDDEN, timeout=2700.0)
     tail = ran.stdout.content[-800:]
     if ran.code == 0 and branch:
       await bash(f'cd {lane_quoted(tree)} && test -z "$(git status --porcelain)" && git merge-base --is-ancestor HEAD origin/{LANE_BASE} && cd "$(git rev-parse --git-common-dir)/.." && git worktree remove {lane_quoted(tree)} && git branch -D {branch}', ok=True, show=HIDDEN, timeout=120.0)
-    if ran.code in (0, 9):
+    if ran.code in (0, 8, 9):
       return ran.code == 0, tail
   return False, tail
 
@@ -265,7 +271,7 @@ async def lane_fill() -> list[str]:
       x["state"] = "open"
   lane_keep(rows)
   cap = json.loads(read("settings://lane", HIDDEN).content)["cap"]
-  main = await bash("gh run list --repo uael/furb --branch main --workflow gates.yml --limit 1 --json conclusion -q '.[0].conclusion'", ok=True, show=HIDDEN, timeout=60.0)
+  main = await bash(f"gh run list --repo uael/furb --branch {LANE_BASE} --workflow gates.yml --limit 1 --json conclusion -q '.[0].conclusion'", ok=True, show=HIDDEN, timeout=60.0)
   red = main.stdout.content.strip() == "failure"
   running = sum(x["state"] == "running" for x in rows)
   started: list[str] = []
@@ -297,7 +303,7 @@ def lane_run(label: str, word: str) -> Act:
   if played != kit:
     rung(kit, on=runner)
   lane_runners[label] = (runner, kit)
-  return rung(f"LANE_BASE = {LANE_BASE!r}\nLANE_ITEMS = {LANE_ITEMS!r}\n{word}", on=runner)
+  return rung(f"LANE_BASE = {LANE_BASE!r}\nLANE_ITEMS = {LANE_ITEMS!r}\nLANE_GUARD = {LANE_GUARD!r}\nLANE_GROUND = {LANE_GROUND!r}\n{word}", on=runner)
 
 
 def lane_job(label: str, job: Act, started: float, patience: float) -> Act:

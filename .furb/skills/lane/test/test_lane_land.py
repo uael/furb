@@ -62,3 +62,15 @@ async def test_lane_land_removes_a_clean_tree_and_its_branch(laning: Bench) -> N
     assert (await laning.value(f"await lane_land({str(tree)!r}, 'accepted', {tree.name!r})"))[0] is True
   assert (clean.exists(), dirty.exists()) == (False, True)
   assert gitted(laning.tmp, "branch", "--list", "--format=%(refname:short)", clean.name, dirty.name).split() == [dirty.name]
+
+async def test_lane_land_pushes_only_a_head_that_the_guard_passes(laning: Bench) -> None:
+  """When LANE_GUARD is bound, it runs it in the tree after the rebase, and gives False with no push when it fails."""
+  await laning.word("LANE_GUARD = 'test \"$(git log -1 --format=%s)\" != secret'")
+  tree = str(laning.tmp)
+  commit(laning.tmp, "secret", "s\n")
+  assert (await laning.value(f"await lane_land({tree!r}, 'accepted')"))[0] is False
+  assert gitted(laning.origin, "log", "--format=%s", "main").split() == ["base"]
+  gitted(laning.tmp, "reset", "-q", "--hard", "origin/main")
+  commit(laning.tmp, "ours", "o\n")
+  assert (await laning.value(f"await lane_land({tree!r}, 'accepted')"))[0] is True
+  assert gitted(laning.origin, "log", "--format=%s", "main").split() == ["ours", "base"]

@@ -12,10 +12,10 @@ async def until(laning: Bench, done: object) -> None:
 
 
 async def test_lane_run_runs_two_lanes_at_once(laning: Bench) -> None:
-  """lane_run(label, word) runs word on the runner chain of label, which it makes once, with the LANE_BASE and the LANE_ITEMS of its caller, so the lanes of two labels run at once."""
+  """lane_run(label, word) runs word on the runner chain of label, which it makes once, with the LANE_BASE, the LANE_ITEMS, the LANE_GUARD and the LANE_GROUND of its caller, so the lanes of two labels run at once."""
   laning.sand.hold = "lane-two"
   word = "await bash('echo lane-two')"
-  await laning.word(f"LANE_BASE = 'w/x'\na = lane_run('a', {word!r})\nb = lane_run('b', {word!r})\nagain = lane_run('a', 'x = 1')")
+  await laning.word(f"LANE_BASE = 'w/x'\nLANE_GUARD = 'g'\nLANE_GROUND = 'r'\na = lane_run('a', {word!r})\nb = lane_run('b', {word!r})\nagain = lane_run('a', 'x = 1')")
   held = lambda: [x for x in said(laning.log, "bash") if "lane-two" in x[4]]  # noqa: E731
   await until(laning, lambda: len(held()) == 2)
   runners = laning.ns["lane_runners"]
@@ -26,7 +26,7 @@ async def test_lane_run_runs_two_lanes_at_once(laning: Bench) -> None:
   laning.sand.release()
   await until(laning, lambda: all(laning.engine.peek(laning.ns[k]) is not None for k in ("a", "b")))
   assert all(laning.engine.peek(x[1]).code == 0 for x in held())
-  assert [laning.engine.module(runners[k][0])["LANE_BASE"] for k in ("a", "b")] == ["w/x", "w/x"]
+  assert [laning.engine.module(runners[k][0])[n] for k in ("a", "b") for n in ("LANE_BASE", "LANE_GUARD", "LANE_GROUND")] == ["w/x", "g", "r"] * 2
 
 
 async def test_lane_run_plays_the_kit_again_when_it_changed(laning: Bench) -> None:

@@ -20,6 +20,6 @@ async def test_lane_next_gives_the_hardest_row_that_waits_for_nothing(laning: Be
 
 
 async def test_lane_next_gives_only_the_fix_of_main_while_main_is_red(laning: Bench) -> None:
-  """When red says that main is red, it gives only a row whose key main says that it fixes main."""
+  """When red says that LANE_BASE is red, it gives only a row whose key main says that it fixes LANE_BASE."""
   await laning.word(ROWS)
   assert await laning.value("lane_next(True)") == "m"

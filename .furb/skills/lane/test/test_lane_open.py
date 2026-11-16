@@ -31,3 +31,12 @@ async def test_lane_open_refuses_a_label_that_a_chain_not_over_holds(laning: Ben
   with pytest.raises(Refused, match=f"{laning.ns['held']}, which is not over, holds the label item"):
     await laning.word(f'await lane_open("item", "", {str(laning.tmp)!r})')
   assert [x[4] for x in said(laning.log, "chain")].count("item") == 1
+
+async def test_lane_open_adds_the_rules_that_the_row_names(laning: Bench) -> None:
+  """When the row names rules and LANE_GROUND is bound, it adds what LANE_GROUND prints for their ids to the brief, verbatim."""
+  laning.words["item"] = ['close(("r", "c"))']
+  await laning.word('LANE_GROUND = "printf \'%s rule\\\\n\'"\nlane_ask("item", "a", "s", rules=["R1", "R2"])')
+  await laning.value(f'await lane_open("item", "", {str(laning.tmp)!r})')
+  [asked] = [x[5] for x in said(laning.log, "prompt")]
+  assert "\nThe rules of the owner that this item names, verbatim. Strictly apply each one:\nR1 rule\nR2 rule\n\n" in asked
+  assert asked.endswith(laning.ns["LANE_OPENING"])
