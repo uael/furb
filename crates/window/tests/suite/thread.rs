@@ -587,13 +587,12 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
     .collect();
   assert_eq!(named, ["■ Engine (System…", "■ Doctrine", "■ Turns", "■ Free"]);
   assert_eq!(boxed(&app)[5], "■ Free                   876k   88%");
-  // A click on the bar, whose cells keep their colors under the pointer, shows what came from the
-  // cache, and a click on the head folds the box.
-  let (x, y) = at(&app, &bar, LEFT);
-  app.click(x, y);
+  // The tab of the cache at the head of the open box, which lights alone under the pointer, shows
+  // what came from the cache, and a click on the fold at the head folds the box.
+  clicked(&app, "Cache", LEFT, 0);
   shows(&app, "From the cache");
   let parts = [
-    "Context ▾                       12%",
+    "Context ▾   Kinds · Cache       12%",
     &bar,
     "■ From the cache          98k   10%",
     "■ Written to the cache   8.4k    1%",
