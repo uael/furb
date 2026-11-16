@@ -12,6 +12,8 @@ static COUNTED: counted::Counted = counted::Counted;
 
 mod counted;
 
+mod corpus;
+
 mod apart;
 mod daemon;
 mod door;

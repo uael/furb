@@ -342,6 +342,9 @@ impl Outside {
       match graph.value(*key).as_str() {
         Some(IS) => {}
         Some("args") => args = Some(self.comes(sand, graph, *one)?),
+        // The interpreter keeps the chain of an exception, as its cause and its context, in
+        // attributes of the instance, which no class takes when it makes one.
+        Some(key) if key.starts_with("__") && key.ends_with("__") => {}
         Some(key) => fields.push((key.to_owned(), self.comes(sand, graph, *one)?)),
         None => return Ok(None),
       }

@@ -5,8 +5,9 @@ Each folder here holds records. A build made them on a model that answers from a
 - `next` holds the records of the coming release.
 - Each release has its own folder, named by its version, as `1.0.0`.
 - `record-<major>` holds the records of the point of the promise of that major of the schema of the record, as
-  `next` held them there: `record-2` holds those of the stable cut (commit `26d11be15`). From its point on, each record
-  of the major opens on each later build with no drift, and no file of the folder changes.
+  `next` held them there: `record-3` holds those of the stable cut (commit `eb49c0233`). From its point on, each record
+  of the major opens on each later build with no drift, and no file of the folder changes. `record-2` holds those of
+  the major before it, which no life opens: the life says why, and a window reads their facts.
 
 The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `next`. A record keeps no checkpoint:
 
