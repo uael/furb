@@ -2350,6 +2350,12 @@ class Data(TypedDict):
   peer: Peer
   machine: str
   build: str
+  program: NotRequired[str | None]
+  """
+    The size and the time of the last write of the program of the daemon when it started, so a
+    window of the machine knows whether a new build of furb replaced it since. None from a
+    life, and from a daemon that could not read its program.
+    """
   capabilities: NotRequired[list[str]]
   folders: NotRequired[Folders | None]
   home: NotRequired[str | None]
@@ -2358,10 +2364,10 @@ class Data(TypedDict):
 class Answer2(TypedDict):
   """
   The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  of the machine of the daemon, its build, and the home folder of its user, which a window of
-  another machine shows as `~` in a folder of that machine. A life that answers the process of a
-  kit names too each verb that it takes past those of the protocol 44 of [`KITS`], and the
-  folders of the life, as `initialize` gives them in LSP.
+  of the machine of the daemon, its build, the program that it runs, and the home folder of its
+  user, which a window of another machine shows as `~` in a folder of that machine. A life that
+  answers the process of a kit names too each verb that it takes past those of the protocol 44
+  of [`KITS`], and the folders of the life, as `initialize` gives them in LSP.
   """
 
   answer: Literal["welcome"]
@@ -3388,4 +3394,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 74
+PROTOCOL = 75

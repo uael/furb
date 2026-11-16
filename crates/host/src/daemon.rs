@@ -36,7 +36,7 @@ use std::{
   net::{IpAddr, SocketAddr},
   path::{Path, PathBuf},
   pin::pin,
-  sync::Arc,
+  sync::{Arc, LazyLock},
   time::{Duration, UNIX_EPOCH},
 };
 
@@ -87,7 +87,7 @@ use crate::{
   },
   reads::{Read, Readers},
   records,
-  serve::{Host, Outbox, fixed, home_folder, serve},
+  serve::{Host, Outbox, PROGRAM, fixed, home_folder, serve},
   stall::{Quiet, Stall},
   stops::Stops,
   transport::{
@@ -156,10 +156,20 @@ where
 
 /// This daemon in the place of the daemon that runs on the transport: that one writes the
 /// image of each life, stops to listen and gives its lives and their pins, which this one
-/// opens again. When no daemon answers, this one starts as [`run`] does.
+/// opens again. When no daemon answers, this one starts as [`run`] does. A daemon of another
+/// protocol refuses the hello and names its own, so this one dials it again and says its hello in
+/// that protocol: the hello and the handover keep their form across the versions.
 pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonError> {
   let (handed, asker) = match local.dial().await {
-    Ok(stream) => handover(stream).await.map(|(handed, asker)| (handed, Some(asker)))?,
+    Ok(stream) => {
+      let (handed, asker) = match handover(stream, PROTOCOL).await {
+        Err(DaemonError::Refused(ProtocolError::Protocol { ours, .. })) if ours != PROTOCOL => {
+          handover(local.dial().await?, ours).await?
+        }
+        handed => handed?,
+      };
+      (handed, Some(asker))
+    }
     Err(TransportError::Dial { .. }) => (Vec::new(), None),
     Err(no) => return Err(no.into()),
   };
@@ -174,10 +184,13 @@ pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonErro
 /// The stream of the peer that asks the handover.
 type Asker = Framed<<Local as Dialer>::Stream, LinesCodec>;
 
-/// The lives that the daemon of a stream gave at its handover, and the stream.
-async fn handover(stream: <Local as Dialer>::Stream) -> Result<(Vec<Handed>, Asker), DaemonError> {
+/// The lives that the daemon of a stream gave at its handover, asked in a protocol, and the stream.
+async fn handover(
+  stream: <Local as Dialer>::Stream,
+  protocol: u32,
+) -> Result<(Vec<Handed>, Asker), DaemonError> {
   let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
-  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Daemon, name: None, role: None });
+  let hello = Verb::Hello(Hello { protocol, kind: Kind::Daemon, name: None, role: None });
   for (id, verb) in [(0, hello), (1, Verb::Handover)] {
     let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
     lines.send(request).await.map_err(TransportError::from)?;
@@ -207,6 +220,8 @@ async fn served<I>(
 where
   I: Identity<Stream = Accepted> + Clone + Send + 'static,
 {
+  // The program as it stands now, before a build replaces it while the daemon runs.
+  LazyLock::force(&PROGRAM);
   let log = settings.opening.log.clone();
   let doors = match &settings.tailnet {
     Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,

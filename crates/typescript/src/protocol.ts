@@ -639,6 +639,12 @@ export type Answer =
         peer: Peer;
         machine: string;
         build: string;
+        /**
+         * The size and the time of the last write of the program of the daemon when it started, so a
+         * window of the machine knows whether a new build of furb replaced it since. None from a
+         * life, and from a daemon that could not read its program.
+         */
+        program?: string | null;
         capabilities?: string[];
         folders?: Folders | null;
         home?: string | null;
@@ -1875,4 +1881,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 74;
+export const PROTOCOL = 75;

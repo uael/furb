@@ -436,3 +436,33 @@ fn a_window_gives_its_place_to_a_new_build_of_its_program_where_it_stood() {
   second.press("enter");
   shows(&second, "┃ and the seed?");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_window_asks_the_handover_of_the_daemon_of_its_machine_once_for_each_new_build_of_furb() {
+  use std::os::unix::fs::PermissionsExt;
+  let (app, host) = (app(), app());
+  let mut daemon = Daemon::bound(&host);
+  daemon.served();
+  // The program that serves the daemon writes each command that it was given.
+  let (furb, asked) = (daemon.file("furb"), daemon.file("asked"));
+  let wrote = |build: &str| {
+    fs::write(&furb, format!("#!/bin/sh\n# {build}\necho \"$@\" >> '{}'\n", asked.display()))
+      .unwrap();
+    fs::set_permissions(&furb, fs::Permissions::from_mode(0o755)).unwrap();
+  };
+  wrote("the build of the test");
+  open(&app, vec![daemon.served_by("mac", &furb)], homed(&daemon));
+  let said = || fs::read_to_string(&asked).unwrap_or_default();
+  let asks =
+    |count: usize, within: Duration| app.wait_until(within, || said().lines().count() >= count);
+  // The daemon runs the program of the test, not the program furb: the window asks its handover.
+  assert!(asks(1, PATIENCE));
+  assert_eq!(said(), "host upgrade\n");
+  // No daemon took its place, and the window asks no more of the same build.
+  assert!(!asks(2, Duration::from_secs(2)), "{}", said());
+  // A new build of furb stands there: the window asks again.
+  wrote("a later build, which is longer");
+  assert!(asks(2, PATIENCE));
+  assert_eq!(said(), "host upgrade\nhost upgrade\n");
+}

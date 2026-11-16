@@ -33,4 +33,6 @@ pub enum Error {
   Lines(#[from] LinesCodecError),
   #[error("the new build of the window cannot start: {0}")]
   Reload(io::Error),
+  #[error("the new build of furb cannot take the place of the daemon: {0}")]
+  Upgrade(io::Error),
 }

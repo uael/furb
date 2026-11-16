@@ -2805,6 +2805,14 @@
                 "build": {
                   "type": "string"
                 },
+                "program": {
+                  "description": "The size and the time of the last write of the program of the daemon when it started, so a\nwindow of the machine knows whether a new build of furb replaced it since. None from a\nlife, and from a daemon that could not read its program.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
                 "capabilities": {
                   "type": "array",
                   "items": {
@@ -2843,7 +2851,7 @@
             "answer",
             "data"
           ],
-          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, its build, and the home folder of its user, which a window of\nanother machine shows as `~` in a folder of that machine. A life that answers the process of a\nkit names too each verb that it takes past those of the protocol 44 of [`KITS`], and the\nfolders of the life, as `initialize` gives them in LSP."
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, its build, the program that it runs, and the home folder of its\nuser, which a window of another machine shows as `~` in a folder of that machine. A life that\nanswers the process of a kit names too each verb that it takes past those of the protocol 44\nof [`KITS`], and the folders of the life, as `initialize` gives them in LSP."
         },
         {
           "type": "object",
@@ -6531,5 +6539,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 74
+  "x-protocol": 75
 }

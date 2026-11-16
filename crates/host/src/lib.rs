@@ -50,5 +50,5 @@ pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportErr
 use furb_wire::event;
 pub use furb_wire::{Event, FollowUp, Seq, protocol};
 pub use life::{Command, Life, LifeHandle, Reply};
-pub use serve::{BUILD, Gone, Granted, Host, Outbox, fixed, machine, serve};
+pub use serve::{BUILD, Gone, Granted, Host, Outbox, built, fixed, machine, serve};
 pub use stall::{HUNG, STALL};

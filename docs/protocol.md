@@ -94,11 +94,14 @@ The first frame of a peer is its hello:
   proved. With no `role`, the peer has the role that its transport proved.
 - The daemon answers with its protocol and the peer as it knows it: its `operator`, its role, its kind and its name.
   The answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its
-  version of furb, and the `home` folder of the user of the machine, which a window of another machine shows as `~` in
-  a folder of that machine.
+  version of furb, the `program` that it runs, its size and the time of its last write when the daemon started, and the
+  `home` folder of the user of the machine, which a window of another machine shows as `~` in a folder of that machine.
+  A window of the same machine whose program `furb` holds another build asks the handover of that program, once for
+  each build, and so does a window that a daemon of an older protocol refuses: a new build of furb takes the place of
+  the daemon while the window runs.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "home": "/Users/uael"}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "program": "75755696-1794817620000000000", "home": "/Users/uael"}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A skill is the
@@ -115,9 +118,9 @@ The first frame of a peer is its hello:
   that version reads it. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
 - The version rises with each change of the schema, `crates/host/protocol.schema.json`: a test of the crate keeps the digest
-  of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
-  so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
-  once its last window quits and its grace passes, and the next window starts one of its own build.
+  of the schema of each version. A window that meets a daemon of an older version on its own machine asks the handover
+  of its own program `furb`, as the welcome says above; a window that meets a daemon of a later version, or of another
+  machine, asks none and says that the daemon is of another build.
 - A request that the daemon cannot read, as a verb of a later version, gets the refusal `unread` under its `id`, with
   why it names the verb, so no request waits for an answer that never comes.
 
@@ -547,7 +550,7 @@ once it listens. A second daemon refuses to start there.
   fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
-  The new daemon says `handover`. The daemon that runs ends each life, which writes its image, stops to listen
+  The new daemon says `handover`, in the protocol of the daemon that runs when that daemon refuses its own. The daemon that runs ends each life, which writes its image, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
   from its image when the new build reads it, else from its record. A life that ran another engine, Kernel or

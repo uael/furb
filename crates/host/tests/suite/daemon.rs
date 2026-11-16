@@ -2739,25 +2739,92 @@ async fn a_sign_in_of_the_machine_turns_codex_on_for_its_user_and_each_project_o
   assert!(codex(window.ask(models).await), "the catalog offers the models of the account");
 }
 
-/// The welcome of a daemon to a new window: the name of its machine and its build.
-async fn welcome(local: &Local) -> (String, String) {
+/// The welcome of a daemon to a new window: the name of its machine, its build and its program.
+async fn welcome(local: &Local) -> (String, String, Option<String>) {
   let mut lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
   let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
   let request = Request { id: 0, verb: Verb::Hello(hello) };
   lines.send(serde_json::to_string(&request).unwrap()).await.unwrap();
   let line = timeout(PATIENCE, lines.next()).await.unwrap().unwrap().unwrap();
   match serde_json::from_str(&line).unwrap() {
-    Frame::Reply { answer: Answer::Welcome { machine, build, .. }, .. } => (machine, build),
+    Frame::Reply { answer: Answer::Welcome { machine, build, program, .. }, .. } => {
+      (machine, build, program)
+    }
     other => panic!("no welcome: {other:?}"),
   }
 }
 
 #[tokio::test]
-async fn the_welcome_names_the_machine_and_its_build() {
+async fn the_welcome_names_the_machine_its_build_and_its_program() {
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
-  let named = (furb_host::machine(), furb_host::BUILD.to_owned());
+  let program = furb_host::built(&env::current_exe().unwrap());
+  assert!(program.is_some(), "the program of the test can be read");
+  let named = (furb_host::machine(), furb_host::BUILD.to_owned(), program);
   assert_eq!(welcome(&local).await, named);
+}
+
+/// A daemon of the protocol before this one, which refuses each hello of another protocol as each
+/// daemon does, and gives no life at its handover.
+async fn older(local: &Local) {
+  let mut listener = local.listen().await.unwrap();
+  let before = PROTOCOL - 1;
+  loop {
+    let mut lines = Framed::new(listener.accept().await.unwrap(), LinesCodec::new());
+    // A dial that only looks whether the daemon listens says nothing.
+    let Some(line) = lines.next().await else { continue };
+    let line = line.unwrap();
+    let Ok(Request { verb: Verb::Hello(hello), .. }) = serde_json::from_str(&line) else {
+      panic!("no hello: {line}")
+    };
+    if hello.protocol != before {
+      let error = ProtocolError::Protocol { ours: before, theirs: hello.protocol };
+      lines.send(serde_json::to_string(&Frame::refused(Some(0), error)).unwrap()).await.unwrap();
+      continue;
+    }
+    let welcome = Frame::Reply { id: 0, answer: Answer::Done };
+    lines.send(serde_json::to_string(&welcome).unwrap()).await.unwrap();
+    let line = lines.next().await.unwrap().unwrap();
+    assert_eq!(serde_json::from_str::<Request>(&line).unwrap().verb, Verb::Handover);
+    drop(listener);
+    let handed = Frame::Reply { id: 1, answer: Answer::Handed(Vec::new()) };
+    lines.send(serde_json::to_string(&handed).unwrap()).await.unwrap();
+    return;
+  }
+}
+
+#[tokio::test]
+async fn an_upgrade_takes_the_place_of_a_daemon_of_an_older_protocol_in_its_protocol() {
+  let at = place();
+  let local = Local::new(at.join("sock"));
+  let old = tokio::spawn({
+    let local = local.clone();
+    async move { older(&local).await }
+  });
+  while local.dial().await.is_err() {
+    time::sleep(SHORT).await;
+  }
+  let settings = Settings {
+    opening: opening(&at),
+    grace: GRACE,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    home: None,
+    data: Some(at.join("data")),
+  };
+  let next = local.clone();
+  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  // The new daemon refused by the older one ends at once, and the older one waits for ever.
+  let gave = tokio::select! {
+    gave = old => gave,
+    refused = &mut new => panic!("the new daemon ended before the handover: {refused:?}"),
+  };
+  gave.unwrap();
+  listening(&local, &mut new).await;
+  let (_, _, program) = welcome(&local).await;
+  assert_eq!(program, furb_host::built(&env::current_exe().unwrap()));
 }
 
 /// One project in a folder, which the list of the daemon names, and the folder of its sessions.

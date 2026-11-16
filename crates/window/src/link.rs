@@ -10,15 +10,20 @@
 //! that grows to [`SLOWEST`], until it answers: a new connection says the hello and the ask of the
 //! cards again. A verb that the window asked of the connection that ended goes nowhere: the window
 //! asks a machine only while it lists its cards.
+//!
+//! The daemon of this computer follows the build of furb: once the program that serves it holds a
+//! build that the daemon does not run, as its welcome or its refusal of the protocol of the window
+//! says, the window asks the handover of that program, once for each build, and dials the new
+//! daemon, as [`Machine::upgrade`] says.
 
-use std::{convert::Infallible, pin::pin, time::Duration};
+use std::{convert::Infallible, io, time::Duration};
 
 use furb_client::greeting;
-use furb_host::protocol::{BOUND, Frame, Kind, Request, Role};
-use futures::{
-  SinkExt, StreamExt,
-  future::{self, Either},
+use furb_host::{
+  ProtocolError,
+  protocol::{Answer, BOUND, Frame, Kind, PROTOCOL, Request, Role},
 };
+use futures::{SinkExt, StreamExt};
 use opentui::App;
 use tokio::{
   sync::mpsc::{self, Receiver, Sender, UnboundedReceiver, UnboundedSender},
@@ -41,6 +46,9 @@ const SLOWEST: Duration = Duration::from_secs(10);
 /// How long the window waits between two looks at the tailnet for a machine that came online.
 const LOOK: Duration = Duration::from_secs(30);
 
+/// How often the window looks at the program that serves the daemon of this computer.
+const FOLLOW: Duration = Duration::from_secs(1);
+
 /// What the task tells the thread of the app: a frame of the daemon, or why the connection ended.
 pub(crate) type Heard = Result<Frame, Error>;
 
@@ -52,15 +60,16 @@ pub(crate) fn dialed(app: &App, machine: Machine, on: impl FnMut(&App, Heard) + 
   let (requests, outgoing) = mpsc::unbounded_channel();
   // The task ends when the window lets the frames go, and with the runtime of the app.
   drop(app.runtime().spawn(async move {
-    let (mut machine, mut outgoing, mut wait) = (machine, outgoing, FIRST);
+    let (mut link, mut outgoing) =
+      (Link { machine, wait: FIRST, seen: None, asked: None }, outgoing);
     loop {
-      let Err(end) = held(&mut machine, &mut outgoing, &tell, &mut wait).await;
+      let Err(end) = held(&mut link, &mut outgoing, &tell).await;
       // A window that is gone hears no end.
       if tell.send(Err(end)).await.is_err() {
         return;
       }
-      time::sleep(wait).await;
-      wait = (wait * 2).min(SLOWEST);
+      time::sleep(link.wait).await;
+      link.wait = (link.wait * 2).min(SLOWEST);
     }
   }));
   hearing(app, frames, on);
@@ -107,32 +116,77 @@ impl Asker {
 /// request that waits from a connection before it goes nowhere, and the wait before the next dial
 /// starts again once the machine answers. A window that is gone ends it.
 async fn held(
-  machine: &mut Machine,
+  link: &mut Link,
   outgoing: &mut UnboundedReceiver<Request>,
   tell: &Sender<Heard>,
-  wait: &mut Duration,
 ) -> Result<Infallible, Error> {
+  let machine = &mut link.machine;
   let mut lines = Framed::new(machine.reach().await?, LinesCodec::new_with_max_length(BOUND));
-  *wait = FIRST;
+  link.wait = FIRST;
   while outgoing.try_recv().is_ok() {}
   // A window that only reads on the machine asks its daemon for the role that reads.
-  for request in greeting(Kind::Window, machine.reads.then_some(Role::Read)) {
+  for request in greeting(Kind::Window, link.machine.reads.then_some(Role::Read)) {
     lines.send(serde_json::to_string(&request)?).await?;
   }
+  // The program of the daemon, as its welcome names it, until the welcome comes.
+  let mut daemon = None;
+  let mut follow = time::interval(FOLLOW);
   loop {
-    match future::select(pin!(outgoing.recv()), lines.next()).await {
-      Either::Left((request, reading)) => {
-        drop(reading);
+    tokio::select! {
+      request = outgoing.recv() => {
         let request = request.ok_or(Error::Closed)?;
         lines.send(serde_json::to_string(&request)?).await?;
       }
-      Either::Right((line, _)) => {
-        let line = line.ok_or(Error::Closed)??;
-        if tell.send(Ok(serde_json::from_str(&line)?)).await.is_err() {
+      read = lines.next() => {
+        let frame: Frame = serde_json::from_str(&read.ok_or(Error::Closed)??)?;
+        match &frame {
+          Frame::Reply { answer: Answer::Welcome { program, .. }, .. } => {
+            daemon = Some(program.clone());
+          }
+          // A daemon of an older protocol refuses the window and closes: its program is not the
+          // one that serves it now.
+          Frame::Refused { error: ProtocolError::Protocol { ours, .. }, .. } if *ours < PROTOCOL => {
+            daemon = Some(None);
+          }
+          _ => {}
+        }
+        if tell.send(Ok(frame)).await.is_err() {
           return Err(Error::Closed);
         }
       }
+      _ = follow.tick() => {}
     }
+    if let Some(program) = &daemon {
+      link.followed(program.as_deref()).map_err(Error::Upgrade)?;
+    }
+  }
+}
+
+/// The connection to one machine as the task holds it from one dial to the next: the machine, the
+/// wait before its next dial, the program that serves its daemon at the last look, and the program
+/// that the window last asked the handover of.
+struct Link {
+  machine: Machine,
+  wait: Duration,
+  seen: Option<String>,
+  asked: Option<String>,
+}
+
+impl Link {
+  /// The handover asked of the program that serves the daemon, once it holds a build that the
+  /// daemon does not run and stood still since the last look, so the build wrote it whole. The
+  /// window asks it once for each build, so a program that fails to take the place of the daemon
+  /// is not asked again, and its failure ends the connection with its reason.
+  fn followed(&mut self, daemon: Option<&str>) -> io::Result<()> {
+    let now = self.machine.program();
+    let still = now.is_some() && now == self.seen;
+    let asks = still && now.as_deref() != daemon && now != self.asked;
+    self.seen.clone_from(&now);
+    if asks {
+      self.asked = now;
+      self.machine.upgrade()?;
+    }
+    Ok(())
   }
 }
 

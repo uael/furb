@@ -3,13 +3,10 @@
 //! the new program, which opens where this one stood: on the same thread, at the same place of its
 //! feed, with the same draft. A person who works on furb from its window sees each build at once.
 
-use std::{
-  fs,
-  path::{Path, PathBuf},
-  time::SystemTime,
-};
+use std::path::{Path, PathBuf};
 
 use furb_client::{Key, Opened, Place};
+use furb_host::built;
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
@@ -33,33 +30,24 @@ pub(crate) fn file_of(kept: &Path) -> PathBuf {
   kept.with_file_name("reload.json")
 }
 
-/// What says that a program changed: the time of its last write and its size, none while it
-/// cannot be read, as while a build replaces it.
-type Stamp = Option<(SystemTime, u64)>;
-
-fn stamp(program: &Path) -> Stamp {
-  let meta = fs::metadata(program).ok()?;
-  Some((meta.modified().ok()?, meta.len()))
-}
-
-/// The watch of the program of a window: its path, its stamp when the window opened, and its stamp
-/// at the last look.
+/// The watch of the program of a window: its path, its build when the window opened, and its
+/// build at the last look, as [`built`] gives them.
 pub(crate) struct Watch {
   program: PathBuf,
-  born: Stamp,
-  seen: Stamp,
+  born: Option<String>,
+  seen: Option<String>,
 }
 
 impl Watch {
   pub(crate) fn new(program: PathBuf) -> Self {
-    let born = stamp(&program);
-    Self { program, born, seen: born }
+    let born = built(&program);
+    Self { program, seen: born.clone(), born }
   }
 
   /// Whether a build replaced the program and it held still since the last look, so the build
   /// wrote it whole.
   pub(crate) fn replaced(&mut self) -> bool {
-    let now = stamp(&self.program);
+    let now = built(&self.program);
     let still = now.is_some() && now != self.born && now == self.seen;
     self.seen = now;
     still

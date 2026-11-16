@@ -271,7 +271,13 @@ impl Daemon {
   /// no program, so a window that dials it while no daemon listens starts nothing, and dials it
   /// again.
   pub(crate) fn machine(&self, name: &str) -> Machine {
-    let served = Box::new(Command::new(self.yard.join("no-furb")));
+    self.served_by(name, &self.yard.join("no-furb"))
+  }
+
+  /// The machine of the daemon under a name, whose daemon a program serves, as `furb` beside the
+  /// window serves it.
+  pub(crate) fn served_by(&self, name: &str, program: &Path) -> Machine {
+    let served = Box::new(Command::new(program));
     Machine {
       name: name.to_owned(),
       reach: Reach::Here { folder: self.host.clone(), served },

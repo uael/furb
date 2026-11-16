@@ -163,6 +163,36 @@ impl Machine {
   }
 }
 
+impl Machine {
+  /// The build of the program that serves the daemon of this computer, as [`furb_host::built`]
+  /// gives it: none on the tailnet, where the window starts nothing, and none while the program
+  /// cannot be read, as while a build replaces it.
+  pub(crate) fn program(&self) -> Option<String> {
+    let Reach::Here { served, .. } = &self.reach else { return None };
+    furb_host::built(Path::new(served.as_std().get_program()))
+  }
+
+  /// The daemon of this computer handed to the program that serves it, as `furb host upgrade` does:
+  /// in a group of its own, as [`started`] starts a daemon, so it outlives the window and no end of
+  /// a command reaches it. The daemon that runs ends each life with its image and gives it, and
+  /// each window dials the new one.
+  pub(crate) fn upgrade(&self) -> io::Result<()> {
+    let Reach::Here { folder, served } = &self.reach else { return Ok(()) };
+    let mut upgrade = Command::new(served.as_std().get_program());
+    upgrade.args(["host", "upgrade"]);
+    for (key, value) in served.as_std().get_envs() {
+      match value {
+        Some(value) => upgrade.env(key, value),
+        None => upgrade.env_remove(key),
+      };
+    }
+    let mut child = started(folder, &mut upgrade)?;
+    // The new daemon outlives the window; the task only reaps it if it ends first.
+    drop(tokio::spawn(async move { child.wait().await }));
+    Ok(())
+  }
+}
+
 /// The daemon as a process of its own, which outlives the window: in a group of its own, so no
 /// signal of the terminal of the window reaches it, with what it says in the log of its folder.
 /// The folder is of the user alone, as the daemon asks of the folder where it listens.

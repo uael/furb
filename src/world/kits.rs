@@ -298,6 +298,7 @@ impl Kits {
       peer,
       machine: String::new(),
       build: env!("CARGO_PKG_VERSION").to_owned(),
+      program: None,
       capabilities: CAPABILITIES.map(str::to_owned).to_vec(),
       folders: Some(folders),
       home: None,

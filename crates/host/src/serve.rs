@@ -6,13 +6,14 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  env,
+  env, fs,
   future::Future,
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{
-    Arc,
+    Arc, LazyLock,
     atomic::{AtomicUsize, Ordering},
   },
+  time::UNIX_EPOCH,
 };
 
 use futures::{SinkExt, StreamExt, stream::FuturesUnordered};
@@ -217,6 +218,7 @@ fn welcome(peer: &Peer, home: Option<PathBuf>) -> Answer {
     peer: peer.clone(),
     machine,
     build,
+    program: PROGRAM.clone(),
     capabilities: Vec::new(),
     folders: None,
     home: home.map(|one| one.display().to_string()),
@@ -231,6 +233,20 @@ pub(crate) fn home_folder() -> Option<PathBuf> {
 
 /// The build of the daemon: the version of furb that serves it.
 pub const BUILD: &str = env!("CARGO_PKG_VERSION");
+
+/// The program of this process as it stood when the daemon started, as [`built`] gives it: a build
+/// may replace the file while the daemon runs.
+pub(crate) static PROGRAM: LazyLock<Option<String>> =
+  LazyLock::new(|| env::current_exe().ok().as_deref().and_then(built));
+
+/// What says which build a program is: its size and the time of its last write, none while it
+/// cannot be read, as while a build replaces it. Two builds of furb never have both the same.
+#[must_use]
+pub fn built(program: &Path) -> Option<String> {
+  let meta = fs::metadata(program).ok()?;
+  let written = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
+  Some(format!("{}-{}", meta.len(), written.as_nanos()))
+}
 
 /// The name of the machine of the daemon, without its domain.
 pub fn machine() -> String {
