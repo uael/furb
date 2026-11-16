@@ -10,6 +10,7 @@
 use std::{mem, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use furb_wire::renaming;
 use furb_wire::{PICTURE, anchor::Anchor, protocol::BOUND};
 use jiff::Timestamp;
 use serde_json::Value;
@@ -21,6 +22,10 @@ const STASH: usize = 50;
 
 /// The start of a message that asks its question aside, in a fork of the chain of the open thread.
 pub const ASIDE: &str = "/btw ";
+
+/// The start of a message that names the session, as a word of his on its root: the rest of the
+/// message is the name, and an empty rest takes the default name again.
+pub const RENAME: &str = "/rename";
 
 /// The sign of a long text that a paste folded into one mark, before its name.
 pub const FOLDED: &str = "≡ ";
@@ -141,6 +146,11 @@ impl Client {
     if let Some(why) = self.fault_of(at, &life) {
       return Err(format!("Nothing went: {why}"));
     }
+    if let Some(word) = self.renamed(&text) {
+      let (thread, text) = (None, word?);
+      self.outgoing.push_back(Outgoing { at, life, thread, text, python: true, images: vec![] });
+      return Ok(());
+    }
     self.hold((at, life.clone()), cwd, self.moved);
     let chosen = self.chosen.take_if(|one| one.life.is_none() && one.at == at);
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
@@ -206,6 +216,27 @@ impl Client {
     self.thread.as_ref().filter(|one| self.aim.is_none() && !one.thread.key.2.is_empty())?;
     let question = Value::String(question.to_owned());
     Some(Ok(format!("prompt(str, {question}, on=chain('btw', source=__name__))")))
+  }
+
+  /// The word that names the session for a message that starts with `/rename`, which runs on the
+  /// root, where the session folds its name from, or why it cannot: a session that no message
+  /// started yet has no root to name.
+  fn renamed(&self, text: &str) -> Option<Result<String, String>> {
+    let rest = text.strip_prefix(RENAME).filter(|rest| rest.is_empty() || rest.starts_with(' '));
+    let name = rest.filter(|_| !self.draft.python)?.trim();
+    Some(if matches!(self.target(), Target::New(..)) {
+      Err("A new session takes its name from its first message: send one first.".to_owned())
+    } else {
+      Ok(renaming(name))
+    })
+  }
+
+  /// The input turned to name the session: `/rename ` and the name that the session has now, which
+  /// he writes over.
+  pub fn rename_draft(&mut self) {
+    let key = self.thread.as_ref().map(|one| one.thread.key.clone());
+    let name = key.and_then(|key| self.card(&key)?.session.clone()).unwrap_or_default();
+    self.restore = Some(format!("{RENAME} {name}"));
   }
 
   /// The draft emptied into the stash, so no text that he wrote is lost: the last of the stash at

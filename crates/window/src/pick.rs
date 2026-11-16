@@ -169,6 +169,22 @@ const FRAME: usize = 7;
 const USED: &str = " · in use";
 
 impl Pick {
+  /// The list part that a key opens, if it opens one.
+  pub(crate) const fn of(does: Does) -> Option<Self> {
+    Some(match does {
+      Does::Sessions => Self::Sessions,
+      Does::GoTo => Self::GoTo,
+      Does::Machines => Self::Machines,
+      Does::Projects => Self::Projects,
+      Does::History => Self::History,
+      Does::Model => Self::Models,
+      Does::Settings => Self::Settings,
+      Does::Skills => Self::Skills,
+      Does::Keys => Self::Keys,
+      _ => return None,
+    })
+  }
+
   /// Whether each entry of the list is a thing that says what it does, as a setting or an
   /// extension, so what it says stands whole under its name, as a page of settings shows it.
   fn describes(self) -> bool {

@@ -43,7 +43,7 @@ pub use context::{Content, Parts, Split};
 pub use furb_wire::PICTURE;
 pub use furb_wire::anchor::{Anchor, Where};
 pub use history::{History, Walk};
-pub use input::{ASIDE, Draft, FOLD, FOLDED, Folded, Pasted};
+pub use input::{ASIDE, Draft, FOLD, FOLDED, Folded, Pasted, RENAME};
 pub use inspect::Inspection;
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};

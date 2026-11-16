@@ -4,6 +4,8 @@
 
 use std::time::Duration;
 
+use serde_json::Value;
+
 /// A count of seconds as a person reads it: `4 s`, `1m 05s`, `2h 03m`.
 pub fn timer(seconds: u64) -> String {
   match seconds {
@@ -101,4 +103,21 @@ pub fn percent(part: u64, whole: u64) -> u64 {
 pub fn homed(text: &str, home: &str) -> String {
   let text = text.replace(&format!("{home}/"), "~/").replace(&format!("{home}\\"), "~\\");
   if text == home { "~".to_owned() } else { text }
+}
+
+/// The word of a rung of the operator that names a session, with the name in JSON between its two
+/// parts: the act `rename_session` on the chain of the rung, which the root folds.
+const RENAMING: (&str, &str) =
+  ("act(\"rename_session\", \"\", lambda id: (yield \"done\", id, ", "))");
+
+/// The word of the operator on the root that names the session, which an empty name gives back
+/// its default name.
+pub fn renaming(name: &str) -> String {
+  format!("{}{}{}", RENAMING.0, Value::String(name.to_owned()), RENAMING.1)
+}
+
+/// The name that a word says, when it is the word that names a session.
+pub fn renamed(word: &str) -> Option<String> {
+  let inner = word.strip_prefix(RENAMING.0)?.strip_suffix(RENAMING.1)?;
+  serde_json::from_str::<String>(inner).ok()
 }

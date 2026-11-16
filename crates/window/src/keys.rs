@@ -68,6 +68,7 @@ pub(crate) enum Does {
   Skills,
   Queue,
   Pause,
+  Rename,
 }
 
 /// One stroke of a key: whether it holds control, alt and command, and its key. Command is the
@@ -193,6 +194,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Picture, "paste the image of the clipboard", Some("paste"), &[&[ctrl('v')]]),
   bound(Does::Leave, "leave, twice on an empty input", Some("quit"), &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", Some("session"), &[&led('o')]),
+  bound(Does::Rename, "name the session", Some("rename"), &[&led('n')]),
   bound(Does::Python, "a word of Python, and back to a message", Some("python"), &[&led('y')]),
   bound(Does::Machines, "the machine of a new session", Some("machine"), &[&led('h')]),
   bound(Does::Projects, "the project of a new session", Some("project"), &[&led('p')]),

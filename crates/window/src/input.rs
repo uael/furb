@@ -4,13 +4,13 @@
 
 use std::{mem, ops::Range, path::Path};
 
-use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, timer};
+use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, said, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Target, Where};
+use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, RENAME, Target, Where};
 
 use crate::{
   keys::Does,
@@ -1104,7 +1104,9 @@ impl Model {
     else {
       return (Vec::new(), None);
     };
-    let text = word.text.trim().replace('\n', "\\n");
+    // The word that names the session reads as the command that he wrote.
+    let text = said(&word.text)
+      .map_or_else(|| word.text.trim().replace('\n', "\\n"), |name| format!("{RENAME} {name}"));
     let (head, loader) = match &word.ran {
       None => (vec![run("    ", muted)], Some((2, Loader::Command))),
       Some(RunState::Running | RunState::Done) => (vec![run("  ✓ ", muted)], None),

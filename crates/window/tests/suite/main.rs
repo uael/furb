@@ -21,6 +21,7 @@ mod palette;
 mod part;
 mod prose;
 mod question;
+mod rename;
 mod screens;
 mod settings;
 mod skills;

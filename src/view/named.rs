@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use furb_wire::renamed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -18,10 +19,6 @@ const ROOT: &str = "chain1";
 const RENAME: &str = "rename_session";
 /// The kind of the act by which the extension naming names a session.
 pub const NAME: &str = "name_session";
-
-/// The word of a rung of the operator that names a session, with the name in JSON between its two
-/// parts.
-const WORD: (&str, &str) = ("act(\"rename_session\", \"\", lambda id: (yield \"done\", id, ", "))");
 
 /// The name that a session has, from the acts of its root as they come: the name that the operator
 /// said and the name that the extension naming gave, each the last of its kind by the place that
@@ -95,6 +92,5 @@ impl Named {
 
 /// The name that the word of a rung says, when it is the word that names a session.
 pub fn said(word: &str) -> Option<String> {
-  let inner = word.strip_prefix(WORD.0)?.strip_suffix(WORD.1)?;
-  serde_json::from_str::<String>(inner).ok()
+  renamed(word)
 }

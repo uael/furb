@@ -1150,6 +1150,9 @@ fn paged(app: &App, window: &Shared, up: bool) {
 fn act(app: &App, window: &Shared, does: Does) {
   let forgot = window.borrow_mut().screen.model.pressed(does);
   asked(window, does);
+  if let Some(pick) = Pick::of(does) {
+    return changed(app, window, does, |model| model.pick(pick));
+  }
   let change: fn(&mut Model) = match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
@@ -1157,22 +1160,14 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::List => Model::toggle,
     Does::Jump => Model::jump,
     Does::NewThread => |model| model.client.turn(),
-    Does::Sessions => |model| model.pick(Pick::Sessions),
-    Does::GoTo => |model| model.pick(Pick::GoTo),
-    Does::Machines => |model| model.pick(Pick::Machines),
-    Does::Projects => |model| model.pick(Pick::Projects),
-    Does::History => |model| model.pick(Pick::History),
-    Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
-    Does::Settings => |model| model.pick(Pick::Settings),
-    Does::Skills => |model| model.pick(Pick::Skills),
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
     Does::Chains => |model| model.client.chains(),
     Does::Aside => |model| model.client.aside_draft(),
+    Does::Rename => |model| model.client.rename_draft(),
     Does::Running => Model::act_on_open,
-    Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
     Does::Forward => Model::forward,
@@ -1192,15 +1187,30 @@ fn act(app: &App, window: &Shared, does: Does) {
     }
     Does::Leave => return left(app, window),
     Does::PageUp | Does::PageDown => return paged(app, window, does == Does::PageUp),
-    // The keys of a form, of a list part and of the input, which the key that heard them did.
+    // The keys of a form, of a list part and of the input, which the key that heard them did, and
+    // the keys that open a list part, which the start of this function took.
     Does::Up
     | Does::Down
     | Does::Lean
     | Does::Tick
     | Does::NextQuestion
     | Does::Take
-    | Does::TakeWord => return,
+    | Does::TakeWord
+    | Does::Sessions
+    | Does::GoTo
+    | Does::Machines
+    | Does::Projects
+    | Does::History
+    | Does::Model
+    | Does::Settings
+    | Does::Skills
+    | Does::Keys => return,
   };
+  changed(app, window, does, change);
+}
+
+/// The change that a key makes to the window, then the thread that it opens.
+fn changed(app: &App, window: &Shared, does: Does, change: impl FnOnce(&mut Model)) {
   if matches!(does, Does::Next | Does::Previous | Does::Needed) {
     window.borrow_mut().touched = Some(app.now());
   }

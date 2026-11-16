@@ -1,12 +1,12 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb
 
   Nothing needs you.
   ● 1 session r
                  Each key
-  ⌃P          g  ▌Search a key                                              1 / 32
+  ⌃P          g  ▌Search a key                                              1 / 33
   ⌃X ?        e
                  Go                                                                 ┃
                  ▌⌃P or ⌃O    go to anything, or run a command                      ┃
