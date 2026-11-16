@@ -44,6 +44,8 @@ pub(crate) enum Pick {
   Projects,
   /// The models of the machine of the input, each provider once.
   Models,
+  /// The efforts of the model of the input.
+  Efforts,
   /// What he sent where the input sends, the newest first.
   History,
   /// What the operator does to one session that runs.
@@ -178,6 +180,7 @@ impl Pick {
       Does::Projects => Self::Projects,
       Does::History => Self::History,
       Does::Model => Self::Models,
+      Does::Effort => Self::Efforts,
       Does::Settings => Self::Settings,
       Does::Skills => Self::Skills,
       Does::Keys => Self::Keys,
@@ -199,6 +202,7 @@ impl Pick {
       Self::Machines => "Machines",
       Self::Projects => "Projects",
       Self::Models => "Models",
+      Self::Efforts => "Effort",
       Self::History => "History",
       Self::Session => "The session",
       Self::Leave => "Leave the window",
@@ -215,6 +219,7 @@ impl Pick {
       Self::Machines => "Search a machine",
       Self::Projects => "Search a project",
       Self::Models => "Search a model",
+      Self::Efforts => "Search an effort",
       Self::History => "Search what you sent here",
       Self::Session | Self::Leave => "Search a choice",
       Self::Settings => "Search a setting",
@@ -229,7 +234,7 @@ impl Pick {
       Self::GoTo => "open",
       Self::Keys => "run",
       Self::Sessions | Self::Machines | Self::Projects => "send there",
-      Self::Models => "take it",
+      Self::Models | Self::Efforts => "take it",
       Self::History => "write it",
       Self::Session | Self::Leave => "do it",
       Self::Settings => "change it",
@@ -253,6 +258,10 @@ impl Model {
     if of == Pick::History {
       self.client.ask_history();
     }
+    if of == Pick::Efforts && self.efforts().is_empty() {
+      self.client.notice = Some("This model takes no effort.".to_owned());
+      return;
+    }
     if matches!(of, Pick::Settings | Pick::Skills)
       && let Err(why) = self.client.read_settings(of == Pick::Skills)
     {
@@ -269,7 +278,7 @@ impl Model {
     let entries = self.entries();
     let at = entries.iter().position(|one| match of {
       Pick::Sessions => one.choice == Choice::Session(now.clone()),
-      Pick::Models => one.says.ends_with(USED),
+      Pick::Models | Pick::Efforts => one.says.ends_with(USED),
       _ => false,
     });
     if let (Some(at), Some(picker)) = (at, self.picker.as_mut()) {
@@ -324,6 +333,7 @@ impl Model {
       Pick::Machines => self.machines(),
       Pick::Projects => self.projects(),
       Pick::Models => self.models(),
+      Pick::Efforts => self.efforts(),
       Pick::History => self.sent(),
       Pick::Session => self.session_choices(),
       Pick::Leave => self.leave_choices(),
@@ -634,6 +644,29 @@ impl Model {
       entries.extend(self.sign_in_rows());
     }
     entries
+  }
+
+  /// The efforts that the catalog of its machine gives the model of the input, in its order: the
+  /// one in use in the accent, and the one that the model takes when the operator names none
+  /// marked so.
+  fn efforts(&self) -> Vec<Entry> {
+    let Some((model, effort)) = self.actor() else { return Vec::new() };
+    let offered = self.client.machines.get(self.client.target().machine());
+    let mut offered = offered.and_then(|told| told.models.as_ref()).into_iter().flatten();
+    let Some(one) = offered.find(|one| one.name == model) else { return Vec::new() };
+    let wide = one.efforts.iter().map(|name| name.width()).max().unwrap_or_default();
+    let entry = |name: &String| {
+      let used = effort.as_ref() == Some(name);
+      let default = if one.effort.as_ref() == Some(name) { "  default" } else { "" };
+      Entry {
+        left: format!("{name:<wide$}"),
+        says: if used { format!("{default}{USED}") } else { default.to_owned() },
+        tone: used.then_some(self.tokens.accent),
+        choice: Choice::Actor(format!("{model}/{name}")),
+        ..Entry::default()
+      }
+    };
+    one.efforts.iter().map(entry).collect()
   }
 
   /// The chosen model of the list of the models at a lower or a higher effort, among those that the

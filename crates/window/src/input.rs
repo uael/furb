@@ -909,22 +909,6 @@ impl Model {
     last.or_else(|| offered.first().map(|one| (one.name.clone(), one.effort.clone())))
   }
 
-  /// The model of the target of the input at its next effort, from the least again after the
-  /// most, as the catalog of its machine gives its efforts.
-  pub(crate) fn effort(&mut self) {
-    let at = self.client.target().machine();
-    let Some((model, effort)) = self.actor() else { return };
-    let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
-    let efforts = offered.and_then(|all| all.iter().find(|one| one.name == model));
-    let Some(efforts) = efforts.map(|one| &one.efforts).filter(|all| !all.is_empty()) else {
-      self.client.notice = Some("This model takes no effort.".to_owned());
-      return;
-    };
-    let now = effort.and_then(|effort| efforts.iter().position(|one| *one == effort));
-    let next = &efforts[now.map_or(0, |now| (now + 1) % efforts.len())];
-    self.took_actor(format!("{model}/{next}"));
-  }
-
   /// An actor that the operator chose for the target of the input: a new session opens on it, and
   /// a life that stands takes it on its root, as a word of the operator.
   pub(crate) fn took_actor(&mut self, actor: String) {

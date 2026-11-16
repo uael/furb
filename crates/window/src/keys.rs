@@ -218,7 +218,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Projects, "the project of a new session", Some("project"), &[&led('p')]),
   bound(Does::History, "search what you sent here", Some("history"), &[&[ctrl('r')]]),
   bound(Does::Model, "the model of the input", Some("model"), &[&led('m')]),
-  bound(Does::Effort, "the next effort of the model", Some("effort"), &[&led('e')]),
+  bound(Does::Effort, "the efforts of the model", Some("effort"), &[&led('e')]),
   bound(Does::Changes, "the changes of the project and their diff", Some("changes"), &[&led('g')]),
   bound(Does::Settings, "the settings of the session", Some("config"), &[&led(',')]),
   bound(Does::Skills, "the extensions, on or off", Some("extensions"), &[&led('x')]),

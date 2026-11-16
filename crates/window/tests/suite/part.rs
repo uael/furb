@@ -199,10 +199,14 @@ fn a_model_chosen_on_a_thread_answers_its_next_message() {
 
 #[cfg(unix)]
 #[test]
-fn a_click_on_the_effort_takes_the_next_effort_of_the_model() {
+fn a_click_on_the_effort_opens_the_efforts_of_the_model_on_the_one_in_use() {
   let (app, _daemon) = offered();
   // The home names the effort in its words first, at the left of the launcher.
   clicked(&app, "high", 40, 0);
+  let frame = shows(&app, "Search an effort");
+  assert!(frame.contains("▌high"), "{frame}");
+  app.press("down");
+  app.press("enter");
   let frame = shows(&app, "with opus at xhigh effort.");
   assert!(frame.contains("opus  xhigh"), "{frame}");
 }

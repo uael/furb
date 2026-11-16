@@ -1269,7 +1269,6 @@ fn change_of(does: Does) -> Option<fn(&mut Model)> {
     Does::List => Model::toggle,
     Does::Jump => Model::jump,
     Does::NewThread => |model| model.client.turn(),
-    Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
     Does::Views => Model::reach_views,
     Does::Context => Model::context_step,
