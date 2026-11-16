@@ -2281,7 +2281,8 @@ async def test_an_act_of_a_step_is_each_question_that_it_made_and_each_control_t
 
 async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears_on() -> None:
   """The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, and of the rung that it advanced and that has no reply yet, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run."""
-  raised = "chain1 raised TypeError(\"expected string or bytes-like object, got 'int'\")"
+  raised = "chain1 raised AttributeError(\"'int' object has no attribute 'removeprefix'\")"
+  replied = "chain1 raised TypeError(\"expected string or bytes-like object, got 'int'\")"
   word = "try:\n  write(Text('prompt1', 5))\nexcept Refused:\n  pass\nclose(3)"
 
   async def asked(answer: object) -> tuple[Sand, list[tuple], str, str, list[str]]:
@@ -2328,8 +2329,8 @@ async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears
   assert (await strayed("nobody"))[1] == then
   sand, log, root, prompt, after = await asked(("assistant", 5, (0, 0, 0, 0, 0.0), []))
   assert engine.module(root)["why"] == raised
-  assert repr(engine.peek(said(log, "reply")[0][2])) == repr(Refused(raised)) and engine.peek(prompt) == 3
-  assert (*(await asked(Refused(raised)))[4:],) == (after,)
+  assert repr(engine.peek(said(log, "reply")[0][2])) == repr(Refused(replied)) and engine.peek(prompt) == 3
+  assert (*(await asked(Refused(replied)))[4:],) == (after,)
   assert engine.read(prompt, on=root).content == word
   assert await asyncio.wait_for(engine.rung("close(2)", on=root), 2) == 2
   _, over = await relived(Sand(), plain(sand.record))

@@ -688,7 +688,7 @@ def prompted(name):
 
 
 def question(a):
-  return bool(re.fullmatch(a[0] + r"\d+", a[1]))
+  return a[1].removeprefix(a[0]).isdecimal()
 
 
 def scope(name):
