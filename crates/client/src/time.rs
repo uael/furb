@@ -193,15 +193,15 @@ impl Time {
   pub fn zoomed(&mut self, closer: bool, around: usize) {
     let last = self.moments.len().saturating_sub(1);
     let (first, end) = self.shown();
-    let length = end - first;
-    let length = if closer { (length / 2).max(CLOSEST) } else { length.saturating_mul(2) };
+    let before = end - first;
+    let length = if closer { (before / 2).max(CLOSEST) } else { before.saturating_mul(2) };
     if length >= last {
       self.zoom = None;
       return;
     }
     // The place keeps its share of the track, so what stood under the pointer stays there.
-    let share = (around.saturating_sub(first)) as f64 / length.max(1) as f64;
-    let wanted = around.saturating_sub((share.min(1.0) * length as f64) as usize);
+    let into = around.saturating_sub(first).min(before);
+    let wanted = around.saturating_sub(into * length / before.max(1));
     let first = wanted.min(last - length);
     self.zoom = Some((first, first + length));
   }
