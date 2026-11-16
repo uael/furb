@@ -114,18 +114,7 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
     names,
-    [
-      "provider",
-      "extensions",
-      "skills",
-      "kits",
-      "fetch",
-      "files",
-      "bash",
-      "time",
-      "store",
-      "log"
-    ]
+    ["provider", "extensions", "skills", "kits", "fetch", "files", "bash", "time", "store", "log"]
   );
   drop(ears);
   let (mut engine, _) = opening(&at, true).boot([("mine", mine())]).unwrap();
