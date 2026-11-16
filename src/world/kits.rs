@@ -24,9 +24,9 @@ use std::{
   collections::{HashMap, VecDeque},
   env,
   ffi::OsStr,
-  fs,
+  fs, io,
   path::{Path, PathBuf},
-  process::Stdio,
+  process::{ExitStatus, Stdio},
 };
 
 mod uv;
@@ -36,7 +36,7 @@ use furb_wire::{
   event::Event as Told,
   protocol::{Answer, Config, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
 };
-use futures::{StreamExt, stream};
+use futures::{FutureExt, StreamExt, future::Shared, stream};
 use serde_json::{Value, json};
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
@@ -75,6 +75,10 @@ const SCRIPTS: [&str; 6] = ["ts", "tsx", "mts", "js", "mjs", "cjs"];
 /// life, and how many characters of each line.
 const TAIL: usize = 20;
 const WIDTH: usize = 1000;
+
+/// How long a process of a kit has to end its own work once the ear stopped it: the SDK of MCP
+/// gives a server 2 seconds after its stdin closes, then 2 more after a SIGTERM.
+const GRACE: Duration = Duration::from_secs(5);
 
 /// How long the ear reads what stays of the stderr of a process that ended: a process that left
 /// its group can hold the pipe open.
@@ -230,12 +234,13 @@ impl Kits {
     let program = kit.as_ref().map(|one| one.program.clone()).unwrap_or_default();
     let (stdin, lines) = mpsc::unbounded_channel();
     let (stop, stopped) = oneshot::channel();
-    let (life, name) = (self.life.clone(), name.clone());
+    let (life, name, stopped) = (self.life.clone(), name.clone(), stopped.shared());
+    let ending = stopped.clone();
     let work = stream::once(async move {
       match spawned(&life, &name, &program).await {
         Ok((mut child, group)) => {
           runtime().spawn(written(child.stdin.take(), lines));
-          ran(name, program, child, group)
+          ran(name, program, (child, group), ending)
         }
         Err(no) => {
           let why = format!("The process {} of the kit {name} {no}", program.display());
@@ -440,13 +445,13 @@ async fn written(input: Option<ChildStdin>, mut lines: mpsc::UnboundedReceiver<S
 }
 
 /// The lines that a process writes on its stdout, then its end, told with its exit and the last
-/// lines of its stderr. The group of the process ends with the stream, so a stop of the work ends
-/// the process with each process that it started.
+/// lines of its stderr. A stop of the work ends the process with each process that it started, as
+/// [`waited`] says.
 fn ran(
   name: String,
   program: PathBuf,
-  mut child: Child,
-  group: Group,
+  (mut child, group): (Child, Group),
+  stopped: Shared<oneshot::Receiver<()>>,
 ) -> stream::LocalBoxStream<'static, Worked> {
   let stderr = runtime().spawn(tail(child.stderr.take()));
   let lines = child.stdout.take().map(|one| BufReader::new(one).lines());
@@ -457,10 +462,9 @@ fn ran(
   });
   let line_of = name.clone();
   let said = said.map(move |line| Worked::Line(line_of.clone(), line));
+  let waiting = runtime().spawn(waited(child, group, stopped));
   let end = stream::once(async move {
-    let mut group = group;
-    let status = child.wait().await;
-    let slain = group.slay().err().map(|no| format!(" Its group stays: {no}."));
+    let (status, slain) = waiting.await.unwrap_or_else(|no| (Err(io::Error::other(no)), None));
     let lines = timeout(DRAIN, stderr).await.ok().and_then(Result::ok).unwrap_or_default();
     let exit = status
       .map_or_else(|no| format!("no status that furb could read ({no})"), |one| one.to_string());
@@ -476,6 +480,26 @@ fn ran(
     Worked::Ended(name, why)
   });
   said.chain(end).boxed_local()
+}
+
+/// The exit of the process of a kit, and why its group stays when it does. A stop of the ear closes
+/// the stdin of the process, which then ends its own work, as the servers that the process
+/// started in a session of their own, within [`GRACE`]; after it, the ear ends the process. The
+/// group ends either way, with each process left in it. This runs on the runtime, so it goes on
+/// past the end of the ear that stopped.
+async fn waited(
+  mut child: Child,
+  mut group: Group,
+  stopped: Shared<oneshot::Receiver<()>>,
+) -> (io::Result<ExitStatus>, Option<String>) {
+  let status = tokio::select! {
+    status = child.wait() => status,
+    _ = stopped => match timeout(GRACE, child.wait()).await {
+      Ok(status) => status,
+      Err(_) => child.kill().await.and(child.wait().await),
+    },
+  };
+  (status, group.slay().err().map(|no| format!(" Its group stays: {no}.")))
 }
 
 /// The last lines that a process wrote on its stderr, until the pipe closes or fails.

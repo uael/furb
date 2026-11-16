@@ -60,6 +60,7 @@ from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
+from mcp.client.subscriptions import ListenNotSupportedError, SubscriptionLost
 from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from mcp.shared.exceptions import MCPError
 from mcp.shared.message import SessionMessage
@@ -1410,6 +1411,14 @@ class Hub:
       if isinstance(method, str) and method.endswith("/list_changed"):
         news.put_nowait(method)
 
+    async def subscribed(client: Client) -> None:
+      # A server of the protocol of 2026-07-28 sends the change of a list only while a stream of the client listens,
+      # and the change then reaches `heard` too, as the notification of an older server does.
+      with contextlib.suppress(ListenNotSupportedError, SubscriptionLost, MCPError):
+        async with client.listen(tools_list_changed=True, prompts_list_changed=True, resources_list_changed=True) as on:
+          async for _ in on:
+            pass
+
     async def roots(context: ClientRequestContext) -> types.ListRootsResult:
       del context
       project = self.places.project.resolve()
@@ -1432,6 +1441,8 @@ class Hub:
           )
           why = f"{run.command} did not start: {unborn}" if unborn else said(no) + stderr(errors)
           raise Refused(why) from no
+        listening = asyncio.ensure_future(subscribed(client))
+        stack.callback(listening.cancel)
         info = client.server_info
         entry.version, entry.instructions = (info.version if info else "") or "", client.instructions or ""
         entry.offered, entry.client = offered, client
