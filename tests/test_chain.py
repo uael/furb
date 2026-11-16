@@ -2280,21 +2280,40 @@ async def test_an_act_of_a_step_is_each_question_that_it_made_and_each_control_t
 
 
 async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears_on() -> None:
-  """The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run."""
-  sand, log, root = born()
-  await engine.rung("try:\n  read(5)\nexcept Refused as no:\n  why = str(no)", on=root)
+  """The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, and of the rung that it advanced and that has no reply yet, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run."""
   raised = "chain1 raised TypeError(\"expected string or bytes-like object, got 'int'\")"
+  word = "try:\n  write(Text('prompt1', 5))\nexcept Refused:\n  pass\nclose(3)"
+
+  async def asked(answer: object) -> tuple[Sand, list[tuple], str, str, list[str]]:
+    sand, log, root = born()
+    await engine.rung("try:\n  read(5)\nexcept Refused as no:\n  why = str(no)", on=root)
+    asked = engine.prompt(int, "n", on=root)
+    await settle()
+    _, reply, rung, *_ = said(log, "reply")[-1]
+    at = len(log)
+    world_says("done", reply, answer)
+    await settle()
+    world_says("done", said(log, "reply")[-1][1], ("assistant", word, (0, 0, 0, 0, 0.0), []))
+    await settle()
+    return sand, log, root, asked, [repr(x) for x in log[at:] if x[0] != "keep" and x[1] not in (reply, rung)]
+
+  async def strayed(to: object) -> tuple[str, list[str]]:
+    _, log, root = born("close(3)")
+    await engine.rung(f"r = rung(to={to!r})", on=root)
+    await settle()
+    at = len(log)
+    assert await asyncio.wait_for(engine.prompt(int, "n", on=root), 2) == 3
+    return repr(engine.peek(engine.module(root)["r"])), [repr(x) for x in log[at:] if x[0] != "keep"]
+
+  why, then = await strayed(5)
+  assert why == repr(Refused("chain1 raised TypeError(\"unsupported operand type(s) for +: 'int' and 'str'\")"))
+  assert (await strayed("nobody"))[1] == then
+  sand, log, root, prompt, after = await asked(("assistant", 5, (0, 0, 0, 0, 0.0), []))
   assert engine.module(root)["why"] == raised
-  asked = engine.prompt(int, "n", on=root)
-  await settle()
-  first = said(log, "reply")[-1]
-  world_says("done", first[1], ("assistant", 5, (0, 0, 0, 0, 0.0), []))
-  await settle()
-  assert repr(engine.peek(first[2])) == repr(Refused(raised)) and not engine.over(root)
-  world_says("done", said(log, "reply")[-1][1], ("assistant", "close(3)", (0, 0, 0, 0, 0.0), []))
-  assert await asyncio.wait_for(engine.Act(asked), 2) == 3
-  assert engine.read(asked, on=root).content == "close(3)"
+  assert repr(engine.peek(said(log, "reply")[0][2])) == repr(Refused(raised)) and engine.peek(prompt) == 3
+  assert (*(await asked(Refused(raised)))[4:],) == (after,)
+  assert engine.read(prompt, on=root).content == word
   assert await asyncio.wait_for(engine.rung("close(2)", on=root), 2) == 2
   _, over = await relived(Sand(), plain(sand.record))
-  assert engine.module(over)["why"] == raised and engine.peek(asked) == 3
+  assert engine.module(over)["why"] == raised and engine.peek(prompt) == 3
   assert await asyncio.wait_for(engine.rung("close(4)", on=over), 2) == 4

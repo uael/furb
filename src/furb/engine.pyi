@@ -532,7 +532,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
   A chain is chainN whether boot or chain opened it, and the root is chain1.
   A chain is an act of Never, so the chain never completes.
-  The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run.
+  The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, and of the rung that it advanced and that has no reply yet, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run.
   The turns of a chain tell the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
   Nothing leaves a transcript once the transcript holds it.

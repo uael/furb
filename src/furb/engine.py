@@ -471,7 +471,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             plan = None
           case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
             yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
-          case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
+          case ("write", about, by, _, Text(path, str(content)) as text) if prompted(path) and scope(path) == id:
             under(by, path) and ladder.pop(by, None)
             yield from replay(path, content.rstrip("\n"))
             yield "done", about, text
@@ -559,7 +559,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           with site.set(lone):
             waiting[rung(to=get(lone)[6])] = ""
       except Exception as fault:
-        scope(a[1]) == id != a[1] and not over(a[1]) and (yield "done", a[1], Refused(f"{id} raised {fault!r}"))
+        for lost in a[1], step * (waiting.get(step) == ""):
+          scope(lost) == id != lost and not over(lost) and (yield "done", lost, Refused(f"{id} raised {fault!r}"))
 
   return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 
