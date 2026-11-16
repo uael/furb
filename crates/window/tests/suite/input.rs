@@ -920,7 +920,7 @@ fn the_mouse_alone_reaches_and_runs_each_command_of_go_to() {
   shows(&app, "Search a thread, session");
   assert!(!app.text().contains("The model of the input"), "the row is in view before the wheel");
   let (x, y) = at(&app, "Each key", 0);
-  for _ in 0..30 {
+  for _ in 0..40 {
     app.scroll(x, y, true);
   }
   shows(&app, "The model of the input");

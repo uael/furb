@@ -8,7 +8,7 @@ use std::{mem, process};
 use furb_wire::{
   Viewed,
   protocol::{
-    Dispose, Effect, Frame, Gesture, Mount, Node, Slot, Tree, Verb, ViewEffect, ViewEvent,
+    Dispose, Effect, Frame, Gesture, Mount, Node, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
   },
 };
 use serde_json::json;
@@ -36,6 +36,14 @@ impl View {
   }
 }
 
+/// A control of a view that the keys reach as a click does: a button, or an input with its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewControl {
+  pub viewer: String,
+  pub node: String,
+  pub value: Option<String>,
+}
+
 /// The node of a view whose input the input of the client fills: its viewer and its id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filled {
@@ -57,6 +65,67 @@ impl Client {
   fn drawn(&self) -> impl Iterator<Item = (&Key, &Viewed)> {
     let thread = self.thread.as_ref().map(|one| &one.thread);
     thread.into_iter().flat_map(|one| one.views.iter().map(|view| (&one.key, view)))
+  }
+
+  /// The controls of the views that show, in the order that they draw: each button and each
+  /// input that is not inert.
+  pub fn controls(&self) -> Vec<ViewControl> {
+    fn walk(viewer: &str, node: &Node, all: &mut Vec<ViewControl>) {
+      let (viewer, id) = (viewer.to_owned(), node.id.clone());
+      let nodes: Vec<&Node> = match &node.shape {
+        Shape::Button { inert: false, .. } => {
+          all.push(ViewControl { viewer, node: id, value: None });
+          return;
+        }
+        Shape::Input { value, inert: false, .. } => {
+          all.push(ViewControl { viewer, node: id, value: Some(value.clone()) });
+          return;
+        }
+        Shape::Box { children: nodes, .. } | Shape::List { items: nodes } => nodes.iter().collect(),
+        Shape::Table { rows, .. } => rows.iter().flatten().collect(),
+        _ => Vec::new(),
+      };
+      for one in nodes {
+        walk(&viewer, one, all);
+      }
+    }
+    let mut all = Vec::new();
+    for view in self.shown_views() {
+      if let Some(tree) = &view.tree {
+        walk(&view.viewer, tree, &mut all);
+      }
+    }
+    all
+  }
+
+  /// The control that the keys reach, while they reach one that still shows.
+  pub fn aimed_control(&self) -> Option<ViewControl> {
+    self.controls().into_iter().nth(self.aimed?)
+  }
+
+  /// The keys turned to the first control of the views, or back to the input; whether they reach
+  /// one.
+  pub fn aim_controls(&mut self) -> bool {
+    self.aimed = if self.aimed.is_none() && !self.controls().is_empty() { Some(0) } else { None };
+    self.aimed.is_some()
+  }
+
+  /// The keys moved to the control after, or before, the one that they reach, which stays at the
+  /// first and at the last.
+  pub fn step_control(&mut self, by: isize) {
+    let last = self.controls().len().saturating_sub(1);
+    self.aimed = self.aimed.map(|at| at.saturating_add_signed(by).min(last));
+  }
+
+  /// What Enter does to the control that the keys reach: it presses a button, or turns the input
+  /// of the client to an input, whose text Enter then gives it. The keys go back to the input.
+  pub fn use_control(&mut self) {
+    let Some(ViewControl { viewer, node, value }) = self.aimed_control() else { return };
+    self.aimed = None;
+    match value {
+      None => self.gesture(ViewEvent { viewer, node, kind: Gesture::Press, value: None }),
+      Some(value) => self.fill(Some(Filled { viewer, node }), value),
+    }
   }
 
   /// The life of the target of the input, on its machine: none for a new session.

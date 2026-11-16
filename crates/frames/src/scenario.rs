@@ -1142,6 +1142,12 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("b", &[Act::Pointer { on: "○ buy milk", button: 0 }], "✓ buy milk"),
         // The model adds a second task to the same list.
         step("c", &[Act::Type("Add walk the dog."), Act::Key("Enter")], "○ walk the dog"),
+        // The leader and V give the keys to the list: Down moves to a task, and Enter checks it.
+        step("g", &[Act::Key("C-x"), Act::Key("v")], "use · "),
+        step("h", &[Act::Key("Down"), Act::Key("Enter")], "✓ walk the dog"),
+        // Enter on the input of the list turns the input of the window to it, which adds a task.
+        step("i", &[Act::Key("C-x"), Act::Key("v"), Act::Key("Down"), Act::Key("Down")], ""),
+        step("j", &[Act::Key("Enter"), Act::Type("call mom"), Act::Key("Enter")], "○ call mom"),
         // A pause ends the life of the session.
         step("d", &[Act::Key("C-x"), Act::Key("s")], "Pause it"),
         step("e", &[Act::Type("pause"), Act::Key("Enter")], ""),

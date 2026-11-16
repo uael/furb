@@ -862,7 +862,7 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   // A letter after the leader is a key of the window, and no letter of a text.
   let typed =
     !led && key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
-  if answered(app, window, does, typed) {
+  if answered(app, window, does, typed) || reached(app, window, does) {
     return true;
   }
   match does {
@@ -1155,6 +1155,24 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
   }
 }
 
+/// A key while the keys reach a control of the views: the arrows move among the controls, Enter
+/// uses the one that they reach, and Escape gives the keys back to the input. Whether it took
+/// the key.
+fn reached(app: &App, window: &Shared, does: Option<Does>) -> bool {
+  if window.borrow().screen.model.client.aimed.is_none() {
+    return false;
+  }
+  let change: fn(&mut Model) = match does {
+    Some(Does::Up) => |model| model.client.step_control(-1),
+    Some(Does::Down) => |model| model.client.step_control(1),
+    Some(Does::Send) => |model| model.client.use_control(),
+    Some(Does::Close) => |model| model.client.aimed = None,
+    _ => return false,
+  };
+  tell(app, window, change);
+  true
+}
+
 /// The feed a page up or down. A page keeps two rows of the screen before it in view.
 fn paged(app: &App, window: &Shared, up: bool) {
   let verb = tell(app, window, |model| {
@@ -1181,6 +1199,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::NewThread => |model| model.client.turn(),
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
+    Does::Views => Model::reach_views,
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
     Does::Chains => |model| model.client.chains(),

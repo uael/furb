@@ -110,3 +110,36 @@ fn a_message_after_a_pause_opens_a_new_life_whose_thread_and_view_go_on() {
   let shown = shows(&app, "The open takes");
   assert!(shown.starts_with('●') && shown.contains("buy milk"), "{shown}");
 }
+
+#[test]
+fn the_keys_reach_each_control_of_a_view_as_a_click_does() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("keys.jsonl"), true);
+  peer.said(&life, "keep my list");
+  peer.ask(Verb::Run { life: life.clone(), word: VIEW.to_owned(), on: None });
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "keep my list"));
+  shows(&app, "buy milk");
+  // The leader and V give the keys to the first control, and the row under the view says them.
+  app.press("ctrl+x");
+  app.press("v");
+  shows(&app, "use · ");
+  // Escape gives the keys back to the input, and Enter then uses the control that they reach.
+  app.press("escape");
+  let back = app.wait_until(PATIENCE, || !app.text().contains("use · "));
+  assert!(back, "{}", app.text());
+  app.press("ctrl+x");
+  app.press("v");
+  shows(&app, "use · ");
+  app.press("enter");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("buy milk"));
+  assert!(gone, "{}", app.text());
+  let run = |word: &str| Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
+  peer
+    .ask(run("prompt(str, drawn('pressed ' + json.loads(peek(v))['node']), to=OPERATOR, on=side)"));
+  shows(&app, "pressed clear");
+}

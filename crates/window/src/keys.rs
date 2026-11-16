@@ -71,6 +71,7 @@ pub(crate) enum Does {
   Rename,
   Copy,
   Cd,
+  Views,
 }
 
 /// One stroke of a key: whether it holds control, alt and command, and its key. Command is the
@@ -199,6 +200,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Rename, "name the session", Some("rename"), &[&led('n')]),
   bound(Does::Cd, "move the chain of the thread to a folder", Some("cd"), &[&led('f')]),
   bound(Does::Copy, "copy what the thread said last", Some("copy"), &[&led('i')]),
+  bound(Does::Views, "reach the views of the session with the keys", Some("view"), &[&led('v')]),
   bound(Does::Python, "a word of Python, and back to a message", Some("python"), &[&led('y')]),
   bound(Does::Machines, "the machine of a new session", Some("machine"), &[&led('h')]),
   bound(Does::Projects, "the project of a new session", Some("project"), &[&led('p')]),

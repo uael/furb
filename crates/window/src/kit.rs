@@ -38,10 +38,32 @@ impl Model {
       rows.push(Row::default());
       rows.extend(self.node_rows(&view, tree, room));
     }
+    // While the keys reach a control, the row under the views says which keys move and use it,
+    // in the column of the text of the views.
+    if self.client.aimed_control().is_some() {
+      let keys = [Does::Up, Does::Down].map(|one| self.key(one)).concat();
+      let (send, close) = (self.key(Does::Send), self.key(Does::Close));
+      let said = format!("  {keys} move · {send} use · {close} back to the input");
+      rows.push(Row::of(vec![run(said, self.tokens.style(Role::Muted))]));
+    }
     if !rows.is_empty() {
       rows.push(Row::default());
     }
     rows
+  }
+
+  /// Whether the keys reach a node of a view.
+  fn reached(&self, view: &View, node: &Node) -> bool {
+    let aimed = self.client.aimed_control();
+    aimed.is_some_and(|one| one.viewer == view.viewer && one.node == node.id)
+  }
+
+  /// The keys turned to the controls of the views, or back to the input, and said when no view
+  /// shows.
+  pub(crate) fn reach_views(&mut self) {
+    if !self.client.aim_controls() && self.client.controls().is_empty() {
+      self.client.notice = Some("No view shows here.".to_owned());
+    }
   }
 
   /// The rows of one node of a view in a count of columns.
@@ -106,7 +128,11 @@ impl Model {
   /// presses it.
   fn button(&self, (view, node): (&View, &Node), (label, inert): (&str, bool), wide: usize) -> Row {
     let t = &self.tokens;
-    let style = if inert { t.style(Role::Muted) } else { t.style(Role::Button) };
+    let style = match (inert, self.reached(view, node)) {
+      (true, _) => t.style(Role::Muted),
+      (false, true) => t.style(Role::Button).fg(t.accent).bold(),
+      (false, false) => t.style(Role::Button),
+    };
     let text = format!(" {label} ");
     let pad = wide.saturating_sub(text.width());
     let line = vec![run(format!("{text}{}", " ".repeat(pad)), style)];
@@ -126,7 +152,8 @@ impl Model {
   ) -> Row {
     let t = &self.tokens;
     let filled = self.client.filled.as_ref();
-    let filled = filled.is_some_and(|one| one.viewer == view.viewer && one.node == node.id);
+    let filled = filled.is_some_and(|one| one.viewer == view.viewer && one.node == node.id)
+      || self.reached(view, node);
     let ground = Style::new().bg(t.panel);
     let (text, style) = match hint {
       Some(hint) if value.is_empty() => (hint.clone(), t.style(Role::Muted)),

@@ -56,7 +56,7 @@ pub use settings::Settings;
 pub use sign_in::SignIn;
 pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
-pub use views::{Filled, View};
+pub use views::{Filled, View, ViewControl};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
 /// each with the part that it had then and with its state as its machine last told it, each life
@@ -102,6 +102,9 @@ pub struct Client {
   pub gestures: Vec<(usize, Verb, Asked)>,
   /// The input node of a view that the input of the client fills, while it fills one.
   pub filled: Option<Filled>,
+  /// The place of the control of the views that the keys reach, among [`Client::controls`], while
+  /// the keys reach one.
+  pub aimed: Option<usize>,
   /// The settings of a session, while the operator reads them.
   pub settings: Option<Settings>,
   /// The sign-in of Codex, while it runs.
