@@ -1590,6 +1590,45 @@ async fn a_handover_waits_only_for_the_commands_in_flight_at_its_ask() {
 }
 
 #[tokio::test]
+async fn a_delete_ends_the_life_and_moves_its_files_to_the_trash_and_keeps_its_lock() {
+  let at = place();
+  fs::create_dir_all(at.join("sessions")).unwrap();
+  let (local, _old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "sessions/a.jsonl").await;
+  window.attach(&life).await;
+  window.ran(&life, "x = 1").await;
+  let deleted = window.ask(Verb::Delete { life: life.clone() }).await;
+  let Ok(Answer::Value(Value::String(folder))) = deleted else { panic!("{deleted:?}") };
+  let folder = PathBuf::from(folder);
+  assert_eq!(folder.parent(), Some(at.join("trash").as_path()));
+  assert!(!Path::new(&life).exists(), "the record left its folder");
+  assert!(Path::new(&format!("{life}.lock")).exists(), "the lock stays at its path");
+  assert!(folder.join("a.jsonl").is_file() && folder.join("restore.json").is_file());
+  let restore: Value =
+    serde_json::from_str(&fs::read_to_string(folder.join("restore.json")).unwrap()).unwrap();
+  assert!(
+    restore["files"].as_array().unwrap().iter().any(|one| one[0] == json!(life)),
+    "{restore}"
+  );
+}
+
+#[tokio::test]
+async fn a_delete_is_refused_while_a_window_of_another_peer_holds_the_life() {
+  let at = place();
+  fs::create_dir_all(at.join("sessions")).unwrap();
+  let (local, _old) = started(&at, SHORT).await;
+  let mut first = Window::dialed(&local).await;
+  let life = opened(&mut first, &at, "sessions/a.jsonl").await;
+  first.attach(&life).await;
+  first.ran(&life, "x = 1").await;
+  let mut second = Window::dialed(&local).await;
+  let refused = second.ask(Verb::Delete { life: life.clone() }).await;
+  assert_eq!(refused, Err(ProtocolError::Shown { life: life.clone() }));
+  assert!(Path::new(&life).exists());
+}
+
+#[tokio::test]
 async fn a_handover_that_a_life_asked_waits_for_no_command_of_that_life() {
   let at = place();
   let (local, old) = started(&at, SHORT).await;

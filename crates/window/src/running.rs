@@ -48,7 +48,8 @@ impl Model {
   }
 
   /// The choices for the session that the list part acts on: open it, keep it running in the
-  /// background while no pin keeps it, pause it, or kill it.
+  /// background while no pin keeps it, pause it, kill it, or move it to the trash of its project,
+  /// from where it can come back.
   pub(crate) fn session_choices(&self) -> Vec<Entry> {
     let Some(Acts::On(at, life)) = &self.acts else { return Vec::new() };
     let one = self.client.running().into_iter().find(|one| one.at == *at && one.life == *life);
@@ -61,6 +62,7 @@ impl Model {
       all.push(row("Pause it: its work goes on at its next open", Choice::Control(Control::Pause)));
       all.push(row("Kill it: its work stops", Choice::Control(Control::Kill)));
     }
+    all.push(row("Move it to the trash of its project", Choice::Control(Control::Delete)));
     all
   }
 

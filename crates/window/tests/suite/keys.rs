@@ -105,6 +105,20 @@ fn the_command_export_copies_the_thread_and_with_no_thread_says_so() {
   shows(&app, "This terminal takes no copy.");
 }
 
+#[test]
+fn the_command_delete_offers_the_trash_among_the_choices_of_the_session_and_its_choice_moves_it() {
+  let (app, daemon) = threaded();
+  ran(&app, "move a session to the trash");
+  shows(&app, "Move it to the trash of its project");
+  let sessions = daemon.file("furb").join(".furb");
+  let record = sessions.join("sessions").join("keys.jsonl");
+  assert!(record.exists(), "the command alone moves nothing");
+  app.type_text("trash");
+  app.press("enter");
+  let moved = || !record.exists() && sessions.join("trash").is_dir();
+  assert!(app.wait_until(PATIENCE, moved), "{}", app.text());
+}
+
 /// A window on the thread of a session that answered, open.
 fn threaded() -> (TestApp, Daemon) {
   let (app, mut daemon) = opened();

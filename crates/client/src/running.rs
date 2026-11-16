@@ -53,6 +53,8 @@ pub enum Control {
   Kill,
   /// A pin keeps the life running with no window.
   Background,
+  /// The life ends, and its record and its files move to the trash of its project.
+  Delete,
 }
 
 impl Client {
@@ -132,6 +134,7 @@ impl Client {
       Control::Pause => Verb::End { life, cancel: false },
       Control::Kill => Verb::End { life, cancel: true },
       Control::Background => Verb::Pin { life, holder: BACKGROUND.to_owned() },
+      Control::Delete => Verb::Delete { life },
     };
     self.controls.push((at, verb));
   }

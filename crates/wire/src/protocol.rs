@@ -231,6 +231,15 @@ pub enum Verb {
     #[serde(default)]
     cancel: bool,
   },
+  /// The delete of a session: its life ends as an end ends it, then its record and each file
+  /// beside it that bears its name move to a folder of their own in the folder `trash` beside the
+  /// folder of the sessions, with its scratch directory and `restore.json`, which names where each
+  /// came from, so the session can come back. The lock file stays, empty. The answer gives the
+  /// folder in the trash as a value. It is refused while a window of another peer holds the life,
+  /// or another process holds the record.
+  Delete {
+    life: String,
+  },
   /// Each operator whose window holds a life now.
   Presence {
     life: String,
@@ -550,6 +559,7 @@ impl Verb {
       | Self::Pin { life, .. }
       | Self::Unpin { life, .. }
       | Self::End { life, .. }
+      | Self::Delete { life }
       | Self::Presence { life }
       | Self::Writes { life, .. }
       | Self::Get { life, .. }

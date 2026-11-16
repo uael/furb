@@ -42,6 +42,7 @@ mod serve;
 mod stall;
 mod stops;
 pub mod transport;
+mod trash;
 mod views;
 
 pub use daemon::{GRACE, STARTING, Settings, Tailnet, run, upgrade};

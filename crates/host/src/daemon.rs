@@ -99,6 +99,7 @@ use crate::{
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, Who, own, upgraded,
   },
+  trash,
   views::{Skill, Views},
 };
 
@@ -1220,6 +1221,7 @@ impl Lives {
         let halt = cancel.then(|| site(&peer).map_or(Command::Halt, |one| Command::Halt.by(one)));
         self.end(&life, halt, outbox)
       }
+      Verb::Delete { life } => return self.delete(life, outbox, reply),
       Verb::Presence { life } => {
         living(&mut self.held, &life).map(|(_, holders)| Answer::Presence(holders.presence()))
       }
@@ -1527,6 +1529,40 @@ impl Lives {
       }
       Stage::Ending(_) => Err(closed()),
     }
+  }
+
+  /// The delete of the session of a record, as [`Verb::Delete`] says: its life ends first when one
+  /// lives, then its files move to the trash on a thread that may block, and the cards of the
+  /// record go.
+  fn delete(&mut self, life: String, outbox: &Outbox, reply: Replied) {
+    let ending = match self.held.get_mut(&life) {
+      Some(Held { stage: Stage::Living(holders), .. }) if holders.elsewhere(outbox) => {
+        reply.send(Err(ProtocolError::Shown { life })).ok();
+        return;
+      }
+      Some(held) => {
+        held.stage = Stage::Ending(Vec::new());
+        Some(held.handle.clone())
+      }
+      None => None,
+    };
+    let asks = self.asks.clone();
+    tokio::spawn(async move {
+      if let Some(handle) = ending {
+        end(&handle).await;
+      }
+      let record = PathBuf::from(&life);
+      let moved = spawn_blocking(move || trash::trashed(&record)).await;
+      let answer = match moved {
+        Ok(Ok(folder)) => Ok(Answer::Value(Value::String(folder.display().to_string()))),
+        Ok(Err(no)) => Err(ProtocolError::Refused { why: no.to_string() }),
+        Err(no) => Err(ProtocolError::Refused { why: no.to_string() }),
+      };
+      if let Some(asks) = asks.upgrade() {
+        asks.send(Asked::Carded { life }).ok();
+      }
+      reply.send(answer).ok();
+    });
   }
 
   /// A view that a window mounts in a slot of a life that it holds.

@@ -88,6 +88,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "delete";
+    }
+  | {
+      life: string;
       verb: "presence";
     }
   | {

@@ -1438,7 +1438,7 @@ fn change_of(does: Does) -> Option<fn(&mut Model)> {
     Does::Rename => |model| model.client.rename_draft(),
     Does::Login => Model::login,
     Does::Status => Model::status,
-    Does::Running => Model::act_on_open,
+    Does::Running | Does::Delete => Model::act_on_open,
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
     Does::Back => |model| model.walk(true),
