@@ -1426,11 +1426,10 @@ class Hub:
         except Exception as no:
           if any(isinstance(one, Login) for one in leaves(no)):
             raise
-          unborn = next((one for one in leaves(no) if isinstance(one, OSError)), None)
-          if run.transport == "stdio" and unborn is not None:
-            why = f"{run.command} did not start: {unborn}"
-          else:
-            why = said(no) + stderr(errors)
+          unborn = (
+            next((one for one in leaves(no) if isinstance(one, OSError)), None) if run.transport == "stdio" else None
+          )
+          why = f"{run.command} did not start: {unborn}" if unborn else said(no) + stderr(errors)
           raise Refused(why) from no
         info = client.server_info
         entry.version, entry.instructions = (info.version if info else "") or "", client.instructions or ""
