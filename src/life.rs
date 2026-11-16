@@ -455,17 +455,26 @@ impl Opening {
   /// crossed. Each segment but the last replays in a life that inspects it, on the texts of its own
   /// fact made, after the carry of the segment before it, and gives the carry to the texts that the
   /// next fact made names, as [`checkpoint::carried`] says. So each engine replays only what it
-  /// made, nothing of the carry is kept, and the record stays the one truth of the life.
+  /// made, and the record stays the one truth of the life. A life that keeps its record starts
+  /// from the carry that it kept beside it, as [`checkpoint::kept`] says, and keeps the carry of
+  /// the last crossing there, so each segment replays on its engine once.
   fn carried(&self, record: &[Object]) -> Result<Option<Object>, Fault> {
     let crossings = checkpoint::crossings(record);
     if crossings.is_empty() {
       return Ok(None);
     }
+    let path = self.record.as_deref().map(Path::new).filter(|_| self.keeps());
+    let kept = path.and_then(|one| checkpoint::kept(one, record));
+    let start = kept.as_ref().map_or(0, |one| one.0);
+    let (mut carry, mut from) = kept.map_or((None, 0), |(at, one)| (Some(one), at));
+    let left: Vec<usize> = crossings.into_iter().filter(|at| *at > start).collect();
+    if left.is_empty() {
+      return Ok(carry);
+    }
     let inspects =
       Self { inspecting: Some(true), keeps: Some(false), record: None, ..self.clone() };
     let waited = inspects.prepared(&Progress::default(), Taken::Parts, None)?.waited;
-    let (mut carry, mut from) = (None, 0);
-    for at in crossings {
+    for at in left {
       let entries: Vec<Object> =
         carry.into_iter().chain(record[from..at].iter().cloned()).collect();
       let ears = inspects.eared(waited.clone(), Some(&entries), checkpoint::stood(&entries))?;
@@ -475,6 +484,9 @@ impl Opening {
       }
       carry = Some(checkpoint::carried(&mut engine, &record[at])?);
       from = at;
+    }
+    if let (Some(path), Some(carry)) = (path, &carry) {
+      checkpoint::keep(path, record, from, carry.clone());
     }
     Ok(carry)
   }

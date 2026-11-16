@@ -18,9 +18,18 @@
 //! carries a record the same, and `seed` of the checkpointer of the next engine reads it, so the
 //! checkpointer is the one home of its shape, and this file holds the entry and the places where a
 //! record crosses alone.
+//!
+//! A life that keeps its record keeps the carry of its last crossing beside it, as
+//! `<record>.carry`, so each segment before that crossing replays on its engine once, at the first
+//! open that carries across it, and each later open boots on that carry. It is a cache, as the
+//! image is: its key names each entry up to that crossing and the texts of the build, a reader
+//! takes none that does not agree, and the open then replays those segments again, to the same
+//! carry.
 
-use std::{path::Path, slice};
+use std::{fs, path::Path, slice};
 
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use similar::TextDiff;
 
 use crate::{
@@ -206,6 +215,47 @@ pub(crate) fn crossings(record: &[Object]) -> Vec<usize> {
 /// crosses to the texts of a build.
 pub(crate) fn crossed(path: &Path, lease: world::Lease, read: &world::Last) -> Result<(), Fault> {
   world::appended(path, lease, read, world::running(&[]).as_ref())
+}
+
+/// The meaning of what [`Kept`] holds, which a change of meaning raises.
+const KEPT: u32 = 1;
+
+/// The carry at a crossing of a record, as `<record>.carry` holds it, with its key: the place of
+/// that crossing among the entries, the digest of each entry up to it, and the texts of the build,
+/// which gathers the carry.
+#[derive(Serialize, Deserialize)]
+struct Kept {
+  version: u32,
+  engine: String,
+  at: usize,
+  entries: String,
+  carry: Object,
+}
+
+/// The digest of entries, as JSON.
+fn digest(entries: &[Object]) -> Option<String> {
+  Some(format!("{:x}", Sha256::digest(serde_json::to_vec(entries).ok()?)))
+}
+
+/// The carry kept beside the record at a path, with the place of its crossing, when its key agrees
+/// with the entries of the record.
+pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
+  let kept: Kept = serde_json::from_slice(&fs::read(world::beside(path, ".carry")).ok()?).ok()?;
+  let agrees = kept.version == KEPT
+    && kept.engine == world::engine()
+    && kept.at < record.len()
+    && digest(&record[..=kept.at]).is_some_and(|one| one == kept.entries);
+  agrees.then_some((kept.at, kept.carry))
+}
+
+/// The carry at the crossing at `at` of the entries of the record at a path, kept beside it. A
+/// cache that does not land costs the next open a replay, and nothing else.
+pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
+  let Some(entries) = digest(&record[..=at]) else { return };
+  let kept = Kept { version: KEPT, engine: world::engine(), at, entries, carry };
+  if let Ok(bytes) = serde_json::to_vec(&kept) {
+    fs::write(world::beside(path, ".carry"), bytes).ok();
+  }
 }
 
 /// The highest number that each kind took in the entries that a life boots on, as a map. A later

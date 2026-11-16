@@ -42,8 +42,7 @@ use furb::{
   engine::OPERATOR,
   image,
   value::{Fault, entry},
-  verbs,
-  world,
+  verbs, world,
 };
 
 #[test]
@@ -1047,6 +1046,39 @@ fn a_life_goes_on_across_a_crossing_with_the_names_the_module_and_the_open_promp
     closed(&mut again, "close([f(), str(chain('last'))])").as_ref().py_repr(),
     "[6, 'chain4']",
     "a later life replays the segment after the crossing"
+  );
+}
+
+/// Each segment before the last crossing of a record replays on its engine once: the open that
+/// keeps the record and carries across that crossing keeps the carry beside the record, and each
+/// later open boots on it while its key agrees with the record, and replays those segments again
+/// when it does not.
+#[test]
+fn a_segment_before_the_last_crossing_replays_once_and_a_carry_that_does_not_agree_replays_again() {
+  let at = yard("carried-once");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "mark = 'replayed'\nclose(0)");
+  drop(first);
+  crossing(&at);
+  let carry = at.join("record.jsonl.carry");
+  let marked = || {
+    let mut life = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+    closed(&mut life, "close(mark)").as_ref().py_repr()
+  };
+  assert_eq!(marked(), "'replayed'");
+  let kept = fs::read_to_string(&carry).expect("the open keeps the carry of the crossing");
+  fs::write(&carry, kept.replace("replayed", "kept")).unwrap();
+  assert_eq!(
+    marked(),
+    "'kept'",
+    "a later open boots on the carry that it kept, and replays no segment before it"
+  );
+  fs::write(&carry, kept.replace("replayed", "kept").replace(&world::engine(), "another build"))
+    .unwrap();
+  assert_eq!(
+    marked(),
+    "'replayed'",
+    "a carry whose key does not agree is made again by the replay"
   );
 }
 
