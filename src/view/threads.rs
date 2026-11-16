@@ -48,7 +48,7 @@ pub(super) trait Works<'a>: Lookup<'a> {
 pub(super) fn works<'a>(on: impl IntoIterator<Item = &'a Act>, at: u64) -> bool {
   on.into_iter().any(|one| {
     one.kind == Kind::Prompt
-      && !one.asks_operator()
+      && !one.to_operator()
       && one.began < at
       && one.ended.is_none_or(|end| end > at)
   })
@@ -130,7 +130,7 @@ pub(super) fn noted<'a>(act: &'a Act, rows: &impl Works<'a>) -> bool {
 /// The thread that a prompt of a chain is a message of, as the threads of the chain read it.
 pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Works<'a>) -> Option<&'a str> {
   match verdict(act, rows) {
-    Verdict::Message(thread) if !act.asks_operator() => Some(thread),
+    Verdict::Message(thread) if !act.to_operator() => Some(thread),
     _ => None,
   }
 }
@@ -279,7 +279,9 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
   let mut out: Vec<ChainThread> = Vec::new();
   let mut asides: Vec<(u64, ChainAside)> = Vec::new();
   let mut later: Vec<(&str, &Act)> = Vec::new();
-  for act in on.iter().copied().filter(|act| act.kind == Kind::Prompt) {
+  // A view that a word draws is no part of a conversation.
+  let prompts = on.iter().copied().filter(|act| act.kind == Kind::Prompt && act.view().is_none());
+  for act in prompts {
     // A question about a line of a file is a sub thread, as a message about one is.
     if act.asks_operator() && anchor_of(act).is_none() {
       later.extend(thread_of(act, rows).map(|thread| (thread, act)));

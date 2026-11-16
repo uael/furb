@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::state::State;
+use crate::{page::Viewed, state::State};
 
 /// The kind of an act, read once from its fact: each kind that the view reads by name, and any
 /// other as its text. It serializes to that text, so a window reads the string of the fact.
@@ -337,15 +337,26 @@ impl Act {
     (self.kind == Kind::Prompt && self.on != self.chain).then_some(self.on.as_str())
   }
 
-  /// Whether the act asks the operator: a prompt to him.
-  pub fn asks_operator(&self) -> bool {
+  /// Whether the act is a prompt to the operator: a question, or a view that a word draws.
+  pub fn to_operator(&self) -> bool {
     self.kind == Kind::Prompt && self.words.get(2).and_then(Value::as_str).is_some_and(operator)
   }
 
-  /// Whether the operator owes the act an answer: a prompt that his console took, and that is not
-  /// done.
+  /// Whether the act asks the operator a question: a prompt to him that draws no view.
+  pub fn asks_operator(&self) -> bool {
+    self.to_operator() && self.view().is_none()
+  }
+
+  /// The view that the act draws: a prompt to the operator whose message is one.
+  pub fn view(&self) -> Option<Viewed> {
+    let message = self.words.get(1).and_then(Value::as_str).filter(|_| self.to_operator())?;
+    Viewed::of(&self.id, message)
+  }
+
+  /// Whether the operator owes the act an answer: a question that his console took, and that is
+  /// not done. A view waits for a gesture that no one owes.
   pub fn owed(&self) -> bool {
-    self.operator && !self.done()
+    self.operator && !self.done() && self.view().is_none()
   }
 
   /// Whether the act failed: a rung whose run raised, or an act done with a fault that is no

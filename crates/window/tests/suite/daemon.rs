@@ -580,10 +580,18 @@ pub(crate) const EDITS: &str = "(the model edits a file)";
 /// one answers at once and one works for ever.
 pub(crate) const FANS: &str = "(the model fans out)";
 
+/// The words of a message of a test that make the model draw a view of a list on a chain of its
+/// own, which the word does not await. Its thread stays open, since a prompt does not close while
+/// an act that its word made lives.
+pub(crate) const DRAWS: &str = "(the model draws a view)";
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
 /// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
 /// and the second waits on its chain.
-const ANSWERED: [(&str, &str); 9] = [
+const ANSWERED: [(&str, &str); 10] = [
+  (
+    DRAWS,
+    r#"todo = prompt(str, '{"view": 1, "slot": "footer", "tree": {"id": "todo", "node": "text", "runs": [{"text": "buy milk"}]}}', to=OPERATOR, on=chain('todo'))"#,
+  ),
   (DELEGATES, DELEGATE),
   (
     TABLES,

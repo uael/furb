@@ -9,12 +9,12 @@ use furb_window::open;
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{Daemon, PATIENCE},
+  daemon::{DRAWS, Daemon, PATIENCE},
   thread::clicked,
 };
 
 /// The word that draws a view of a text and a button, on a chain of its own, as `v`.
-const DRAWS: &str = r#"import json
+const VIEW: &str = r#"import json
 side = chain('views')
 def drawn(said):
   text = {"id": "said", "node": "text", "runs": [{"text": said}]}
@@ -33,7 +33,7 @@ fn a_view_draws_in_the_footer_and_a_click_or_a_close_of_a_model_answers_its_prom
   let life = peer.opened(&sessions.join("views.jsonl"), true);
   peer.said(&life, "keep my list");
   let run = |word: &str| Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
-  peer.ask(run(DRAWS));
+  peer.ask(run(VIEW));
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "keep my list"));
   shows(&app, "buy milk");
@@ -52,4 +52,32 @@ fn a_view_draws_in_the_footer_and_a_click_or_a_close_of_a_model_answers_its_prom
   peer
     .ask(run("prompt(str, drawn('closed ' + json.loads(peek(w))['node']), to=OPERATOR, on=side)"));
   shows(&app, "closed clear");
+}
+
+#[test]
+fn a_view_that_the_word_of_a_thread_draws_is_no_question_of_that_thread() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("drawn.jsonl"), true);
+  let prompt = Verb::Prompt {
+    life,
+    shape: "None".to_owned(),
+    message: format!("keep a list {DRAWS}"),
+    to: None,
+    on: None,
+  };
+  peer.ask(prompt);
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "keep a list"));
+  let shown = shows(&app, "buy milk");
+  // The view stands in the footer, under the thread, and the thread asks nothing: no form of a
+  // question, which names the model that asks, and no state of a question on its card.
+  let (thread, view) = (shown.find("keep a list").unwrap(), shown.rfind("buy milk").unwrap());
+  assert!(thread < view, "{shown}");
+  assert!(!shown.contains("opus/high asks") && !shown.contains("⏎ answer"), "{shown}");
+  let card = peer.card(|card| card.thread.title.contains("keep a list"));
+  assert_ne!(serde_json::json!(card.thread.standing)["is"], "asks");
 }

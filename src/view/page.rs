@@ -305,7 +305,7 @@ impl<'a> Reader<'a> {
         .held
         .made_by(&rung.id)
         .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain)
-        .filter(|act| !act.asks_operator() && !noted(act, &self.held))
+        .filter(|act| !act.to_operator() && !noted(act, &self.held))
         .map(|agent| (*rung, agent))
     });
     let mut agents: Vec<Agent> = agents
@@ -345,9 +345,7 @@ impl<'a> Reader<'a> {
   /// The views of the session that stand open: each prompt to the operator, not done, whose
   /// message draws one.
   fn views(self) -> Vec<Viewed> {
-    let open = self.held.open().filter(|act| act.asks_operator());
-    let drawn = |act: &Act| Viewed::of(&act.id, act.words.get(1)?.as_str()?);
-    open.filter_map(drawn).collect()
+    self.held.open().filter_map(Act::view).collect()
   }
 
   /// The folder of a chain: where the last cd of the chain came to.
