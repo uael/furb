@@ -2,6 +2,7 @@
 //! screens at a step of time, cut to the cells that move, which a model reads in one look; the
 //! measures that no image gives, from the times of the recording; and a GIF of the whole screen,
 //! which a person plays to judge how the motion feels.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashMap,

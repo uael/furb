@@ -1,5 +1,6 @@
 //! What each machine told a client: its login, its cards and the records that it lists, and the
 //! order of the cards of every machine in one list.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   Event, FollowUp, Part, Standing,

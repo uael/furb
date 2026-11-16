@@ -27,6 +27,7 @@
 //! holds for the process, but for a name of a model that it does not offer, or, for a host that lists the models, a
 //! model for chat with no window, after which the server is asked again once a delay passed. A host that lists the
 //! models waits for the server, five seconds at most and once in each delay while the server does not answer.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   error::Error as StdError,

@@ -1,5 +1,6 @@
 //! One life of the engine, as the operator holds it: the World of this machine it stands on, the
 //! record it keeps, and what the operator hears of it.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   future::{Future, poll_fn},

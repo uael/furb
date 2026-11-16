@@ -1,6 +1,7 @@
 //! The operator, as the console of a host puts a prompt to it: the shapes it answers, and a line it writes back, read
 //! as a value of the shape the prompt wants. Every console reads a line by these rules, so an answer means the same at
 //! every host.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::fmt::Display;
 

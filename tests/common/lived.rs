@@ -2,7 +2,7 @@
 //! writes and on a provider that answers from a script, as a host opens one. The suite of the crate
 //! and the tests of the bound of a turn beside the engine share it: each includes it as a module,
 //! and gives it `answered`, which the provider calls at each answer of its script.
-
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 #![allow(dead_code, reason = "each side takes the part of the harness that it needs")]
 
 use std::{

@@ -1,7 +1,7 @@
 //! The acts of a life as a window last heard them, which the life keeps as it tells them, so a
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"

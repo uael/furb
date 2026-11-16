@@ -3,6 +3,7 @@
 //!
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::{
   Fault, Object, ObjectRef, Text,

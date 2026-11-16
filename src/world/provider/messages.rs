@@ -1,4 +1,5 @@
 //! The turns of a chain as the messages that a model reads.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::collections::HashSet;
 

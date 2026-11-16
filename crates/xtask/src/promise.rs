@@ -1,5 +1,7 @@
 //! The proofs of the promise: each test that the page of the promise names, which a release waits
 //! for.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   fs,

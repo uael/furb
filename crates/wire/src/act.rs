@@ -1,4 +1,5 @@
 //! An act with its meaning, and what its models cost.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::fmt;
 

@@ -1,5 +1,6 @@
 //! The word of a reply as its model writes it: the part of it that runs, and what its chain is
 //! told when a statement of it cannot be python.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::fmt::{self, Write};
 

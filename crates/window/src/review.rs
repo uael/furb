@@ -3,6 +3,7 @@
 //! branch and that file, and the changed files where the list stands, on its panel, the chosen one
 //! on the ground of a selected card. The diff of OpenTUI draws its line numbers, its grounds and
 //! the colors of its grammar. What the review holds stands in the client.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{iter, mem};
 

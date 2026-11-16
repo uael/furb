@@ -5,6 +5,7 @@
 //! the record and the space left on its disk. Once the record holds each fact, the life wakes each
 //! chain that it paused and that no later pause or wake of the operator holds, and a pause that the
 //! operator set, before or after its own, stays.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::mem;
 use std::path::Path;

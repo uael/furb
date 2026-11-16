@@ -1,6 +1,6 @@
 //! The list part over the window: Go to, with the commands, and each key, on a real daemon
 //! whose lives a peer of the test drives.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 #[cfg(unix)]

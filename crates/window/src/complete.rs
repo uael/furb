@@ -3,6 +3,7 @@
 //! and lists at most eight rows under a head that says what it lists and where the chosen row
 //! stands among the rows that match, the chosen one on the lifted ground. The completion itself
 //! stands in the client.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::cells::Cells;
 use opentui::style::Style;

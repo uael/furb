@@ -1,6 +1,6 @@
 //! A life that writes its image at its rest past a tail of facts, from which a later life goes on,
 //! and the readers of a life whose log let go of the facts of its past.
-
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "a test blocks on the runtime that tokio starts for it"

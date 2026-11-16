@@ -1,5 +1,6 @@
 //! The store: the record of a life, which one process at a time owns by a lease. A record whose name ends in
 //! `.sqlite`, `.sqlite3` or `.db` is a database of SQLite, and any other record is a file of lines, one fact per line.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 mod error;
 mod lines;

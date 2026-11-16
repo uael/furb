@@ -1,7 +1,7 @@
 //! One conversation of the claude command line: what it is fixed at, where it stands, the turns
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"

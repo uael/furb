@@ -1,6 +1,6 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that
 //! the store keeps.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use crate::opened::{

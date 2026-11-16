@@ -3,6 +3,8 @@
 //! from the words of the walk. What the window writes is recorded through `tmux pipe-pane` with
 //! the time of each part, and each step of the walk puts a marker in the recording once its screen
 //! shows what the step waits for and the window stopped writing. No model and no network.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   env,

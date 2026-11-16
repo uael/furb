@@ -1,5 +1,6 @@
 //! The tests of the tasks of a developer, each through the program that `cargo xtask` runs, on a
 //! yard of its own, in one binary: cargo links the program once for them.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 #[path = "../../../../tests/common/yard.rs"]
 mod yard;

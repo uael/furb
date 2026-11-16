@@ -1,5 +1,6 @@
 //! A thread that a client reads: the exchanges that the daemon gave of it, page by page, and the
 //! messages of the operator that it shows before the daemon tells them.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap, HashSet},

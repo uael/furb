@@ -2,7 +2,7 @@
 //! models of rig that answer from a script or fail, a model that never answers, and the claude
 //! command line of the tests. The laws that no door reaches stand beside the module, in
 //! `src/world/provider.test.rs`, each family with its reason.
-
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 #![cfg_attr(
   unix,
   expect(

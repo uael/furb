@@ -24,7 +24,8 @@
 //! each chain where the
 //! extension plays, and the definitions alone of a new word of an extension that the life runs,
 //! which reloads it.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 

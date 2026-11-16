@@ -10,6 +10,7 @@
 //! of this user whose command names a tree of the clone of the folder of the watch, as git worktree
 //! list gives the trees. A daemon of furb is no part of the work, since no end of a test process
 //! frees its memory. It ends no other process.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   env, fs,

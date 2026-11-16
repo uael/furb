@@ -1,5 +1,7 @@
 //! The tokens of the design of the window: each color, each loader, each role of a text and each
 //! column that a screen starts at. A screen reads them here and writes no value of its own.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::time::Duration;
 

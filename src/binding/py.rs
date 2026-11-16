@@ -1463,7 +1463,7 @@ fn called(f: &Py<PyAny>, args: &[Object], hands: &mut Hands) -> Result<Object, F
 fn bare(shown: &str) -> String {
   /// A run of name characters, cut after its last dot.
   fn cut(run: &str) -> &str {
-    run.rfind('.').map_or(run, |at| &run[at + 1..])
+    run.rsplit('.').next().unwrap_or(run)
   }
   let mut out = String::new();
   let mut run = String::new();

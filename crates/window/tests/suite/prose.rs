@@ -1,6 +1,6 @@
 //! The prose of a model in its thread, which is markdown: a table and a block of code in the room
 //! of the feed.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use crate::{

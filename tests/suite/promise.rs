@@ -3,7 +3,8 @@
 //! module and what each definition gives, reads with the reader of a record and no life, and takes
 //! one more turn on a model that answers from a script. `tests/corpus/README.md` says the rule of
 //! the folders.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the act of a rung, as the tests of the crate do"

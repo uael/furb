@@ -37,6 +37,7 @@
 //! keeps a mark at the last thing that the life did, and ends a run that bought `STUCK` answers
 //! since that mark. Each step of the rig ends after `STEP`, so an install that waits for input
 //! that it never gets does not hold the run.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 mod crash;
 mod grade;

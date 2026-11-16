@@ -2,6 +2,7 @@
 //! where a cell is 10 pixels wide, a symbol that it lacks with a face of symbols, and an emoji with
 //! the face `Noto Emoji`. Each machine draws a frame the same way, from these faces alone. A glyph
 //! that the faces lack is named, and drawn as a box.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{collections::HashMap, sync::LazyLock};
 

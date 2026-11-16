@@ -2,6 +2,8 @@
 //! answers it, the block of code of each answer as its lines, the thought of its model, and the
 //! agents that the thread made. A page reads the acts of its thread through the lists of the
 //! acts by maker, so it takes the time of the thread and not of the life.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{HashMap, HashSet},

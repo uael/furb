@@ -1,6 +1,6 @@
 //! The daemon of a machine, as its windows reach it on the local transport: the holders of a life,
 //! the grace after the last of them, a fault of one life, and the handover to a new build.
-
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![expect(
   clippy::disallowed_methods,

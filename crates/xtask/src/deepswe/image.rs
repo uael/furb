@@ -1,5 +1,7 @@
 //! The image of a task, read from its registry with no pull and no docker: the environment that
 //! it sets, and the python that its verifier runs.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::BTreeMap,

@@ -1,4 +1,5 @@
 //! The task `promise`, on a workspace in a yard whose page names proofs of python and of rust.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{env, fs, path::Path, process};
 

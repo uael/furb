@@ -3,6 +3,7 @@
 //! of a terminal match them, the up and down arrows move the chosen row, enter takes it, and escape
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{borrow::Cow, cmp::Reverse, ops::Range};
 

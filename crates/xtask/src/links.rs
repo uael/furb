@@ -1,5 +1,7 @@
 //! The links of the README that each package carries. The registry of each package shows that
 //! README and reads no relative link as GitHub does, so each of its links is absolute.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{cmp::Reverse, collections::BTreeSet, fs, ops::Range, path::Path, process::ExitCode};
 

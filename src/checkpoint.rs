@@ -28,6 +28,7 @@
 //! tip, so no segment replays. It is a cache, as the image is: its key names each entry up to that
 //! crossing and the texts of the build, a reader takes none that does not agree, and the open then
 //! replays those segments again, to the same carry.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{fs, path::Path, slice};
 

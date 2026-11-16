@@ -18,7 +18,7 @@
 //! of a class of the engine comes in as the name of its class and its fields, and it is made in the sandbox. A map
 //! that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
 //! of a word or of a host as a mark.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: a method that the build makes takes its words by value and only borrows them"

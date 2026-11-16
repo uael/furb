@@ -1,6 +1,7 @@
 //! The input and the line of the launcher under it, on a real daemon whose model answers from a
 //! script: a message starts a session or goes to a thread, and the thread shows it.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::{

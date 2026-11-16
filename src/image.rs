@@ -33,6 +33,7 @@
 //! them. The life that opens from the image says them again, as a boot says a record again, so a
 //! crash costs its tail alone. A fact that names an engine after the image is a birth of its own,
 //! which no life of the image went on to: the image agrees no more.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fmt::Display,

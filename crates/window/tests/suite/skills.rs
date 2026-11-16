@@ -1,6 +1,6 @@
 //! The skills and extensions of a session as a list part, on a real daemon: how each plays, and
 //! the view of an extension that enter opens, which turns it on or off in place.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use furb_window::open;

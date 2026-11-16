@@ -8,7 +8,7 @@
 //! from it.
 //! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"

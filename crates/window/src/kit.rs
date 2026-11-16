@@ -2,6 +2,7 @@
 //! a skill serves, under the dock of the agents and over the input, in the closed set of nodes of
 //! the protocol. A button takes a press, and an input takes the input of the window, whose next
 //! send goes to that node.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use crate::cells::Cells;
 use furb_client::View;

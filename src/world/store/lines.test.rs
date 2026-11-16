@@ -2,6 +2,7 @@
 //! life, which only that open hands over; the heads of the lines, whose law is what a read parses;
 //! and a line that a write left torn, which only a write that failed midway leaves. The suite of
 //! the stores proves the rest.
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 
 use std::{fs, io::Write};
 

@@ -7,6 +7,7 @@
 //! that start with what the input held when the walk began, as fish does, and a step forward past
 //! the newest gives that text back. While no walk runs, the input offers the rest of the newest
 //! text that starts with what he wrote.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{Sent, protocol::Verb};
 

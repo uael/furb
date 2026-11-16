@@ -1,5 +1,6 @@
 //! The task `catalog`, on a yard where a stand-in of curl serves a catalog of models.dev and a
 //! release of pi-ai from files, so it asks no network.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{
   fs,

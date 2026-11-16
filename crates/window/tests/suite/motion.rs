@@ -1,5 +1,5 @@
 //! What moves in the window while something works, frame by frame over the clock of the window.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::time::Duration;

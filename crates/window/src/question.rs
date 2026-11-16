@@ -8,6 +8,7 @@
 //! A question that comes while he writes a message takes nothing: his text stays, and one row says
 //! that the question waits. Which question is open, and what its shape offers and takes, comes
 //! from the crate: the form only draws it and says his answer.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::collections::BTreeSet;
 

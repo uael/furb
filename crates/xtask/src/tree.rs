@@ -1,5 +1,6 @@
 //! The life of a worktree of this clone: `new` makes it with a warm build, `land` moves a branch
 //! to its head, and `close` removes it once nothing in it can be lost.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   fs, io,

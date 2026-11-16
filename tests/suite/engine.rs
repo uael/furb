@@ -6,7 +6,8 @@
 //! and speaks as it writes, a wait ends at its due, a function of the host is called back, a fault
 //! crosses as itself, and the record the store kept opens a second life. The bound of a turn stands
 //! beside the engine, in `src/engine.test.rs`.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 #[path = "../common/lived.rs"]

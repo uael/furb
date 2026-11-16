@@ -1,5 +1,6 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashSet,

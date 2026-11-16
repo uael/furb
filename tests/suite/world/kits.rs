@@ -1,5 +1,6 @@
 //! The kits of a life that a host opens, whose process is a module of Python that speaks the
 //! frames of a kit on its stdin and its stdout.
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 
 #[cfg(unix)]
 use std::time::Duration;

@@ -1,5 +1,6 @@
 //! The budget of time of each job of the gates, in `.github/budgets.json`: one and a half times its
 //! median time in the last green runs of `gates.yml` on main, rounded up to a whole minute.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,

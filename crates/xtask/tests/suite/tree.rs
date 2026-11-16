@@ -1,5 +1,7 @@
 //! The task `tree`, which makes, lands and closes a worktree, on a clone of a bare origin in a
 //! yard.
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink;

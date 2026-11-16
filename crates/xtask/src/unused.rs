@@ -1,5 +1,6 @@
 //! The names that nothing but a test uses: each exported name of the TypeScript side and each
 //! public item of the crates that no file but a test names, its own file included.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeSet, HashMap, HashSet},

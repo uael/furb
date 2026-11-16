@@ -5,7 +5,8 @@
 //! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
 //! `crates/xtask/budgets.toml`. The test counts each byte that the process allocates, so a child of
 //! the suite runs it alone, as `apart` says.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the runtime that it starts for itself"

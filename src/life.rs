@@ -7,7 +7,7 @@
 //! record is made again by running its words: a life whose host turns the
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
-
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{

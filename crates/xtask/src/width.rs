@@ -1,6 +1,7 @@
 //! The width of the comments of Rust. rustfmt sets the width of the code at 100 and wraps no
 //! comment, so a comment goes past it with no gate that says so: this check fails on a comment
 //! line that a change adds past it.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{BTreeMap, BTreeSet},

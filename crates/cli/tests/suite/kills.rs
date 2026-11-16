@@ -8,7 +8,7 @@
 //! A scripted claude stands in for the models. Each process of it, and each command that holds
 //! the life at a moment, holds the write end of the FIFO `lifeline`, so the test knows that no
 //! process outlived the daemon when the FIFO ends, and waits on no clock.
-
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![cfg(unix)]
 #![expect(

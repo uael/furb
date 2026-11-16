@@ -1,6 +1,7 @@
 //! How a person reads a time, a size and a count, in each client the same words: the time that a
 //! work took or takes, how long ago a moment was, a count of bytes, of entries and of tokens, and
 //! a path with the home folder as `~`.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::time::Duration;
 

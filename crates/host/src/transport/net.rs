@@ -2,6 +2,7 @@
 //! on the tailnet, where `WireGuard` encrypts. A frame crosses TCP as one line, as on the machine,
 //! and WebSocket as one text message. The identity of a peer of the tailnet is the login that the
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashMap,

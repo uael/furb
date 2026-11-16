@@ -2,6 +2,7 @@
 //! `FURB_OPENAI_URL`: it serves the sign-in of Codex from a device and the models of its account,
 //! so a walk signs in as a new user does, with no network. The code of the sign-in holds once the
 //! browser of the walk opened its page, as a person who enters the code there.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::sync::{
   Arc,

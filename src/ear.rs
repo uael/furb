@@ -37,6 +37,7 @@
 //! the operator, and takes no prompt; and the commands, the time and the web call none.
 //! The extensions and memory do no work, so they call each verb while they hear, where the life
 //! answers it in their place.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   any::Any,

@@ -1,6 +1,7 @@
 //! The kills of a run of the rig, as crashes: the rig kills the life at a random point after the
 //! first answer of each life, and opens it again on its record, which takes the work up. The
 //! measures read the record and the lives that the rig started, which `.run/lives.json` keeps.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, BTreeSet},

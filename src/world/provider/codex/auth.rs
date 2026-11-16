@@ -1,4 +1,5 @@
 //! `OpenAI` models on a `ChatGPT` subscription, with credentials kept outside the project.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashMap,

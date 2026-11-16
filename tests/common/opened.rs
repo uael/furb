@@ -2,7 +2,7 @@
 //! records that it leaves. The suite of the crate and the tests of the bound of a turn beside the
 //! life share it: each includes it as a module, and gives it `answered`, which the script calls at
 //! each answer, and `Yard`.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![allow(dead_code, reason = "each side takes the part of the harness that it needs")]
 
 use std::{

@@ -3,6 +3,8 @@
 //! rig that asks it, the names of its credential and its address, and of each model the fields that
 //! the crate reads. models.dev lists every provider but two, whose models come from the data that
 //! pi-ai publishes.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::BTreeSet,

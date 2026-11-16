@@ -1,6 +1,8 @@
 //! The input as the window draws it: its rows and the line of the launcher under it, and what a
 //! key of the operator does to it. Where it sends and what it sends stand in the input of
 //! `furb-client`.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{mem, ops::Range, path::Path};
 

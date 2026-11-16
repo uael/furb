@@ -1,4 +1,5 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, HashSet},

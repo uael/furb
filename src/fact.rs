@@ -3,6 +3,7 @@
 //! The contract says a fact is `(kind, about, by, *words)`, and a question is `(kind, id, by, on, *words)`. The
 //! crate reads a fact as the tuple it is and nothing more: what a kind means is the engine's, and a host that
 //! hears facts reads the ones it knows by position, as the contract declares them.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use serde::{Deserialize, Serialize};
 

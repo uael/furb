@@ -1,7 +1,7 @@
 //! The form of a question, on a real daemon whose model asks the operator from a script: the form
 //! takes the place of the input in the thread that asks, and a question of another thread is a mark
 //! on its card.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use furb_client::HOLD;

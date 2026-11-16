@@ -1,5 +1,6 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::path::Path;
 

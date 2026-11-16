@@ -1,6 +1,8 @@
 //! A page of a thread: some exchanges of it, each message with the block of code that answers it
 //! and what the answer says to the operator, with the agents of the thread and the context of its
 //! chain.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::ops::Range;
 

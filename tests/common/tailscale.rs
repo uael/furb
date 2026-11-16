@@ -2,7 +2,7 @@
 //! address, names other machines of the tailnet online on loopback, and says the path of each
 //! request that it heard. The suites of the host and of the
 //! command line share it by a path, as `common/yard.rs`.
-
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![allow(dead_code, reason = "a suite takes the part of the fake that it needs")]
 
 use furb_host::transport::LocalApi;

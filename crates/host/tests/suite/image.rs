@@ -1,6 +1,7 @@
 //! A life that opens from the image beside its record: it stands where the life before it stood,
 //! reads no fact of its record, and takes again each act that the life before it held in flight.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "a test blocks on the runtime that tokio starts for it"

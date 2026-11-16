@@ -1,5 +1,6 @@
 //! The home, at the left of the list while no thread is open: what waits for the operator, and
 //! what worked while no window was open.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{iter, path::Path};
 

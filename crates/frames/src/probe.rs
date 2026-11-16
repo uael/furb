@@ -3,6 +3,7 @@
 //! that it breaks: one set of colors and one scale of spacing, in the tokens of the window alone;
 //! each box as wide inside on its left as on its right, and as high above as below; each slot of a
 //! repeated row in one column; and each box the same at each size.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{array, collections::BTreeMap, ops::RangeInclusive};
 

@@ -9,6 +9,7 @@
 //! wrapper that points it at the same server. Each arm reads `BRIEF`. The server measures each arm:
 //! the bench reads the totals of its `/metrics` before and after the arm, so run each arm alone on
 //! the server. `score` compares each label with the known one.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,

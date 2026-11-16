@@ -3,6 +3,7 @@
 //! the values of a key that takes some values only. Its skills and extensions, as a list part too:
 //! enter opens the view of an extension, where he turns it on or off and reloads it, and adds the
 //! mention of a skill with no code to the draft.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::borrow::Cow;
 

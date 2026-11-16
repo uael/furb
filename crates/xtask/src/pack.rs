@@ -7,6 +7,7 @@
 //! `include_bytes!` or `#[path]`, beside that source, and by a `rerun-if-changed` of its build
 //! script, from the folder of the crate. The task reads each source of the pack, as `cargo package
 //! --list` gives it, and builds nothing, so it ends in a second and runs before each commit.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeSet,

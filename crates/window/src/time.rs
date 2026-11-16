@@ -7,6 +7,7 @@
 //! A prompt that a word of one chain asked of another flows down its column from the track of
 //! the asker to the track of the chain that it asks, and its answer flows back, as the flow events
 //! of a profiler join two tracks.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{cmp::Ordering, ptr};
 

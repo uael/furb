@@ -1,6 +1,7 @@
 //! The records of the sessions of the workspaces that `workspaces.json` in a config folder names,
 //! which the verb `list` gives: the `.furb/sessions` of the main checkout of each workspace and of
 //! each worktree of it, as a window lists them, and those of each session with no project.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs,

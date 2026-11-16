@@ -1,5 +1,7 @@
 //! The desk of the operator: each question that waits for him and each notice that he did not
 //! dismiss, with what the line of his answer is for the shape that each one asks.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::{
   value::{Fault, Object},

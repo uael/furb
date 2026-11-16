@@ -1,5 +1,7 @@
 //! The seed of a task: its base, a checkout of one commit with the dependencies that its image
 //! holds, and the checkout of a run, a copy of the base whose environment is its own.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::BTreeMap,

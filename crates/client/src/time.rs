@@ -3,6 +3,7 @@
 //! that moment, page by page, as the daemon folds it. A play steps forward on its own until now.
 //! Under the bar, the chains of the life stand on the same moments: each that works, and each
 //! that a text that he types finds.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap},

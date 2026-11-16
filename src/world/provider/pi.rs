@@ -1,6 +1,7 @@
 //! The protocol of pi-ai itself, which the gateway Radius speaks: a request is the model, the context of a turn and
 //! its options, which one post to `<address>/messages` carries, and the reply streams as the events of pi-ai, each a
 //! line of data of its own.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::collections::VecDeque;
 

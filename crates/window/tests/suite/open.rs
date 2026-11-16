@@ -1,7 +1,7 @@
 //! The open of a session at rest from its card, on a real daemon whose model answers from a script.
 //! A test holds an open at the catalog of its models until it makes a file, so the clock of the
 //! window, which the test moves, says how long the open took.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::{

@@ -1,6 +1,8 @@
 //! The quotes of a word: `<s:name>` at the start of a line, its text, and `</s:name>` at the end of
 //! a line, which bind the name to the text as one string. A window reads each quote of a word that
 //! ran, and of a word that a model still writes, from here.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use serde::Serialize;
 use std::iter;

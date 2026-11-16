@@ -3,6 +3,7 @@
 //! the next open, a kill, which cancels that work first, or a pin, which keeps it running in the
 //! background once no window holds it. The same three come when he leaves while a session that
 //! the client holds lives: a thread of it works or asks him.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   card::Standing,

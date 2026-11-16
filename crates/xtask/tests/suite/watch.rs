@@ -1,4 +1,5 @@
 //! The task `watch` as a process, on a repository in a yard.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{
   fs,

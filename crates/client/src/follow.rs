@@ -1,6 +1,7 @@
 //! The follow-ups that the operator queues on a thread while its chain works: the life sends each
 //! as a message of the thread once the chain rests, and each window of the life shows it until it
 //! goes.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   Event, FollowUp,

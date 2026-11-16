@@ -1,5 +1,6 @@
 //! The proof of the crates of furb as a user takes them: as crates.io will give them, from their
 //! packs alone.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs, io,

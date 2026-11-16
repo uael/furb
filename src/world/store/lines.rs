@@ -1,4 +1,5 @@
 //! The store of a record as a file of lines: one fact per line, in JSON.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fs::{File, OpenOptions},

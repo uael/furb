@@ -1,4 +1,5 @@
 //! The failures of a call of a model that pass, and when the provider calls the model again.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

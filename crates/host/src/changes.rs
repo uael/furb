@@ -2,6 +2,7 @@
 //! and to undo what each write changed. As an ear that comes before the files of the crate, it
 //! reads the text that a write replaces before the files take the write, and it keeps the change
 //! once the write is done. It says nothing, so each write goes on to the ear that takes it.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;

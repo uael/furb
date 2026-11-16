@@ -1,5 +1,5 @@
 //! The thread of a card, on a real daemon whose lives a peer of the test drives.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::{fs, mem, time::Duration};

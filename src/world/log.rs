@@ -29,6 +29,7 @@
 //!
 //! [`Line`] reads a line of a log from its head, and [`keep`] writes the line of keep, so the
 //! format of the log has this one home, which the reader of a record with no life shares.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use serde::{Deserialize, Serialize};
 use std::{

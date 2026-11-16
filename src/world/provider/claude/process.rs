@@ -1,5 +1,7 @@
 //! The process of the claude command line that a conversation holds: how it starts, with a program
 //! that an update may replace for a moment, and how a turn reads its stdout and its stderr.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   process::Stdio,

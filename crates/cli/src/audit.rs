@@ -1,5 +1,6 @@
 //! The audit of a record: a replay with no model and no network that checks each word and each
 //! answer of the record, as `docs/audit.md` says.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{env, fs, path::Path, process};
 

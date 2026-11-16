@@ -8,6 +8,7 @@
 //! repository is listed in `MADE`, and a path with a variable or a pattern in it is not a whole
 //! path, so it is not checked. A path after `$root/`, which the scripts use for the root of the
 //! repository, is checked as a path of the repository.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   cmp::Reverse,

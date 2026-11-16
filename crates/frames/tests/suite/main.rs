@@ -1,5 +1,6 @@
 //! The program `furb-frames` as a person and a model run it: on recordings and frames that each
 //! test writes in a yard of its own, through its commands and the files that they write.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 #[path = "../../../../tests/common/yard.rs"]
 mod yard;

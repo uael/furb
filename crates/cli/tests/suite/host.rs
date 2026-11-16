@@ -1,6 +1,7 @@
 //! The daemon of `furb host` on the tailnet, with a fake of the local API of Tailscale: it reads
 //! `host.json` again at each change of the file.
-
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the runtime that tokio starts for it"

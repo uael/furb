@@ -2,6 +2,7 @@
 //! process, through an Opening in a process of its own: each test runs again as a child of itself,
 //! with the variables that it gives, as a user starts a host with them, and a provider on a port of
 //! this machine answers the child and keeps each request that it read.
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 
 use std::{
   fs,

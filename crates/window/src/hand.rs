@@ -1,5 +1,7 @@
 //! The window on an app: its widgets, and what each key, each move of the pointer, each timer and
 //! each frame of a machine changes in its model.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   env, fs, io, mem,

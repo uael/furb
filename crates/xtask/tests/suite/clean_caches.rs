@@ -1,4 +1,5 @@
 //! The task `clean-caches` as a process, on folders of its own.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{
   fs,

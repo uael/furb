@@ -4,7 +4,8 @@
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line
 //! that answers from a script stands in for the models, so no test asks one. The fake answers each
 //! line of input with the next word the test gave it, and it counts what it answered.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![cfg(unix)]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 

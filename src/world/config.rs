@@ -8,6 +8,7 @@
 //! each extension that the configs turn on adds the keys of the file that its manifest names under
 //! `furb-config`, each under the name of the extension. The writer refuses a value that the
 //! property of its key does not take, and keeps each key that no schema names as it is.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fs, io,

@@ -6,6 +6,7 @@
 //! The feed shows from a place: an exchange, and a count of rows from its first row. So a page
 //! of older exchanges, which comes above, moves no row that the operator reads, and a frame builds
 //! the rows of the exchanges that show and of no other.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap},

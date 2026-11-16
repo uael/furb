@@ -1,4 +1,5 @@
 //! A row of text as its runs, and how a row fills its columns.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{mem, ops::Range};
 

@@ -1,6 +1,9 @@
 //! A life on its thread, as a client of the host holds it: its commands, its events in order, and
 //! its end.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the tests block on the runtime that tokio starts for them"

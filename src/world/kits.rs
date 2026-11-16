@@ -19,6 +19,7 @@
 //! process that ends before its life tells the operator once, with its exit and the last lines of
 //! its stderr, and each act that it held is refused with the same reason. The end of the life ends
 //! each process with each process that it started.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, VecDeque},

@@ -3,6 +3,8 @@
 //! model on one row, what the answer said as markdown, and the messages of the operator that the
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{collections::HashMap, mem, path::Path, rc::Rc};
 

@@ -1,5 +1,6 @@
 //! The images of the input and of his messages: the image file of a path that he pastes, as a
 //! terminal pastes a file that he drags on it, and the mark that stands for an image in a text.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{fs, ops::Range, path::Path};
 

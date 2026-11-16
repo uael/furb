@@ -2,6 +2,7 @@
 //! digest of its bytes, and the message names it as a Markdown image, `![name](furb-image://<digest>.<extension>)`.
 //! The provider hands a model each image that the message of a prompt of a user turn names, and each image that a read
 //! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{HashMap, HashSet},

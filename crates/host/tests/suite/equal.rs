@@ -2,7 +2,8 @@
 //! boots on the carry across that crossing, and by its image. Each way reaches the state that the
 //! replay reaches, so a model and the owner read the same turns, the same module, the same acts,
 //! the same threads and the same pages, at the open and after it.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "a test blocks on the runtime that tokio starts for it"

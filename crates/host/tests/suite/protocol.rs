@@ -1,6 +1,7 @@
 //! The proofs of the protocol: the role of each verb, the bound of a frame, the version of a hello,
 //! and a round trip of each verb on each transport of the system.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![expect(
   clippy::disallowed_methods,

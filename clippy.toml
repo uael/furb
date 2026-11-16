@@ -3,6 +3,9 @@ too-many-lines-threshold = 60
 too-many-arguments-threshold = 4
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+# A panic is how a test fails, so a test indexes and panics as it reads.
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
 disallowed-methods = [
   { path = "std::thread::sleep", reason = "an ear awaits; a poll with sleep hides a hang" },
   { path = "futures::executor::block_on", reason = "never block the life or the reactor" },

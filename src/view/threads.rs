@@ -1,6 +1,7 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
 //! messages and what it asks the operator, nested under the thread whose ladder made it, or under
 //! the thread that it is on when its message carries an anchor, as a sub thread.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, HashSet},

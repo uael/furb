@@ -2,6 +2,7 @@
 //! wrapped between words, a list with its marks, a link in the accent that the terminal follows,
 //! inline code on the raised ground, and a block of code as a block of code, with the colors of
 //! python.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::mem;
 

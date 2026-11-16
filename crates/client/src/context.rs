@@ -2,6 +2,8 @@
 //! prompt, the doctrine, the code of the kits, the skills, the tools of MCP, the memory files
 //! and the turns of the work, which the client parts from the turns of the chain while the box of
 //! the context shows them.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::mem;
 

@@ -1,4 +1,6 @@
 //! The engine, minified: the system prompt of every model.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use ruff_python_ast::{
   comparable::ComparableModModule,

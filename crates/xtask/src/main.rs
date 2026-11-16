@@ -796,7 +796,7 @@ fn about(source: &str) -> String {
     .join(" ");
   let end =
     [". ", "? "].iter().filter_map(|stop| text.find(stop)).min().map_or(text.len(), |at| at + 1);
-  text[..end].to_owned()
+  text.get(..end).unwrap_or(&text).to_owned()
 }
 
 fn is_doc(line: &str) -> bool {

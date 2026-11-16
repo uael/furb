@@ -1,5 +1,6 @@
 //! The grade of a submission: the verifier of the task, held out of the life, over the diff that
 //! the life left, in the image of the task, in a mount namespace of its own, or on plain paths.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,

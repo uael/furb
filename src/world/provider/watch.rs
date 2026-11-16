@@ -18,6 +18,7 @@
 //! that ran: it is the word as far as the parts that ran, whatever the model wrote after them that
 //! cannot be python, since a later life runs the word of the rung and a statement of it must run
 //! there as it ran.
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use monty::{ReplContinuationMode, detect_repl_continuation_mode};
 use ruff_python_parser::{ParseErrorType, parse_module};

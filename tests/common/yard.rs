@@ -1,7 +1,10 @@
 //! The yard of a test: a folder of its own in the temporary directory, which goes when the test
 //! ends. The tests of each package of the workspace share it: the crate as a module of its tests,
 //! and each suite of `tests/` by a path, as `common/pipes.rs`.
-
+#![allow(
+  clippy::panic,
+  reason = "a panic is how a test fails, and a suite whose yard is a test module allows it already"
+)]
 #![allow(dead_code, reason = "a suite takes the part of the yard that it needs")]
 
 use std::{

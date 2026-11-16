@@ -5,6 +5,8 @@
 //! The list stands while he types the word and ranks its rows as each list of the client does. A
 //! row that he takes writes its name in the place of the word with a space after it, so his next
 //! word never joins it, and a command leaves the input as it was before its word, and runs.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{HashMap, HashSet},

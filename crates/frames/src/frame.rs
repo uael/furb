@@ -1,5 +1,6 @@
 //! A frame: the grid of a terminal at one moment, as rows of runs of one look. Its JSON is the one
 //! that each frame of the window and of another program takes, so one reader reads both.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{array, fs, path::Path};
 

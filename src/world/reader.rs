@@ -23,6 +23,7 @@
 //!
 //! A question that the reader says names its maker, as the engine names it, and each other fact
 //! that it says is said by [`READER`].
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};

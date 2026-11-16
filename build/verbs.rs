@@ -20,6 +20,11 @@
 //!
 //! Each constant of the contract that is a number or a text becomes a constant of the engine, with
 //! its sentence, so no ear of the crate writes it again.
+#![expect(
+  clippy::string_slice,
+  reason = "a build script fails the build by a panic, as cargo reports it"
+)]
+#![expect(clippy::panic, reason = "a build script fails the build by a panic, as cargo reports it")]
 
 use ruff_python_ast::{Expr, Number, Stmt, StmtFunctionDef};
 use ruff_python_parser::parse_module;

@@ -5,6 +5,7 @@
 //! which the window does only while the hand is away from the list, so no card moves under a
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashMap,

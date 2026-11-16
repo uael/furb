@@ -1,6 +1,8 @@
 //! The names of the code of a thread, as an editor reads them: where each name stands in its line,
 //! whether its line binds it, and what the contract says of each verb of the engine. The pointer on
 //! a name shows what it holds, and a click on it goes to the line that bound it.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
+#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{collections::HashMap, ops::Range, rc::Rc};
 

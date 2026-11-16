@@ -1,6 +1,7 @@
 //! The limit of time of a part of the suite. The run of its command fails when it passes the limit
 //! of that part, which `crates/xtask/budgets.toml` holds: the table `local` for this machine and
 //! `ci` for a runner of the gates.
+#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs, hint,

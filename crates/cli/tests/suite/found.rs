@@ -2,7 +2,7 @@
 //! names, then the one beside furb, then the one on PATH. The window that the checkout of the
 //! build holds comes last, and its tests stand beside the code, since the checkout is fixed when
 //! furb is built.
-
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![cfg(unix)]
 
 use crate::yard::Yard;
