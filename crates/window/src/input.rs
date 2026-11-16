@@ -52,20 +52,22 @@ pub(crate) struct Word {
 
 /// What a first press of a key named, which a second press of that key does: the resolve of the
 /// open thread while it works, which stops its work, the stop of that work, the take back of his
-/// last message that still runs, or the leave of the window. Any other key leaves it.
+/// last message that still runs, which the hint names as it stands at each frame, or the leave of
+/// the window. Any other key leaves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Armed {
   Resolve(Key),
   Stop,
-  Back(Back),
+  Back,
   Leave,
 }
 
 /// His last message that still runs, with its text: one that waits in the queue of the input, by
-/// its place there, or one of the open thread, by its act.
+/// its place there, one on its way to its machine, or one of the open thread, by its act.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Back {
   Queued(usize, String),
+  Flying(String),
   Said(String, String),
 }
 
@@ -205,7 +207,7 @@ impl Model {
       (&self.armed, does),
       (Some(Armed::Resolve(_)), Does::Resolve)
         | (Some(Armed::Stop), Does::Close)
-        | (Some(Armed::Back(_)), Does::Empty)
+        | (Some(Armed::Back), Does::Empty)
         | (Some(Armed::Leave), Does::Leave)
     );
     self.client.notice = None;
@@ -227,27 +229,29 @@ impl Model {
   }
 
   /// A press of the key that empties the input, on an empty input: the first names his last
-  /// message that still runs, and a second takes it back. A message that waits in the queue
-  /// leaves it, and its text comes back to the input at once; one of the open thread is cancelled
-  /// on its machine, and its text comes back once the machine did it. The cancel to ask, with that
-  /// text.
+  /// message that still runs, and a second takes back the one that the hint names then. A message
+  /// that waits in the queue leaves it, and its text comes back to the input at once; one of the
+  /// open thread is cancelled on its machine, and its text comes back once the machine did it. A
+  /// message on its way stays named, and the next press takes it once its machine took it. The
+  /// cancel to ask, with that text.
   pub(crate) fn take_back(&mut self) -> Option<((usize, Verb), String)> {
     let Some(last) = self.last_own() else {
       self.client.notice = Some("Nothing that you sent still runs here.".to_owned());
       return None;
     };
-    let armed = Armed::Back(last.clone());
-    if self.armed.replace(armed.clone()) != Some(armed) {
-      return None;
-    }
-    self.armed = None;
+    let again = self.armed.replace(Armed::Back) == Some(Armed::Back);
     match last {
+      // A message on its way stays named, and the next press takes it once its machine took it.
+      _ if !again => None,
+      Back::Flying(_) => None,
       Back::Queued(at, text) => {
+        self.armed = None;
         self.unqueued(at, &text);
         self.client.restore = Some(self.before_draft(text));
         None
       }
       Back::Said(act, text) => {
+        self.armed = None;
         let (at, life, _) = self.client.thread.as_ref()?.thread.key.clone();
         Some(((at, Verb::Cancel { life, act, why: None }), text))
       }
@@ -255,14 +259,17 @@ impl Model {
   }
 
   /// His last message that still runs: the last one of the queue that is not on its way, else the
-  /// last one that the daemon took and the page does not show yet, else his last one on the open
-  /// thread while its act runs, so a take back never reaches past a message that the thread already
-  /// took to an earlier one, as the message that began the thread.
+  /// one on its way, else the last one that the daemon took and the page does not show yet, else
+  /// his last one on the open thread while its act runs, so a take back never reaches past a later
+  /// message to an earlier one, as the message that began the thread.
   fn last_own(&self) -> Option<Back> {
     let flying = self.client.asked.values().any(|one| *one == Asked::Say);
     let queued = self.client.outgoing.iter().enumerate().skip(usize::from(flying)).next_back();
     if let Some((at, one)) = queued {
       return Some(Back::Queued(at, one.text.clone()));
+    }
+    if let Some(one) = self.client.outgoing.front().filter(|_| flying) {
+      return Some(Back::Flying(one.text.clone()));
     }
     let opened = self.client.thread.as_ref()?;
     let mut taken = opened.thread.pending.iter().rev();
@@ -310,9 +317,9 @@ impl Model {
   /// head says the resolve of a thread that works.
   fn armed_says(&self, room: usize) -> Option<String> {
     match self.armed.as_ref()? {
-      Armed::Back(back) => {
-        let text = match back {
-          Back::Queued(_, text) | Back::Said(_, text) => text,
+      Armed::Back => {
+        let text = match self.last_own()? {
+          Back::Queued(_, text) | Back::Flying(text) | Back::Said(_, text) => text,
         };
         let said = format!("{} again takes back “", self.key(Does::Empty));
         let first =
