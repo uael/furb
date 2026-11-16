@@ -4,7 +4,6 @@
 //! one more turn on a model that answers from a script. `tests/corpus/README.md` says the rule of
 //! the folders.
 
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the act of a rung, as the tests of the crate do"

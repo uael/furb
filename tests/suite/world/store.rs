@@ -51,7 +51,7 @@ fn shown(entries: &[Object]) -> Vec<String> {
 /// A record whose store kept each fact of the suite and let it go.
 fn filled(open: impl Fn(&Path) -> Result<Box<dyn Store>, Fault>, path: &Path) {
   let mut one = open(path).unwrap_or_else(|no| panic!("{no}"));
-  assert!(one.entries().unwrap_or_else(|no| panic!("{no}")).is_empty());
+  assert_eq!(one.entries().unwrap_or_else(|no| panic!("{no}")), Vec::<Object>::new());
   for entry in facts() {
     one.keep(entry.as_ref()).unwrap_or_else(|no| panic!("{no}"));
   }
@@ -75,9 +75,9 @@ macro_rules! conformance {
       #[test]
       fn a_new_record_holds_no_entry() {
         let path = at("new");
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
         assert!(open(&path).unwrap().entries().unwrap().is_empty());
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
       }
 
       #[test]
@@ -119,7 +119,7 @@ macro_rules! conformance {
         one.entries().unwrap();
         one.sync().unwrap();
         one.sync().unwrap();
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
       }
 
       #[test]
@@ -186,7 +186,7 @@ macro_rules! conformance {
       fn the_store_of_a_path_whose_name_ends_so_is_this_store() {
         let path = at("named");
         let (record, ear) = store(&path).unwrap();
-        assert!(record.is_empty());
+        assert_eq!(record, Vec::<Object>::new());
         drop(ear);
         filled(open, &path);
         let (record, _ear) = store(&path).unwrap();
@@ -465,7 +465,7 @@ fn a_record_on_a_full_disk_tells_the_operator_once_and_takes_each_entry_in_order
   let first = pass(&mut ear, &entries[0]).expect("the first keep that fails tells the operator");
   assert!(first.contains("cannot be written: No space left on device"), "{first}");
   assert_eq!(pass(&mut ear, &entries[1]), None, "the operator knows already");
-  assert!(kept(&path).unwrap().is_empty());
+  assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
   space.full.set(false);
   // The end of a run keeps each entry that waits and syncs them, which ends the fault.
   ear.ran().unwrap();
@@ -571,7 +571,7 @@ fn one_store_at_a_time_holds_a_record_and_a_read_with_no_lease_reads_it_all_the_
   let at = Yard::new(format!("furb-world-lease-{}", process::id()));
   let path = at.join("record.jsonl");
   let (record, ear) = store(&path).unwrap();
-  assert!(record.is_empty());
+  assert_eq!(record, Vec::<Object>::new());
   let refused = store(&path).err().unwrap();
   assert_eq!(refused.to_string(), format!("Refused: Another process owns {}.", path.display()));
   fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\n").unwrap();
@@ -611,7 +611,7 @@ fn the_store_reads_past_a_torn_last_line_and_a_whole_one_that_no_keep_mends_and_
     format!("Refused: Invalid record entry at byte 0 in {}.", path.display())
   );
   fs::write(&path, "[\"torn\"").unwrap();
-  assert!(kept(&path).unwrap().is_empty());
+  assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
   assert_eq!(fs::read_to_string(&path).unwrap(), "[\"torn\"");
 }
 

@@ -477,7 +477,7 @@ fn the_threads_that_the_ladder_of_a_thread_made_nest_under_it_and_a_question_in_
     [tree[0].state, deepest.state, tree[1].state],
     [State::Asks, State::Asks, State::Runs]
   );
-  assert!(tree[0].thread.asks.is_empty());
+  assert_eq!(tree[0].thread.asks, Vec::<String>::new());
   assert_eq!(tree[0].thread.state, State::Runs);
 }
 

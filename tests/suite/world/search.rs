@@ -4,8 +4,6 @@
 //! offer each provider, and whose model stands in the snapshot with its native search, so no search
 //! goes to the free search of the kit `web`, whose suite is `tests/outside/test_web.py`.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{fs, path::Path, time::Duration};
 
 use serde_json::{Value, json};

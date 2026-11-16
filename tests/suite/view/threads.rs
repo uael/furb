@@ -438,7 +438,7 @@ fn the_rail_holds_the_closed_threads_first_and_the_open_ones_last_each_by_its_la
   assert_eq!(rail.iter().map(open).collect::<Vec<_>>(), [false, false, true, true, true]);
   assert_eq!(shape(&rail[3..4]), vec![("prompt6".to_owned(), names(&["prompt8", "prompt7"]))]);
   // The rail leaves out each chain that it names, and stands as it stood at a moment.
-  assert!(life.rail(&names(&["chain1"]), None).is_empty());
+  assert_eq!(life.rail(&names(&["chain1"]), None), Vec::<ThreadNode>::new());
   let moments = life.moments(None);
   let early = life.rail(&[], moments.get(2).copied());
   assert_eq!(

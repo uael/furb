@@ -2,8 +2,6 @@
 //! models.dev in its cache, with the credentials of its environment: each test runs again as a
 //! child of itself, whose cache holds the listing of the tests, and says what it found.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   fs,
   io::{BufRead, BufReader, Write},
@@ -243,7 +241,7 @@ fn a_catalog_keeps_the_names_it_finds_and_names_each_one_that_left_once() {
     assert_eq!((kept.actor, kept.left), (None, vec!["nothing".to_owned()]));
     let kept = catalog.keep(None, Some("openai:gpt-5/medium"));
     assert_eq!((kept.names, kept.actor), (None, Some("openai:gpt-5/medium".to_owned())));
-    assert!(kept.left.is_empty());
+    assert_eq!(kept.left, Vec::<String>::new());
     return;
   }
   run(here!(), cached("keep", &listing()), &[]);

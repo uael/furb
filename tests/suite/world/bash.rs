@@ -1,7 +1,5 @@
 //! The commands of a life, through the verb bash of the engine.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{env, fs, os::unix::fs::PermissionsExt, path::Path, process, thread, time::Duration};
 
 use furb::{Exit, life::Opening, verbs};

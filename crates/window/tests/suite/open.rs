@@ -22,14 +22,13 @@ use crate::{
 
 // What only the tests of a session at rest use, which run on unix alone.
 #[cfg(unix)]
-use {
-  crate::{
-    cards::CLOCK,
-    daemon::aged,
-    thread::{at, clicked},
-  },
-  opentui::style::Color,
+use crate::{
+  cards::CLOCK,
+  daemon::aged,
+  thread::{at, clicked},
 };
+#[cfg(unix)]
+use opentui::style::Color;
 
 /// The columns of the left side of the window, at the left of the list.
 const LEFT: usize = 61;

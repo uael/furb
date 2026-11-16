@@ -3,7 +3,6 @@
 //! runs this test.
 #![cfg(unix)]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 use crate::pipes;
 use crate::yard;

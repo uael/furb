@@ -1,8 +1,6 @@
 //! The reader of a record, through what the crate gives a host: a record written as a life keeps
 //! it, and what [`retold`] and its kin tell of it, with no life.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{fs, path::PathBuf, process, thread};
 
 use serde_json::{Value, value::RawValue};
@@ -376,7 +374,7 @@ fn a_record_with_no_log_names_its_session_by_the_last_word_of_the_operator_that_
   assert_eq!(read.name(), Some(r#"say "it" \ twice"#));
   let again = retold(&at).unwrap();
   assert_eq!(again.said, read.said);
-  assert!(!fs::read_to_string(&again.file).unwrap().is_empty());
+  assert_ne!(fs::read_to_string(&again.file).unwrap(), "");
   assert!(!PathBuf::from(format!("{}.told.body", at.display())).exists());
 }
 

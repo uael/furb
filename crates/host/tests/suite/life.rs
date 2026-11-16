@@ -362,7 +362,7 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   let mut tip = Box::pin(life.events(Seq::MAX));
   let got = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
   let Event::Ended(Some(fault)) = &*got.last().unwrap().1 else { panic!("the end has a fault") };
-  assert!(!fault.is_empty());
+  assert_ne!(fault, "");
   assert!(events.next().await.is_none());
   let heard = time::timeout(
     Duration::from_secs(10),

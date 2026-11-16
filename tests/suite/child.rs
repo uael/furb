@@ -2,8 +2,6 @@
 //! gives, as a user starts a host with them: the catalog of a life and the World read their
 //! settings from the environment of their process, which a test in that process cannot set.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   env,
   path::{Path, PathBuf},

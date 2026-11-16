@@ -2,8 +2,6 @@
 //! each test runs again as a child of itself, as a user starts a host with that environment, and a
 //! server of the test on a port of this machine answers it and keeps each request that it read.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   fs,
   io::{BufRead, BufReader, Read, Write},

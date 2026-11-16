@@ -508,11 +508,7 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
     "a Literal is answered by one of its values"
   );
   let output = ran(yard.furb(&pick), "c\n");
-  assert_eq!(
-    String::from_utf8_lossy(&output.stdout),
-    "'c'\n",
-    "a Literal ends with his own words"
-  );
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "'c'\n", "a Literal ends with his own words");
   let said = refused(yard.furb(&["prompt", "a set", "--to", "operator", "--shape", "set"]), "");
   assert_eq!(
     said, "furb: Refused: the operator answers no set\n",

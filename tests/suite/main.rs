@@ -3,19 +3,15 @@
 
 #[cfg(unix)]
 #[path = "../common/pipes.rs"]
-#[expect(clippy::expect_used, reason = "a test fails by a panic where its process fails")]
 mod pipes;
 
 #[cfg(unix)]
 #[path = "../common/claude.rs"]
-#[expect(clippy::expect_used, reason = "the fake fails the test where it is not made")]
 mod claude;
 #[path = "../common/drive.rs"]
 mod drive;
 #[path = "../common/opened.rs"]
 #[expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#[expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
-#[expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 mod opened;
 #[path = "../common/yard.rs"]
 mod yard;

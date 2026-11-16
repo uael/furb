@@ -3,7 +3,6 @@
 //! command line of the tests. The laws that no door reaches stand beside the module, in
 //! `src/world/provider.test.rs`, each family with its reason.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 #![cfg_attr(
   unix,
   expect(

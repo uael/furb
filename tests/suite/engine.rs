@@ -8,8 +8,6 @@
 //! beside the engine, in `src/engine.test.rs`.
 
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
 #[path = "../common/lived.rs"]
 mod lived;
@@ -949,7 +947,7 @@ fn a_replay_gives_a_word_the_facts_of_the_world_that_the_first_life_gave() {
     let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
     let rung = first.engine.rung(rung).unwrap().id().to_owned();
     assert!(first.settled(&rung).is_ok());
-    assert!(first.engine.pending().unwrap().is_empty());
+    assert_eq!(first.engine.pending().unwrap(), Vec::<(String, String)>::new());
     let live = bash(&mut first, &root);
     (root, live, first.end())
   };
@@ -991,8 +989,8 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
   // Each life that a host wakes as it opens asks the model again, and ends while the reply runs.
   for _ in 1..CRASHES {
     let mut again = Lived::new("parked", &["WAIT"], false).unwrap();
-    assert!(again.engine.parked().unwrap().is_empty());
-    assert!(!again.engine.pending().unwrap().is_empty());
+    assert_eq!(again.engine.parked().unwrap(), Vec::<(String, String)>::new());
+    assert_ne!(again.engine.pending().unwrap(), Vec::<(String, String)>::new());
     again.engine.wake(&root).unwrap();
     assert_eq!(started(&mut again), 1);
   }
@@ -1007,7 +1005,7 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
   assert!(parked.settled(&rung).is_ok(), "the ears behind the park hear as before");
   parked.engine.retry("reply1").unwrap();
   assert_eq!(started(&mut parked), 1, "a retry puts it to the outside after the wake");
-  assert!(parked.engine.parked().unwrap().is_empty());
+  assert_eq!(parked.engine.parked().unwrap(), Vec::<(String, String)>::new());
   assert_eq!(parked.engine.retry("reply1").unwrap_err().name, "Refused");
   drop(parked);
   // A retry before any wake puts the act to the outside as well.

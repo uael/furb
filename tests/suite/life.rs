@@ -2,11 +2,6 @@
 //! the store keeps.
 
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
-#![cfg_attr(
-  unix,
-  expect(clippy::expect_used, reason = "a test of the systems of unix fails where its call fails")
-)]
 
 use crate::opened::{
   changed, closed, corpus, crossed, crossing, elsewhere, made_of, named, names, opening, ours,
@@ -30,7 +25,8 @@ use std::{
 #[cfg(unix)]
 use std::time::Instant;
 
-use futures::{channel::mpsc::unbounded, executor, future, future::select};
+use futures::channel::mpsc::unbounded;
+use futures::{executor, future, future::select};
 use tokio::runtime;
 
 use crate::yard::Yard;

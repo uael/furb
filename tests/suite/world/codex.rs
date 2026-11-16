@@ -3,8 +3,6 @@
 //! a user starts a host whose `FURB_OPENAI_URL` names a host that stands in for `OpenAI`, which a
 //! thread of the parent serves on a port of this machine, keeping each request that it read.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   collections::HashMap,
   env,

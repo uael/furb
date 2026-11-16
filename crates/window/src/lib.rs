@@ -43,8 +43,8 @@ mod screen;
 mod settings;
 mod thread;
 mod time;
-mod transcript;
 pub mod tokens;
+mod transcript;
 mod voice;
 
 use std::{

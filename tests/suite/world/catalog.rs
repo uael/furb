@@ -3,8 +3,6 @@
 //! with the variables that it gives, as a user starts a host with them, and a provider on a port of
 //! this machine answers the child and keeps each request that it read.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   fs,
   io::{BufRead, BufReader, Read, Write},

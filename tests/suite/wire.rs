@@ -1,7 +1,5 @@
 //! The wire of a host, through `furb::wire`: a line of the record read with every number exact.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use serde_json::Value;
 
 use furb::wire::{outward, parsed};

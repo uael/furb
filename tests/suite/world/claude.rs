@@ -1,7 +1,6 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a
 //! script, which `fake-claude.sh` says.
 
-#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
@@ -527,7 +526,7 @@ fn an_effort_that_the_command_line_does_not_take_is_refused_before_any_process_s
   let no = asked(&model, &[user("first")], json!({"effort": "huge"})).unwrap_err();
   let why = "sonnet spends one of low, medium, high, xhigh, max on a turn, never huge.";
   assert!(no.to_string().contains(why), "{no}");
-  assert!(yard.pids().is_empty());
+  assert_eq!(yard.pids(), Vec::<String>::new());
 }
 
 #[test]
@@ -938,7 +937,7 @@ fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
     ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"]
   );
   assert_eq!(got[2].1, 200_000);
-  assert!(yard.pids().is_empty());
+  assert_eq!(yard.pids(), Vec::<String>::new());
 }
 
 #[test]

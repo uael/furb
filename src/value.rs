@@ -495,6 +495,6 @@ mod tests {
     let held = Object::exception(monty_types::ExcType::CancelledError, None);
     let fault = Fault::of(held.as_ref()).unwrap();
     assert_eq!(fault.name, "CancelledError");
-    assert!(fault.args.is_empty());
+    assert_eq!(fault.args, Vec::<Object>::new());
   }
 }

@@ -4,8 +4,6 @@
 //! engine on the
 //! record that the store keeps.
 
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   env, fs,
   path::{self, Path, PathBuf},
