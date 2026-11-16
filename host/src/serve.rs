@@ -143,7 +143,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   let (read, write) = io::split(stream);
   let mut lines = FramedRead::new(read, LinesCodec::new_with_max_length(BOUND));
   let mut out = FramedWrite::new(write, LinesCodec::new());
-  let (mut peer, asked) = match heard(&mut lines).await? {
+  let (mut peer, asked, version) = match heard(&mut lines).await? {
     None => return Ok(()),
     Some(Ok(Request { id, verb: Verb::Hello(Hello { kind: Kind::Skill, name: None, .. }) })) => {
       return closed(&mut out, Some(id), ProtocolError::Nameless).await;
@@ -153,7 +153,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
       let peer = Peer { operator: who.operator, role, kind: hello.kind, name: hello.name };
       send(&mut out, &Frame::Reply { id, answer: welcome(&peer, host.home()) }).await?;
-      (peer, asked)
+      (peer, asked, hello.protocol)
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) => {
       let error = ProtocolError::Protocol { ours: PROTOCOL, theirs: hello.protocol };
@@ -186,15 +186,15 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
         let role = asked.map_or(role, |asked| asked.min(role));
         if role != peer.role {
           peer.role = role;
-          send(&mut out, &Frame::Granted { role }).await?;
+          told(&mut out, Frame::Granted { role }, version).await?;
         }
       }
       Some(frame) = pushed.recv() => {
-        let sent = send(&mut out, &frame).await;
+        let sent = told(&mut out, frame, version).await;
         outbox.read();
         sent?;
       }
-      Some(frame) = answers.next() => send(&mut out, &frame).await?,
+      Some(frame) = answers.next() => told(&mut out, frame, version).await?,
     }
   }
 }
@@ -278,6 +278,19 @@ async fn answered<H: Host>(host: &H, peer: Peer, outbox: &Outbox, id: u64, verb:
   match host.answer(&peer, verb, outbox).await {
     Ok(answer) => Frame::Reply { id, answer },
     Err(error) => Frame::refused(Some(id), error),
+  }
+}
+
+/// A frame written to a peer as the version of its hello reads it, or nothing for a frame that the
+/// version did not have: a kit speaks each version from [`KITS`].
+async fn told<W: AsyncWrite + Unpin>(
+  out: &mut FramedWrite<W, LinesCodec>,
+  frame: Frame,
+  version: u32,
+) -> Result<(), TransportError> {
+  match frame.told_to(version) {
+    Some(frame) => send(out, &frame).await,
+    None => Ok(()),
   }
 }
 

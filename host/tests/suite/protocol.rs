@@ -29,6 +29,7 @@ use furb_host::{
   serve,
   transport::{Dialer, Identity, Local, Who},
 };
+use furb_wire::{Block, Exchange, Line, Maker, Mark, Page};
 use serde_json::{Value, json};
 use tokio::io::{
   AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, DuplexStream, duplex,
@@ -698,4 +699,129 @@ fn the_schema_on_disk_is_the_schema_of_the_protocol() {
   }
   let held = fs::read_to_string(&place).unwrap_or_default();
   assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
+}
+
+/// A daemon that answers each verb with a page of one exchange, whose one line waits to run.
+struct Paged;
+
+impl Host for Paged {
+  fn answer(
+    &self,
+    _: &Peer,
+    _: Verb,
+    _: &Outbox,
+  ) -> impl Future<Output = Result<Answer, ProtocolError>> + Send {
+    let line = Line::of(1, "x = 1".to_owned(), Mark::Waits);
+    let block = Block { maker: Maker::Operator, lines: vec![line], more: true, thought: None };
+    let exchange = Exchange {
+      at: 0,
+      message: "prompt1".to_owned(),
+      said_at: 0,
+      by: Maker::Operator,
+      text: "hi".to_owned(),
+      python: true,
+      runs: true,
+      block: Some(block),
+      said: Vec::new(),
+    };
+    future::ready(Ok(Answer::Page(Page { exchanges: vec![exchange], ..Page::default() })))
+  }
+}
+
+#[tokio::test]
+async fn a_kit_of_the_first_version_reads_a_page_as_its_version_said_it() {
+  for (protocol, kind, name, mark) in
+    [(KITS, Kind::Skill, Some("k"), Mark::Ran), (PROTOCOL, Kind::Window, None, Mark::Waits)]
+  {
+    let (ours, theirs) = duplex(1 << 16);
+    let who = Who { operator: "uael".to_owned(), role: Role::Read };
+    tokio::spawn(async move { serve(&Paged, theirs, who, fixed(Role::Read)).await });
+    let mut client = Client { lines: BufReader::new(ours) };
+    client.hello_as(protocol, kind, name).await;
+    let Frame::Reply { answer: Answer::Page(mut page), .. } =
+      client.ask(1, Verb::List { config: None }).await
+    else {
+      panic!("the daemon answers a page");
+    };
+    let block = page.exchanges.remove(0).block.expect("the exchange holds its block");
+    assert_eq!(block.lines[0].mark, mark, "{protocol}");
+  }
+}
+
+/// Each value of the protocol of now that a kit of the first version did not know, with what the
+/// daemon does for that kit: `Frame::told_to` maps each value that a kit can read, and the rest
+/// never reaches a kit of that version.
+const NEW: [(&str, &str); 6] = [
+  ("Mark|is=waits", "mapped: a kit before 66 reads ran"),
+  ("Reply|is=withdrawn", "mapped: a kit before 54 reads refused"),
+  ("Saying|resolved", "mapped: a kit before 68 reads answer"),
+  ("Frame|frame=granted", "mapped: a kit before 60 hears no change of its role"),
+  ("Frame|frame=served", "only a window hears which kits serve views"),
+  ("Answer|answer=tracks", "only the verb tracks of 56 gives it, which no kit of 44 says"),
+];
+
+#[test]
+fn each_value_that_a_kit_of_the_first_version_did_not_know_is_mapped_or_never_reaches_it() {
+  let kits = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/kits");
+  let first: Value =
+    serde_json::from_str(&fs::read_to_string(kits.join(format!("{KITS}.schema.json"))).unwrap())
+      .unwrap();
+  let now = serde_json::to_value(schema()).unwrap();
+  // What a kit says is the golden of its lines, which each later daemon takes: only what the daemon
+  // says is read here.
+  let read = |schema: &Value| -> BTreeSet<String> {
+    let mut paths = BTreeSet::new();
+    for (name, one) in schema["definitions"].as_object().unwrap() {
+      if name != "Request" {
+        flat(name, one, &mut paths);
+      }
+    }
+    paths
+  };
+  let (then, now) = (read(&first), read(&now));
+  let gone: Vec<&String> = then.difference(&now).collect();
+  assert_eq!(gone, Vec::<&String>::new(), "a part that a kit of {KITS} reads is gone");
+  let mapped: BTreeSet<&str> = NEW.iter().map(|(path, _)| *path).collect();
+  let new: Vec<&String> = now
+    .difference(&then)
+    .filter(|path| {
+      let (owner, last) = path.rsplit_once(['|', '.']).unwrap_or((path, ""));
+      then.contains(owner) && path[owner.len()..].starts_with('|') && !last.is_empty()
+    })
+    .filter(|path| !mapped.contains(path.as_str()))
+    .collect();
+  assert_eq!(new, Vec::<&String>::new(), "a value of now has no line in NEW nor in Frame::told_to");
+}
+
+/// The keys whose constant names the variant of a union.
+const TAGGED: [&str; 7] = ["frame", "answer", "event", "is", "kind", "slot", "effect"];
+
+/// Each path of a schema under a name: each property, as `.key`, and each variant of a union, as
+/// `|key=value` by the constant of its tag, `|key` for an object of one key, or `|value` for a
+/// string of a list of strings.
+fn flat(at: &str, one: &Value, paths: &mut BTreeSet<String>) {
+  paths.insert(at.to_owned());
+  if let Some(properties) = one["properties"].as_object() {
+    for (key, part) in properties {
+      flat(&format!("{at}.{key}"), part, paths);
+    }
+  }
+  for union in ["oneOf", "anyOf"] {
+    for part in one[union].as_array().into_iter().flatten() {
+      let tag = TAGGED.iter().find_map(|key| {
+        let value = part["properties"][key]["const"].as_str()?;
+        Some(format!("{key}={value}"))
+      });
+      let single = part["properties"].as_object().filter(|keys| keys.len() == 1);
+      let tag = tag.or_else(|| single.and_then(|keys| keys.keys().next().cloned()));
+      match tag {
+        Some(tag) => flat(&format!("{at}|{tag}"), part, paths),
+        None => {
+          for value in part["enum"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            paths.insert(format!("{at}|{value}"));
+          }
+        }
+      }
+    }
+  }
 }
