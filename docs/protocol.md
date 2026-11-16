@@ -163,6 +163,7 @@ daemon answers requests in any order.
 | `sign_in` | `cwd`, `device` | write |
 | `cancel_sign_in` | | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
+| `picture` | `life`, `source`: the uri `furb-image://…` of an image of the gallery of the life, or the absolute path of an image file. It answers `{media, data}`, the media type and the bytes in base64, and refuses what is no image | read |
 | `image` | `life`, `name`, `data` (the bytes of a PNG, a JPEG, a GIF or a WebP, in base64): the life keeps it beside its record and answers the text `![name](furb-image://…)` by which a message names it | write |
 | `seen` | `life`, `about` | write |
 | `resolve` | `life`, `thread` | write |

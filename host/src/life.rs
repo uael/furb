@@ -147,6 +147,9 @@ pub enum Command {
   /// by which a message names it under a name. A life with no gallery, as one that keeps no
   /// record, refuses it.
   Image { name: String, data: String },
+  /// An image that the life shows: one of its gallery by its uri, or a file by its absolute path,
+  /// as a value with its media type and its bytes in base64.
+  Picture { source: String },
   /// The names of the models of the roster of the life put in place of the ones it held, then a
   /// stand of the life, which reads the catalog again and offers them: the act of the stand. The
   /// life goes on, and each later birth of it keeps them.
@@ -250,6 +253,7 @@ impl Command {
         | Self::Tracks
         | Self::Thread { .. }
         | Self::Sent
+        | Self::Picture { .. }
     )
   }
 }
@@ -1539,6 +1543,17 @@ fn imaged(life: &Life, name: &str, data: &str) -> Result<Reply, LifeError> {
   Ok(Reply::Value(Value::String(images::reference(name, &uri))))
 }
 
+/// An image that the life shows, from its gallery or from a file, with its media type.
+fn pictured(life: &Life, source: &str) -> Result<Reply, LifeError> {
+  let refused = |why: String| LifeError::Refused(why);
+  let (media, bytes) = match life.gallery.as_deref() {
+    Some(gallery) if source.starts_with(images::SCHEME) => images::read(gallery, source),
+    _ => images::file(Path::new(source)),
+  }
+  .map_err(|no| refused(no.to_string()))?;
+  Ok(Reply::Value(json!({ "media": media, "data": STANDARD.encode(bytes) })))
+}
+
 /// What a command comes to, said by a speaker: the life speaks as that speaker for the command
 /// alone, then as before, whatever the command came to.
 async fn spoken(
@@ -1638,6 +1653,7 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
       Ok(Reply::Page(life.kept.held.past(at).page(&life.kept.streams, &thread, reach)))
     }
     Command::Sent => Ok(Reply::Sent(life.kept.held.sent())),
+    Command::Picture { source } => pictured(life, &source),
     other => Err(LifeError::Refused(format!("{other:?} is no view"))),
   }
 }

@@ -588,6 +588,31 @@ async fn an_image_of_a_window_stands_in_the_gallery_of_the_life_and_a_message_na
 }
 
 #[tokio::test]
+async fn a_window_reads_an_image_of_the_gallery_by_its_uri_and_a_file_by_its_path() {
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  let data =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4takZAATZAjDdIHqMAAAAAElFTkSuQmCC";
+  let name = "image-1.png".to_owned();
+  window.ask(Verb::Image { life: life.clone(), name, data: data.to_owned() }).await.unwrap();
+  let file = "9e485a66b9b8e7bee8eec3a548388240c61b2d9854bd1a1dc1aa5de904b8ae17.png";
+  let picture = json!({ "media": "image/png", "data": data });
+  let source = format!("furb-image://{file}");
+  let kept = window.ask(Verb::Picture { life: life.clone(), source }).await;
+  assert_eq!(kept, Ok(Answer::Value(picture.clone())));
+  let shot = at.join("shot.png");
+  fs::copy(at.join("a.jsonl.images").join(file), &shot).unwrap();
+  let source = shot.display().to_string();
+  let read = window.ask(Verb::Picture { life: life.clone(), source }).await;
+  assert_eq!(read, Ok(Answer::Value(picture)));
+  let source = at.join("a.jsonl").display().to_string();
+  let refused = window.ask(Verb::Picture { life, source }).await;
+  assert!(matches!(refused, Err(ProtocolError::Refused { .. })), "{refused:?}");
+}
+
+#[tokio::test]
 async fn the_detach_of_one_window_leaves_the_other() {
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;

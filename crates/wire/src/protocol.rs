@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 70;
+pub const PROTOCOL: u32 = 71;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -360,6 +360,13 @@ pub enum Verb {
     life: String,
     config: Config,
   },
+  /// An image that the life shows, which a window draws: one of its gallery by the uri by which a
+  /// message names it, or a file by its absolute path. It answers a value with the media type of
+  /// the image as `media` and its bytes in base64 as `data`, or refuses what is no image.
+  Picture {
+    life: String,
+    source: String,
+  },
   /// An image kept in the gallery of the life, beside its record, under the digest of its bytes:
   /// a PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it
   /// under its name, `![name](uri)`, so that the model sees it.
@@ -567,6 +574,7 @@ impl Verb {
       | Self::Roster { life, .. }
       | Self::Config { life, .. }
       | Self::Image { life, .. }
+      | Self::Picture { life, .. }
       | Self::Seen { life, .. }
       | Self::Resolve { life, .. }
       | Self::Revert { life, .. }
@@ -630,6 +638,7 @@ impl Verb {
         | Self::Standing { .. }
         | Self::Filled { .. }
         | Self::Cwd { .. }
+        | Self::Picture { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
         | Self::Queued { .. }

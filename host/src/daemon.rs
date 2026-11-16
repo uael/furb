@@ -673,6 +673,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Roster { life, roster } => (life, Command::Roster(roster)),
     Verb::Config { life, config } => (life, configured(config)),
     Verb::Image { life, name, data } => (life, Command::Image { name, data }),
+    Verb::Picture { life, source } => (life, Command::Picture { source }),
     Verb::Plays { life } => (life, Command::Plays),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Resolve { life, thread } => (life, Command::Resolve { thread }),

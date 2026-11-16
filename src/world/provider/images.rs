@@ -22,7 +22,7 @@ use crate::world::disk::{self, Access};
 const LARGEST: u64 = 20 * 1024 * 1024;
 
 /// The scheme of the uri of an image.
-const SCHEME: &str = "furb-image://";
+pub const SCHEME: &str = "furb-image://";
 
 /// The types of an image, each by its media type, its extension, and the first bytes of its file.
 const KINDS: [(&str, &str, &[u8]); 4] = [
@@ -88,11 +88,7 @@ pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), Error> {
 
 /// An image copied into a directory of images under the digest of its bytes, with the name of the file it came from.
 pub fn attach(directory: &Path, path: &Path) -> Result<Attached, Error> {
-  let info = fs::metadata(path)?;
-  if !info.is_file() || info.len() > LARGEST {
-    return Err(Error::TooLarge);
-  }
-  let bytes = fs::read(path)?;
+  let (_, bytes) = file(path)?;
   let (uri, media) = keep(directory, &bytes)?;
   let name = path.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
   Ok(Attached { name, uri, media, size: bytes.len() as u64 })
@@ -138,6 +134,16 @@ pub fn read(directory: &Path, uri: &str) -> Result<(&'static str, Vec<u8>), Erro
   if digest(&bytes) != named {
     return Err(Error::Changed);
   }
+  Ok((kind(&bytes)?.0, bytes))
+}
+
+/// The bytes of an image file of at most 20 MiB, and its media type.
+pub fn file(path: &Path) -> Result<(&'static str, Vec<u8>), Error> {
+  let info = fs::metadata(path)?;
+  if !info.is_file() || info.len() > LARGEST {
+    return Err(Error::TooLarge);
+  }
+  let bytes = fs::read(path)?;
   Ok((kind(&bytes)?.0, bytes))
 }
 

@@ -964,6 +964,27 @@
         },
         {
           "type": "object",
+          "description": "An image that the life shows, which a window draws: one of its gallery by the uri by which a\nmessage names it, or a file by its absolute path. It answers a value with the media type of\nthe image as `media` and its bytes in base64 as `data`, or refuses what is no image.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "picture"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "source"
+          ]
+        },
+        {
+          "type": "object",
           "description": "An image kept in the gallery of the life, beside its record, under the digest of its bytes:\na PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it\nunder its name, `![name](uri)`, so that the model sees it.",
           "properties": {
             "life": {
@@ -6356,5 +6377,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 70
+  "x-protocol": 71
 }
