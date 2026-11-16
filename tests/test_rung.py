@@ -676,3 +676,12 @@ async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_to
   lost = [engine.peek(x) for x in [*wants, *runs]]
   assert all(isinstance(x, engine.Refused) and "the word was lost" in str(x) for x in lost), lost
   assert all(engine.over(rung) for rung in rungs)
+
+
+async def test_a_word_that_is_no_str_is_refused_where_the_rung_is_made() -> None:
+  """A word that is no str is refused where the rung is made, so its chain makes no act of it and goes on."""
+  _, log, root = born()
+  await engine.rung("try:\n  rung(read('a.txt'))\nexcept Refused as no:\n  why = str(no)", on=root)
+  assert engine.module(root)["why"] == "no word: Text(path='/w/a.txt', content='one\\ntwo\\n')"
+  assert len(said(log, "rung")) == 1
+  assert await engine.rung("close(2)", on=root) == 2

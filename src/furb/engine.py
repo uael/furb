@@ -209,6 +209,9 @@ def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
 
 
 def rung(word="", retells="", to="", on="") -> Act:
+  if not isinstance(word, str):
+    raise Refused(f"no word: {word!r:.80}")
+
   def ear(id):
     yield "started", id
     mine = {retells, scope(id)}

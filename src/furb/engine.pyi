@@ -430,6 +430,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The turns of the chain of another prompt tell the rung of a word its caller wrote.
   rung is given a word and runs it on a chain in the globals of that chain.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
+  A word that is no str is refused where the rung is made, so its chain makes no act of it and goes on.
   A close ends the rung that runs in a prompt at its next await.
   A chain with a source and its origin share the one act, the record's.
   A chain with a source awaits what its origin started, through the name of the act.
