@@ -276,3 +276,18 @@ fn a_skill_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_config_
     assert!(layers.get().is_ok());
   }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_config_that_a_change_writes_is_the_users_alone_whatever_mode_it_had() {
+  use std::os::unix::fs::PermissionsExt;
+  let (at, layers) = place("owner");
+  let (project, local) =
+    (at.join("project/.furb/config.json"), at.join("project/.furb/config.local.json"));
+  fs::write(&project, "{}\n").unwrap();
+  fs::set_permissions(&project, fs::Permissions::from_mode(0o751)).unwrap();
+  set(&layers, change(&["max_thinking_tokens"], Some(json!(0)), Layer::Project)).unwrap();
+  set(&layers, change(&["max_thinking_tokens"], Some(json!(0)), Layer::Local)).unwrap();
+  let mode = |file: &PathBuf| fs::metadata(file).unwrap().permissions().mode() & 0o7777;
+  assert_eq!((mode(&project), mode(&local)), (0o600, 0o600));
+}

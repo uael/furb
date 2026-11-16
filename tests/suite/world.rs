@@ -6,6 +6,7 @@ mod catalog;
 #[cfg(unix)]
 mod claude;
 mod config;
+mod disk;
 mod kits;
 mod offered;
 mod operator;
