@@ -52,6 +52,12 @@ use crate::{
 /// How long the window waits for a machine before it says that it waits.
 const PATIENCE: Duration = Duration::from_millis(400);
 
+/// What the window says when the terminal took no copy.
+const TAKES_NO_COPY: &str = "This terminal takes no copy.";
+
+/// What the window says once a text that he selected went to the clipboard.
+const COPIED_SELECTION: &str = "Copied the selection.";
+
 /// How long the leader key waits for the key that follows it, and the first escape for the second.
 const LEADER: Duration = Duration::from_secs(2);
 
@@ -195,6 +201,16 @@ fn listened(app: &App, window: &Shared, area: &Textarea) {
   heard_edits(window, area);
   let on = Rc::clone(window);
   app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
+  // The window copies a selection itself, as the app would, so it can say whether the copy took.
+  // Each row of the window is as wide as its part, so a line of the selection ends in the blanks
+  // that pad it, which no copy keeps.
+  let on = Rc::clone(window);
+  app.on_selection(move |cx, text| {
+    cx.prevent_default();
+    let text = text.lines().map(str::trim_end).collect::<Vec<_>>().join("\n");
+    let notice = if cx.app().copy_to_clipboard(&text) { COPIED_SELECTION } else { TAKES_NO_COPY };
+    tell(cx.app(), &on, |model| model.client.notice = Some(notice.to_owned()));
+  });
   let on = Rc::clone(window);
   app.on_terminal_focus(move |cx, focused| {
     if focused {
@@ -684,7 +700,7 @@ fn copied(app: &App, window: &Shared) {
   let notice = match said {
     None => "Nothing to copy yet.",
     Some(text) if app.copy_to_clipboard(&text) => "Copied what the thread said last.",
-    Some(_) => "This terminal takes no copy.",
+    Some(_) => TAKES_NO_COPY,
   };
   tell(app, window, |model| model.client.notice = Some(notice.to_owned()));
 }

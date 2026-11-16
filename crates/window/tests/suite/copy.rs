@@ -1,4 +1,5 @@
-//! The copy of what a thread said last, which the operator takes with `/copy`, on a real daemon.
+//! The copy of what a thread said last, which the operator takes with `/copy`, and of a text that
+//! he selects with the pointer, on a real daemon.
 //! The clipboard of the system and of the terminal stand outside a test: a window with no terminal
 //! takes no copy, and says so, where a terminal says that it copied.
 
@@ -9,6 +10,7 @@ use furb_window::open;
 use crate::{
   cards::{app, options, row, shows},
   daemon::{ANSWERS, Daemon},
+  thread::at,
 };
 
 #[test]
@@ -35,4 +37,23 @@ fn copy_with_no_terminal_says_that_nothing_was_copied_and_on_a_thread_that_said_
   app.press("ctrl+x");
   app.press("i");
   shows(&app, "Nothing to copy yet.");
+}
+
+#[test]
+fn a_drag_over_the_feed_selects_its_text_and_copies_it_at_once_with_a_notice() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("select.jsonl"), true);
+  peer.said(&life, &format!("how long does an open take {ANSWERS}"));
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "The open takes");
+  let (x, y) = at(&app, "The open takes", 0);
+  app.drag((x, y), (x + 13, y));
+  assert_eq!(app.app().selected_text().as_deref(), Some("The open takes"));
+  // A window with no terminal takes no copy, and says so, as a terminal says that it copied.
+  shows(&app, "This terminal takes no copy.");
 }
