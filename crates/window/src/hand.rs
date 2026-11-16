@@ -50,7 +50,7 @@ use crate::{
   review::{MARKS, NEXT, PREVIOUS},
   thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
-  voice::{self, RELEASED, Record, Run, Said, Space, Voice},
+  voice::{self, RELEASED, Record, Run, Said, Space, Stage, Voice},
 };
 
 /// How long the window waits for a machine before it says that it waits.
@@ -81,6 +81,9 @@ const WATCH: Duration = Duration::from_secs(1);
 /// How many loaders move at once at most: the line that runs and its light, the thought, the mark
 /// and the word of each agent of the dock, and the row of hints.
 const LOADERS: usize = 16;
+
+/// How each notice of the program of the speech starts, so its next notice takes its place.
+const VOICE: &str = "The voice ";
 
 /// How many images of the feed draw at once at most.
 const PICTURES: usize = 4;
@@ -1663,7 +1666,7 @@ fn readied(app: &App, window: &Shared) -> Result<(), String> {
   let program = voice::program(named.as_deref(), &folder)
     .map_err(|no| format!("The program of the speech cannot be written: {no}"))?
     .ok_or_else(|| "This window has no speech on this system yet.".to_owned())?;
-  let (listener, output) = voice::started(&program, &app.runtime())
+  let (listener, output) = voice::started(&program, &folder.join("voice"), &app.runtime())
     .map_err(|no| format!("The speech did not start: {no}"))?;
   window.borrow_mut().voice.listener = Some(listener);
   listening(app, window, FramedRead::new(output, LinesCodec::new_with_max_length(BOUND)));
@@ -1727,7 +1730,19 @@ fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, Line
       None => Err("The speech ended.".to_owned()),
     };
     match said {
-      Ok(Said::Ready { .. }) => {}
+      Ok(Said::Ready { .. }) => tell(cx.app(), &on, |model| {
+        if model.client.notice.as_deref().is_some_and(|one| one.starts_with(VOICE)) {
+          model.client.notice = Some(format!("{VOICE}is ready: hold the space bar to speak."));
+        }
+      }),
+      Ok(Said::Loading { loading, done }) => tell(cx.app(), &on, |model| {
+        model.client.notice = Some(match loading {
+          Stage::Download => format!("{VOICE}downloads its model, once: {}%", done.unwrap_or(0)),
+          Stage::Prepare => {
+            format!("{VOICE}prepares its model, which takes minutes the first time.")
+          }
+        });
+      }),
       Ok(Said::Level { level }) => tell(cx.app(), &on, |model| {
         if let Some(levels) = model.listening.as_mut() {
           levels.push(level);

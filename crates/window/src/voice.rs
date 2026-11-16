@@ -1,9 +1,10 @@
-//! The voice of the operator in the input. While he holds the space bar, the program of the speech
-//! of the system writes what he says into the input as he says it, and the record ends when he lets
-//! the bar go. A terminal tells a held key only by its repeats, so a space that comes as soon after
-//! the one before as a repeat comes starts the record, and the spaces of the hold leave the input:
-//! one tap of the bar stays a space. The program starts with the window and readies the speech
-//! with no microphone, so a record only opens the microphone, and a tap never opens it.
+//! The voice of the operator in the input. While he holds the space bar, the program of the
+//! speech, Whisper on this Mac, writes what he says into the input as he says it, in the language
+//! that he speaks, and the record ends when he lets the bar go. A terminal tells a held key only
+//! by its repeats, so a space that comes as soon after the one before as a repeat comes starts the
+//! record, and the spaces of the hold leave the input: one tap of the bar stays a space. The
+//! program starts with the window and readies the speech with no microphone, so a record only
+//! opens the microphone, and a tap never opens it.
 
 use std::{
   fs, io,
@@ -33,7 +34,7 @@ const FIRST: Duration = Duration::from_secs(2);
 /// How long the repeats of the bar stop before the record ends: he let the bar go.
 pub(crate) const RELEASED: Duration = Duration::from_millis(200);
 
-/// The program of the speech of macOS that the build carries, which is empty where it has none.
+/// The program of the speech that the build carries, `listen`, which is empty where it has none.
 const CARRIED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/listen"));
 
 /// The spaces that he typed one after the other, the program of the speech while it runs, and the
@@ -96,6 +97,11 @@ pub(crate) enum Said {
     #[serde(rename = "ready")]
     _ready: bool,
   },
+  Loading {
+    loading: Stage,
+    #[serde(default)]
+    done: Option<u8>,
+  },
   Level {
     level: u8,
   },
@@ -107,6 +113,15 @@ pub(crate) enum Said {
   Fault {
     error: String,
   },
+}
+
+/// What the program of the speech does before it is ready: it downloads its model, with the share
+/// done, or prepares it for this Mac.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Stage {
+  Download,
+  Prepare,
 }
 
 impl Voice {
@@ -185,10 +200,16 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   Ok(Some(path))
 }
 
-/// The program started on a runtime, with what tells it each line, and its output.
-pub(crate) fn started(program: &Path, runtime: &Handle) -> io::Result<(Listener, ChildStdout)> {
+/// The program started on a runtime, on the folder of its models, with what tells it each line, and
+/// its output.
+pub(crate) fn started(
+  program: &Path,
+  models: &Path,
+  runtime: &Handle,
+) -> io::Result<(Listener, ChildStdout)> {
   let _runtime = runtime.enter();
   let mut child = Command::new(program)
+    .arg(models)
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::null())

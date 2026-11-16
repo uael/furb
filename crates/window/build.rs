@@ -97,27 +97,32 @@ fn linked() -> Result<(), Fault> {
   Ok(())
 }
 
-/// The program of the speech of macOS, `listen.swift`, built into the folder of the build, which
-/// the window carries and starts while the operator holds the space bar. A build for another
-/// system, or with no Swift of macOS 26, writes an empty program, and the window then says that it
-/// has no speech.
+/// The program of the speech, the Swift package `listen` on `WhisperKit` at the versions that its
+/// `Package.resolved` pins, built into the folder of the build, which the window carries and starts
+/// with its first frame. Its first build fetches its packages. A build for another system, or with
+/// no Swift of macOS, writes an empty program, and the window then says that it has no speech.
 fn listener() -> Result<(), Fault> {
-  println!("cargo::rerun-if-changed=listen.swift");
-  let out = PathBuf::from(var("OUT_DIR")?).join("listen");
+  for one in ["listen/Package.swift", "listen/Package.resolved", "listen/Sources"] {
+    println!("cargo::rerun-if-changed={one}");
+  }
+  let folder = PathBuf::from(var("OUT_DIR")?);
+  let out = folder.join("listen");
   let mac = var("TARGET")?.ends_with("-apple-darwin");
+  let scratch = folder.join("swift");
   let built = mac
     && Command::new("xcrun")
-      .args(["swiftc", "-O", "-parse-as-library", "listen.swift", "-o"])
-      .arg(&out)
+      .args(["swift", "build", "-c", "release", "--package-path", "listen", "--scratch-path"])
+      .arg(&scratch)
       .status()
       .is_ok_and(|status| status.success());
   if built {
-    return Ok(());
+    let program = scratch.join("release").join("listen");
+    return fs::copy(&program, &out)
+      .map(drop)
+      .map_err(|source| Fault::File { path: program, source });
   }
   if mac {
-    println!(
-      "cargo::warning=the window carries no speech: listen.swift needs the Swift of macOS 26"
-    );
+    println!("cargo::warning=the window carries no speech: listen needs the Swift of macOS");
   }
   fs::write(&out, b"").map_err(|source| Fault::File { path: out, source })
 }
