@@ -31,6 +31,7 @@ mod width;
 mod yard;
 
 use std::{
+  env,
   ffi::OsStr,
   fs, io,
   path::{Path, PathBuf},
@@ -76,7 +77,9 @@ enum Task {
   /// Run one suite, or each suite at once when none is named, each into a log of its own.
   ///
   /// The suites share no file, so they run together, and the slowest alone sets the time of the
-  /// run. Each log stands in target/xtask/<suite>.log, and a suite that fails prints its tail.
+  /// run. Each log stands in target/xtask/<suite>.log, and a suite that fails prints its tail. A
+  /// whole suite of rust or of python runs within its limit, as the task budget says, so the whole
+  /// run fails once it passes a minute on this machine.
   Test {
     /// The suite to run.
     suite: Option<Suite>,
@@ -610,23 +613,35 @@ impl Suite {
   /// The commands of the suite in order. Each runner builds what its tests read, but the tests of
   /// TypeScript read the package that `bun run build` makes, and fail on a build older than its
   /// sources.
-  fn steps(self, words: &[String]) -> Vec<(&'static str, Vec<String>)> {
-    let with = |head: &[&str], tail: &[String]| {
-      head.iter().map(|one| (*one).to_owned()).chain(tail.iter().cloned()).collect()
+  fn steps(self, words: &[String]) -> Vec<(String, Vec<String>)> {
+    let with = |program: &str, head: &[&str], tail: &[String]| {
+      let args = head.iter().map(|one| (*one).to_owned()).chain(tail.iter().cloned()).collect();
+      (program.to_owned(), args)
+    };
+    // A whole suite runs within the limit of its part, through the task budget of this program.
+    let limited = |part: &str, (program, args): (String, Vec<String>)| {
+      let budget = env::current_exe().ok().filter(|_| words.is_empty());
+      match budget {
+        Some(xtask) => {
+          let head = ["budget", part, "--", &program].map(str::to_owned);
+          (xtask.to_string_lossy().into_owned(), head.into_iter().chain(args).collect())
+        }
+        None => (program, args),
+      }
     };
     let crates = if words.is_empty() { &["--workspace".to_owned()][..] } else { words };
     match self {
-      Self::Rust => vec![("cargo", with(&["nextest", "run"], crates))],
-      Self::Python => vec![("uv", with(&["run", "pytest", "-q"], words))],
+      Self::Rust => vec![limited("cargo", with("cargo", &["nextest", "run"], crates))],
+      Self::Python => vec![limited("pytest", with("uv", &["run", "pytest", "-q"], words))],
       Self::Typescript => {
-        vec![("bun", with(&["run", "build"], &[])), ("bun", with(&["run", "test"], words))]
+        vec![with("bun", &["run", "build"], &[]), with("bun", &["run", "test"], words)]
       }
     }
   }
 
   fn run(self, root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
     for (program, args) in self.steps(words) {
-      let code = spawn(root, program, &args)?;
+      let code = spawn(root, &program, &args)?;
       if code != ExitCode::SUCCESS {
         return Ok(code);
       }
@@ -645,13 +660,13 @@ impl Suite {
           .map(Stdio::from)
           .map_err(|source| Fault::Read { path: log.to_owned(), source })
       };
-      let status = Process::new(program)
+      let status = Process::new(&program)
         .args(&args)
         .current_dir(root)
         .stdout(out(&file)?)
         .stderr(out(&file)?)
         .status()
-        .map_err(|source| Fault::Spawn { program: program.to_owned(), source })?;
+        .map_err(|source| Fault::Spawn { program: program.clone(), source })?;
       if !status.success() {
         return Ok(false);
       }

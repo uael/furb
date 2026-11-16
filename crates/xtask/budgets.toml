@@ -17,7 +17,7 @@
 [local]
 pytest = 60
 pytest_cpu = 240
-cargo = 75
+cargo = 60
 cargo_cpu = 360
 
 [ci]
