@@ -21,7 +21,8 @@ use crate::{
   tokens::{APART, Loader, Role, WORKS},
 };
 
-/// How many rows of text the input grows to before its text scrolls.
+/// The fewest rows of text that the input grows to before its text scrolls: it grows to a third of
+/// the rows of the window when they are more, as a box of a rival grows to most of a screen.
 const GROWS: usize = 6;
 
 /// The fewest columns of the target in the launcher before the effort gives way to it: the head
@@ -416,7 +417,12 @@ impl Model {
 
   /// How many rows the text of the input takes in its box, which grows up to a count of rows.
   pub(crate) fn grown(&self) -> usize {
-    usize::clamp(self.lines(), 1, GROWS)
+    usize::clamp(self.lines(), 1, self.grows())
+  }
+
+  /// How many rows of text the input grows to before its text scrolls.
+  fn grows(&self) -> usize {
+    GROWS.max(usize::from(self.size.1) / 3)
   }
 
   /// How many lines the text of the input holds, as the editor wraps it at its columns.
@@ -528,7 +534,8 @@ impl Model {
       Some(vec![run(format!("  ↑↓ history {at} / {of}"), muted)])
     };
     let lines = self.lines();
-    let long = || (lines > GROWS).then(|| vec![run(format!("  {GROWS} of {lines} lines"), muted)]);
+    let grows = self.grows();
+    let long = || (lines > grows).then(|| vec![run(format!("  {grows} of {lines} lines"), muted)]);
     self
       .form_hints()
       .or_else(|| self.completion_hints())
