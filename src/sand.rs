@@ -30,6 +30,17 @@ use std::{cell::Cell, time::Instant};
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
 
+/// The most frames and levels of a value that a run stacks. Monty holds 1000 by default, which the
+/// replay of a record passes on an engine that nests two frames for each entry that it plays: a
+/// record of a few thousand entries did not open, and each part of a record replays on the engine
+/// that made it.
+const DEPTH: usize = 20_000;
+
+/// The stack that a run takes. Monty walks a value one level at a time on the stack of the thread,
+/// under a KiB a level, up to [`DEPTH`] levels, so a run grows a stack of this size on a thread
+/// that holds less, and never ends the process.
+const STACK: usize = DEPTH * 1024;
+
 /// The longest stretch of a word of a rung between two round trips to the host. Past it, monty
 /// raises a
 /// `TimeoutError` where the code stands, which the code may catch, so its `finally` blocks run on a new stretch; a
@@ -44,6 +55,8 @@ pub(crate) const TURN: Duration = Duration::from_secs(30);
 thread_local! {
   /// The bound of each sandbox that this thread makes, which a test sets short.
   pub(crate) static BOUND: Cell<Duration> = const { Cell::new(TURN) };
+  /// The depth of each sandbox that this thread makes, which a test sets low.
+  pub(crate) static DEEP: Cell<usize> = const { Cell::new(DEPTH) };
 }
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
@@ -108,7 +121,10 @@ pub(crate) struct Sand {
 impl Sand {
   /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
   pub(crate) fn new() -> Self {
-    let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
+    let limits = ResourceLimits::default()
+      .gc_interval(GC_INTERVAL)
+      .max_turn_duration(turn())
+      .max_recursion_depth(depth());
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
     Self { state: State::Idle(repl), fed: 0, bounded: true, applied: turn() }
@@ -166,8 +182,10 @@ impl Sand {
     if let Some(limit) = self.changed() {
       repl.tracker_mut().set_max_turn_duration(limit);
     }
-    let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
-    self.drive(step, host)
+    stacker::maybe_grow(STACK, STACK, || {
+      let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
+      self.drive(step, host)
+    })
   }
 
   /// One entry of the host into the sandbox, which is a run of its own: `body` runs as the answer of the one call
@@ -196,9 +214,11 @@ impl Sand {
     let call = self.taken()?;
     let call = self.limited(call);
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
-    let step =
-      call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
-    self.drive(step, host)
+    stacker::maybe_grow(STACK, STACK, || {
+      let step =
+        call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
+      self.drive(step, host)
+    })
   }
 
   /// Whether the bound of the turn holds from the next round trip to the host on, and whether it
@@ -350,6 +370,15 @@ pub(crate) fn past() -> Option<Duration> {
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.
+/// The depth that a new sandbox holds.
+fn depth() -> usize {
+  #[cfg(test)]
+  let depth = DEEP.get();
+  #[cfg(not(test))]
+  let depth = DEPTH;
+  depth
+}
+
 fn turn() -> Duration {
   #[cfg(test)]
   let bound = BOUND.get();

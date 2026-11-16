@@ -1477,6 +1477,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "similar",
+ "stacker",
  "thiserror 2.0.20",
  "tokio",
  "unsync",

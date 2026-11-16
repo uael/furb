@@ -144,6 +144,9 @@ serde = { version = "1", features = ["derive", "rc"] }
 thiserror = "2"
 url = "2"
 indexmap = { version = "2", features = ["serde"] }
+# The stack that a run of the sandbox takes, grown when the thread that runs it holds less, as the parser of monty
+# grows its own.
+stacker = "0.1"
 # The search for a byte, which finds the end of each line of the record many bytes at a time, even in a build that
 # does not optimize the crate.
 memchr = "2"
