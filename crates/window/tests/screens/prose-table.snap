@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · where does the open go                ✓ Resolved      All projects ▾        This computer
-┃
-┃ where does the open go                                       Resting 1
-┃ (the model answers a table)                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ ● where does the open go      now ▌
+  ● furb · where does the open go              ✓ Resolved      All projects ▾        This computer
+  ┃
+  ┃ where does the open go                                     Resting 1
+  ┃ (the model answers a table)                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● where does the open go      now ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     1  close('| Stage | Time | Share |\n| --- | ---:…+320     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → where… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find      No answer yet

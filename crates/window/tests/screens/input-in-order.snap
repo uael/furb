@@ -1,23 +1,24 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb-try · one (the model works on it)           Resolve     All projects ▾        This computer
-┃
-┃ one (the model works on it)                                  Working 1
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb-try · one (the model works on it)         Resolve     All projects ▾        This computer
+  ┃
+  ┃ one (the model works on it)                                Working 1
+  ┃                                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                 opus/high     ▐ ● one (the model…       ◐ Working ▌
     1  writes                                                 ▐   FT furb-try                opus ▌
     …                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
-┃
-┃ two (the model works on it)
-┃
+  ┃
+  ┃ two (the model works on it)
+  ┃
 
     …
 
-┃
-┃ three (the model works on it)
-┃
+  ┃
+  ┃ three (the model works on it)
+  ┃
 
     …
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ a draft
-┃
-┃  Message  Python    → one (the… ▾     opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ a draft
+  ┃
+  ┃  Message  Python    → one (the… ▾   opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Nothing that you sent here starts so.           ⌃P find      No answer yet

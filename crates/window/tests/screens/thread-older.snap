@@ -1,33 +1,34 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · ground the branch, message by…        ✓ Resolved      All projects ▾        This computer
-┃
-┃ ground the branch, message by message                        Resolved 1 ▸
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb · ground the branch, message by…      ✓ Resolved      All projects ▾        This computer
+  ┃
+  ┃ ground the branch, message by message                      Resolved 1 ▸
+  ┃                                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                 opus/high     ▐ ● ground the branch,…         now ▌
     1  close(None)                                            ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-┃
-┃ and the step 1
-┃
+  ┃
+  ┃ and the step 1
+  ┃
 
     2  close(None)
 
-┃
-┃ and the step 2
-┃
+  ┃
+  ┃ and the step 2
+  ┃
 
     3  close(None)
 
-┃
-┃ and the step 3
-┃
+  ┃
+  ┃ and the step 3
+  ┃
 
   ↓ Jump to latest  ↘
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → ground the… ▾   opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → ground… ▾     opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find      No answer yet

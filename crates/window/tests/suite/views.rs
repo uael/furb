@@ -101,14 +101,14 @@ fn a_message_after_a_pause_opens_a_new_life_whose_thread_and_view_go_on() {
   shows(&app, "Pause it");
   app.type_text("pause");
   app.press("enter");
-  let ended = app.wait_until(PATIENCE, || !app.text().starts_with('●'));
+  let ended = app.wait_until(PATIENCE, || !app.text().trim_start().starts_with('●'));
   assert!(ended, "{}", app.text());
   // The message opens a new life on the record, whose thread tells the answer of its model, and
   // the view of the record stands again.
   app.type_text(&format!("what is left {ANSWERS}"));
   app.press("enter");
   let shown = shows(&app, "The open takes");
-  assert!(shown.starts_with('●') && shown.contains("buy milk"), "{shown}");
+  assert!(shown.trim_start().starts_with('●') && shown.contains("buy milk"), "{shown}");
 }
 
 #[test]

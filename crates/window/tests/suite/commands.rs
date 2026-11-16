@@ -34,7 +34,7 @@ fn rename_names_the_session_as_a_word_of_his_on_its_root_and_the_window_shows_th
   // names its thread, since the window is thread first.
   shows(&app, "✓ /rename Taxes");
   let named = shows(&app, "FU furb · Taxes");
-  assert!(named.starts_with("● furb · sort the receipts of the year"), "{named}");
+  assert!(named.starts_with("  ● furb · sort the receipts of the year"), "{named}");
 }
 
 #[test]

@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb                                                         All projects ▾       studio offline
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
   ⌃P          go to anything, or run a command                    FU furb                    opus
   ⌃X ?        each key
                                                                   where does the time go      11h
-┃                                                                 FU furb                    opus
-┃ Ask for a change, a review or an answer
-┃                                                                 Ground the…        ‖ Paused 11h
-┃  Message  Python    This… ▾   FT furb-try ▾  opus  high         FU furb                    opus
-┃
+  ┃                                                               FU furb                    opus
+  ┃ Ask for a change, a review or an answer
+  ┃                                                               Ground the…        ‖ Paused 11h
+  ┃  Message  Python    This… ▾   FT furb-… ▾  opus  high         FU furb                    opus
+  ┃
   ~/furb-try                                      ⌃P find      Resolved 1 ▸

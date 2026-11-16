@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · remove the gate from the engine       ✓ Resolved      All projects ▾        This computer
-┃
-┃ remove the gate from the engine                              Resolved 1 ▾
-┃ (the model answers)                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ ● remove the gate from the…   now ▌
+  ● furb · remove the gate from the engine     ✓ Resolved      All projects ▾        This computer
+  ┃
+  ┃ remove the gate from the engine                            Resolved 1 ▾
+  ┃ (the model answers)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● remove the gate from the…   now ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     1  found = 2                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close('The open takes **329 s**. Two stages h…+251
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → remove the… ▾   opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → remove… ▾     opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find      No answer yet

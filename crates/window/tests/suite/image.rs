@@ -18,6 +18,8 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\nrest";
 #[test]
 fn a_paste_of_the_path_of_an_image_file_puts_its_image_in_each_form_that_a_terminal_pastes() {
   let (app, daemon, _) = started();
+  // The room of the four marks on one row of the input.
+  app.resize(102, 30);
   let folder = daemon.file("furb-try");
   fs::write(folder.join("a shot.png"), PNG).unwrap();
   fs::write(folder.join("notes.txt"), "no image").unwrap();
@@ -77,9 +79,9 @@ fn an_image_that_a_message_names_draws_under_its_text_and_one_that_does_not_draw
   // The image of 192 by 108 pixels takes 7 rows of 16 pixels and the columns of its shape, a
   // blank row under the text.
   let rows: Vec<&str> = frame.lines().skip_while(|row| !row.contains("(the model works")).collect();
-  let drawn = |row: &&str| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one));
+  let drawn = |row: &&str| row.chars().nth(4).is_some_and(|one| ('▀'..='▟').contains(&one));
   let image: Vec<&str> = rows.iter().skip(3).copied().take_while(drawn).collect();
-  assert_eq!((image.len(), rows[2].chars().nth(2)), (7, Some(' ')), "{frame}");
+  assert_eq!((image.len(), rows[2].chars().nth(4)), (7, Some(' ')), "{frame}");
 }
 
 #[test]
@@ -93,7 +95,7 @@ fn an_image_that_a_message_names_twice_draws_twice() {
   shows(&app, "(the model works");
   // Both boxes draw once the one image of the two marks came, each in 7 rows.
   let drawn = |frame: &str| {
-    let pixels = |row: &&str| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one));
+    let pixels = |row: &&str| row.chars().nth(4).is_some_and(|one| ('▀'..='▟').contains(&one));
     frame.lines().filter(pixels).count()
   };
   let twice = app.wait_until(PATIENCE, || drawn(&app.text()) == 14);
@@ -136,11 +138,11 @@ fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
   // the foot of the feed, where the image cannot draw a part of itself: its first row names it
   // there. Then down until its box crosses the head of the feed, where its last row names it.
   let drawn = |frame: &str| {
-    frame.lines().any(|row| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one)))
+    frame.lines().any(|row| row.chars().nth(4).is_some_and(|one| ('▀'..='▟').contains(&one)))
   };
   // A row of the feed alone, as the list stands at its right.
   let feed = |row: &str| row.chars().take(50).collect::<String>().trim_end().to_owned();
-  let named = |frame: &str| frame.lines().any(|row| feed(row) == "┃ ▣ image-1.png");
+  let named = |frame: &str| frame.lines().any(|row| feed(row) == "  ┃ ▣ image-1.png");
   let (x, y) = (10, 5);
   let turned = |down: bool, found: &dyn Fn(&str) -> bool| {
     let reached = app.wait_until(PATIENCE, || {

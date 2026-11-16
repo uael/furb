@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · what does the head say                    Resolve     All projects ▾        This computer
-┃
-┃ what does the head say                                       Needs you 1
-┃ (the model asks twice)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ ● what does the head say  ◆ Input ▌
+  ● furb · what does the head say                  Resolve     All projects ▾        This computer
+  ┃
+  ┃ what does the head say                                     Needs you 1
+  ┃ (the model asks twice)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● what does the head say  ◆ Input ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     ◆  one = prompt(bool, 'Does the head count the qu…+23     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◆  two = prompt(str, 'What does the head say?', t…+11
@@ -20,14 +21,14 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ ◆ opus/high asks                                 1 of 2
-┃ Does the head count the questions?
-┃
-┃ › yes
-┃   no
-┃   type another answer
-┃
-┃  Message  Python    → what does… ▾    opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ ◆ opus/high asks                               1 of 2
+  ┃ Does the head count the questions?
+  ┃
+  ┃ › yes
+  ┃   no
+  ┃   type another answer
+  ┃
+  ┃  Message  Python    → what does… ▾  opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer · ⇥ next                 ⌃C refuse      No answer yet

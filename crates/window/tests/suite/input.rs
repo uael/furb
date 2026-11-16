@@ -60,7 +60,7 @@ pub(crate) fn sent(app: &TestApp, text: &str) {
 /// The color of the bar of the input of one row, which stands above the launcher and the hints.
 fn bar(app: &TestApp) -> Color {
   let frame = app.render();
-  frame.cells[(frame.height as usize - 3) * frame.width as usize].fg
+  frame.cells[(frame.height as usize - 3) * frame.width as usize + 2].fg
 }
 
 /// The texts of the messages of the thread of the one session of a project, as its daemon holds
@@ -226,12 +226,12 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   typed(&app, &first);
   let frame = app.render();
   let row = (frame.height as usize - 5) * frame.width as usize;
-  let (written, rest) = (&frame.cells[row + 2], &frame.cells[row + 4]);
+  let (written, rest) = (&frame.cells[row + 4], &frame.cells[row + 6]);
   assert_ne!(written.fg, rest.fg, "the rest is grey and what he wrote is not");
   screen("input-suggested", &app);
   app.press("right");
   typed(&app, &first);
-  assert_eq!(app.render().cells[row + 4].fg, written.fg, "the right arrow took the rest");
+  assert_eq!(app.render().cells[row + 6].fg, written.fg, "the right arrow took the rest");
   // One word of it with alt and the right arrow.
   app.press("ctrl+c");
   app.paste("say");
@@ -472,7 +472,7 @@ fn a_word_of_python_shows_in_its_thread_as_his_code_and_a_line_that_raised_says_
   sent(&app, "await wait(60, __name__)\nanswer = 41 + 1");
   let ran = shows(&app, "  answer = 41 + 1");
   let his =
-    |frame: &str, code: &str| frame.lines().any(|one| one.starts_with('┃') && one.contains(code));
+    |frame: &str, code: &str| frame.lines().any(|one| one.starts_with("  ┃") && one.contains(code));
   assert!(his(&ran, "await wait(60, __name__)") && his(&ran, "answer = 41 + 1"), "{ran}");
   screen("input-word-ran", &app);
   // A line that raised shows its cross in the place of its number, and why under it.
@@ -941,7 +941,10 @@ fn commands(app: &TestApp) -> Vec<(String, String)> {
   let mut found = Vec::new();
   for _ in 0..count {
     let frame = app.text();
-    let chosen = frame.lines().find_map(|line| line.strip_prefix("▌ /")).expect("a row is chosen");
+    let chosen = frame
+      .lines()
+      .find_map(|line| line.trim_start().strip_prefix("▌ /"))
+      .expect("a row is chosen");
     let parts: Vec<&str> =
       chosen.split("  ").map(str::trim).filter(|one| !one.is_empty()).collect();
     let [name, says, key] = parts[..] else { panic!("/{chosen} names no key") };
@@ -1122,6 +1125,8 @@ fn a_sign_in_to_codex_that_connects_lists_its_models_in_the_launcher_before_any_
 #[test]
 fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() {
   let (app, daemon, sessions) = started();
+  // The room of the name of the place on the launcher.
+  app.resize(102, 30);
   app.press("ctrl+x");
   app.press("p");
   shows(&app, "No project");

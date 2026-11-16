@@ -1,7 +1,8 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · how long does an open take                Resolve     All projects ▾        This computer
+  ● furb · how long does an open take              Resolve     All projects ▾        This computer
   to send each entry to the ears of the host, and 104 s in
   the boot.                                                    Resting 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -13,10 +14,10 @@ source: crates/window/tests/suite/screens.rs
 
   See the trace.
 
-┃
-┃ and the side
-┃ (the model asks a choice)
-┃
+  ┃
+  ┃ and the side
+  ┃ (the model asks a choice)
+  ┃
 
     ◆  side = await prompt(Literal['right', 'left'], …+51
     4  close(side)
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
   ◆ Where does the list of cards stand?
 
   ◆ A question waits. It shows when the input is empty.
-┃
-┃ the bar is too wide
-┃
-┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ the bar is too wide
+  ┃
+  ┃  Message  Python    → how long… ▾   opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find      No answer yet

@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · Debug stuck TUI after merge             ✗ Failed      All projects ▾       studio offline
-┃
-┃ Debug stuck TUI after merge                                 ▐   FU furb                    opus ▌
-┃ (the model works on it)                                     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-┃                                                              Working 2
+  ● furb · Debug stuck TUI after merge           ✗ Failed      All projects ▾       studio offline
+  ┃
+  ┃ Debug stuck TUI after merge                               ▐   FU furb                    opus ▌
+  ┃ (the model works on it)                                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  ┃                                                            Working 2
                                                 opus/high
     ■  wrote nothing                              stopped         run the…    Working as of 09:12
                                                                   FC furb-cloud@studio     opus ◌
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
                                                                   FU furb                    opus
 
                                                                Resolved 1 ▾
-┃
-┃ A reply opens this thread again                               ✓ which fold reads the whole…  2d
-┃
-┃  Message  Python    → Debug stuck… ▾  opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ A reply opens this thread again                             ✓ which fold reads the whole…  2d
+  ┃
+  ┃  Message  Python    → Debug… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb  ◆ 1 other thread asks   ⌃P find      No answer yet

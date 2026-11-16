@@ -21,7 +21,7 @@ use furb_client::{Asked, Form, HOLD};
 
 use crate::{
   keys::Does,
-  line::{Line, run, spread, wrapped},
+  line::{BARRED, Line, barred, run, spread, wrapped},
   model::{Key, Model},
   thread::{Click, Row, width},
   tokens::Role,
@@ -262,7 +262,7 @@ impl Model {
     let Some((form, question)) = self.form() else { return (Vec::new(), None) };
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
-    let room = self.wide().saturating_sub(6);
+    let room = self.wide().saturating_sub(BARRED + 4);
     let questions = self.questions();
     let at = questions.iter().position(|one| one.act == form.act).unwrap_or_default();
     let asks = question.by.map_or_else(|| "furb".to_owned(), Maker::shown);
@@ -296,14 +296,13 @@ impl Model {
       );
     }
     let band = Style::new().bg(t.raised);
-    let bar = run("┃", Style::new().fg(t.attention).bg(t.raised));
     let banded = |(line, click): (Line, Option<Click>)| {
       let wide = width(&line);
       let line = line.into_iter().map(|one| run(one.content, one.style.bg(t.raised))).collect();
-      let mut row = vec![bar.clone(), run(" ", band)];
-      row.extend(spread(line, Vec::new(), self.wide().saturating_sub(6), band));
+      let mut row = barred(t.attention, t.raised);
+      row.extend(spread(line, Vec::new(), self.wide().saturating_sub(BARRED + 4), band));
       row.push(run("  ", band));
-      let hot = click.map(|click| (2..2 + wide, Some(click))).into_iter().collect();
+      let hot = click.map(|click| (BARRED..BARRED + wide, Some(click))).into_iter().collect();
       Row { hot, ..Row::of(row) }
     };
     (lines.into_iter().map(banded).collect(), editor)

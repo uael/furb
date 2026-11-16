@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · which keys does the form take             Resolve     All projects ▾        This computer
-┃
-┃ which keys does the form take                                Needs you 1
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃   Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
+  ● furb · which keys does the form take           Resolve     All projects ▾        This computer
+  ┃
+  ┃ which keys does the form take                              Needs you 1
+                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+    Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
     ▌Search a key                                 1 / 37      ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
@@ -19,15 +20,15 @@ source: crates/window/tests/suite/screens.rs
     The thread
      Ctrl+N              a new thread, and back to…
      End                 jump to the latest
-┃    PgUp                a page up
-┃    PgDn                a page down
-┃    Esc Esc             stop the work of the thread
-┃    Ctrl+X R            resolve the thread
-┃    Ctrl+X D            revert the files that the…
-┃    Ctrl+X Z            pause the thread, or resume…
-┃
-┃   ↑↓ move · Enter run · Esc close
-┃
-┃  Message  Python    → which keys… ▾     opus   + Ctrl+N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     PgUp                a page up
+     PgDn                a page down
+     Esc Esc             stop the work of the thread
+     Ctrl+X R            resolve the thread
+     Ctrl+X D            revert the files that the…
+     Ctrl+X Z            pause the thread, or resume…
+
+    ↑↓ move · Enter run · Esc close
+
+  ┃  Message  Python    → which keys… ▾   opus   + Ctrl+N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      No answer yet

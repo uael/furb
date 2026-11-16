@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · the bench stalls on a cold build          Resolve     All projects ▾        This computer
-┃
-┃ the bench stalls on a cold build                             Working 1
-┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ ● the bench stalls on…  ⠋ Working ▌
+  ● furb · the bench stalls on a cold build        Resolve     All projects ▾        This computer
+  ┃
+  ┃ the bench stalls on a cold build                           Working 1
+  ┃ (the model is asked again)                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● the bench stalls on…  ⠋ Working ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     ⠋  Attempt 2 of 10 in 4 s                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
        the provider is overloaded
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ Reply to this thread
-┃
-┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ Reply to this thread
+  ┃
+  ┃  Message  Python    → the bench… ▾  opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⠋ Working · ⎋ stop                              ⌃P find      No answer yet

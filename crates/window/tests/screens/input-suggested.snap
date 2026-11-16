@@ -1,14 +1,15 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb-try · fix the build (the model…         ✓ Resolved      All projects ▾        This computer
+  ● furb-try · fix the build (the model…       ✓ Resolved      All projects ▾        This computer
     1  open = boot + seed
                                                                Resolved 1 ▸
   See the trace.                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                               ▐ ● fix the build (the model…   now ▌
-┃                                                             ▐   FT furb-try                opus ▌
-┃ say what moved (the model answers)                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-┃
+  ┃                                                           ▐   FT furb-try                opus ▌
+  ┃ say what moved (the model answers)                        ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  ┃
 
     3  found = 2
     4  close('The open takes **329 s**. Two stages h…+251
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
   See the trace.
 
-┃
-┃ fix the build (the model answers)
-┃
-┃  Message  Python    → fix the… ▾      opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ fix the build (the model answers)
+  ┃
+  ┃  Message  Python    → fix the… ▾    opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb-try                      ⌃P find      No answer yet

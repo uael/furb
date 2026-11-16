@@ -1,5 +1,6 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb                                                         broken ▾              This computer
 
@@ -25,9 +26,9 @@ source: tests/suite/screens.rs
   ⌃P          go to anything, or run a command
   ⌃X ?        each key
 
-┃
-┃ how long does an open take
-┃
-┃  Message  Python    This… ▾   BR broken ▾    opus  high
-┃
+  ┃
+  ┃ how long does an open take
+  ┃
+  ┃  Message  Python    This… ▾   BR broken ▾  opus  high
+  ┃
   Refused: Could not use…                         ⌃P find

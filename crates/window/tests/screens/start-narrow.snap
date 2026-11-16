@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · Debug stuck TUI after merge                                ✗ Failed
-┃
-┃ Debug stuck TUI after merge
-┃ (the model works on it)
-┃
+  ● furb · Debug stuck TUI after merge                              ✗ Failed
+  ┃
+  ┃ Debug stuck TUI after merge
+  ┃ (the model works on it)
+  ┃
                                                                    opus/high
     ■  wrote nothing                                                 stopped
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → Debug stuck TUI… ▾      opus  high   + New thread ⌃N
-┃
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → Debug stuck TUI… ▾    opus  high   + New thread ⌃N
+  ┃
   This computer · ~/furb                     ◆ 1 other thread asks   ⌃P find

@@ -1,10 +1,11 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · remove the gate from the engine       ✓ Resolved      All projects ▾        This computer
-┃
-┃ remove the gate from the engine                              Resting 1
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb · remove the gate from the engine     ✓ Resolved      All projects ▾        This computer
+  ┃
+  ┃ remove the gate from the engine                            Resting 1
+  ┃                                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                               ▐ ● remove the gate from…     • now ▌
                                                               ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → remove the gate… ▾  opus   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find

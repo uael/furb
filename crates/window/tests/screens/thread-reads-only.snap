@@ -1,10 +1,11 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · where does the time of a…     ◉ rex   ✓ Resolved      All projects ▾        This computer
-┃
-┃ where does the time of a resume go                           Resting 1
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb · where does the time of a…   ◉ rex   ✓ Resolved      All projects ▾        This computer
+  ┃
+  ┃ where does the time of a resume go                         Resting 1
+  ┃                                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                 opus/high     ▐ ● where does the time of a…   now ▌
     1  close(None)                                            ▐   FU furb                re  opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -29,5 +30,5 @@ source: crates/window/tests/suite/screens.rs
 
 
                                                                Context
-  Read only · you watch this session                           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Read only · you watch this session                         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                          ⌃P find      No answer yet

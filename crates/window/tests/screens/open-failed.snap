@@ -1,7 +1,8 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-  furb · remove the gate from the engine                       All projects ▾        This computer
+    furb · remove the gate from the engine                     All projects ▾        This computer
   Refused: Another process owns
   ~/furb/.furb/sessions/rest0.jsonl.                           Resting 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ and the replay
-┃
-┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ and the replay
+  ┃
+  ┃  Message  Python    → remove the gate… ▾  opus   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                           ⎋ back

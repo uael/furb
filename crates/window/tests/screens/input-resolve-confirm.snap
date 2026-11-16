@@ -1,10 +1,11 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb-try · where does the time go…      Stop and resolve     All projects ▾        This computer
-┃
-┃ where does the time go (the model works on it)               Working 1
-┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb-try · where does the time go…    Stop and resolve     All projects ▾        This computer
+  ┃
+  ┃ where does the time go (the model works on it)             Working 1
+  ┃                                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                 opus/high     ▐ ● where does the time…  ⠋ Working ▌
     1  writes                                                 ▐   FT furb-try                opus ▌
     …                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ Reply to this thread
-┃
-┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context
-┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃
+  ┃ Reply to this thread
+  ┃
+  ┃  Message  Python    → where… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⌃X R again stops and resolves the thread        ⌃P find      No answer yet

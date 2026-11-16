@@ -12,7 +12,7 @@ use furb_client::{Asked, Completes, Kind, Offer, Target};
 use crate::{
   input::named,
   keys::{self, Does},
-  line::{Line, capital, run, spread},
+  line::{BARRED, Line, capital, run, spread},
   model::Model,
   pick::lit,
   tokens::Role,
@@ -186,9 +186,9 @@ impl Model {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let ground = if chosen { Style::new().bg(t.lifted) } else { raised };
-    let room = self.wide().saturating_sub(6);
+    let room = self.wide().saturating_sub(BARRED + 4);
     let bar = if chosen { "▌" } else { "┃" };
-    let mut row = vec![run(bar, raised.fg(self.bar())), run(" ", ground)];
+    let mut row = vec![run("  ", Style::new()), run(bar, raised.fg(self.bar())), run(" ", ground)];
     row.extend(spread(line, right, room, ground));
     row.push(run(" ", ground));
     row.push(run(" ", raised));

@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
   ⌃P          g   ⌃X R        resolve the thread
   ⌃X ?        e   ⌃X D        revert the files that the last answer wrote
                   ⌃X Z        pause the thread, or resume it
-┃
-┃ Ask for a cha  ↑↓ move · ⏎ run · ⎋ close
-┃
-┃  Message  Python    This computer ▾   FT furb-try ▾                                 opus  high
-┃
+  ┃
+  ┃ Ask for a c  ↑↓ move · ⏎ run · ⎋ close
+  ┃
+  ┃  Message  Python    This computer ▾   FT furb-try ▾                               opus  high
+  ┃
   ~/furb-try                                                                       ⌃X L the list

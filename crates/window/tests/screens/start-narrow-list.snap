@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · Debug stuck TUI…    ✗ Failed      All projects ▾       studio offline
-┃
-┃ Debug stuck TUI after merge               ● TUI scope for the new…  ◆ Input
-┃ (the model works on it)                     FU furb                    opus
-┃                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ● furb · Debug stuck TUI…  ✗ Failed      All projects ▾       studio offline
+  ┃
+  ┃ Debug stuck TUI after merge             ● TUI scope for the new…  ◆ Input
+  ┃ (the model works on it)                   FU furb                    opus
+  ┃                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                             opus/high     ▐ ● Debug stuck TUI…       ✗ Failed ▌
     ■  wrote nothing          stopped     ▐   FU furb                    opus ▌
                                           ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
                                               where does the time go      11h
                                               FU furb                    opus
 
-┃                                             Ground the…        ‖ Paused 11h
-┃ A reply opens this thread again             FU furb                    opus
-┃
-┃  Message  Python    →   opus   + ⌃N      Context
-┃                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃                                           Ground the…        ‖ Paused 11h
+  ┃ A reply opens this thread again           FU furb                    opus
+  ┃
+  ┃  Message  Python      opus   + ⌃N      Context
+  ┃                                        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ~…  ◆ 1 other thread asks   ⌃P find      No answer yet

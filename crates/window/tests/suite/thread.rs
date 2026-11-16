@@ -414,7 +414,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   // The head names the agent once its card or its page came, which can follow the button.
   let head = || app.text().lines().next().unwrap().to_owned();
   let named = app
-    .wait_until(PATIENCE, || head().starts_with("● furb · agent · Run the bench of the replay "));
+    .wait_until(PATIENCE, || head().starts_with("  ● furb · agent · Run the bench of the replay "));
   assert!(named, "{}", head());
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);

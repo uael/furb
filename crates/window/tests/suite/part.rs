@@ -155,11 +155,11 @@ fn where_room_is_short_the_machine_gives_way_and_the_project_and_the_effort_stay
   };
   // With room for each, the launcher names the machine, the project, the model and its effort.
   let wide = "┃ Message Python This computer ▾ FT furb-try ▾ opus high";
-  assert_eq!(launcher(110, wide), wide);
+  assert_eq!(launcher(112, wide), wide);
   // Where the room runs short, the machine gives way to a few letters first, and the project and
   // the effort, which a click changes in place, stay.
   let short = "┃ Message Python This… ▾ FT furb-try ▾ opus high";
-  assert_eq!(launcher(100, short), short);
+  assert_eq!(launcher(102, short), short);
 }
 
 #[cfg(unix)]
@@ -184,6 +184,8 @@ fn a_click_on_the_model_lists_the_models_of_each_provider_and_one_is_the_model_o
 #[test]
 fn a_model_chosen_on_a_thread_answers_its_next_message() {
   let (app, _daemon) = offered();
+  // The room of the model and its effort beside the title of the thread on the launcher.
+  app.resize(102, 30);
   app.paste(&format!("how long does an open take {ANSWERS}"));
   app.press("enter");
   shows(&app, "Two stages hold most");

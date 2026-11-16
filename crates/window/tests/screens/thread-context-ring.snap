@@ -1,11 +1,12 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
-● furb · read the trace of the open                               ✓ Resolved
-┃
-┃ read the trace of the open
-┃ (the model reads much)
-┃
+  ● furb · read the trace of the open                             ✓ Resolved
+  ┃
+  ┃ read the trace of the open
+  ┃ (the model reads much)
+  ┃
                                                                    opus/high
     1  close('The trace holds the open of each chain.')
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-┃
-┃ A reply opens this thread again
-┃
-┃  Message  Python    → read the… ▾     opus  high   + New thread ⌃N   ○ 12%
-┃
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → read the… ▾   opus  high   + New thread ⌃N   ○ 12%
+  ┃
   This computer · ~/furb                                             ⌃P find

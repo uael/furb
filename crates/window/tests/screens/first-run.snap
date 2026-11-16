@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb                                                         furb-try ▾            This computer
 
@@ -25,9 +26,9 @@ source: crates/window/tests/suite/screens.rs
   ⌃P          go to anything, or run a command
   ⌃X ?        each key
 
-┃
-┃ Ask for a change, a review or an answer
-┃
-┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
-┃
+  ┃
+  ┃ Ask for a change, a review or an answer
+  ┃
+  ┃  Message  Python    This… ▾   FT furb-… ▾  opus  high
+  ┃
   ~/furb-try                                      ⌃P find

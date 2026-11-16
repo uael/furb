@@ -14,7 +14,7 @@ use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Targ
 
 use crate::{
   keys::Does,
-  line::{Line, clipped, cut, run, spread, wrapped},
+  line::{BARRED, Line, barred, clipped, cut, run, spread, wrapped},
   link::Heard,
   list::{NO_PROJECT, project},
   model::{Key, Model},
@@ -474,7 +474,7 @@ impl Model {
   /// How many lines the text of the input holds, as the editor wraps it at its columns.
   fn lines(&self) -> usize {
     let prompt = if self.client.draft.python { PROMPT_WIDTH } else { 0 };
-    let room = self.wide().saturating_sub(6 + prompt).max(1);
+    let room = self.wide().saturating_sub(BARRED + 4 + prompt).max(1);
     // The editor wraps at a word boundary, as the box of a message does.
     self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum()
   }
@@ -497,13 +497,13 @@ impl Model {
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
-      (Some(_), None) => (2, 0, 1, String::new()),
+      (Some(_), None) => (BARRED, 0, 1, String::new()),
       (Some((_, question)), Some(at)) if question.offers_line() => {
         let hint = question.hint();
         let says = if hint.is_empty() { "Your answer".to_owned() } else { hint };
-        (2, at, self.grown(), format!("Write {says}"))
+        (BARRED, at, self.grown(), format!("Write {says}"))
       }
-      (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
+      (Some(_), Some(at)) => (BARRED + 2, at, 1, "type another answer".to_owned()),
       (None, _) => {
         let anchored = self.client.draft.anchor.as_ref().map(|one| match &one.at {
           Where::Line { line, before, .. } => {
@@ -534,7 +534,7 @@ impl Model {
         // The text stands under the blank row that opens the box, as in the box of a message, and
         // after the prompt of the interpreter while it is a word of Python.
         let waits = usize::from(self.waiting_row().is_some());
-        let x = if self.client.draft.python { 2 + PROMPT_WIDTH } else { 2 };
+        let x = if self.client.draft.python { BARRED + PROMPT_WIDTH } else { BARRED };
         (x, waits + 1, self.grown(), says.to_owned())
       }
     };
@@ -635,8 +635,8 @@ impl Model {
   /// column on each side, as wide as the box of a message of the feed, with what its right says.
   fn band(&self, line: Line, right: Option<Line>) -> Row {
     let raised = Style::new().bg(self.tokens.raised);
-    let room = self.wide().saturating_sub(6);
-    let mut row = vec![run("┃", raised.fg(self.bar())), run(" ", raised)];
+    let room = self.wide().saturating_sub(BARRED + 4);
+    let mut row = barred(self.bar(), self.tokens.raised);
     row.extend(spread(line, right.unwrap_or_default(), room, raised));
     row.push(run("  ", raised));
     Row::of(row)
@@ -662,7 +662,7 @@ impl Model {
     };
     let mut left: Line = switch.into();
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
-    let room = self.wide().saturating_sub(6);
+    let room = self.wide().saturating_sub(BARRED + 4);
     let wanted = left.last().map_or(0, |one| one.content.width());
     // The turn keeps its label, as on each other launcher: the target gives way first, down to a
     // few words, then the turn to its mark and its key, then the effort.
@@ -686,8 +686,8 @@ impl Model {
     let line = spread(left, right, room, raised);
     let at = columns(&line);
     let mut hot = vec![
-      (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
-      (at[3].start + 2..at[5].end + 2, Some(Click::Key(Does::Sessions))),
+      (at[0].start + BARRED..at[1].end + BARRED, Some(Click::Key(Does::Python))),
+      (at[3].start + BARRED..at[5].end + BARRED, Some(Click::Key(Does::Sessions))),
     ];
     hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line, None);
@@ -702,10 +702,10 @@ impl Model {
     let left = vec![run(format!("Read only · you watch {watched}"), t.style(Role::Muted))];
     let ring = self.ring().map(|ring| (run(ring, t.style(Role::Prose)), Some(Click::Context)));
     let (right, clicks): (Line, Vec<_>) = ring.into_iter().unzip();
-    // The line stands where the text of a box of the input stands, two columns in.
-    let line = spread(left, right, self.wide().saturating_sub(6), Style::new());
+    // The line stands where the text of a box of the input stands.
+    let line = spread(left, right, self.wide().saturating_sub(BARRED + 4), Style::new());
     let hot = clicked(&columns(&line), clicks);
-    let mut row = vec![run("  ", Style::new())];
+    let mut row = vec![run(" ".repeat(BARRED), Style::new())];
     row.extend(line);
     Row { hot, ..Row::of(row) }
   }
@@ -728,7 +728,7 @@ impl Model {
     // The names give way before the effort, the one control whose label is its value, which a
     // click changes in place: the turn gives way to its mark, then the name of the machine to a
     // few letters, then the name of the project to its badge, and the effort goes last.
-    let room = self.wide().saturating_sub(6);
+    let room = self.wide().saturating_sub(BARRED + 4);
     let spare = |right: &(Line, _)| room.checked_sub(width(&right.0) + 2 + fixed);
     let (whole, least) = (machine.width() + 1 + project.width(), SHORTEST + 2 + project.width());
     let tries = [(0, whole), (1, whole), (1, least), (1, SHORTEST)];
@@ -759,9 +759,9 @@ impl Model {
     let line = spread(left, right, room, raised);
     let at = columns(&line);
     let mut hot = vec![
-      (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
-      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Machines))),
-      (at[6].start + 2..at[8].end + 2, Some(Click::Key(Does::Projects))),
+      (at[0].start + BARRED..at[1].end + BARRED, Some(Click::Key(Does::Python))),
+      (at[3].start + BARRED..at[4].end + BARRED, Some(Click::Key(Does::Machines))),
+      (at[6].start + BARRED..at[8].end + BARRED, Some(Click::Key(Does::Projects))),
     ];
     hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line, None);
@@ -1174,7 +1174,9 @@ fn clicked(at: &[Range<usize>], clicks: Vec<Option<Click>>) -> Vec<Hot> {
   let first = at.len() - clicks.len();
   let each = clicks.into_iter().enumerate();
   each
-    .filter_map(|(n, click)| Some((at[first + n].start + 2..at[first + n].end + 2, Some(click?))))
+    .filter_map(|(n, click)| {
+      Some((at[first + n].start + BARRED..at[first + n].end + BARRED, Some(click?)))
+    })
     .collect()
 }
 

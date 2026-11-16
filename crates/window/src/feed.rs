@@ -23,7 +23,9 @@ use crate::{
   code::Gutter,
   input::{Armed, named},
   keys::Does,
-  line::{self, Line, capital, clipped, marked, run, sliced, spread, styled, wrapped},
+  line::{
+    self, BARRED, Line, barred, capital, clipped, marked, run, sliced, spread, styled, wrapped,
+  },
   list::project,
   model::Model,
   names::{self, Named},
@@ -251,6 +253,7 @@ impl Feed<'_> {
     // messages, so its project stands over their text.
     let runs = card.is_some_and(|card| self.model.live(&root.thread.key, card));
     let mut left = vec![
+      run("  ", Style::new()),
       run(if runs { "●" } else { " " }, Style::new().fg(t.live)),
       run(format!(" {project} · "), muted),
     ];
@@ -444,7 +447,8 @@ impl Feed<'_> {
   fn band(&self, text: &str, (hue, style): (Color, Style), right: Line) -> Vec<Row> {
     let t = &self.model.tokens;
     let pictures = images::references(text);
-    let room = self.wide.saturating_sub(6 + width(&right) + 2 * usize::from(!right.is_empty()));
+    let right_room = width(&right) + 2 * usize::from(!right.is_empty());
+    let room = self.wide.saturating_sub(BARRED + 4 + right_room);
     let room = room.min(PROSE);
     let lines = picture::shown(&self.model.homed(text))
       .lines()
@@ -464,7 +468,7 @@ impl Feed<'_> {
         let row = |line: Line| self.banded(hue, line, Vec::new());
         [row(Vec::new())].into_iter().chain(self.picture(
           one,
-          (2, self.wide.saturating_sub(6)),
+          (u16::try_from(BARRED).unwrap_or_default(), self.wide.saturating_sub(BARRED + 4)),
           row,
         ))
       }))
@@ -475,9 +479,8 @@ impl Feed<'_> {
   /// A row of the band of a message: the bar in a hue, then a text, and a line at its right.
   fn banded(&self, hue: Color, text: Line, right: Line) -> Row {
     let band = Style::new().bg(self.model.tokens.raised);
-    let mut line =
-      vec![run("┃", Style::new().fg(hue).bg(self.model.tokens.raised)), run(" ", band)];
-    line.extend(spread(text, right, self.wide.saturating_sub(4), band));
+    let mut line = barred(hue, self.model.tokens.raised);
+    line.extend(spread(text, right, self.wide.saturating_sub(BARRED + 2), band));
     Row::of(line)
   }
 
@@ -583,7 +586,7 @@ impl Feed<'_> {
     rows.extend(self.lines(message, block));
     rows.push(blank);
     for row in &mut rows {
-      row.line.splice(..1, [bar.clone(), run(" ", Style::new().bg(t.raised))]);
+      row.line.splice(1..2, [bar.clone()]);
     }
     rows.push(Row::default());
     rows

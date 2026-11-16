@@ -70,6 +70,17 @@ pub(crate) fn spread(left: Line, right: Line, room: usize, fill: Style) -> Line 
 
 /// A line in a box of a count of columns on a ground: one column of the ground on each side, and
 /// each run on the ground.
+/// The columns before the text of a box that a bar in a hue marks, a message of the operator or
+/// the input: the margin of the feed, the bar, and one blank column of the ground of the box.
+pub(crate) const BARRED: usize = 4;
+
+/// The left of a row of a box that a bar in a hue marks: the margin of the feed, so the bar stands
+/// in the column where each other box of the feed starts, the bar, and one blank column.
+pub(crate) fn barred(hue: Color, ground: Color) -> Line {
+  let ground = Style::new().bg(ground);
+  vec![run("  ", Style::new()), run("┃", ground.fg(hue)), run(" ", ground)]
+}
+
 pub(crate) fn boxed(line: Line, room: usize, ground: Color) -> Line {
   let fill = Style::new().bg(ground);
   let inside = line.into_iter().map(|one| run(one.content, one.style.bg(ground))).collect();
