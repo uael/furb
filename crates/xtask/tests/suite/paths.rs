@@ -17,13 +17,21 @@ const HELD: [(&str, &str); 5] = [
 fn a_path_that_git_holds_or_ignores_or_that_is_no_whole_path_stands() {
   let tree = tree(
     "stands",
-    &[(
-      "script/a.sh",
-      "cp docs/models.md out\nls crates/typescript/test/programs/\nbun build crates/typescript\n\
+    &[
+      (
+        "script/a.sh",
+        "cp docs/models.md out\nls crates/typescript/test/programs/\nbun build crates/typescript\n\
      ls bind/dist\ncp crates/typescript/furb.$system.node x\nls docs/*.md\n\
      rm crates/typescript/furb.${{ x }}.node\ncd /usr/share/docs/x\ncurl https://example.com/src/y.sh\n\
      ls traces/overnight/a.json\nmy-docs/x\ncp demo.rs src/main.rs\n",
-    )],
+      ),
+      (
+        ".github/workflows/a.yml",
+        "        crate:\n          - { name: a, path: src }\n          - { name: b, path: ./crates/typescript/ }\n\
+       - working-directory: ${{ matrix.crate.path }}\n- working-directory: .\n\
+       - run: cargo test --manifest-path src/lib.rs\n- uses: x\n  with:\n    path: dist\n",
+      ),
+    ],
   );
   assert_eq!(checked(&tree), (Some(0), String::new()));
 }
@@ -41,6 +49,12 @@ fn a_path_that_a_move_left_in_a_tool_or_a_workflow_is_named_with_its_file_and_it
       (".github/workflows/gates.yml", "      - run: python3 src/scope.py\n"),
       ("crates/xtask/src/main.rs", "const HOOK: &str = \"docs/hooks/pre-commit\";\n"),
       ("docs/notes.md", "The old guide was docs/gone.md.\n"),
+      // Bare names of folders that a move took, which no path with a slash names.
+      (
+        ".github/workflows/publish.yml",
+        "          - { name: furb-cli, path: cli }\n        working-directory: ${{ matrix.crate.path }}\n\
+         - working-directory: host\n- run: napi build --manifest-path bind/Cargo.toml\n",
+      ),
     ],
   );
   assert_eq!(
@@ -48,6 +62,9 @@ fn a_path_that_a_move_left_in_a_tool_or_a_workflow_is_named_with_its_file_and_it
     (
       Some(1),
       ".github/workflows/gates.yml:1: src/scope.py is no file or folder of git\n\
+       .github/workflows/publish.yml:1: cli is no file or folder of git\n\
+       .github/workflows/publish.yml:3: host is no file or folder of git\n\
+       .github/workflows/publish.yml:4: bind/Cargo.toml is no file or folder of git\n\
        crates/xtask/src/main.rs:1: docs/hooks/pre-commit is no file or folder of git\n\
        script/prove-npm.sh:2: crates/typescript/test/claude.ts is no file or folder of git\n\
        script/real.py:1: src/gone.py is no file or folder of git\n\

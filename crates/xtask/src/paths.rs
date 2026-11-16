@@ -50,20 +50,31 @@ pub(crate) fn check(root: &Path) -> Result<ExitCode, Fault> {
   for file in files.iter().filter(|file| WATCHED.iter().any(|folder| file.starts_with(folder))) {
     let path = root.join(file);
     let bytes = fs::read(&path).map_err(|source| Fault::Read { path, source })?;
-    for (at, line) in String::from_utf8_lossy(&bytes).lines().enumerate() {
+    let text = String::from_utf8_lossy(&bytes);
+    let mut paths = Vec::new();
+    for (at, line) in text.lines().enumerate() {
       for one in named.captures_iter(line) {
-        let path = one?[1].trim_end_matches(['.', '/']).to_owned();
-        if !(path.contains(['*', '$', '?', '%'])
-          || MADE.contains(&path.as_str())
-          || stands(&path, &files))
-        {
-          found.push(Stale { file, line: at + 1, path });
-        }
+        paths.push((at + 1, one?[1].to_owned()));
+      }
+    }
+    if file.starts_with(".github/workflows/") {
+      paths.extend(folders(&text)?);
+    }
+    for (line, path) in paths {
+      let path = path.trim_start_matches("./").trim_end_matches(['.', '/']).to_owned();
+      if !(path.is_empty()
+        || path.contains(['*', '$', '?', '%', '{'])
+        || MADE.contains(&path.as_str())
+        || stands(&path, &files)
+        || found.iter().any(|one: &Stale| one.file == file && one.line == line && one.path == path))
+      {
+        found.push(Stale { file, line, path });
       }
     }
   }
   let made = ignored(root, &found)?;
   found.retain(|one| !made.contains(&one.path));
+  found.sort_by_key(|one| (one.file, one.line));
   for one in &found {
     println!("{}:{}: {} is no file or folder of git", one.file, one.line, one.path);
   }
@@ -82,6 +93,41 @@ fn pattern(files: &BTreeSet<String>) -> Result<Regex, Fault> {
     ROOTS.iter().map(|name| format!(r"(?<=\${name}/)|(?<=\$\{{{name}\}}/)")).collect();
   let before = [r"(?<![\w./@$}-])".to_owned(), roots.join("|")].join("|");
   Ok(Regex::new(&format!(r#"(?:{before})((?:{})/[^\s"'`()=,;:|<>&\\\[\]{{}}]*)"#, tops.join("|")))?)
+}
+
+/// The values that a workflow uses as folders, each by its line: a literal `working-directory`,
+/// each value of the key of a matrix that a `working-directory` reads, as `${{ matrix.crate.path
+/// }}` reads `path` of each entry `{ .., path: .. }`, and each `--manifest-path`. Each names a path
+/// of the repository with a slash or with none, so a bare name of a folder that a move took is
+/// named too, which the pattern of a path, whose first part must be a folder that stands, never
+/// names.
+fn folders(text: &str) -> Result<Vec<(usize, String)>, Fault> {
+  let directory = Regex::new(r#"working-directory:\s*["']?(.+?)["']?\s*$"#)?;
+  let read = Regex::new(r"^\$\{\{\s*matrix\.(?:\w+\.)*(\w+)\s*\}\}$")?;
+  let manifest = Regex::new(r#"--manifest-path[= ]["']?([^\s"']+)"#)?;
+  let mut keys: BTreeSet<String> = BTreeSet::new();
+  let mut found = Vec::new();
+  for (at, line) in text.lines().enumerate() {
+    for hit in directory.captures_iter(line) {
+      let value = hit?[1].to_owned();
+      match read.captures(value.as_str())? {
+        Some(key) => drop(keys.insert(key[1].to_owned())),
+        None => found.push((at + 1, value)),
+      }
+    }
+    for hit in manifest.captures_iter(line) {
+      found.push((at + 1, hit?[1].to_owned()));
+    }
+  }
+  for key in keys {
+    let entry = Regex::new(&format!(r#"[{{,]\s*{}:\s*["']?([^\s,}}"']+)"#, escape(&key)))?;
+    for (at, line) in text.lines().enumerate() {
+      for hit in entry.captures_iter(line) {
+        found.push((at + 1, hit?[1].to_owned()));
+      }
+    }
+  }
+  Ok(found)
 }
 
 fn stands(path: &str, files: &BTreeSet<String>) -> bool {
