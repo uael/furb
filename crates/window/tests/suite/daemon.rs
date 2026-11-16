@@ -460,7 +460,9 @@ impl Peer {
     } else {
       "resolved"
     };
-    self.card(|card| card.thread.prompt == prompt && json!(card.thread.standing)["is"] == stands);
+    // Each life names its first prompt alike, so a card is the thread of this life by both.
+    let ours = |card: &Card| card.life == life && card.thread.prompt == prompt;
+    self.card(|card| ours(card) && json!(card.thread.standing)["is"] == stands);
     prompt
   }
 

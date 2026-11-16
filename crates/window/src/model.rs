@@ -247,8 +247,7 @@ impl Model {
         self.client.restore = Some(self.before_draft(text));
       }
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
-      (Asked::Ended, Ok(Frame::Reply { answer: Answer::Acts(acts), .. })) => self.ran(acts),
-      (Asked::Ended, Ok(Frame::Refused { why, .. })) => (self.word, self.fault) = (None, Some(why)),
+      (Asked::Ended(life, rung), heard) => self.ended(at, (&life, &rung), heard),
       (
         Asked::Seen
         | Asked::List

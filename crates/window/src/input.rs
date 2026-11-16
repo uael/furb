@@ -6,7 +6,7 @@ use std::{mem, ops::Range, path::Path};
 
 use crate::cells::Cells;
 use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, said, timer};
-use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
+use furb_host::protocol::{Answer, Card, Frame, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 
@@ -15,6 +15,7 @@ use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Targ
 use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
+  link::Heard,
   list::{NO_PROJECT, project},
   model::{Key, Model},
   picture,
@@ -388,9 +389,23 @@ impl Model {
     self.client.stands(word.at, &word.life).then_some((word.at, verb))
   }
 
+  /// The answer to the ask of the end of a rung of a life of a machine, which reaches the word
+  /// that the window runs only when it is that rung of that life: each life names its rungs alike.
+  pub(crate) fn ended(&mut self, at: usize, (life, rung): (&str, &str), heard: Heard) {
+    let ours = |one: &Word| one.at == at && one.life == life && one.rung == rung;
+    if !self.word.as_ref().is_some_and(ours) {
+      return;
+    }
+    match heard {
+      Ok(Frame::Reply { answer: Answer::Acts(acts), .. }) => self.ran(acts),
+      Ok(Frame::Refused { why, .. }) => (self.word, self.fault) = (None, Some(why)),
+      _ => {}
+    }
+  }
+
   /// What the rung of the word that the window ran came to, as its life folds it. A rung of another
   /// birth of the life may hold its name and another word, so the life holds no end of the word.
-  pub(crate) fn ran(&mut self, acts: Vec<Act>) {
+  fn ran(&mut self, acts: Vec<Act>) {
     let Some(word) = self.word.as_mut() else { return };
     let Some(act) = acts.into_iter().find(|one| one.id == word.rung) else { return };
     if let Some(run) = act.run.filter(|_| act.word.as_deref() == Some(&word.text)) {
@@ -1119,9 +1134,15 @@ impl Model {
   fn word_hints(&self, room: usize) -> (Line, Option<(usize, Loader)>) {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
-    let mut opened = self.client.thread.iter().flat_map(|one| one.thread.exchanges.values());
-    let Some(word) = self.word.as_ref().filter(|word| !opened.any(|one| one.message == word.rung))
-    else {
+    // Each life names its rungs alike, so the open thread shows the word only on its own life.
+    let shows = |word: &&Word| {
+      self.client.thread.as_ref().is_some_and(|one| {
+        let key = &one.thread.key;
+        let mut exchanges = one.thread.exchanges.values();
+        (key.0, &key.1) == (word.at, &word.life) && exchanges.any(|one| one.message == word.rung)
+      })
+    };
+    let Some(word) = self.word.as_ref().filter(|word| !shows(word)) else {
       return (Vec::new(), None);
     };
     // The word that names the session reads as the command that he wrote.
@@ -1179,3 +1200,7 @@ fn tail(path: &str, room: usize) -> String {
   let end = ends.into_iter().find(|end| end.width() < room);
   end.map_or_else(|| cut(path, room), |end| format!("…{end}"))
 }
+
+#[cfg(test)]
+#[path = "input.test.rs"]
+mod tests;

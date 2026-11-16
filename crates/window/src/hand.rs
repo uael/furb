@@ -803,7 +803,7 @@ fn pump(window: &Shared) -> bool {
     && let Some(word) = model.word.as_mut()
   {
     word.asked = true;
-    model.client.asked.insert((at, id), Asked::Ended);
+    model.client.asked.insert((at, id), Asked::Ended(word.life.clone(), word.rung.clone()));
   }
   saw
 }
