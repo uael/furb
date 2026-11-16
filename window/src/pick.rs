@@ -886,7 +886,9 @@ impl Model {
   /// The rows of the entries that the part shows: a head before the first entry of each part of the
   /// list while no text filters it, and each entry, the chosen one on the lifted ground with a bar
   /// in the hue of its thread, as the selected card of the list. In a list of things that say what
-  /// they do, what each says stands whole under its name. A row of an entry carries its place. The
+  /// they do, what the chosen one says stands whole under its name, and what each other says on one
+  /// row, so the list reads as a list and the one that he reads tells all. A row of an entry carries
+  /// its place. The
   /// rows start at the one that keeps the chosen entry in view.
   fn shown_entries(
     &self,
@@ -936,7 +938,7 @@ impl Model {
       let tone = entry.tone.map_or(muted, |tone| Style::new().fg(tone));
       let right = vec![run(entry.right.clone(), ground(tone)), run(" ", ground(Style::new()))];
       all.push((Some(at), spread(left, right, room, ground(Style::new()))));
-      let lines = if under && !says.is_empty() { wrapped(says, room - indent - 1) } else { vec![] };
+      let lines = if under { described(says, room - indent - 1, chosen) } else { Vec::new() };
       for line in lines {
         let line = vec![
           bar.clone(),
@@ -1092,4 +1094,17 @@ fn projects(sessions: &[Session]) -> Vec<Entry> {
     ..Entry::default()
   };
   projects.into_iter().map(row).collect()
+}
+
+/// The rows of what an entry says under its name in a room: all of it, or its first row with a
+/// mark of the rest when it holds more.
+fn described(says: &str, room: usize, whole: bool) -> Vec<String> {
+  if says.is_empty() {
+    Vec::new()
+  } else if whole || says.width() <= room {
+    wrapped(says, room)
+  } else {
+    let first = wrapped(says, room.saturating_sub(1)).swap_remove(0);
+    vec![format!("{first}…")]
+  }
 }
