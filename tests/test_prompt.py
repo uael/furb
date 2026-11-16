@@ -240,6 +240,16 @@ async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expre
   ]
 
 
+async def test_a_literal_that_the_operator_answers_is_named_with_str_as_well() -> None:
+  """A Literal that the operator answers is named with str as well, as Act[Literal['a', 'b'] | str], since his own words answer it too."""
+  _, _, root = born()
+  engine.prompt(Literal["a", "b"], "which?", to=OPERATOR, on=root)
+  engine.prompt(Literal["a", "b"], "which?", to="m/low", on=root)
+  await settle()
+  bindings = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if ": Act[" in line]
+  assert bindings[1:] == ["prompt1: Act[Literal['a', 'b'] | str] = Act('prompt1')", "prompt2: Act[Literal['a', 'b']] = Act('prompt2')"]
+
+
 async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
   """A rung whose word closes nothing ends its step, and the chain asks the model again when something new comes, as a message or the end of an act that the word awaited."""
   _, log, root = born("a = 1\ndebug(t'go')", "close(a + 1)")

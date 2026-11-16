@@ -64,7 +64,7 @@ fn formless(app: &TestApp) -> bool {
 #[test]
 fn a_choice_is_answered_by_its_key_and_the_word_that_asked_goes_on() {
   let (app, _daemon, _peer, ..) =
-    opened(&format!("where does the list stand\n{CHOOSES}"), "type another answer");
+    opened(&format!("where does the list stand\n{CHOOSES}"), "type your own answer");
   screen("question-choice", &app);
   // A key in the first moments of the form answers nothing, and moves nothing.
   app.press("down");
@@ -94,7 +94,7 @@ fn a_click_on_a_choice_answers_it() {
 }
 
 #[test]
-fn his_own_words_on_the_last_row_reach_the_word_that_asked_as_a_refusal() {
+fn his_own_words_on_the_last_row_are_the_answer_of_a_choice() {
   let (app, _daemon, _peer) = asked(&format!("where does the list stand\n{CHOOSES}"));
   // A letter on a row of a value writes nothing.
   app.type_text("x");
@@ -104,7 +104,20 @@ fn his_own_words_on_the_last_row_reach_the_word_that_asked_as_a_refusal() {
   shows(&app, "› at the top");
   screen("question-own", &app);
   app.press("enter");
-  shows(&app, "refused: at the top · you");
+  shows(&app, "at the top · you");
+  said(&app, "at the top");
+}
+
+#[test]
+fn a_refused_question_gives_the_input_and_the_pointer_back_at_once() {
+  let (app, _daemon, _peer) = asked(&format!("where does the list stand\n{CHOOSES}"));
+  app.press("down");
+  app.press("down");
+  app.press("escape");
+  shows(&app, "refused · you");
+  assert!(formless(&app), "{}", app.text());
+  app.type_text("hello");
+  shows(&app, "┃ hello");
 }
 
 #[test]

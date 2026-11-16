@@ -1,6 +1,5 @@
 ---
 source: crates/window/tests/suite/screens.rs
-assertion_line: 34
 ---
   ● furb · how many rows                           Resolve     All projects ▾        This computer
   ┃
@@ -20,7 +19,6 @@ assertion_line: 34
 
 
 
-
   ┃
   ┃ ◆ opus/high asks
   ┃ How many rows does the form take?
@@ -29,6 +27,7 @@ assertion_line: 34
   ┃ Refused: "many" is no int: invalid digit found in
   ┃ string
   ┃
-  ┃  Message  Python    → how many… ▾   opus  high   + ⌃N      Context
-  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⏎ answer                                      ⌃C refuse      No answer yet
+  ┃  Message  Python    → how many… ▾   opus  high   + ⌃N
+  ┃                                                            Context
+  ⏎ answer · ⎋ refuse                           ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━●            now  chains ▾    No answer yet

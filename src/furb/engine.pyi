@@ -475,6 +475,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The actor that a prompt leaves unsaid, and that its thread leaves unsaid too, is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
+  A Literal that the operator answers is named with str as well, as Act[Literal['a', 'b'] | str], since his own words answer it too.
   A rung whose word closes nothing ends its step, and the chain asks the model again when something new comes, as a message or the end of an act that the word awaited.
   The completion of a prompt leaves no command and no prompt under it running, since its own word cannot close it while one runs and a close by another cancels each.
   The operator prompts on any chain, by the id of the chain.

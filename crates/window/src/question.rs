@@ -16,7 +16,6 @@ use furb::view::{
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::Style;
-use serde_json::Value;
 
 use furb_client::{Asked, Form, HOLD};
 
@@ -237,9 +236,8 @@ impl Model {
   }
 
   /// The answer of the form, which waits for no other: the value of the row chosen, each value
-  /// ticked as a list, his own words on the last row, which answer a Literal as its last entry and
-  /// join the values that he ticked, and close a yes or no as a refusal that its model reads, or
-  /// the line that he wrote.
+  /// ticked as a list, his own words on the last row, which answer a choice named with str and
+  /// close any other as a refusal that its model reads, or the line that he wrote.
   fn answer(&self) -> Option<(usize, Verb)> {
     let (form, question) = self.form().filter(|_| !self.answering())?;
     let opened = self.client.thread.as_ref()?;
@@ -254,15 +252,10 @@ impl Model {
       }
       Offers::Line => answer(words),
       _ if words.trim().is_empty() => return None,
-      Offers::Choices(_) if question.shape.trim() == "bool" => {
-        Verb::Close { life, act, value: declined(&words) }
-      }
-      Offers::Choices(_) => answer(words.trim().to_owned()),
-      Offers::Ticks(all) => {
-        let ticked = form.ticked.iter().map(|at| all[*at].json.clone());
-        let own = Value::String(words.trim().to_owned()).to_string();
-        answer(format!("[{}]", ticked.chain([own]).collect::<Vec<_>>().join(", ")))
-      }
+      // A choice that the shape names with str takes his words as its answer, as each Literal
+      // that the operator answers is named; any other closes as a refusal that its model reads.
+      Offers::Choices(_) if takes_words(question.shape) => answer(words.trim().to_owned()),
+      _ => Verb::Close { life, act, value: declined(&words) },
     };
     Some((at, verb))
   }
@@ -454,4 +447,9 @@ pub(crate) fn closed(answered: &Answered, login: &str) -> String {
     Reply::Withdrawn(Some(why)) => format!("withdrawn: {why}"),
   };
   format!("{reply} · {who}")
+}
+
+/// Whether a shape takes his own words as an answer: a union with str among its arms.
+fn takes_words(shape: &str) -> bool {
+  shape.split('|').any(|arm| arm.trim() == "str")
 }

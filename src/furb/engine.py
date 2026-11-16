@@ -258,6 +258,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     raise Refused("no thread " + thread)
   to = to or (thread and "".join(get(thread)[6:]))
   asks = (to or module(on).get("actor")) != OPERATOR
+  named += " | str" * ((named[:8] == "Literal[") > asks)
   says = asks and thread and named == "None" and not over(thread)
 
   def ear(id):
