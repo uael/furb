@@ -233,6 +233,13 @@ fn named(tree: &Path, name: &str, log: &Path) -> Vec<String> {
       }
     }
   }
+  // A suite past its limits fails with each test green: it is named by its budget, which the owner
+  // of the suite reads.
+  let over =
+    |line: &str| line.ends_with("over its limit.") || line.contains("passed its wall limit by");
+  for line in text.lines().filter(|line| line.starts_with("budget: ") && over(line)) {
+    found.push(format!("budget of {name}: {}", line.trim_start_matches("budget: ")));
+  }
   found.sort();
   found.dedup();
   if found.is_empty() {
@@ -334,3 +341,7 @@ fn stamp() -> String {
     .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
     .unwrap_or_default()
 }
+
+#[cfg(test)]
+#[path = "watch.test.rs"]
+mod test;
