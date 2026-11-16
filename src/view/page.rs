@@ -349,11 +349,29 @@ impl<'a> Reader<'a> {
     at_line(&lines, before, source).map(|at| lines[at].number)
   }
 
-  /// The context of a chain at its last answer, and none before it.
+  /// The context of a chain at its last answer, and none before it: of the chain that it stands
+  /// as now, since each name of a chain that jumped names the chain that it jumped to.
   fn context(self, chain: &str) -> Option<Context> {
-    let spend = self.held.act(chain)?.spend.as_ref()?;
+    let spend = self.held.act(&self.landed(chain))?.spend.as_ref()?;
     let window = spend.actor.as_deref().and_then(|actor| self.held.window(actor));
     Some(Context { read: spend.read?, window, dollars: spend.dollars })
+  }
+
+  /// The chain that a chain stands as now: the chain that its last jump made, and on through each
+  /// jump of that one.
+  fn landed(self, chain: &str) -> String {
+    let jumped = |on: &str| {
+      let to = |act: &Act| match (&act.kind, &act.phase) {
+        (Kind::Other(kind), Phase::Done(Value::String(to))) if kind == "jump" => Some(to.clone()),
+        _ => None,
+      };
+      self.held.on_chain(on).filter_map(to).last()
+    };
+    let mut at = chain.to_owned();
+    while let Some(to) = jumped(&at).filter(|to| *to != at) {
+      at = to;
+    }
+    at
   }
 
   /// The views of the session that stand open: each prompt to the operator, not done, whose

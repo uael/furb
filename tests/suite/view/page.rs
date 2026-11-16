@@ -862,6 +862,30 @@ fn a_page_gives_the_context_of_its_chain_at_its_last_answer_with_the_window_of_i
 }
 
 #[test]
+fn a_page_gives_the_context_of_the_chain_that_its_chain_jumped_to() {
+  let roster = json!([["claude-cli:opus", ["low", "high"], 200_000], ["operator", ["uael"], 0]]);
+  let mut facts = vec![
+    json!(["stand", "stand1", "operator", "chain1"]),
+    json!(["done", "stand1", "journal", [roster, "/tmp", "claude-cli:opus/high"]]),
+  ];
+  facts.extend(thread());
+  facts.extend([
+    json!(["reply", "reply1", "rung2", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "journal", ["assistant", "x", [140_000, 30, 98_000, 8_400, 0.5], []]]),
+    json!(["jump", "jump1", "rung2", "chain1", [], ""]),
+    json!(["chain", "chain2", "chain1", "chain1", "root", "chain1", []]),
+    json!(["done", "jump1", "chain1", "chain2"]),
+    json!(["reply", "reply2", "rung2", "chain2", "claude-cli:opus/high"]),
+    json!(["done", "reply2", "journal", ["assistant", "x", [96_000, 10, 90_000, 1_000, 0.25], []]]),
+  ]);
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let read = Read { tokens: 96_000, cached: 90_000, written: 1_000 };
+  assert_eq!(page.context, Some(Context { read, window: Some(200_000), dollars: 0.25 }));
+}
+
+#[test]
 fn the_line_that_comes_runs_from_the_ask_of_its_model_and_a_stop_marks_it_stopped() {
   let mut facts = thread();
   facts.push(json!(["rung", "rung3", "prompt3", "chain1", "", "", "claude-cli:opus/high"]));
