@@ -12,8 +12,9 @@
 //! A host gives its part a version of its own in that part. The key names the texts that the
 //! session runs: those of the engine, of the Kernel and of the checkpointer, as
 //! [`world::engine`] names them, and the python of the record, [`crate::RECORD`]. A build of
-//! other texts of the engine opens the image, as it replays a record of them, and the life then
-//! moves to the texts of the build as a step of its own, which [`Engine::cross`] writes. Only a
+//! other texts of the engine or of another python of the record opens the image, as it replays a
+//! record of them, and the life then moves to the texts of the build as a step of its own, which
+//! [`Engine::cross`] writes. Only a
 //! life that keeps its record writes an image, since only that record holds each fact that the
 //! life said.
 //!
@@ -102,15 +103,21 @@ impl Key {
 
   /// Whether this key is the one that this build writes for the body that it names, at the bytes
   /// of the record that it names, but for a dump of an earlier version that monty still reads and
-  /// for the texts of the engine, of the Kernel and of the checkpointer, which the session holds
-  /// and this build runs as it replays a record of them: the record holds those bytes as the life
+  /// for the texts of the engine, of the Kernel and of the checkpointer and the python of the
+  /// record, which the session holds and this build runs as it replays a record of them, and which
+  /// a crossing then moves to those of this build: the record holds those bytes as the life
   /// of the image left them. A record only grows, so the bytes after them are entries that a later
   /// life kept, and a life of the image goes on from it only while none of them is a birth of its
   /// own.
   fn stands(&self, record: &Path) -> bool {
     let read = (monty::MIN_SUPPORTED_DUMP_VERSION..=monty::DUMP_VERSION).contains(&self.dump);
     let ours = Self::of(record, Some(self.tip.bytes), self.parts.clone());
-    let held = |now: Self| Self { dump: self.dump, engine: self.engine.clone(), ..now };
+    let held = |now: Self| Self {
+      dump: self.dump,
+      engine: self.engine.clone(),
+      record: self.record.clone(),
+      ..now
+    };
     read && ours.is_ok_and(|now| held(now) == *self) && world::goes_after(record, self.tip.bytes)
   }
 }

@@ -1276,8 +1276,9 @@ async fn lives(
 
 /// The life that opened on the texts of an earlier build, as its image or its record holds them,
 /// moved to this build once each reader heard it: the fact made of this build at the tip of its
-/// record, then the open again across that crossing, which tells each chain the lines of the engine
-/// that differ, as an open of its own, whose stages each window shows. Each command waits in the
+/// record, with the carry of the tip beside it, then the open again across that crossing, which
+/// boots on that carry and tells each chain the lines of the engine that differ, as an open of its
+/// own, whose stages each window shows. Each command waits in the
 /// inbox meanwhile, so no word runs on the texts that the life leaves.
 async fn moved(
   engine: Engine,
@@ -1290,9 +1291,12 @@ async fn moved(
 ) -> Result<Engine, Fault> {
   life.opens.born();
   (progress.0)(Stage::Cross, 0, 0);
-  engine.cross()?;
+  let crossed = engine.cross()?;
   if let Some(lost) = flushed(None, journal).await {
     return Err(Fault::refused(lost));
+  }
+  if let Some(record) = opening.record.as_deref() {
+    crossed.keep(Path::new(record))?;
   }
   while let Ok(event) = life.heard.try_recv() {
     life.told(Some(event));

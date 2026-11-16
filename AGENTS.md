@@ -55,6 +55,8 @@ API of its own:
   record keeps the carry of its last crossing beside it, `<record>.carry`, a cache as the image is: its key names each
   entry up to that crossing and the texts of the build, so each later open boots on it while it agrees and replays
   those segments again when it does not, and each segment before the last crossing replays on its old engine once. A
+  life that crosses as `Engine::cross` keeps there the carry that it gathers at its own tip, so the open after it
+  replays no segment. A
   tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.
 - `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between

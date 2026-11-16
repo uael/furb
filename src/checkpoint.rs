@@ -21,10 +21,11 @@
 //!
 //! A life that keeps its record keeps the carry of its last crossing beside it, as
 //! `<record>.carry`, so each segment before that crossing replays on its engine once, at the first
-//! open that carries across it, and each later open boots on that carry. It is a cache, as the
-//! image is: its key names each entry up to that crossing and the texts of the build, a reader
-//! takes none that does not agree, and the open then replays those segments again, to the same
-//! carry.
+//! open that carries across it, and each later open boots on that carry. A life that crosses
+//! from its own tip, as [`Engine::cross`] moves it, keeps there the carry that it gathers at that
+//! tip, so no segment replays. It is a cache, as the image is: its key names each entry up to that
+//! crossing and the texts of the build, a reader takes none that does not agree, and the open then
+//! replays those segments again, to the same carry.
 
 use std::{fs, path::Path, slice};
 
@@ -178,13 +179,17 @@ impl Engine {
   /// The move of a life that opened on the texts of another engine, Kernel or checkpointer to those
   /// of this build, as a step of its own: the fact made of this build, which the ear of its store
   /// keeps, so each later open carries the life across it, as [`crossings`] says. The life ends
-  /// with it. A life that keeps no record is refused.
-  pub fn cross(mut self) -> Result<(), Fault> {
+  /// with it, and gives the carry of its tip to this build, which [`Crossed::keep`] keeps beside
+  /// the record once the record holds that fact. A life that keeps no record is refused.
+  pub fn cross(mut self) -> Result<Crossed, Fault> {
     if !self.hears("store") {
       return Err(Fault::refused("a life that keeps no record does not cross"));
     }
+    let made = world::running(&[]);
+    let carry = carried(&mut self, &made)?;
     // A keep is no fact of the life, so it waits in the log: the feed of no entry hands it on.
-    self.word("say('keep', '', __made), feed(())", vec![("__made", world::running(&[]))]).map(drop)
+    self.word("say('keep', '', __made), feed(())", vec![("__made", made)])?;
+    Ok(Crossed(carry))
   }
 
   /// Whether the life runs the texts of another engine, Kernel or checkpointer than this build, as
@@ -215,6 +220,25 @@ pub(crate) fn crossings(record: &[Object]) -> Vec<usize> {
 /// crosses to the texts of a build.
 pub(crate) fn crossed(path: &Path, lease: world::Lease, read: &world::Last) -> Result<(), Fault> {
   world::appended(path, lease, read, world::running(&[]).as_ref())
+}
+
+/// The carry of a life at the tip where it crossed, gathered from the life itself. The life stood
+/// at the exact state of that tip, so the open after the crossing boots on it and replays no
+/// segment before it, as an open after a replay of those segments boots on the carry that it kept.
+#[derive(Debug)]
+pub struct Crossed(Object);
+
+impl Crossed {
+  /// Keeps the carry beside the record at a path, as [`keep`] keeps the carry of a replay, once the
+  /// fact made of the crossing ends the record. A record that holds another entry after it keeps
+  /// nothing, and the next open replays.
+  pub fn keep(self, path: &Path) -> Result<(), Fault> {
+    let record = world::kept(path)?;
+    if let Some(at) = crossings(&record).last().filter(|at| **at + 1 == record.len()) {
+      keep(path, &record, *at, self.0);
+    }
+    Ok(())
+  }
 }
 
 /// The meaning of what [`Kept`] holds, which a change of meaning raises.

@@ -1518,6 +1518,26 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   drop(later);
 }
 
+/// An image of a build whose python of the record differs agrees with its record, as the image of
+/// another engine does: the session holds that python, and the life goes on from the image.
+#[test]
+fn an_image_of_another_python_of_the_record_agrees_with_its_record() {
+  let at = yard("image-record");
+  let record = at.join("record.jsonl");
+  let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut life, "x = 1\nclose(x)");
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
+  drop(life);
+  let path = at.join("record.jsonl.image");
+  let mut text = fs::read(&path).unwrap();
+  let end = text.iter().position(|one| *one == b'\n').unwrap();
+  let key = String::from_utf8(text[..end].to_vec()).unwrap();
+  let at_digest = key.find("\"record\":\"").unwrap() + "\"record\":\"".len();
+  text[at_digest..at_digest + 64].copy_from_slice(&[b'0'; 64]);
+  fs::write(&path, &text).unwrap();
+  assert!(image::agrees(&record), "the image of another python of the record agrees");
+}
+
 /// A life whose image stands at the tip of its record keeps that image as it is: the end of a life
 /// that said nothing after its last image writes none again.
 #[test]
@@ -1609,6 +1629,38 @@ fn a_life_opens_on_the_image_of_another_engine_and_then_moves_to_this_build() {
   let kept = moved.word(kept, vec![("__b", before)]).unwrap();
   assert_eq!(kept.as_ref().py_repr(), "True", "the move appends the engine that differs");
   assert_eq!(read(&mut moved), "[1, None]", "the next word runs on this build");
+}
+
+/// A life on the image of an earlier build moves to this build with the carry of its tip, so the
+/// open after the move boots on that carry and replays no segment before it: a segment that an
+/// earlier engine cannot replay, as one whose order drifts, keeps its life.
+#[test]
+fn a_life_that_moves_from_its_image_opens_on_the_carry_of_its_tip_and_replays_nothing_before() {
+  let at = yard("image-carries");
+  let (made, _) = elsewhere("crossed = True");
+  let (record, _) = made_elsewhere(&at, &made);
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let open = || {
+    let opening = Opening { skills: Some(false), ..opening(&at, true) };
+    reactor.block_on(opening.open::<String>([], Progress::default(), &mut |_| true, None))
+  };
+  let mut first = open().unwrap().0;
+  // A long word after the first one, so the tip that the image names holds none of the first one.
+  closed(&mut first, &format!("y = '{}'\nclose(y)", "z".repeat(5000)));
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  // A replay of the segment makes the run of the first word again, which the record now holds with
+  // another word, so it drifts there.
+  let text = fs::read_to_string(&record).unwrap();
+  let run =
+    text.lines().find(|line| line.starts_with("[[\"run\"") && line.contains("x = 1")).unwrap();
+  fs::write(&record, text.replace(run, &run.replace("x = 1", "x = 2"))).unwrap();
+  let shown = open().unwrap().0;
+  assert!(shown.crosses() && image::agrees(&record), "the life opens on its image");
+  shown.cross().unwrap().keep(&record).unwrap();
+  let mut moved = open().expect("the open boots on the carry of the tip and replays nothing");
+  assert!(!moved.0.crosses(), "the life runs this build");
+  assert_eq!(closed(&mut moved.0, "close([x, y[:1]])").as_ref().py_repr(), "[1, 'z']");
 }
 
 /// A wait that a life left open takes its time again in the life that resumes its record: the ear
