@@ -1416,8 +1416,8 @@ class Hub:
 
     with tempfile.TemporaryFile("w+") as errors:
       async with contextlib.AsyncExitStack() as stack:
-        ended = await stack.enter_async_context(watched(self.transport(entry, run, errors), news))
         try:
+          ended = await stack.enter_async_context(watched(self.transport(entry, run, errors), news))
           async with asyncio.timeout(CONNECT):
             client = await stack.enter_async_context(
               Client(ended, list_roots_callback=roots, message_handler=heard, cache=None)
@@ -1426,7 +1426,11 @@ class Hub:
         except Exception as no:
           if any(isinstance(one, Login) for one in leaves(no)):
             raise
-          why = said(no) + stderr(errors)
+          unborn = next((one for one in leaves(no) if isinstance(one, OSError)), None)
+          if run.transport == "stdio" and unborn is not None:
+            why = f"{run.command} did not start: {unborn}"
+          else:
+            why = said(no) + stderr(errors)
           raise Refused(why) from no
         info = client.server_info
         entry.version, entry.instructions = (info.version if info else "") or "", client.instructions or ""

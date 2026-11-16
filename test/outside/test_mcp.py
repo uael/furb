@@ -279,3 +279,63 @@ async def test_a_server_over_stdio_offers_what_it_lists_but_its_denied_tools_and
   ]
   assert isinstance(one["binding"], str)
   await answers_each_act(place, root)
+
+
+async def controls_write_the_local_scope(place: Place, root: str, local: Path) -> None:
+  """What a control writes in the local config, and what it refuses."""
+
+  def written() -> object:
+    return json.loads(local.read_text())
+
+  assert (await asked(root, "mcp_control", "'approve', 'shared'"))["state"] == "connected"
+  assert written() == {"theme": "kept", "approved": ["shared"]}
+  assert (await asked(root, "mcp_control", "'disable', 'shared'"))["state"] == "disabled"
+  assert written() == {"theme": "kept", "approved": ["shared"], "enabled": [], "disabled": ["shared"]}
+  assert (await asked(root, "mcp_control", "'enable', 'off'"))["state"] == "connected"
+  assert written() == {"theme": "kept", "approved": ["shared"], "enabled": ["off"], "disabled": ["shared"]}
+  assert (await asked(root, "mcp_control", "'reconnect', 'off'"))["state"] == "connected"
+  assert len(place.starts()) == 3, "the approval, the enable and the reconnect each started a process"
+  assert (
+    await refused(root, "mcp_control", "'reconnect', 'shared'")
+    == "the server shared is disabled: mcp_control('enable', \"shared\")"
+  )
+  assert (
+    await refused(root, "mcp_control", "'login', 'off'") == "the server off runs on this machine and takes no login"
+  )
+  assert await refused(root, "mcp_control", "'approve', 'nobody'") == "there is no server nobody"
+  assert (
+    await refused(root, "mcp_control", "'fly', 'off'")
+    == "the action fly is none of reconnect, enable, disable, approve, login and logout"
+  )
+
+
+async def test_each_server_has_its_state_and_a_control_writes_the_choice_of_the_operator_to_the_local_scope(
+  place: Place,
+) -> None:
+  """Each server has its state, and a control writes the choice of the operator to the local scope."""
+  place.user(
+    {
+      "off": place.stdio(disabled=True),
+      "unset": {"command": "${MISSING}"},
+      "absent": {"command": "/nonexistent/furb-mcp-server"},
+      "pigeon": {"type": "carrier-pigeon", "url": "http://127.0.0.1"},
+    }
+  )
+  place.write(place.project / ".mcp.json", {"mcpServers": {"shared": place.stdio()}})
+  local = place.project / ".furb" / "mcp.json"
+  place.write(local, {"theme": "kept"})
+  root = place.opened()
+  servers = await asked(root, "mcp_servers")
+  assert isinstance(servers, list)
+  assert [(one["name"], one["state"], one["scope"]) for one in servers] == [
+    ("off", "disabled", "user"),
+    ("unset", "failed", "user"),
+    ("absent", "failed", "user"),
+    ("pigeon", "failed", "user"),
+    ("shared", "unapproved", "project"),
+  ]
+  assert (await server(root, "unset"))["error"] == "the variable MISSING is not set"
+  assert (await server(root, "absent"))["error"].startswith("/nonexistent/furb-mcp-server did not start")
+  assert (await server(root, "pigeon"))["error"] == "the type carrier-pigeon is none of stdio, http and sse"
+  assert await refused(root, "mcp_call", "'shared', 'echo'") == "the server shared is not connected, it is unapproved"
+  await controls_write_the_local_scope(place, root, local)
