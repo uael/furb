@@ -43,6 +43,7 @@ pub(crate) fn options(kept: &Path) -> Options {
     program: None,
     reloaded: false,
     tailnet: None,
+    listen: None,
   }
 }
 

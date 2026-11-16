@@ -5,7 +5,7 @@ use std::{
   cell::{Cell, RefCell},
   fs, mem,
   ops::Range,
-  path::PathBuf,
+  path::{Path, PathBuf},
   rc::Rc,
   sync::Arc,
   time::{Duration, Instant},
@@ -25,7 +25,10 @@ use opentui::{
   style::{Color, Style},
 };
 
-use furb_host::protocol::Verb;
+use furb_host::protocol::{BOUND, Verb};
+use futures::StreamExt;
+use tokio::process::ChildStdout;
+use tokio_util::codec::{FramedRead, LinesCodec};
 
 use furb::world::images;
 use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, mentioned};
@@ -47,6 +50,7 @@ use crate::{
   review::{MARKS, NEXT, PREVIOUS},
   thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
+  voice::{self, RELEASED, Record, Said, Space, Voice},
 };
 
 /// How long the window waits for a machine before it says that it waits.
@@ -114,6 +118,10 @@ struct Window {
   program: Option<Watch>,
   /// Whether the window ended to give its place to a new build of its program.
   reloads: Rc<Cell<bool>>,
+  /// The voice of the operator, while he holds the space bar.
+  voice: Voice,
+  /// The program of the speech that the window was given, else the one that the build carries.
+  listen: Option<PathBuf>,
 }
 
 type Shared = Rc<RefCell<Window>>;
@@ -161,6 +169,8 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<
     diff,
     program: options.program.map(Watch::new),
     reloads: Rc::new(Cell::new(false)),
+    voice: Voice::default(),
+    listen: options.listen,
   };
   let reloads = Rc::clone(&window.reloads);
   let window = Rc::new(RefCell::new(window));
@@ -900,6 +910,9 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if key.kind == KeyEventKind::Release {
     return false;
   }
+  if voiced(app, window, key) {
+    return true;
+  }
   let led = window.borrow_mut().led.take();
   let led = led.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER);
   if keys::leads(key) {
@@ -1531,4 +1544,153 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   {
     act(app, window, does);
   }
+}
+
+/// A key that the voice takes: a space while he holds the bar, which starts the record or holds it,
+/// and escape during a record, which drops it. A list part, a form and the review take their spaces
+/// as they do.
+fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  let recording = window.borrow().voice.record.is_some();
+  if recording && key.code == KeyCode::Escape {
+    dropped(app, window, None);
+    return true;
+  }
+  let busy = {
+    let model = &window.borrow().screen.model;
+    model.picker.is_some() || model.form().is_some() || model.client.review.is_some()
+  };
+  let space = key.code == KeyCode::Char(' ') && key.modifiers.is_empty();
+  if !space || busy && !recording {
+    window.borrow_mut().voice.other();
+    return false;
+  }
+  let heard = window.borrow_mut().voice.space(app.now());
+  match heard {
+    Space::Types => false,
+    Space::Holds => true,
+    Space::Starts(spaces) => {
+      recorded(app, window, spaces);
+      true
+    }
+  }
+}
+
+/// A record of his voice started, once the spaces of the hold left the input: the program of the
+/// speech listens, and what it hears writes itself at the caret. A system with no speech, or a
+/// program that does not start, says so, and the spaces stay.
+fn recorded(app: &App, window: &Shared, spaces: usize) {
+  let (named, folder) = {
+    let held = window.borrow();
+    (held.listen.clone(), held.kept.parent().map(Path::to_path_buf).unwrap_or_default())
+  };
+  let started = match voice::program(named.as_deref(), &folder) {
+    Ok(Some(program)) => {
+      let _runtime = app.runtime().enter();
+      voice::started(&program).map_err(|no| format!("The speech did not start: {no}"))
+    }
+    Ok(None) => Err("This window has no speech on this system yet.".to_owned()),
+    Err(no) => Err(format!("The program of the speech cannot be written: {no}")),
+  };
+  let (child, input, output) = match started {
+    Ok(started) => started,
+    Err(why) => return tell(app, window, |model| model.client.notice = Some(why)),
+  };
+  let area = window.borrow().area.clone();
+  let text: Vec<char> = area.text().chars().collect();
+  let caret = usize::try_from(area.cursor_offset()).unwrap_or_default().min(text.len());
+  let typed = text[..caret].iter().rev().take(spaces).take_while(|one| **one == ' ').count();
+  let before = text[..caret - typed].iter().collect();
+  let after = text[caret..].iter().collect();
+  let record = Record { child, input: Some(input), before, after, last: app.now(), level: 0 };
+  window.borrow_mut().voice.record = Some(record);
+  spoken(app, window, "");
+  listening(app, window, FramedRead::new(output, LinesCodec::new_with_max_length(BOUND)));
+  held(app, window);
+}
+
+/// The text of the voice so far written in the input at the caret where the record began, with a
+/// blank between it and a word before it.
+fn spoken(app: &App, window: &Shared, said: &str) {
+  let Some((text, caret)) = window.borrow().voice.record.as_ref().map(|record| {
+    let blank =
+      !said.is_empty() && record.before.chars().last().is_some_and(|one| !one.is_whitespace());
+    let head = format!("{}{}{said}", record.before, if blank { " " } else { "" });
+    let caret = head.chars().count();
+    (format!("{head}{}", record.after), caret)
+  }) else {
+    return;
+  };
+  let area = window.borrow().area.clone();
+  area.set_text(&text);
+  area.set_cursor_offset(u32::try_from(caret).unwrap_or(u32::MAX));
+  // The editor tells no change that the window makes, so the draft takes the text too.
+  tell(app, window, |model| model.client.draft.text = text);
+}
+
+/// Each line of the program of the speech, heard on the app, until its output ends.
+fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, LinesCodec>) {
+  let on = Rc::clone(window);
+  let next = async move { (lines.next().await, lines) };
+  drop(app.spawn(next, move |cx, (line, lines)| {
+    let said = match line {
+      Some(Ok(line)) => serde_json::from_str::<Said>(&line)
+        .map_err(|no| format!("The speech said what the window cannot read: {no}")),
+      Some(Err(no)) => Err(format!("The speech cannot be read: {no}")),
+      None => Err("The speech ended with no text.".to_owned()),
+    };
+    match said {
+      Ok(Said::Level { level }) => {
+        if let Some(record) = on.borrow_mut().voice.record.as_mut() {
+          record.level = level;
+        }
+      }
+      Ok(Said::Text { text, ends }) => {
+        spoken(cx.app(), &on, &text);
+        if ends {
+          on.borrow_mut().voice.record = None;
+          return;
+        }
+      }
+      Ok(Said::Fault { error }) => return dropped(cx.app(), &on, Some(error)),
+      Err(why) => return dropped(cx.app(), &on, Some(why)),
+    }
+    listening(cx.app(), &on, lines);
+  }));
+}
+
+/// The record looked at after each pause of the repeats of the bar: once they stopped, he let the
+/// bar go, and the input of the program closes, so it gives its final text.
+fn held(app: &App, window: &Shared) {
+  let on = Rc::clone(window);
+  app.set_timeout(RELEASED, move |cx| {
+    let now = cx.app().now();
+    let mut window = on.borrow_mut();
+    let Some(record) = window.voice.record.as_mut().filter(|one| one.input.is_some()) else {
+      return;
+    };
+    if now.saturating_duration_since(record.last) >= RELEASED {
+      record.input = None;
+      return;
+    }
+    drop(window);
+    held(cx.app(), &on);
+  });
+}
+
+/// The record dropped, with the input as it stood before it, and why when a fault ended it.
+fn dropped(app: &App, window: &Shared, why: Option<String>) {
+  let Some(mut record) = window.borrow_mut().voice.record.take() else { return };
+  // A program that ended already takes no kill, which is all that the error says.
+  record.child.start_kill().ok();
+  let text = format!("{}{}", record.before, record.after);
+  let caret = record.before.chars().count();
+  let area = window.borrow().area.clone();
+  area.set_text(&text);
+  area.set_cursor_offset(u32::try_from(caret).unwrap_or(u32::MAX));
+  tell(app, window, |model| {
+    model.client.draft.text = text;
+    if why.is_some() {
+      model.client.notice = why;
+    }
+  });
 }

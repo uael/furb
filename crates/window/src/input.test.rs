@@ -22,6 +22,7 @@ fn running() -> Model {
     program: None,
     reloaded: false,
     tailnet: None,
+    listen: None,
   };
   let mut model = Model::new(vec![Told::default()], (120, 40), Tokens::on(None), &options);
   model.word = Some(word());

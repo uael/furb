@@ -31,4 +31,5 @@ mod system;
 mod text;
 mod thread;
 mod views;
+mod voice;
 mod walk;

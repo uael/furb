@@ -43,6 +43,7 @@ mod settings;
 mod thread;
 mod time;
 pub mod tokens;
+mod voice;
 
 use std::{
   env, io,
@@ -96,6 +97,9 @@ pub struct Options {
   /// Where the window finds the other machines of the tailnet, each of which joins its machines
   /// once its daemon takes a dial. None looks for none.
   pub tailnet: Option<Tailnet>,
+  /// The program that writes the voice of the operator as text while he holds the space bar, as
+  /// lines of JSON: none takes the one that the build carries, the speech of macOS.
+  pub listen: Option<PathBuf>,
 }
 
 impl Options {
@@ -121,7 +125,21 @@ impl Options {
     let program = env::current_exe().ok();
     let reloaded = env::var_os(RELOADED).is_some();
     let tailnet = Tailnet::here();
-    Ok(Self { folder, home, kept, zone, clock, still, system, browse, program, reloaded, tailnet })
+    let listen = None;
+    Ok(Self {
+      folder,
+      home,
+      kept,
+      zone,
+      clock,
+      still,
+      system,
+      browse,
+      program,
+      reloaded,
+      tailnet,
+      listen,
+    })
   }
 }
 

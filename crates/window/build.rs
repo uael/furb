@@ -59,7 +59,7 @@ enum Fault {
 }
 
 fn main() -> ExitCode {
-  match linked() {
+  match linked().and_then(|()| listener()) {
     Ok(()) => ExitCode::SUCCESS,
     Err(fault) => {
       eprintln!("{fault}");
@@ -95,6 +95,31 @@ fn linked() -> Result<(), Fault> {
     println!("cargo::rustc-link-lib={library}");
   }
   Ok(())
+}
+
+/// The program of the speech of macOS, `listen.swift`, built into the folder of the build, which
+/// the window carries and starts while the operator holds the space bar. A build for another
+/// system, or with no Swift of macOS 26, writes an empty program, and the window then says that it
+/// has no speech.
+fn listener() -> Result<(), Fault> {
+  println!("cargo::rerun-if-changed=listen.swift");
+  let out = PathBuf::from(var("OUT_DIR")?).join("listen");
+  let mac = var("TARGET")?.ends_with("-apple-darwin");
+  let built = mac
+    && Command::new("xcrun")
+      .args(["swiftc", "-O", "-parse-as-library", "listen.swift", "-o"])
+      .arg(&out)
+      .status()
+      .is_ok_and(|status| status.success());
+  if built {
+    return Ok(());
+  }
+  if mac {
+    println!(
+      "cargo::warning=the window carries no speech: listen.swift needs the Swift of macOS 26"
+    );
+  }
+  fs::write(&out, b"").map_err(|source| Fault::File { path: out, source })
 }
 
 /// What a program links with the library, as the build script of `opentui-sys` says it for a

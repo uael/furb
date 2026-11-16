@@ -129,7 +129,7 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
 /// The text of an input of one row, which stands above a blank row of its box, the launcher, the
 /// last row of its box and the hints, once it shows a text: the window draws the text that the
 /// editor takes at its next frame. The box of the context stands at its right.
-fn typed(app: &TestApp, text: &str) -> String {
+pub(crate) fn typed(app: &TestApp, text: &str) -> String {
   let row = || {
     let frame = app.text();
     let lines: Vec<&str> = frame.lines().collect();
