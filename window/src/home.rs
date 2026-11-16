@@ -101,22 +101,20 @@ impl Model {
     } else if self.known() {
       rows.extend(wrapped("Write below to start a thread.", prose));
       rows.pop();
-      let actor = self.maker().map(|(model, effort)| match effort {
-        Some(effort) => format!(", with {model} at {effort} effort"),
-        None => format!(", with {model}"),
-      });
-      let (project, at) = match self.client.target() {
-        Target::New(at, folder) => (self.folder_named(at, &folder), at),
-        _ => (self.project(), 0),
+      let (place, actor) = self.starts();
+      // A sentence that takes two rows breaks at its comma, so the model and its effort read as one
+      // part and no word of it stands alone on a row.
+      let said = match actor {
+        Some(actor) if place.width() + actor.width() + 3 > room => {
+          let mut rows = wrapped(&format!("{place},"), muted);
+          rows.pop();
+          rows.extend(wrapped(&format!("{actor}."), muted));
+          rows
+        }
+        Some(actor) => wrapped(&format!("{place}, {actor}."), muted),
+        None => wrapped(&format!("{place}."), muted),
       };
-      let machine = if at == 0 { "this computer" } else { &self.client.machines[at].name };
-      let session = if project == NO_PROJECT {
-        "a new session with no project".to_owned()
-      } else {
-        format!("a new session of {project}")
-      };
-      let place = format!("It runs in {session} on {machine}");
-      rows.extend(wrapped(&format!("{place}{}.", actor.unwrap_or_default()), muted));
+      rows.extend(said);
     }
     for told in &self.client.machines {
       if let Link::Lost(why) = &told.link {
@@ -125,6 +123,27 @@ impl Model {
       }
     }
     rows
+  }
+
+  /// Where a thread that the operator starts here runs, and the model that answers it with its
+  /// effort, none before the window knows it.
+  fn starts(&self) -> (String, Option<String>) {
+    let actor = self.maker().map(|(model, effort)| match effort {
+      Some(effort) => format!("with {model} at {effort} effort"),
+      None => format!("with {model}"),
+    });
+    let (project, at) = match self.client.target() {
+      Target::New(at, folder) => (self.folder_named(at, &folder), at),
+      _ => (self.project(), 0),
+    };
+    let machine = if at == 0 { "this computer" } else { &self.client.machines[at].name };
+    let session = if project == NO_PROJECT {
+      "a new session with no project".to_owned()
+    } else {
+      format!("a new session of {project}")
+    };
+    let place = format!("It runs in {session} on {machine}");
+    (place, actor)
   }
 
   /// The folder of the window, with the home folder of the user as `~`, and `/` between its parts

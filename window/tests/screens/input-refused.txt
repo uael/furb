@@ -16,8 +16,8 @@
 
 
   Write below to start a thread.
-  It runs in a new session of broken on this computer, with
-  opus at high effort.
+  It runs in a new session of broken on this computer,
+  with opus at high effort.
 
   ⌃P          go to anything, or run a command
   ⌃X ?        each key
