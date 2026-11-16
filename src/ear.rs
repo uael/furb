@@ -288,9 +288,10 @@ pub enum Next<W> {
   Worked(W),
 }
 
-/// What the coroutine of an ear tells its body: a fact heard, the question of an act that an earlier life took and
-/// that a wake puts to it again, what a verb it called came to, that the life drives the ear, that the life took one
-/// thing that the body said, what the body keeps, handed back before the body runs, and what an image gave of it.
+/// What the coroutine of an ear tells its body: a fact heard, the question of an act that an
+/// earlier life took and that a wake puts to it again, what a verb it called came to, that the life
+/// drives the ear, that the life took one thing that the body said, what the body keeps, handed
+/// back before the body runs, and what an image gave of it.
 enum Event {
   Heard(Fact),
   Resumed(Fact),
@@ -301,15 +302,16 @@ enum Event {
   Given(Value),
 }
 
-/// What the body of an ear gives its coroutine: what it says, with the question whose act a started of it takes,
-/// and what it keeps, which the coroutine holds while the body waits.
+/// What the body of an ear gives its coroutine: what it says, with the question whose act a started
+/// of it takes, and what it keeps, which the coroutine holds while the body waits.
 enum Gave {
   Said(Spoken, Option<Fact>),
   Kept(Box<dyn Kept>),
 }
 
-/// What an ear of rust keeps across its steps, beside its acts in flight: its coroutine holds it while the body
-/// waits, where the life reads what the image holds of it, ends a run with it and counts what it holds unkept.
+/// What an ear of rust keeps across its steps, beside its acts in flight: its coroutine holds it
+/// while the body waits, where the life reads what the image holds of it, ends a run with it and
+/// counts what it holds unkept.
 pub trait Kept: Any {
   /// What the image of the life holds of it, or nothing when it cannot say it.
   fn image(&self) -> Option<Value>;
@@ -332,13 +334,14 @@ impl<T: Serialize + 'static> Kept for T {
   }
 }
 
-/// What the coroutine of an ear of rust holds for the image of its life: the question of each act that the ear
-/// started and that is not done, those acts, which are its acts in flight, and the acts that an earlier life took and
-/// that no wake put to it yet.
+/// What the coroutine of an ear of rust holds for the image of its life: the question of each act
+/// that the ear started and that is not done, those acts, which are its acts in flight, and the
+/// acts that an earlier life took and that no wake put to it yet.
 ///
-/// A question goes to each ear in turn until one owns it, but its done goes only to the ears that wait for its kind
-/// or for every fact. So the ear keeps a question only when its body starts the act of the question that it hears:
-/// else it would keep each question that another ear answered, for the whole life.
+/// A question goes to each ear in turn until one owns it, but its done goes only to the ears that
+/// wait for its kind or for every fact. So the ear keeps a question only when its body starts the
+/// act of the question that it hears: else it would keep each question that another ear answered,
+/// for the whole life.
 #[derive(Default)]
 struct Imaged {
   asked: HashMap<String, Fact>,
@@ -347,8 +350,9 @@ struct Imaged {
 }
 
 impl Imaged {
-  /// A fact told to the body: a done forgets its act, a started that the journal says again is of an act that an
-  /// earlier life took, and the question of such an act is resumed, which this gives.
+  /// A fact told to the body: a done forgets its act, a started that the journal says again is of
+  /// an act that an earlier life took, and the question of such an act is resumed, which this
+  /// gives.
   fn told(&mut self, fact: &Fact) -> bool {
     match fact.kind() {
       "done" => {
@@ -368,7 +372,8 @@ impl Imaged {
     false
   }
 
-  /// What the body said: a started makes its act one in flight, with the question that the body heard of it.
+  /// What the body said: a started makes its act one in flight, with the question that the body
+  /// heard of it.
   fn said(&mut self, spoken: &Spoken, question: Option<Fact>) {
     if let Spoken::Saying(saying) = spoken
       && saying.kind() == "started"
@@ -383,11 +388,12 @@ impl Imaged {
   }
 }
 
-/// What the body of an ear of rust hears, says and works through, which the body owns: what the coroutine tells it,
-/// what it gives the coroutine, how much of what it said the life has not taken yet, its works, the stop of the work
-/// of each act it took, the question that it hears now, the facts it heard and has not taken, the answer to the verb
-/// it called, what it keeps while it runs, what an image gave of that, whether the life drives it, and whether it
-/// began a work while it heard. `W` is what each of its works gives.
+/// What the body of an ear of rust hears, says and works through, which the body owns: what the
+/// coroutine tells it, what it gives the coroutine, how much of what it said the life has not taken
+/// yet, its works, the stop of the work of each act it took, the question that it hears now, the
+/// facts it heard and has not taken, the answer to the verb it called, what it keeps while it runs,
+/// what an image gave of that, whether the life drives it, and whether it began a work while it
+/// heard. `W` is what each of its works gives.
 pub struct Co<W = ()> {
   events: Receiver<Event>,
   gave: Sender<Gave>,
@@ -444,8 +450,9 @@ impl<W: 'static> Co<W> {
     .await
   }
 
-  /// A fact heard, as the body takes it: a done ends the work of its act, the question of an act that an earlier
-  /// life took is resumed, and the body hears any other question until it starts its act or hears the next.
+  /// A fact heard, as the body takes it: a done ends the work of its act, the question of an act
+  /// that an earlier life took is resumed, and the body hears any other question until it starts
+  /// its act or hears the next.
   fn noted(&mut self, fact: Fact, resumed: bool) -> Next<W> {
     if fact.kind() == "done" {
       self.taken.remove(fact.about());
@@ -459,8 +466,8 @@ impl<W: 'static> Co<W> {
     Next::Heard(fact)
   }
 
-  /// What an image of the life gave of what this ear keeps, read once as `T`: nothing for an ear that no image
-  /// made.
+  /// What an image of the life gave of what this ear keeps, read once as `T`: nothing for an ear
+  /// that no image made.
   pub fn given<T: DeserializeOwned>(&mut self) -> Result<Option<T>, Fault> {
     self.told();
     let read = |given| serde_json::from_value(given);
@@ -470,21 +477,22 @@ impl<W: 'static> Co<W> {
     self.given.take().map(read).transpose().map_err(fault)
   }
 
-  /// What the ear keeps from now on: what an image of the life gave of it to this fresh ear, or else `first`.
+  /// What the ear keeps from now on: what an image of the life gave of it to this fresh ear, or
+  /// else `first`.
   pub fn keeps<K: Kept + DeserializeOwned>(&mut self, first: K) -> Result<(), Fault> {
     let kept = self.given()?.unwrap_or(first);
     self.keep(kept);
     Ok(())
   }
 
-  /// What the ear keeps, taken while it steps, which [`Co::keep`] gives back before it waits again. The image of a
-  /// life that reads it meanwhile reads the empty value in its place.
+  /// What the ear keeps, taken while it steps, which [`Co::keep`] gives back before it waits again.
+  /// The image of a life that reads it meanwhile reads the empty value in its place.
   pub fn held<K: Kept + Default>(&mut self) -> Result<K, Fault> {
     self.kept().map(mem::take)
   }
 
-  /// What the ear keeps from now on, which its coroutine holds while it waits, where the life reads it between two
-  /// runs.
+  /// What the ear keeps from now on, which its coroutine holds while it waits, where the life reads
+  /// it between two runs.
   pub fn keep<K: Kept>(&mut self, kept: K) {
     self.kept = Some(Box::new(kept));
   }
@@ -497,8 +505,8 @@ impl<W: 'static> Co<W> {
     kept.downcast_mut().ok_or_else(|| Fault::refused("the ear keeps a value of another type"))
   }
 
-  /// What the coroutine told since, taken: the facts wait to be taken, and the life drives the ear until it hears
-  /// again.
+  /// What the coroutine told since, taken: the facts wait to be taken, and the life drives the ear
+  /// until it hears again.
   fn told(&mut self) {
     while let Ok(event) = self.events.try_recv() {
       match event {
@@ -527,7 +535,8 @@ impl<W: 'static> Co<W> {
     Poll::Pending
   }
 
-  /// One thing given to the coroutine, which holds the ear and its body, so it stands while the body runs.
+  /// One thing given to the coroutine, which holds the ear and its body, so it stands while the
+  /// body runs.
   fn gives(&self, gave: Gave) {
     self.gave.send(gave).ok();
   }
@@ -555,8 +564,8 @@ impl<W: 'static> Co<W> {
     .await
   }
 
-  /// What the ear says or tells, to the coroutine, which counts it until it gives it to the life. A started takes
-  /// the question that the ear hears, when it is of the same act.
+  /// What the ear says or tells, to the coroutine, which counts it until it gives it to the life. A
+  /// started takes the question that the ear hears, when it is of the same act.
   fn spoke(&mut self, spoken: Spoken) {
     let question = match &spoken {
       Spoken::Saying(saying) if saying.kind() == "started" => {
@@ -580,11 +589,12 @@ impl<W> Drop for Co<W> {
 
 type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 
-/// An ear of rust: its body, what it tells the body and what the body gives it, what the body said and the life has
-/// not taken, what its work said past the first thing of a poll, what the verb its work called came to, which the
-/// body takes at the next poll, how the body ended, which the next resume gives, whether the next fact a resume
-/// gives is the one the bus made of what the ear said at a resume, which goes nowhere, since the log gives the ear
-/// that fact later too, what it holds for the image, and what the body keeps while it waits, once it keeps a thing.
+/// An ear of rust: its body, what it tells the body and what the body gives it, what the body said
+/// and the life has not taken, what its work said past the first thing of a poll, what the verb its
+/// work called came to, which the body takes at the next poll, how the body ended, which the next
+/// resume gives, whether the next fact a resume gives is the one the bus made of what the ear said
+/// at a resume, which goes nowhere, since the log gives the ear that fact later too, what it holds
+/// for the image, and what the body keeps while it waits, once it keeps a thing.
 struct Coroutine {
   body: Option<Body>,
   /// The names and kinds the ear waits for, as a set, or nothing for every fact.
@@ -644,8 +654,8 @@ impl Ear for Coroutine {
     self.kept.as_deref().map_or(0, Kept::unkept)
   }
 
-  /// Each act in flight goes out as the question that the ear heard, with what the body keeps; nothing while the
-  /// body holds what it keeps.
+  /// Each act in flight goes out as the question that the ear heard, with what the body keeps;
+  /// nothing while the body holds what it keeps.
   fn image(&self) -> Option<Value> {
     let imaged = &self.imaged;
     let asked = imaged.started.iter().filter_map(|id| imaged.asked.get(id));
@@ -687,7 +697,8 @@ impl Ear for Coroutine {
 }
 
 impl Coroutine {
-  /// One event, told to the body, which takes it at its next poll. A body that ended takes nothing more.
+  /// One event, told to the body, which takes it at its next poll. A body that ended takes nothing
+  /// more.
   fn tell(&self, event: Event) {
     self.events.send(event).ok();
   }

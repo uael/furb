@@ -593,7 +593,8 @@ impl Sink {
 }
 
 impl Reader {
-  /// The reader that tells each fact to its sink, with what it knows of the chains that the record does not hold.
+  /// The reader that tells each fact to its sink, with what it knows of the chains that the record
+  /// does not hold.
   fn new(known: Known, sink: Sink) -> Self {
     Self {
       sink,

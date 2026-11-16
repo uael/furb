@@ -519,7 +519,8 @@ impl Held {
     self.state.reach(|state| state.engine.is_none()).unwrap_or_default()
   }
 
-  /// The listener hears why the life stopped, once, when it stopped, or at once when it stopped already.
+  /// The listener hears why the life stopped, once, when it stopped, or at once when it stopped
+  /// already.
   pub(crate) fn listen(&self, listener: FunctionRef<String, ()>) {
     self.state.reach(|state| state.listener = Some(listener));
     self.stops();

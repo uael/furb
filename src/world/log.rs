@@ -166,8 +166,8 @@ fn heard(mut log: Log, tail: usize) -> Box<dyn Ear> {
   })
 }
 
-/// The ear keeps its log, whose image is what it knows of the lines, and which hands the lines to the file at the
-/// end of each run.
+/// The ear keeps its log, whose image is what it knows of the lines, and which hands the lines to
+/// the file at the end of each run.
 impl Kept for Log {
   fn image(&self) -> Option<Value> {
     serde_json::to_value(&self.tip).ok()
