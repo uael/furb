@@ -125,3 +125,31 @@ test("a kit reads its own keys from a life that gives config, and an older life 
   });
   await expect(older.settings()).rejects.toThrow("older than the capability config");
 });
+
+test("a kit answers an act that waits for it as it attaches, with the answers that its welcome made", async () => {
+  let fact = (_seq: number, _data: unknown[]) => {};
+  const double = life((verb) => {
+    if (verb.verb === "hello")
+      return {
+        frame: "reply",
+        answer: { answer: "welcome", data: { peer: {}, folders: { project: "/p" } } },
+      };
+    if (verb.verb === "peek") return { frame: "refused", error: { error: "refused" }, why: "not done" };
+    if (verb.verb === "attach") queueMicrotask(() => fact(0, ["k.add", "k.add1", "rung4", "chain1", "milk"]));
+    return done;
+  });
+  fact = double.fact;
+  const skill = await Skill.attach({
+    env,
+    link: double.link,
+    answering: (welcomed) => ({
+      "k.add": (one) => `added ${String(one[4])} in ${String(welcomed.folders?.project)}`,
+    }),
+  });
+  const closes = () => double.said.filter((verb) => verb.verb === "close");
+  for (let tries = 0; closes().length < 1 && tries < 500; tries++) await Bun.sleep(10);
+  expect(closes().map((verb) => [verb.act, verb.value])).toEqual([
+    ["k.add1", JSON.stringify("added milk in /p")],
+  ]);
+  skill.close();
+});

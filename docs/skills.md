@@ -228,10 +228,15 @@ A process draws nothing: the word of the kit draws its views through the life.
 ```typescript
 import { Skill } from "@uael/furb/skill";
 
-const skill = await Skill.attach({ kinds: [] });
-skill.answers("notes_add", (fact) => `added ${String(fact[4])}`);
+const skill = await Skill.attach({
+  kinds: [],
+  answering: () => ({ notes_add: (fact) => `added ${String(fact[4])}` }),
+});
 await skill.closed;
 ```
+
+The life gives the acts that wait for the kit as soon as it attaches, so a kit gives its answers to `attach`, which
+makes them from the welcome of the life, as its folders, before it attaches. `answers` adds or removes one later.
 
 The module `furb.skill` gives a process of Python the same calls, on asyncio, and `furb.protocol` the types of the
 protocol:
@@ -243,8 +248,7 @@ from furb.skill import Skill
 
 
 async def main() -> None:
-  skill = await Skill.attach(kinds=[])
-  skill.answers("notes_add", lambda fact: f"added {fact[4]}")
+  skill = await Skill.attach(kinds=[], answering=lambda _welcome: {"notes_add": lambda fact: f"added {fact[4]}"})
   await skill.closed
 
 

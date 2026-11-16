@@ -138,6 +138,39 @@ async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_
   ]
 
 
+async def test_a_kit_answers_an_act_that_waits_for_it_as_it_attaches_with_the_answers_that_its_welcome_made(
+  life: Life,
+) -> None:
+  waiting = ["k.add", "k.add1", "rung4", "chain1", "milk"]
+
+  def answering(verb: dict[str, object]) -> dict[str, object] | None:
+    match verb["verb"]:
+      case "hello":
+        welcome = {"peer": PEER, "folders": {"project": "/p"}}
+        return {"frame": "reply", "answer": {"answer": "welcome", "data": welcome}}
+      case "attach":
+        # The life gives the act that waits for the kit in the instant after its reply to the attach.
+        life.push({"id": verb["id"], "frame": "reply", "answer": {"answer": "done"}})
+        life.push({"frame": "event", "life": "a.jsonl", "seq": 0, "event": {"event": "fact", "data": waiting}})
+        return None
+      case "peek":
+        return {"frame": "refused", "error": {"error": "refused"}, "why": "not done"}
+    return answered(verb)
+
+  life.answers = answering
+
+  def made(welcome: Mapping[str, object]) -> dict[str, Callable[[list[object]], object]]:
+    folders = welcome["folders"]
+    assert isinstance(folders, dict)
+    return {"k.add": lambda fact: f"added {fact[4]} in {folders['project']}"}
+
+  await client.Skill.attach([], env=ENV, streams=(life.reader, life), answering=made)
+  await until(lambda: any(verb["verb"] == "close" for verb in life.said))
+  assert [(verb["act"], verb["value"]) for verb in life.said if verb["verb"] == "close"] == [
+    ("k.add1", json.dumps("added milk in /p"))
+  ]
+
+
 async def test_the_done_of_an_act_that_a_kit_answers_cancels_its_answer(life: Life) -> None:
   skill = await life.attach(kinds=[])
   life.answers = lambda verb: (

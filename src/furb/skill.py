@@ -177,10 +177,13 @@ class Skill:
     start: int = 0,
     env: Mapping[str, str] = os.environ,
     streams: tuple[asyncio.StreamReader, Writer] | None = None,
+    answering: Callable[[Mapping[str, object]], Mapping[str, Callable[[Fact], object]]] | None = None,
   ) -> Skill:
     """The kit of this process attached to its life, on the stdin and the stdout of this process unless `streams`
     names others, from the variables that the life gave it. It hears the facts of the kinds that it names, each kind
-    when it names none, from the place `start` of the life."""
+    when it names none, from the place `start` of the life. `answering` makes, from the welcome of the life, the answer
+    of each kind of act that the kit answers, as answers takes it: the life gives the acts that wait for the kit as
+    soon as it attaches, so a kit answers each of them only when its answers stand before it attaches."""
     life, name = env.get(LIFE), env.get(SKILL)
     if life is None or not name:
       why = f"A process of a kit needs {LIFE} and {SKILL}, which its life gives it."
@@ -189,6 +192,8 @@ class Skill:
     connection = Connection(reader, writer)
     await connection.hello("skill", name)
     skill = cls(connection, name, life, kinds)
+    for kind, answer in (answering(connection.welcome) if answering else {}).items():
+      skill.answers(kind, answer)
     await connection.ask({"verb": "attach", "life": life, "from": start})
     return skill
 

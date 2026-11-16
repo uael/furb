@@ -316,6 +316,10 @@ export interface SkillOptions {
   from?: number;
   env?: Record<string, string | undefined>;
   link?: Link;
+  /** The answer of each kind of act that the kit answers, as `answers` takes it, made from the welcome of the life.
+   * The life gives the acts that wait for the kit as soon as it attaches, so a kit answers each of them only when its
+   * answers stand before it attaches. */
+  answering?: (welcome: Welcome) => Record<string, (fact: Fact, signal: AbortSignal) => unknown>;
 }
 
 /** The process of a kit as a peer of its life: it attaches the life under the name of its kit, hears the facts of the
@@ -344,6 +348,8 @@ export class Skill {
     const connection = await Connection.over(link, "skill", name);
     const kinds = options.kinds ? new Set(options.kinds) : undefined;
     const skill = new Skill(connection, name, life, kinds);
+    for (const [kind, answer] of Object.entries(options.answering?.(connection.welcome) ?? {}))
+      skill.answers(kind, answer);
     await connection.ask({ verb: "attach", life, from: options.from ?? 0 });
     return skill;
   }
