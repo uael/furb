@@ -380,9 +380,14 @@ impl<'a> Reader<'a> {
     let mut rungs: Vec<&Act> = prompts.iter().flat_map(|one| self.rungs(&one.id)).collect();
     rungs.extend(words);
     rungs.sort_by_key(|rung| rung.began);
+    // A sub thread that asks the operator about a line is its own first question.
+    if prompt.asks_operator() {
+      answers[0].asked.push(prompt);
+    }
     for rung in &rungs {
       answers[after(rung.began)].rungs.push(rung);
-      for asked in self.held.made_by(&rung.id).filter(|act| act.asks_operator()) {
+      let asks = |act: &&Act| act.asks_operator() && anchor_of(act).is_none();
+      for asked in self.held.made_by(&rung.id).filter(asks) {
         answers[after(asked.began)].asked.push(asked);
       }
     }
@@ -427,7 +432,7 @@ impl<'a> Reader<'a> {
       } else {
         Saying::Question { shape, answered: Answered::of(asked) }
       };
-      let one = Said { act: asked.id.clone(), kind, text: text(asked.words.get(1)) };
+      let one = Said { act: asked.id.clone(), kind, text: said_of(asked).to_owned() };
       said.push((asked.began, one));
     }
     for closed in &answers.closes {
@@ -647,7 +652,7 @@ impl<'a> Reader<'a> {
       .copied()
       .chain(rungs.iter().flat_map(|rung| self.held.made_by(&rung.id)))
       .collect();
-    let asks = work.iter().any(|act| act.asks_operator() && act.owed());
+    let asks = work.iter().chain(&prompts).any(|act| act.asks_operator() && act.owed());
     let state = match State::of(now) {
       _ if asks => State::Asks,
       State::Runs if working(&work, &[]) == State::Thinks => State::Thinks,

@@ -238,6 +238,44 @@ fn the_agents_of_a_thread_stand_as_cards() {
 }
 
 #[test]
+fn a_question_of_a_model_about_a_line_is_a_sub_thread_that_asks_the_operator() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  facts.extend([
+    json!([
+      "prompt",
+      "prompt8",
+      "rung2",
+      "prompt1",
+      "str",
+      "On `c.py`, line 3 after the change:\n> z\n\nkeep z?",
+      "operator"
+    ]),
+    json!(["started", "prompt8", "console"]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let [asks] = page.agents.as_slice() else { panic!("{page:?}") };
+  assert_eq!(
+    (asks.card.title.as_str(), &asks.card.standing),
+    ("keep z?", &Standing::Asks { of: None })
+  );
+  let questions = |page: &Page| -> Vec<String> {
+    let said = page.exchanges.iter().flat_map(|one| &one.said);
+    said
+      .filter(|one| matches!(one.kind, Saying::Question { .. }))
+      .map(|one| one.act.clone())
+      .collect()
+  };
+  assert!(questions(&page).is_empty(), "{page:?}");
+  let own = held.page(&streams, "prompt8", Reach { before: None, limit: 10 });
+  assert_eq!(questions(&own), ["prompt8"]);
+  // The card of the thread that it is on says that a question waits under it.
+  let cards: Vec<Standing> = held.cards().into_iter().map(|one| one.standing).collect();
+  assert_eq!(cards, [Standing::Asks { of: None }]);
+}
+
+#[test]
 fn a_prompt_on_a_thread_about_a_line_of_a_file_is_a_sub_thread_that_holds_its_answers() {
   let mut streams = Streamed::default();
   let mut facts = thread();

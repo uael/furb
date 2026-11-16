@@ -278,7 +278,8 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
   let mut asides: Vec<(u64, ChainAside)> = Vec::new();
   let mut later: Vec<(&str, &Act)> = Vec::new();
   for act in on.iter().copied().filter(|act| act.kind == Kind::Prompt) {
-    if act.asks_operator() {
+    // A question about a line of a file is a sub thread, as a message about one is.
+    if act.asks_operator() && anchor_of(act).is_none() {
       later.extend(thread_of(act, rows).map(|thread| (thread, act)));
       continue;
     }
@@ -401,7 +402,8 @@ fn aside_of(act: &Act, aside: Aside) -> ChainAside {
   ChainAside { prompt: act.id.clone(), aside, messages: Vec::new() }
 }
 
-/// A thread of its own, from its prompt, before its messages and its questions join it.
+/// A thread of its own, from its prompt, before its messages and its questions join it. A sub
+/// thread that asks the operator is its own first question.
 fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let maker = rows.get(act.by.as_str());
   let mine = operator(&act.by);
@@ -415,12 +417,13 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let title = images::references(title)
     .into_iter()
     .fold(title.to_owned(), |title, one| title.replacen(&one.text, &one.name, 1));
+  let asked: Vec<String> = act.asks_operator().then(|| act.id.clone()).into_iter().collect();
   ChainThread {
     prompt: act.id.clone(),
     title,
     messages: Vec::new(),
-    asked: Vec::new(),
-    asks: Vec::new(),
+    asks: asked.iter().filter(|_| act.owed()).cloned().collect(),
+    asked,
     state: State::Done,
     over: true,
     origin,
