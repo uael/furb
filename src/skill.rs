@@ -381,6 +381,12 @@ impl Places {
     });
     Self { config, home }
   }
+
+  /// The places of this process with another config directory.
+  #[must_use]
+  pub fn under(config: PathBuf) -> Self {
+    Self { config, ..Self::here() }
+  }
 }
 
 /// The configs that each reader reads, in this order, a later one winning over an earlier one for a
@@ -1020,12 +1026,13 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           // runs and that a config turns on reloads it when its word changed.
           "done" if named(a.about(), "write") && a.by() != JOURNAL => {
             let Some(text) = a.word(0).and_then(Text::of) else { return Ok(()) };
-            let Ok(file) = files::placed(Path::new(""), &text.path) else { return Ok(()) };
+            let home = places.home.as_deref();
+            let Ok(file) = files::placed(Path::new(""), &text.path, home) else { return Ok(()) };
             let config = projected(Path::new("")).iter().any(|one| file.ends_with(one));
             if !config && !file.parent().is_some_and(|one| one.join(MANIFEST).is_file()) {
               return Ok(());
             }
-            let Some(project) = skills::project(&mut co).await? else { return Ok(()) };
+            let Some(project) = skills::project(&mut co, home).await? else { return Ok(()) };
             if projected(&project).contains(&file) {
               let (found, refused) = turned(&file, &text.content, &places);
               tell(&mut co, &refused);
@@ -1055,7 +1062,8 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               return Ok(());
             }
             let name = part(1);
-            let Some(project) = skills::project(&mut co).await? else { return Ok(()) };
+            let home = places.home.as_deref();
+            let Some(project) = skills::project(&mut co, home).await? else { return Ok(()) };
             let (found, refused) =
               configured(&places, &project).unwrap_or_else(|no| (Vec::new(), vec![no.message()]));
             if !told(&mut co, &refused.join("\n")).await? {

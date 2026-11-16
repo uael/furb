@@ -12,7 +12,7 @@ mod shell;
 use std::{
   collections::{HashMap, HashSet},
   future,
-  path::PathBuf,
+  path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
   time::Duration,
@@ -70,9 +70,9 @@ use crate::{
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
 /// every process it started, which its group holds. A command that a control ended first, which the
 /// engine says done, is ended so and says nothing more.
-pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
+pub fn bash(scratch: Scratch, home: Option<PathBuf>) -> Box<dyn Ear> {
   shell::read_login();
-  let mut commands = Commands { scratch, running: HashMap::new(), closed: HashSet::new() };
+  let mut commands = Commands { scratch, home, running: HashMap::new(), closed: HashSet::new() };
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     loop {
       match co.next().await {
@@ -84,10 +84,11 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
   })
 }
 
-/// What the ear of the commands holds: the scratch directory of the life, each command that runs
-/// in this life, and the commands whose stdin a write closed.
+/// What the ear of the commands holds: the scratch directory of the life, the home of its user,
+/// each command that runs in this life, and the commands whose stdin a write closed.
 struct Commands {
   scratch: Scratch,
+  home: Option<PathBuf>,
   running: HashMap<String, Running>,
   closed: HashSet<String>,
 }
@@ -126,7 +127,7 @@ impl Commands {
   /// A command that starts: its stdin kept, and its streams worked until its act is done.
   async fn started(&mut self, co: &mut Co<Said>, a: &Fact, about: String) -> Result<(), Fault> {
     say(co, Fact::says("started", &about, []));
-    match begun(co, a, &self.scratch).await {
+    match begun(co, a, &self.scratch, self.home.as_deref()).await {
       Ok(mut begun) => {
         let (stdin, fed_in) = spsc::unbounded();
         let mut one = Running { stdin };
@@ -253,7 +254,12 @@ const UNASKING: [(&str, &str); 4] =
 
 /// A command begun: its shell made ready in the directory of its chain, with the scratch directory
 /// as its `TMPDIR`.
-async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
+async fn begun(
+  co: &mut Co<Said>,
+  a: &Fact,
+  scratch: &Scratch,
+  home: Option<&Path>,
+) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
   let line = command_line(a);
@@ -268,7 +274,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   let timeout = a.word(3).and_then(|one| one.seconds());
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   let timeout = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-  let dir = here(co, &on).await?;
+  let dir = here(co, &on, home).await?;
   let asked = vec![Object::string("merged"), Object::string(on), Object::string(about.clone())];
   let merged = co.call("ask", asked, vec![]).await?.as_ref().as_bool().unwrap_or_default();
   let mut command = Command::new(shell());

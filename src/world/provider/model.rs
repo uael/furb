@@ -29,7 +29,6 @@ use crate::{
   engine::{OPERATOR, WINDOW},
   value::{Object, ObjectRef},
 };
-use std::env;
 use std::fs;
 
 /// What streams one response of a model of rig, whatever model it is.
@@ -376,9 +375,9 @@ pub(super) fn standing(
   actor: &str,
   skills: Option<&[Advertised]>,
   members: &[String],
-  user: &Path,
+  places: &skill::Places,
 ) -> Object {
-  let given = configured(user, Path::new(directory));
+  let given = configured(&places.config, Path::new(directory));
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
@@ -398,8 +397,8 @@ pub(super) fn standing(
     Object::string(Class::Cheap.name()),
   ]);
   let roster = Object::list(offered.chain([operator]));
-  let home = env::home_dir();
-  let shown = |one: &Path| Object::string(files::tilded(one, home.as_deref()));
+  let home = places.home.as_deref();
+  let shown = |one: &Path| Object::string(files::tilded(one, home));
   let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
   let given = |all: &[Advertised]| {
     Object::list(all.iter().map(|(name, file, life, root)| {
@@ -408,8 +407,7 @@ pub(super) fn standing(
     }))
   };
   let advertised = skills.filter(|_| doctrine.is_some()).map(given);
-  let above =
-    advertised.as_ref().and(home.as_deref()).map(|one| Object::string(one.display().to_string()));
+  let above = advertised.as_ref().and(home).map(|one| Object::string(one.display().to_string()));
   Object::list(
     [roster, shown(Path::new(directory)), Object::string(actor)]
       .into_iter()

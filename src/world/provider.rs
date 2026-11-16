@@ -49,6 +49,7 @@ pub(crate) use self::{
 use super::interrupted;
 use crate::{
   ear::{Co, Ear, Next, hearing},
+  skill::Places,
   value::{Fault, Object},
 };
 
@@ -94,7 +95,7 @@ pub type Search = Arc<dyn Fn(&str) -> Option<Searches> + Send + Sync>;
 #[derive(Clone)]
 pub struct Provider {
   directory: String,
-  config: Option<PathBuf>,
+  places: Option<Places>,
   skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
@@ -241,7 +242,7 @@ impl Provider {
     let directory = directory.into();
     Self {
       directory,
-      config: None,
+      places: None,
       skills: None,
       models: Arc::new(RwLock::new(models)),
       actor: None,
@@ -259,12 +260,13 @@ impl Provider {
     }
   }
 
-  /// The config directory of the user whose `config.json` the standing reads for the classes
-  /// and the list of automatic work, else the one that [`crate::skill::Places::here`]
-  /// names: a life that opens on a config directory of its own reads no file of the machine.
+  /// The places of the user: the config directory whose `config.json` the standing reads for the
+  /// classes and the list of automatic work, and the home from which the standing tells its
+  /// folders; else the ones that [`Places::here`] names. A life that opens on a config directory
+  /// of its own reads no file of the machine.
   #[must_use]
-  pub fn config(mut self, config: impl Into<PathBuf>) -> Self {
-    self.config = Some(config.into());
+  pub fn places(mut self, places: Places) -> Self {
+    self.places = Some(places);
     self
   }
 

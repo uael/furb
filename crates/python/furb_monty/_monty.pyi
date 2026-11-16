@@ -118,6 +118,7 @@ class Opening(TypedDict):
   inspecting: NotRequired[bool | None]
   skills: NotRequired[bool | None]
   config: NotRequired[str | None]
+  home: NotRequired[str | None]
   actor: NotRequired[str | None]
   roster: NotRequired[list[str] | None]
   claude: NotRequired[str | None]

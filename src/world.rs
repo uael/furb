@@ -97,8 +97,12 @@ pub fn free(_: &Path) -> Option<u64> {
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last,
 /// resolved against the directory the life stands on, each read as a path of the machine where it
-/// names the home of the user with `~`, as the World writes it.
-pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf, Fault> {
+/// names the home of the user with `~`, as the World writes it from `home`.
+pub(crate) async fn here<W: 'static>(
+  co: &mut Co<W>,
+  on: &str,
+  home: Option<&Path>,
+) -> Result<PathBuf, Fault> {
   let on = vec![("on", Object::string(on))];
   let cwd = co.call("cwd", vec![], on).await?;
   let standing = co.call("standing", vec![], vec![]).await?;
@@ -107,7 +111,8 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
     .items()
     .and_then(|held| held.get(1).and_then(|one| one.as_str().map(str::to_owned)));
   let cwd = cwd.as_ref().as_str().map(str::to_owned).unwrap_or_default();
-  files::placed(&files::placed(Path::new(""), &directory.unwrap_or_default())?, &cwd)
+  let directory = files::placed(Path::new(""), &directory.unwrap_or_default(), home)?;
+  files::placed(&directory, &cwd, home)
 }
 
 /// An act that an earlier life took and did not end, taken and closed with a refusal that names it

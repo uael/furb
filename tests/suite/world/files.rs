@@ -10,6 +10,7 @@ use std::{
   process,
 };
 
+use furb::skill::Places;
 use furb::{Ear, Engine, Object, Text, world};
 
 use super::provider::closed;
@@ -26,7 +27,8 @@ fn yard(name: &str) -> Yard {
 /// A life on the files of the World alone, whose gallery of images is this one, when it keeps one.
 fn life(at: &Path, gallery: Option<&Path>) -> Engine {
   let scratch = world::Scratch::at(at.join("scratch")).expect("the scratch directory");
-  let files = world::files(scratch, at.join("config"), gallery.map(Path::to_path_buf));
+  let files =
+    world::files(scratch, Places::under(at.join("config")), gallery.map(Path::to_path_buf));
   let ears: [(&str, Box<dyn Ear>); 1] = [("files", files)];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
 }
@@ -47,6 +49,22 @@ fn text(engine: &mut Engine, word: &str) -> Result<(String, String), String> {
 fn homed(test: &str, at: &Path) {
   let home = at.join("h").display().to_string();
   ran(test, at, &[("HOME", &home), ("USERPROFILE", &home)]);
+}
+
+#[test]
+fn a_tilde_names_the_home_that_the_places_give_and_a_path_under_it_shows_from_that_home() {
+  let at = yard("given");
+  let home = at.join("h");
+  fs::create_dir_all(&home).expect("the home");
+  fs::write(home.join("a.txt"), "home").expect("a file of the home");
+  let scratch = world::Scratch::at(at.join("scratch")).expect("the scratch directory");
+  let places = Places { config: at.join("config"), home: Some(home.clone()) };
+  let ears: [(&str, Box<dyn Ear>); 1] = [("files", world::files(scratch, places, None))];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).expect("the life opens");
+  let shown = Ok((format!("~{MAIN_SEPARATOR}a.txt"), "home".to_owned()));
+  assert_eq!(text(&mut engine, "read('~/a.txt')"), shown);
+  let whole = format!("read({})", quoted(&home.join("a.txt")));
+  assert_eq!(text(&mut engine, &whole), shown, "a path under the home shows from it");
 }
 
 #[test]

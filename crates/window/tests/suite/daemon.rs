@@ -189,9 +189,9 @@ impl Daemon {
     let (tell, mut reported) = mpsc::unbounded_channel();
     let log = Log(Arc::new(move |line: &str| drop(tell.send(line.to_owned()))));
     // The user of the far machine has the folder of the test as its home.
-    let home = dunce::canonicalize(&self.yard).ok();
-    let settings = Settings { home, ..self.settings() };
-    let opening = Opening { log: Some(log), ..settings.opening };
+    let home = dunce::canonicalize(&self.yard).ok().map(|one| one.display().to_string());
+    let settings = self.settings();
+    let opening = Opening { log: Some(log), home, ..settings.opening };
     let local = self.local.clone();
     let (login, name) = (login.to_owned(), name.to_owned());
     self.runtime.block_on(async move {
@@ -257,7 +257,6 @@ impl Daemon {
       stall: STALL,
       tailnet: None,
       door: None,
-      home: None,
       data: Some(self.yard.join("data")),
     }
   }

@@ -361,8 +361,8 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
-  let config = config.map_or_else(|| skill::Places::here().config, Into::into);
-  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
+  let places = config.map_or_else(skill::Places::here, |one| skill::Places::under(one.into()));
+  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, places, None)))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the
@@ -371,7 +371,7 @@ pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn bash(scratch: String) -> Result<NativeEar, Fault> {
-  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?)))
+  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?, skill::Places::here().home)))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
@@ -504,7 +504,7 @@ pub fn played(given: Vec<Skill>) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn skills(config: String) -> NativeEar {
-  NativeEar::of(world::skills::skills(config.into()))
+  NativeEar::of(world::skills::skills(skill::Places::under(config.into())))
 }
 
 /// The config directory of the user for this process, where the configs and the extensions of the

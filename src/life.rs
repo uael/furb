@@ -179,6 +179,10 @@ pub struct Opening {
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
+  /// The home folder of the user, against which the World resolves each path that starts with `~`,
+  /// and from which it tells each path; the one of this process when unsaid.
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub home: Option<String>,
   /// The home of the members who answer as the operator, each by his login, as the access list of a
   /// host and its local user give them, each of which a prompt can ask with
   /// `to="operator/<login>"`; none when unsaid. A host that changes it changes the roster at the
@@ -339,29 +343,30 @@ impl Opening {
     let project = PathBuf::from(&self.directory);
     let provider = provider.mode(Mode::of(works, stood)).ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
-    let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
-    let user = config.clone();
+    let (user, filing, home) = (places.clone(), places.clone(), places.home.clone());
     let life = self.record.clone().unwrap_or_default();
     let ears = vec![
       ("provider", provider),
       (skill::EAR, skill::telling(played, refused, places.clone())),
-      ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
+      ("skills", lasting(skills(user.clone()), move || skills(user.clone()))),
       ("kits", working(works.then(|| world::kits::kits(life, project, gallery.clone(), places)))),
       (
         "files",
         working(scratch.clone().map(|one| {
-          let (again, home) = (gallery.clone(), user.clone());
-          lasting(world::files(one.clone(), user.clone(), gallery.clone()), move || {
-            world::files(one.clone(), home.clone(), again.clone())
+          let again = gallery.clone();
+          lasting(world::files(one.clone(), filing.clone(), gallery.clone()), move || {
+            world::files(one.clone(), filing.clone(), again.clone())
           })
         })),
       ),
       (
         "bash",
-        working(
-          scratch.map(|one| lasting(world::bash(one.clone()), move || world::bash(one.clone()))),
-        ),
+        working(scratch.map(|one| {
+          lasting(world::bash(one.clone(), home.clone()), move || {
+            world::bash(one.clone(), home.clone())
+          })
+        })),
       ),
       ("time", working(works.then(|| lasting(world::time(), world::time)))),
     ];
@@ -401,7 +406,10 @@ impl Opening {
       .map(|one| minify::minified(&one).ok_or_else(unread))
       .transpose()?;
     let here = Places::here();
-    let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
+    let places = Places {
+      config: self.config.clone().map_or(here.config, PathBuf::from),
+      home: self.home.clone().map(PathBuf::from).or(here.home),
+    };
     let (played, refused) = match self.skills != Some(false) && works {
       true => skill::configured(&places, self.directory.as_ref())?,
       false => (Vec::new(), Vec::new()),
@@ -422,7 +430,8 @@ impl Opening {
     };
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let actor = self.actor.clone().or(actor);
-    let provider = self.provider(advertised, actor, roster)?.systems(systems);
+    let provider =
+      self.provider(advertised, actor, roster)?.places(places.clone()).systems(systems);
     let provider = match system {
       Some(one) => provider.system(one.into()),
       None => provider,
@@ -581,7 +590,6 @@ impl Opening {
     let claude = self.claude.as_ref().map(PathBuf::from);
     let config = self.config.as_ref().map(PathBuf::from);
     let directory = self.directory.clone();
-    let user = config.clone().unwrap_or_else(|| Places::here().config);
     let catalog = self.catalog()?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
@@ -611,7 +619,7 @@ impl Opening {
       })
     }));
     let members = self.members.clone().unwrap_or_default();
-    provider = provider.advertises(advertised).config(user).members(members);
+    provider = provider.advertises(advertised).members(members);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

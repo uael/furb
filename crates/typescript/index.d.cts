@@ -487,6 +487,11 @@ export interface Opening {
    */
   config?: string
   /**
+   * The home folder of the user, against which the World resolves each path that starts with `~`,
+   * and from which it tells each path; the one of this process when unsaid.
+   */
+  home?: string
+  /**
    * The home of the members who answer as the operator, each by his login, as the access list of a
    * host and its local user give them, each of which a prompt can ask with
    * `to="operator/<login>"`; none when unsaid. A host that changes it changes the roster at the

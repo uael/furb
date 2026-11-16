@@ -10,6 +10,7 @@ use std::{cell::RefCell, collections::VecDeque, env, fs, path::PathBuf, process,
 use futures::{FutureExt, stream};
 use unsync::oneshot;
 
+use furb::skill::Places;
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{Co, Next, ear, hear, say},
@@ -98,8 +99,8 @@ impl Lived {
     let scratch = world::Scratch::own();
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
-      ("files", world::files(scratch.clone(), at.join("config"), None)),
-      ("bash", world::bash(scratch)),
+      ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
+      ("bash", world::bash(scratch, Places::here().home)),
       ("time", world::time()),
       ("store", store),
     ];

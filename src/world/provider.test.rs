@@ -54,7 +54,7 @@ use super::{
   retry::{Backoff, Retry, Transient, passing, resets},
   thinking::{Thinking, budgeted},
 };
-use crate::{Act, Ear, Engine, Object, fact, verbs, world};
+use crate::{Act, Ear, Engine, Object, fact, skill::Places, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
@@ -80,10 +80,11 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
   let scratch = world::Scratch::own();
   // The config directory of the user is a place that no one writes, never the one of the machine.
   let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
+  let places = Places::under(config);
   let ears: [(&str, Box<dyn Ear>); 4] = [
-    ("provider", provider.config(config.clone()).ear()),
-    ("files", world::files(scratch.clone(), config, gallery)),
-    ("bash", world::bash(scratch)),
+    ("provider", provider.places(places.clone()).ear()),
+    ("files", world::files(scratch.clone(), places.clone(), gallery)),
+    ("bash", world::bash(scratch, places.home)),
     ("time", world::time()),
   ];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
@@ -95,10 +96,11 @@ fn stored(provider: Provider, record: &Path) -> Engine {
   let (kept, store) = world::store(record).expect("the record opens");
   let scratch = world::Scratch::own();
   let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
+  let places = Places::under(config);
   let ears: [(&str, Box<dyn Ear>); 5] = [
-    ("provider", provider.config(config.clone()).ear()),
-    ("files", world::files(scratch.clone(), config, None)),
-    ("bash", world::bash(scratch)),
+    ("provider", provider.places(places.clone()).ear()),
+    ("files", world::files(scratch.clone(), places.clone(), None)),
+    ("bash", world::bash(scratch, places.home)),
     ("time", world::time()),
     ("store", store),
   ];

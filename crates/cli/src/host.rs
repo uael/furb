@@ -48,8 +48,7 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
       .ok()
   });
   let opening = Opening::default();
-  let settings =
-    Settings { opening, grace, first: STARTING, stall, tailnet, door, data: None, home: None };
+  let settings = Settings { opening, grace, first: STARTING, stall, tailnet, door, data: None };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);

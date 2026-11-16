@@ -47,6 +47,7 @@ use serde_json::{Value, json};
 
 use jiff::{SignedDuration, Zoned};
 
+use furb::skill::Places;
 use furb::world::{
   Hosted, Members, Model, Provider, Retries, Retry, Searches, Writes, catalog, images,
 };
@@ -89,10 +90,11 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
   let scratch = world::Scratch::own();
   // The config directory of the user is a place that no one writes, never the one of the machine.
   let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
+  let places = Places::under(config);
   let ears: [(&str, Box<dyn Ear>); 4] = [
-    ("provider", provider.config(config.clone()).ear()),
-    ("files", world::files(scratch.clone(), config, gallery)),
-    ("bash", world::bash(scratch)),
+    ("provider", provider.places(places.clone()).ear()),
+    ("files", world::files(scratch.clone(), places.clone(), gallery)),
+    ("bash", world::bash(scratch, places.home)),
     ("time", world::time()),
   ];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")

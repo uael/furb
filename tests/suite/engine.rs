@@ -51,6 +51,7 @@ use rustix::{
   process::{Pid, test_kill_process},
 };
 
+use furb::skill::Places;
 use furb::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
@@ -742,8 +743,8 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at.to_path_buf(), words, Rc::default())),
-    ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch)),
+    ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
+    ("bash", world::bash(scratch, Places::here().home)),
     ("time", world::time()),
     ("store", store),
   ];
@@ -771,8 +772,8 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at.to_path_buf(), words, Rc::default())),
-    ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch)),
+    ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
+    ("bash", world::bash(scratch, Places::here().home)),
     ("time", world::time()),
     ("store", store),
   ];
@@ -1282,8 +1283,8 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
     let scratch = world::Scratch::own();
     let ears: [(&str, Box<dyn Ear>); 4] = [
       ("provider", provider.ear()),
-      ("files", world::files(scratch.clone(), at.join("config"), None)),
-      ("bash", world::bash(scratch)),
+      ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
+      ("bash", world::bash(scratch, Places::here().home)),
       ("store", store),
     ];
     Engine::boot(record, ears).expect("the life opens")

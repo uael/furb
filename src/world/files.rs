@@ -17,7 +17,6 @@ use super::{
   here, images, resolved,
   scratch::{Beneath, beneath},
 };
-use std::env;
 use std::path;
 
 /// The scheme of the paths of the config directory of the user.
@@ -25,6 +24,7 @@ pub const CONFIG: &str = "config://";
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
+  skill::Places,
   value::{Fault, Given, Object, Text},
 };
 
@@ -33,16 +33,16 @@ use crate::{
 /// after a folder and no walk below it, and a write with the text as it stands after, but a write
 /// of a door of a command, which the ear of the commands answers, each resolved against the working
 /// directory of the chain, or with the refusal. The path of a cd, a read or a write that is `~` or
-/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user, one of
-/// `scratch://` against the scratch directory of the life, and one of `config://` against the
-/// config directory of the user, in neither of which a chain stands. A file whose every line ends
-/// with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of
-/// an act of the life is a door that no ear of the engine served, and never a file, so the ear
+/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user of the places,
+/// one of `scratch://` against the scratch directory of the life, and one of `config://` against
+/// the config directory of the places, in neither of which a chain stands. A file whose every line
+/// ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name
+/// of an act of the life is a door that no ear of the engine served, and never a file, so the ear
 /// refuses it with the chain of that act. The path of each text, of each refusal and of each cd
 /// that it gives is as [`tilded`] writes it. A write puts the whole text in place in one step, as
 /// `stored` says, so no reader sees a torn file. A read of an image keeps it in the directory of
 /// the images of the life, the gallery, as `seen` says.
-pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box<dyn Ear> {
+pub fn files(scratch: Scratch, places: Places, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -57,9 +57,9 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
         continue;
       }
       let answer = match a.kind() {
-        "cd" => moved(&mut co, &a).await.map(Object::string),
+        "cd" => moved(&mut co, &a, places.home.as_deref()).await.map(Object::string),
         _ => {
-          served(&mut co, &a, &scratch, &config, gallery.as_deref()).await.map(|text| text.object())
+          served(&mut co, &a, &scratch, &places, gallery.as_deref()).await.map(|text| text.object())
         }
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
@@ -70,7 +70,7 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
 
 /// The directory a cd came to: its path placed against the working directory of the chain, when a directory stands
 /// there, as [`tilded`] writes it.
-async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
+async fn moved(co: &mut Co, a: &Fact, home: Option<&Path>) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
   let path = native(&path);
   if let Some(scheme) =
@@ -80,8 +80,8 @@ async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
       "A chain cannot stand in {path}, since {scheme} has no path to stand in."
     )));
   }
-  let at = placed(&here(co, a.on()).await?, &path)?;
-  let shown = tilded(&at, env::home_dir().as_deref());
+  let at = placed(&here(co, a.on(), home).await?, &path, home)?;
+  let shown = tilded(&at, home);
   if !at.is_dir() {
     return Err(Fault::refused(format!("There is no directory at {shown}.")));
   }
@@ -93,7 +93,7 @@ async fn served(
   co: &mut Co,
   a: &Fact,
   scratch: &Scratch,
-  config: &Path,
+  places: &Places,
   gallery: Option<&Path>,
 ) -> Result<Text, Fault> {
   let (path, content) = if a.kind() == "read" {
@@ -108,7 +108,7 @@ async fn served(
     return scratch.served(path, content, gallery);
   }
   if let Some(path) = path.strip_prefix(CONFIG) {
-    let dir = Beneath { root: config, scheme: CONFIG, place: "the config directory" };
+    let dir = Beneath { root: &places.config, scheme: CONFIG, place: "the config directory" };
     return beneath(dir, path, content, gallery, || Ok(()));
   }
   if let Some(scheme) =
@@ -130,11 +130,12 @@ async fn served(
       a.kind()
     )));
   }
-  let at = placed(&here(co, a.on()).await?, &path)?;
+  let home = places.home.as_deref();
+  let at = placed(&here(co, a.on(), home).await?, &path, home)?;
   if let Some(content) = content {
     filed(&at, content, at.display())?;
   }
-  text(&at, tilded(&at, env::home_dir().as_deref()), gallery)
+  text(&at, tilded(&at, home), gallery)
 }
 
 /// The content of a write put at a path, with the folders above it made, in one write as
@@ -183,9 +184,10 @@ pub(super) fn native(path: &str) -> String {
   }
 }
 
-/// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
-pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  text(at, tilded(at, env::home_dir().as_deref()), None)
+/// The text at a path, named from a home: a file of utf-8 of any size, since the engine bounds
+/// what a read tells.
+pub(crate) fn read(at: &Path, home: Option<&Path>) -> Result<Text, Fault> {
+  text(at, tilded(at, home), None)
 }
 
 /// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
@@ -266,8 +268,8 @@ pub(crate) fn tilded(path: &Path, home: Option<&Path>) -> String {
 
 /// The place of a path of the machine that a chain names: against the home of the user, as [`homed`] says, or else
 /// against the directory.
-pub(crate) fn placed(directory: &Path, path: &str) -> Result<PathBuf, Fault> {
-  homed(path, env::home_dir()).unwrap_or_else(|| Ok(resolved(directory, path)))
+pub(crate) fn placed(directory: &Path, path: &str, home: Option<&Path>) -> Result<PathBuf, Fault> {
+  homed(path, home.map(Path::to_path_buf)).unwrap_or_else(|| Ok(resolved(directory, path)))
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.

@@ -178,7 +178,7 @@ impl Layers {
   /// The places of the extensions that these configs turn on: the config directory of their user,
   /// and the home of this process.
   pub fn places(&self) -> Places {
-    Places { config: self.user.clone(), home: Places::here().home }
+    Places::under(self.user.clone())
   }
 
   fn file(&self, layer: Layer) -> PathBuf {

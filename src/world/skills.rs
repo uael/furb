@@ -6,7 +6,7 @@
 //! reads them. [`kit`] gives the World part of a kit, which the ear of the kits runs.
 
 use std::{
-  env, fs, io,
+  fs, io,
   path::{Component, Path, PathBuf},
 };
 
@@ -141,7 +141,7 @@ impl Seen {
 /// first, then in `skills` of the config directory of the user, then in the folders of the
 /// extensions of the project in `.furb/skills` and of each folder that a config turns on, then
 /// in the official extensions.
-pub fn skills(config: PathBuf) -> Box<dyn Ear> {
+pub fn skills(places: Places) -> Box<dyn Ear> {
   hearing(&["read", "write", "skill"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -158,9 +158,10 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
       let scheme = if configured { CONFIGS } else { SCHEME };
       let Some(asked) = path.as_deref().and_then(|one| one.strip_prefix(scheme)) else { continue };
       let asked = asked.to_owned();
-      let here = here(&mut co, a.on()).await?;
-      let project = project(&mut co).await?.unwrap_or_else(|| here.clone());
-      let places = Places { config: config.clone(), home: env::home_dir() };
+      let home = places.home.as_deref();
+      let here = here(&mut co, a.on(), home).await?;
+      let project = project(&mut co, home).await?.unwrap_or_else(|| here.clone());
+      let places = places.clone();
       let found = found(&here, &project, &places);
       let runs = enabled(&rooted(&mut co, ENABLE).await?);
       let seen = Seen { chain: a.on().to_owned(), found, runs, places, project };
@@ -187,8 +188,9 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
 /// project, each with how it plays, as [`Played`] says. The facts of the root say which skills the
 /// life runs, which play on the root.
 pub fn played(directory: &str, cwd: &str, places: &Places, root: &[Fact]) -> Vec<Played> {
-  let project = files::placed(Path::new(""), directory).unwrap_or_default();
-  let here = files::placed(&project, cwd).unwrap_or_else(|_| project.clone());
+  let home = places.home.as_deref();
+  let project = files::placed(Path::new(""), directory, home).unwrap_or_default();
+  let here = files::placed(&project, cwd, home).unwrap_or_else(|_| project.clone());
   let on = turned_on(places, &project).map(|got| got.0).unwrap_or_default();
   let runs = enabled(root);
   let row = |one: Found| {
@@ -240,7 +242,7 @@ fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
   match (file, &one.place) {
     (Some(file), _) => filed(one, file, &path),
     (None, _) if one.word.is_some() => worded(one, &seen.runs, &path),
-    (None, Place::Folder(folder)) => read(&folder.join(MANIFEST)),
+    (None, Place::Folder(folder)) => read(&folder.join(MANIFEST), seen.places.home.as_deref()),
     (None, _) => Ok(Text::new(path, one.manifest.clone())),
   }
 }
@@ -381,10 +383,10 @@ fn body(text: &str) -> &str {
 }
 
 /// The folder of the project that the standing names, or none while it names none.
-pub(crate) async fn project(co: &mut Co) -> Result<Option<PathBuf>, Fault> {
+pub(crate) async fn project(co: &mut Co, home: Option<&Path>) -> Result<Option<PathBuf>, Fault> {
   let got = co.call("standing", vec![], vec![]).await?;
   let named = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
-  Ok(named.and_then(|one| files::placed(Path::new(""), &one).ok()))
+  Ok(named.and_then(|one| files::placed(Path::new(""), &one, home).ok()))
 }
 
 /// The word of a skill with code: the word that the life last enabled for it, or else the word of
@@ -405,7 +407,7 @@ fn filed(one: &Found, file: &str, path: &str) -> Result<Text, Fault> {
     return Err(missing());
   }
   match &one.place {
-    Place::Folder(folder) => read(&folder.join(file)).map(|got| Text::new(path, got.content)),
+    Place::Folder(folder) => read(&folder.join(file), None).map(|got| Text::new(path, got.content)),
     Place::Shipped(files) => {
       let text = files.iter().find(|two| two.0 == file).map(|two| two.1).ok_or_else(missing)?;
       Ok(Text::new(path, text))
@@ -429,7 +431,7 @@ pub(crate) struct Kit {
 /// It is none when the manifest names no process, and when the file leaves the folder.
 pub(crate) fn kit(name: &str, program: Option<&str>, here: &Path, places: &Places) -> Option<Kit> {
   if let Some(program) = program.filter(|one| !one.is_empty()) {
-    let program = files::placed(Path::new(""), program).ok()?;
+    let program = files::placed(Path::new(""), program, places.home.as_deref()).ok()?;
     let mut above = program.ancestors().skip(1);
     let manifest = above.find_map(|one| fs::read_to_string(one.join(MANIFEST)).ok())?;
     return Some(Kit { acts: acts(&manifest), program });
@@ -443,7 +445,8 @@ pub(crate) fn kit(name: &str, program: Option<&str>, here: &Path, places: &Place
       let python = Path::new(&file).extension().is_some_and(|one| one == "py");
       let sdk = if python { &SDK[..] } else { &[] };
       let copied = copy(name, &[[(file.as_str(), text)].as_slice(), sdk].concat(), places);
-      (!copied.is_empty()).then(|| files::placed(Path::new(""), &copied).ok()).flatten()?
+      let home = places.home.as_deref();
+      (!copied.is_empty()).then(|| files::placed(Path::new(""), &copied, home).ok()).flatten()?
     }
   };
   Some(Kit { acts: acts(&one.manifest), program })
@@ -486,7 +489,7 @@ fn found(here: &Path, project: &Path, places: &Places) -> Vec<Found> {
     }
   };
   for folder in folders {
-    let Ok(text) = read(&folder.join(MANIFEST)) else { continue };
+    let Ok(text) = read(&folder.join(MANIFEST), places.home.as_deref()) else { continue };
     let name = folder.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
     keep(Found::of(&text.content, &name, Place::Folder(folder)));
   }

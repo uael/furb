@@ -17,6 +17,7 @@ use std::os::unix::fs as unix_fs;
 
 use super::provider::closed;
 use crate::{drive::park, yard::Yard};
+use furb::skill::Places;
 use furb::{
   Ear, Engine, Object, Text,
   world::{self, SCRATCH, Scratch},
@@ -47,7 +48,8 @@ fn wrote(about: &str, path: &str, content: &str) -> Object {
 /// A life on the files of the World alone, whose scratch directory is this one.
 fn life(scratch: Scratch) -> Engine {
   let config = env::temp_dir().join(format!("furb-scratch-user-{}", process::id()));
-  let ears: [(&str, Box<dyn Ear>); 1] = [("files", world::files(scratch, config, None))];
+  let ears: [(&str, Box<dyn Ear>); 1] =
+    [("files", world::files(scratch, Places::under(config), None))];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
 }
 

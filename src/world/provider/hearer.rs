@@ -3,7 +3,6 @@
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
-  path::PathBuf,
   rc::Rc,
   sync::{Arc, PoisonError, RwLock},
 };
@@ -46,7 +45,7 @@ use std::mem;
 pub(super) struct Hearer {
   life: String,
   directory: String,
-  config: Option<PathBuf>,
+  places: Option<skill::Places>,
   skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: String,
@@ -93,7 +92,7 @@ impl Hearer {
     let native = provider.search();
     let Provider {
       directory,
-      config,
+      places,
       skills,
       models,
       actor,
@@ -119,7 +118,7 @@ impl Hearer {
     Self {
       life,
       directory,
-      config,
+      places,
       skills,
       models,
       actor,
@@ -226,7 +225,7 @@ impl Hearer {
       &self.actor,
       self.skills.as_deref(),
       &self.members.get(),
-      &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
+      &self.places.clone().unwrap_or_else(skill::Places::here),
     );
     say(co, Fact::says("done", &about, [given]));
     if word {

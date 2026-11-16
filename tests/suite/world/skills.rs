@@ -6,6 +6,7 @@ use serde_json::json;
 
 use super::provider::closed;
 use crate::yard::Yard;
+use furb::skill::Places;
 use furb::{
   Ear, Engine, Object, Text,
   view::{Fold, Held},
@@ -26,8 +27,8 @@ fn the_index_of_the_skills_reads_back_as_the_name_of_each_skill_and_what_it_is_f
   let scratch = world::Scratch::at(at.join("scratch")).expect("the scratch directory");
   // The skills hear a read of their scheme before the files, which refuse any path they lack.
   let ears: [(&str, Box<dyn Ear>); 2] = [
-    ("skills", world::skills::skills(at.join("config"))),
-    ("files", world::files(scratch, at.join("config"), None)),
+    ("skills", world::skills::skills(Places::under(at.join("config")))),
+    ("files", world::files(scratch, Places::under(at.join("config")), None)),
   ];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).expect("the life opens");
   let folder = serde_json::to_string(&at.display().to_string()).expect("a path");

@@ -405,7 +405,6 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     stall: STALL,
     tailnet: None,
     door: None,
-    home: None,
     data: None,
   };
   let served = local.clone();

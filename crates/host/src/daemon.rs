@@ -134,9 +134,6 @@ pub struct Settings {
   /// The data folder of furb, whose `sessions` holds each session with no project: that of the
   /// user of the machine when none is given.
   pub data: Option<PathBuf>,
-  /// The home folder of the user, which the welcome tells each peer: that of the user of the
-  /// machine when none is given.
-  pub home: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -503,7 +500,8 @@ impl Daemon {
     let (leave, leaving) = oneshot::channel();
     let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
-    let home = settings.home.clone().or_else(home_folder);
+    // The welcome tells the home from which the World of each life tells its paths.
+    let home = settings.opening.home.clone().map(PathBuf::from).or_else(home_folder);
     let (index, records) = mpsc::unbounded_channel();
     let log = settings.opening.log.clone();
     tokio::spawn(indexed(records, asks.downgrade(), log));

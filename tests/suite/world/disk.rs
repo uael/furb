@@ -7,6 +7,7 @@
 use std::{env, fs, io::Write, path::Path, process};
 
 use crate::{drive::block_on, yard::Yard};
+use furb::skill::Places;
 use furb::{Ear, Engine, Object, verbs, world};
 
 /// An empty folder of the test, named with the id of the process.
@@ -28,7 +29,7 @@ fn names(folder: &Path) -> Vec<String> {
 fn life() -> Engine {
   let config = env::temp_dir().join(format!("furb-disk-user-{}", process::id()));
   let ears: [(&str, Box<dyn Ear>); 1] =
-    [("files", world::files(world::Scratch::own(), config, None))];
+    [("files", world::files(world::Scratch::own(), Places::under(config), None))];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
 }
 
