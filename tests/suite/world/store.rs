@@ -190,6 +190,75 @@ conformance!(lines, "record.jsonl", Lines::open);
 conformance!(sqlite, "record.sqlite", Sqlite::open);
 
 #[test]
+fn a_line_holds_the_entry_and_after_its_fact_the_time_the_store_kept_it() {
+  let at = place("stamped", "record.jsonl");
+  let mut store = Lines::open(&at).unwrap();
+  let before = jiff::Timestamp::now().as_millisecond();
+  store.keep(facts()[1].as_ref()).unwrap();
+  store.sync().unwrap();
+  let after = jiff::Timestamp::now().as_millisecond();
+  let line: serde_json::Value = serde_json::from_str(&fs::read_to_string(&at).unwrap()).unwrap();
+  assert_eq!(line[0], serde_json::json!(["done", "clock1", "time", 1.5]));
+  let time = line[1].as_i64().unwrap();
+  assert!((before..=after).contains(&time), "{time} in {before}..={after}");
+  assert_eq!(line.as_array().map(Vec::len), Some(2));
+}
+
+#[test]
+fn a_record_reads_the_same_with_a_time_after_each_fact_and_with_none() {
+  let timed = place("timed", "record.jsonl");
+  let plain = place("plain", "record.jsonl");
+  fs::write(&timed, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],1760000000000]\n").unwrap();
+  fs::write(&plain, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n").unwrap();
+  let one = kept(&timed).unwrap();
+  assert_eq!(one.len(), 1);
+  assert_eq!(shown(&one), shown(&kept(&plain).unwrap()));
+}
+
+#[test]
+fn a_line_whose_word_after_the_fact_is_no_time_is_invalid() {
+  let at = place("invalid", "record.jsonl");
+  fs::write(&at, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],\"noon\"]\n").unwrap();
+  assert!(kept(&at).is_err());
+}
+
+#[test]
+fn a_record_is_read_whole_from_its_start_past_a_blank_line_to_a_last_line_with_no_end() {
+  let at = place("whole", "record.jsonl");
+  let text =
+    "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],1]\n\n[[\"done\",\"clock1\",\"time\",1.5]]";
+  fs::write(&at, text).unwrap();
+  assert_eq!(kept(&at).unwrap().len(), 2);
+  assert_eq!(
+    kept(place("gone", "record.jsonl")).unwrap().len(),
+    0,
+    "a record that stands not holds none"
+  );
+}
+
+#[test]
+fn a_record_whose_last_line_is_torn_or_not_ended_is_mended_at_the_first_keep_and_not_before() {
+  let one = "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n";
+  for (tail, name, held) in [
+    ("[[\"stand\",\"sta", "torn-tail", 2),
+    ("[[\"stand\",\"stand2\",\"operator\",\"chain1\"]]", "unended", 3),
+  ] {
+    let at = place(name, "record.jsonl");
+    fs::write(&at, format!("{one}{tail}")).unwrap();
+    let before = fs::read(&at).unwrap();
+    let mut store = Lines::open(&at).unwrap();
+    let entries = store.entries().unwrap();
+    store.sync().unwrap();
+    assert_eq!(fs::read(&at).unwrap(), before, "a store that keeps nothing changes nothing");
+    store.keep(entries[0].as_ref()).unwrap();
+    store.sync().unwrap();
+    drop(store);
+    assert_eq!(kept(&at).unwrap().len(), held, "{name}");
+    assert!(fs::read_to_string(&at).unwrap().ends_with('\n'));
+  }
+}
+
+#[test]
 fn a_record_named_as_a_database_is_one_of_sqlite_and_any_other_is_a_file_of_lines() {
   for (file, database) in
     [("r.sqlite", true), ("r.SQLITE3", true), ("r.db", true), ("r.jsonl", false), ("r", false)]

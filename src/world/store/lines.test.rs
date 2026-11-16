@@ -1,10 +1,11 @@
-//! The file of lines, proved where no life reaches it: the line it keeps of an entry, and the record it reads again.
+//! The file of lines, where no door reaches it: the read that a store takes from the open of a life,
+//! which only that open hands over; the heads of the lines, whose law is what a read parses; and a
+//! line that a write left torn, which only a write that failed midway leaves. The suite of the
+//! stores proves the rest.
 
 use std::{fs, io::Write};
 
-use serde_json::json;
-
-use super::{HEAD, Last, Lines, heads, last, stamped};
+use super::{HEAD, Last, Lines, heads, last};
 use crate::testing::Yard;
 use crate::value::Object;
 use crate::world::{kept, store::Store};
@@ -13,37 +14,6 @@ use std::process;
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
   Yard::new(format!("furb-lines-{name}-{}", process::id())).within("record.jsonl")
-}
-
-#[test]
-fn a_line_holds_the_entry_and_after_its_fact_the_time_the_store_kept_it() {
-  let entry = json!([["done", "clock1", "time", 1.5]]);
-  assert_eq!(
-    stamped(entry, 1_760_000_000_000),
-    "[[\"done\",\"clock1\",\"time\",1.5],1760000000000]\n"
-  );
-}
-
-#[test]
-fn a_record_reads_the_same_with_a_time_after_each_fact_and_with_none() {
-  let timed = place("timed");
-  let plain = place("plain");
-  fs::write(&timed, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],1760000000000]\n").unwrap();
-  fs::write(&plain, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n").unwrap();
-  let one = kept(&timed).unwrap();
-  let two = kept(&plain).unwrap();
-  assert_eq!(one.len(), 1);
-  assert_eq!(
-    format!("{:?}", one[0].as_ref().py_repr()),
-    format!("{:?}", two[0].as_ref().py_repr())
-  );
-}
-
-#[test]
-fn a_line_whose_word_after_the_fact_is_no_time_is_invalid() {
-  let at = place("invalid");
-  fs::write(&at, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],\"noon\"]\n").unwrap();
-  assert!(kept(&at).is_err());
 }
 
 /// The lines of a record with entries before a byte, one of which does not parse, and that byte.
@@ -63,22 +33,6 @@ fn parted() -> (String, u64) {
 /// The entries that a read gave, as python shows them.
 fn shown(entries: &[Object]) -> Vec<String> {
   entries.iter().map(|one| one.as_ref().py_repr()).collect()
-}
-
-#[test]
-fn a_record_is_read_whole_from_its_start() {
-  let at = place("whole");
-  fs::write(
-    &at,
-    "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],1]\n\n[[\"done\",\"clock1\",\"time\",1.5]]",
-  )
-  .unwrap();
-  let mut passed = Vec::new();
-  let Last { entries, .. } = last(&at, &mut |byte| passed.push(byte)).unwrap();
-  assert_eq!(entries.len(), 2);
-  assert_eq!(passed.last(), Some(&(fs::metadata(&at).unwrap().len())));
-  let Last { entries, .. } = last(&place("gone"), &mut |_| {}).unwrap();
-  assert_eq!(entries.len(), 0, "a record that stands not holds none");
 }
 
 #[test]
@@ -157,26 +111,4 @@ fn a_line_that_the_store_failed_to_write_whole_is_cut_before_the_next_line() {
   let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
   let want: Vec<String> = entries.iter().map(|one| one.as_ref().py_repr()).collect();
   assert_eq!(shown, want);
-}
-
-#[test]
-fn a_record_whose_last_line_is_torn_or_not_ended_is_mended_at_the_first_keep_and_not_before() {
-  let one = "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n";
-  for (tail, name) in [
-    ("[[\"stand\",\"sta", "torn-tail"),
-    ("[[\"stand\",\"stand2\",\"operator\",\"chain1\"]]", "unended"),
-  ] {
-    let at = place(name);
-    fs::write(&at, format!("{one}{tail}")).unwrap();
-    let before = fs::read(&at).unwrap();
-    let mut store = Lines::open(&at).unwrap();
-    let entries = store.entries().unwrap();
-    store.sync().unwrap();
-    assert_eq!(fs::read(&at).unwrap(), before, "a store that keeps nothing changes nothing");
-    store.keep(entries[0].as_ref()).unwrap();
-    store.sync().unwrap();
-    let held = kept(&at).unwrap().len();
-    assert_eq!(held, if name == "torn-tail" { 2 } else { 3 });
-    assert!(fs::read_to_string(&at).unwrap().ends_with('\n'));
-  }
 }
