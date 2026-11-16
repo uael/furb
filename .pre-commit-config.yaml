@@ -17,8 +17,9 @@ repos:
     hooks:
       - id: check-added-large-files
         # A record of the corpus holds a whole life with a checkpoint, and git keeps a copy of a record that a release
-        # does not change once.
-        exclude: ^tests/corpus/.*\.jsonl$
+        # does not change once. The face of an emoji that the frames carry holds the outline of each emoji, which no
+        # subset makes smaller, and git keeps one copy of it.
+        exclude: ^(tests/corpus/.*\.jsonl|crates/frames/fonts/NotoEmoji-Regular\.ttf)$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml

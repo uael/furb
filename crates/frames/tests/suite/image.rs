@@ -70,3 +70,20 @@ fn a_block_of_quarters_fills_its_quarters_of_the_cell_to_their_edges() {
   let lower: Vec<bool> = half.iter().map(|upper| !upper).collect();
   assert_eq!((rows(14), rows(15), rows(19)), (vec![false; height], lower.clone(), lower));
 }
+
+#[test]
+fn an_emoji_is_drawn_whole_across_its_two_cells_from_the_face_that_the_program_carries() {
+  let (said, images) = drawn("emoji", 2, &["\x1b[?2027h🔀"]);
+  assert!(!said.contains("lacks"), "{said}");
+  let mut decoder = png::Decoder::new(Cursor::new(&images[0])).read_info().unwrap();
+  let mut pixels = vec![0; decoder.output_buffer_size().unwrap()];
+  decoder.next_frame(&mut pixels).unwrap();
+  // Each half of the glyph stands on its cell: a pixel of either cell holds more than its ground.
+  let lit = |from: usize| {
+    pixels
+      .chunks(3)
+      .enumerate()
+      .any(|(at, one)| (from..from + 10).contains(&(at % 20)) && one[0] > 0x1e)
+  };
+  assert_eq!((lit(0), lit(10)), (true, true));
+}

@@ -1,6 +1,7 @@
 //! The image of a frame: each cell drawn on its ground with the face `JetBrains Mono`, at the size
-//! where a cell is 10 pixels wide. A glyph that the face lacks is named, and drawn from a face of
-//! the system that holds it, as a terminal falls back to one, or as a box when none does.
+//! where a cell is 10 pixels wide, and an emoji with the face `Noto Emoji`. A glyph that the faces
+//! lack is named, and drawn from a face of the system that holds it, as a terminal falls back to
+//! one, or as a box when none does.
 
 use std::{collections::HashMap, fs, sync::LazyLock};
 
@@ -13,9 +14,18 @@ use crate::frame::{BOLD, Cell, Frame, ITALIC, Rgb, STRIKE, UNDERLINE};
 const WIDTH: usize = 10;
 const PX: f32 = 10.0 / 0.6;
 
-/// The three faces, which the program carries, under the license that `fonts/OFL.txt` holds.
+/// The face of an emoji among `FACES`.
+const EMOJI: usize = 3;
+
+/// The faces that the program carries: the three of `JetBrains Mono`, under the license that
+/// `fonts/OFL.txt` holds, and the face of an emoji, under `fonts/OFL-NotoEmoji.txt`. That face is
+/// `NotoEmoji[wght].ttf` of google/fonts at 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5, set to its
+/// weight 400 by `fonttools varLib.instancer`, then cut of its hints and its rules of layout, which
+/// this rasterizer does not read, by `pyftsubset --unicodes='*' --layout-features='' --no-hinting
+/// --name-IDs='*'`, so each machine draws an emoji the same way. It has no color, which no face of
+/// this rasterizer draws, and a joined emoji or a flag shows as its first part.
 #[expect(clippy::expect_used, reason = "the faces that the program carries parse")]
-static FACES: LazyLock<[Font; 3]> = LazyLock::new(|| {
+static FACES: LazyLock<[Font; 4]> = LazyLock::new(|| {
   let face = |bytes: &[u8]| {
     Font::from_bytes(bytes, FontSettings { scale: PX, ..FontSettings::default() })
       .expect("the faces that the program carries parse")
@@ -24,6 +34,7 @@ static FACES: LazyLock<[Font; 3]> = LazyLock::new(|| {
     face(include_bytes!("../fonts/JetBrainsMono-Regular.ttf")),
     face(include_bytes!("../fonts/JetBrainsMono-Bold.ttf")),
     face(include_bytes!("../fonts/JetBrainsMono-Italic.ttf")),
+    face(include_bytes!("../fonts/NotoEmoji-Regular.ttf")),
   ]
 });
 
@@ -90,11 +101,16 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
   let mut missing = Vec::new();
   for (row, cells) in frame.cells().iter().enumerate() {
     for (col, cell) in cells.iter().enumerate() {
+      // The second cell of a wide glyph is drawn with the first, so its ground covers no part of
+      // the glyph.
+      if col > 0 && cell.glyph.is_empty() {
+        continue;
+      }
       let (x, y, width) = (col * side, row * height, side);
-      canvas.fill(Area { x, y, width, height }, cell.bg);
       let wide = cells.get(col + 1).is_some_and(|next| next.glyph.is_empty());
       let place =
         Place { area: Area { x, y, width: if wide { 2 * width } else { width }, height }, base };
+      canvas.fill(place.area, cell.bg);
       let Some(glyph) = cell.glyph.chars().next().filter(|glyph| !glyph.is_whitespace()) else {
         canvas.lines(cell, place);
         continue;
@@ -103,7 +119,7 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
         canvas.lines(cell, place);
         continue;
       }
-      let face = face(cell.attributes, glyph);
+      let face = face(cell.attributes, glyph, wide);
       if face.is_none_or(|face| face >= FACES.len()) && !missing.contains(&glyph) {
         missing.push(glyph);
       }
@@ -124,9 +140,10 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
 }
 
 /// The face of a glyph in a look: bold, italic or regular, the regular one when the face of the
-/// look lacks it, then the first of `FALLBACKS` that holds it, after the three faces. None when no
-/// face holds it.
-fn face(attributes: u8, glyph: char) -> Option<usize> {
+/// look lacks it, then the first of `FALLBACKS` that holds it, after the faces that the program
+/// carries. A glyph of two cells, as a terminal draws an emoji, takes the face of an emoji first.
+/// None when no face holds it.
+fn face(attributes: u8, glyph: char, wide: bool) -> Option<usize> {
   let wanted = if attributes & BOLD != 0 {
     1
   } else if attributes & ITALIC != 0 {
@@ -135,10 +152,12 @@ fn face(attributes: u8, glyph: char) -> Option<usize> {
     0
   };
   let system = (0..FALLBACKS.len()).map(|fallback| FACES.len() + fallback);
-  [wanted, 0].into_iter().chain(system).find(|&face| font(face).lookup_glyph_index(glyph) != 0)
+  let emoji = wide.then_some(EMOJI);
+  let faces = emoji.into_iter().chain([wanted, 0]).chain(system);
+  faces.into_iter().find(|&face| font(face).lookup_glyph_index(glyph) != 0)
 }
 
-/// A face by its place: the three faces, then `FALLBACKS`.
+/// A face by its place: the faces that the program carries, then `FALLBACKS`.
 fn font(face: usize) -> &'static Font {
   FACES.get(face).unwrap_or_else(|| &FALLBACKS[face - FACES.len()])
 }
