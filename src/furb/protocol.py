@@ -3016,88 +3016,6 @@ class Exchange(TypedDict):
   said: list[Said]
 
 
-class Page(TypedDict):
-  """
-  Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
-  agents of the whole thread, in the order the thread made them, the context of its chain, and,
-  for a sub thread, which no list holds, the thread itself as the thread that it is on holds it.
-  """
-
-  exchanges: list[Exchange]
-  above: int
-  agents: list[Agent]
-  context: NotRequired[Context | None]
-  sub: NotRequired[Agent | None]
-  folder: NotRequired[str | None]
-  """
-    The folder of the chain of the thread, where its next word runs: the last that a cd of the
-    chain came to, a cd of its setup first.
-    """
-
-
-class Frame8(TypedDict):
-  """
-  A change of the thread that the peer reads: each exchange that is new or that changed, how
-  many exchanges stand before the first of the page of the end now, and the agents of the
-  thread.
-  """
-
-  life: str
-  thread: str
-  page: Page
-  frame: Literal["thread"]
-
-
-class Answer24(TypedDict):
-  """
-  A page of a thread.
-  """
-
-  answer: Literal["page"]
-  data: Page
-
-
-type Answer = (
-  Answer1
-  | Answer2
-  | Answer3
-  | Answer4
-  | Answer5
-  | Answer6
-  | Answer7
-  | Answer8
-  | Answer9
-  | Answer10
-  | Answer11
-  | Answer12
-  | Answer13
-  | Answer14
-  | Answer15
-  | Answer16
-  | Answer17
-  | Answer18
-  | Answer19
-  | Answer20
-  | Answer21
-  | Answer22
-  | Answer23
-  | Answer24
-)
-"""
-What a verb comes to.
-"""
-
-
-class Frame1(TypedDict):
-  """
-  The answer to the request of an id.
-  """
-
-  id: int
-  answer: Answer
-  frame: Literal["reply"]
-
-
 class Protocol(TypedDict):
   """
   Both ways of the protocol, which its schema holds.
@@ -3234,6 +3152,29 @@ One node of a view, under an id that an event names.
 """
 
 
+class Frame1(TypedDict):
+  """
+  The answer to the request of an id.
+  """
+
+  id: int
+  answer: Answer
+  frame: Literal["reply"]
+
+
+class Frame8(TypedDict):
+  """
+  A change of the thread that the peer reads: each exchange that is new or that changed, how
+  many exchanges stand before the first of the page of the end now, and the agents of the
+  thread.
+  """
+
+  life: str
+  thread: str
+  page: Page
+  frame: Literal["thread"]
+
+
 class Frame15(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
@@ -3270,8 +3211,181 @@ type Frame = (
 What the daemon says to a peer.
 """
 
+
+class Answer24(TypedDict):
+  """
+  A page of a thread.
+  """
+
+  answer: Literal["page"]
+  data: Page
+
+
+type Answer = (
+  Answer1
+  | Answer2
+  | Answer3
+  | Answer4
+  | Answer5
+  | Answer6
+  | Answer7
+  | Answer8
+  | Answer9
+  | Answer10
+  | Answer11
+  | Answer12
+  | Answer13
+  | Answer14
+  | Answer15
+  | Answer16
+  | Answer17
+  | Answer18
+  | Answer19
+  | Answer20
+  | Answer21
+  | Answer22
+  | Answer23
+  | Answer24
+)
+"""
+What a verb comes to.
+"""
+
+
+class Page(TypedDict):
+  """
+  Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
+  agents of the whole thread, in the order the thread made them, the context of its chain, and,
+  for a sub thread, which no list holds, the thread itself as the thread that it is on holds it.
+  """
+
+  exchanges: list[Exchange]
+  above: int
+  agents: list[Agent]
+  context: NotRequired[Context | None]
+  sub: NotRequired[Agent | None]
+  folder: NotRequired[str | None]
+  """
+    The folder of the chain of the thread, where its next word runs: the last that a cd of the
+    chain came to, a cd of its setup first.
+    """
+  views: NotRequired[list[Viewed]]
+  """
+    The views of the session that stand open, in the order that their words drew them.
+    """
+
+
+class Viewed1(TypedDict):
+  """
+  A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+  elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+  answer is what a person or a model did to one of its nodes, as
+  `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+  replay draws it again.
+  """
+
+  prompt: str
+  tree: Node
+  on: str
+  slot: Literal["dock"]
+
+
+class Viewed2(TypedDict):
+  """
+  A section of the sidebar.
+  """
+
+  prompt: str
+  tree: Node
+  slot: Literal["sidebar"]
+
+
+class Viewed3(TypedDict):
+  """
+  The row of one act, of a kind that the skill draws.
+  """
+
+  prompt: str
+  tree: Node
+  act: str
+  slot: Literal["row"]
+
+
+class Viewed4(TypedDict):
+  """
+  The detail of one act, of a kind that the skill draws.
+  """
+
+  prompt: str
+  tree: Node
+  act: str
+  slot: Literal["detail"]
+
+
+class Viewed5(TypedDict):
+  """
+  A mark in the feed, after one act, of a kind that the skill marks.
+  """
+
+  prompt: str
+  tree: Node
+  act: str
+  slot: Literal["mark"]
+
+
+class Viewed6(TypedDict):
+  """
+  A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+  elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+  answer is what a person or a model did to one of its nodes, as
+  `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+  replay draws it again.
+  """
+
+  prompt: str
+  tree: Node
+  slot: Literal["footer"]
+
+
+class Viewed7(TypedDict):
+  """
+  A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+  elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+  answer is what a person or a model did to one of its nodes, as
+  `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+  replay draws it again.
+  """
+
+  prompt: str
+  tree: Node
+  slot: Literal["screen"]
+
+
+class Viewed8(TypedDict):
+  """
+  A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+  elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+  answer is what a person or a model did to one of its nodes, as
+  `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+  replay draws it again.
+  """
+
+  prompt: str
+  tree: Node
+  slot: Literal["overlay"]
+
+
+type Viewed = Viewed1 | Viewed2 | Viewed3 | Viewed4 | Viewed5 | Viewed6 | Viewed7 | Viewed8
+"""
+A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+answer is what a person or a model did to one of its nodes, as
+`{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+replay draws it again.
+"""
+
 type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 73
+PROTOCOL = 74

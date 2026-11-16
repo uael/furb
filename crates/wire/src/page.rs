@@ -12,6 +12,7 @@ use crate::{
   act::{Act, Maker, Read, fault},
   anchor::Anchor,
   card::Card,
+  protocol::{Node, Slot},
   words::timer,
 };
 
@@ -31,6 +32,44 @@ pub struct Page {
   /// chain came to, a cd of its setup first.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub folder: Option<String>,
+  /// The views of the session that stand open, in the order that their words drew them.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub views: Vec<Viewed>,
+}
+
+/// The version of the vocabulary of a view, which the message of its prompt names.
+pub const VIEW: u64 = 1;
+
+/// A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+/// elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+/// answer is what a person or a model did to one of its nodes, as
+/// `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+/// replay draws it again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Viewed {
+  pub prompt: String,
+  #[serde(flatten)]
+  pub slot: Slot,
+  pub tree: Node,
+}
+
+/// The message of the prompt of a view.
+#[derive(Deserialize)]
+struct Drawn {
+  view: u64,
+  #[serde(flatten)]
+  slot: Slot,
+  tree: Node,
+}
+
+impl Viewed {
+  /// The view that the message of a prompt draws, when it is one in a version that this build
+  /// reads.
+  #[must_use]
+  pub fn of(prompt: &str, message: &str) -> Option<Self> {
+    let drawn = serde_json::from_str::<Drawn>(message).ok().filter(|one| one.view == VIEW)?;
+    Some(Self { prompt: prompt.to_owned(), slot: drawn.slot, tree: drawn.tree })
+  }
 }
 
 /// The context of a chain at its last answer: what that answer read, the window that the roster of

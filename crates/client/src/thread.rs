@@ -8,7 +8,7 @@ use std::{
 };
 
 use furb_wire::{
-  Agent, Context, Exchange, Mark, OPERATOR, Page, Saying, Standing, card,
+  Agent, Context, Exchange, Mark, OPERATOR, Page, Saying, Standing, Viewed, card,
   protocol::{Card, Verb},
 };
 
@@ -145,6 +145,8 @@ pub struct Thread {
   pub context: Option<Context>,
   /// The folder of the chain of the thread, where its next word runs.
   pub folder: Option<String>,
+  /// The views of the session that stand open.
+  pub views: Vec<Viewed>,
   /// The kinds of what an answer of the chain read, once the client parted its turns.
   pub parts: Option<Parts>,
   /// The bar of its time, while the operator holds it.
@@ -199,8 +201,8 @@ impl Thread {
       time.heard(&page.exchanges);
     }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
-    (self.agents, self.context, self.sub, self.folder) =
-      (page.agents, page.context, page.sub, page.folder);
+    (self.agents, self.context, self.sub, self.folder, self.views) =
+      (page.agents, page.context, page.sub, page.folder, page.views);
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
     let ended = marked(&self.exchanges, |mark| *mark == Mark::Ran);

@@ -18,7 +18,7 @@ use furb_wire::{
   card::{Card, Standing},
   page::{
     Agent, Answered, Block, Context, DIFF, Exchange, LITERAL, Line, Made, Mark, Output, Page,
-    Reach, Retrying, Said, Saying, Thought, Work, Written, stands, wrote,
+    Reach, Retrying, Said, Saying, Thought, Viewed, Work, Written, stands, wrote,
   },
   state::{State, working},
 };
@@ -323,7 +323,7 @@ impl<'a> Reader<'a> {
     agents.extend(self.held.on_chain(&prompts[0].chain).filter(sub).map(|act| self.agent(act)));
     let sub = anchor_of(prompts[0]).map(|_| Box::new(self.agent(prompts[0])));
     let (context, folder) = (self.context(&prompts[0].chain), self.folder(&prompts[0].chain));
-    Page { exchanges, above: start, agents, context, sub, folder }
+    Page { exchanges, above: start, agents, context, sub, folder, views: self.views() }
   }
 
   /// The number in the thread of the line of the word of a rung that made an act.
@@ -340,6 +340,14 @@ impl<'a> Reader<'a> {
     let spend = self.held.act(chain)?.spend.as_ref()?;
     let window = spend.actor.as_deref().and_then(|actor| self.held.window(actor));
     Some(Context { read: spend.read?, window, dollars: spend.dollars })
+  }
+
+  /// The views of the session that stand open: each prompt to the operator, not done, whose
+  /// message draws one.
+  fn views(self) -> Vec<Viewed> {
+    let open = self.held.open().filter(|act| act.asks_operator());
+    let drawn = |act: &Act| Viewed::of(&act.id, act.words.get(1)?.as_str()?);
+    open.filter_map(drawn).collect()
   }
 
   /// The folder of a chain: where the last cd of the chain came to.

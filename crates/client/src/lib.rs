@@ -34,7 +34,7 @@ use std::{
 
 use furb_wire::{
   Part,
-  protocol::{Card, Verb, ViewEvent},
+  protocol::{Card, Verb},
 };
 
 pub use changes::{Review, Seen};
@@ -97,8 +97,9 @@ pub struct Client {
   pub review: Option<Review>,
   /// The views that the client mounted, in the order that it mounted them.
   pub views: Vec<View>,
-  /// What the operator did to the nodes of views, with the machine of each, until it goes.
-  pub gestures: Vec<(usize, ViewEvent)>,
+  /// What the operator did to the nodes of views, with the machine of each, until it goes: an
+  /// event of a view that a skill serves, or the answer of the prompt of a view that a word draws.
+  pub gestures: Vec<(usize, Verb, Asked)>,
   /// The input node of a view that the input of the client fills, while it fills one.
   pub filled: Option<Filled>,
   /// The settings of a session, while the operator reads them.

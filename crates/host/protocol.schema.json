@@ -4889,6 +4889,13 @@
             "null"
           ],
           "description": "The folder of the chain of the thread, where its next word runs: the last that a cd of the\nchain came to, a cd of its setup first."
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Viewed"
+          },
+          "description": "The views of the session that stand open, in the order that their words drew them."
         }
       },
       "required": [
@@ -5684,6 +5691,140 @@
       ],
       "description": "The context of a chain at its last answer: what that answer read, the window that the roster of\nthe standing offers its actor, none when the roster holds no such actor, and the dollars of each\nanswer on the chain."
     },
+    "Viewed": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "tree": {
+          "$ref": "#/definitions/Node"
+        }
+      },
+      "required": [
+        "prompt",
+        "tree"
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "on": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "dock"
+            }
+          },
+          "required": [
+            "slot",
+            "on"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "sidebar"
+            }
+          },
+          "required": [
+            "slot"
+          ],
+          "description": "A section of the sidebar."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "row"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "The row of one act, of a kind that the skill draws."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "detail"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "The detail of one act, of a kind that the skill draws."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "mark"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "A mark in the feed, after one act, of a kind that the skill marks."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "footer"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "screen"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "overlay"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        }
+      ],
+      "description": "A view that a word draws for the operator: a prompt to him, open, whose message is a tree of\nelements in a slot of a window, as `{\"view\": 1, \"slot\": \"footer\", \"tree\": {...}}`, and whose\nanswer is what a person or a model did to one of its nodes, as\n`{\"node\": \"add\", \"value\": \"milk\"}`. So the record keeps the view and each gesture, and a\nreplay draws it again."
+    },
     "ProtocolError": {
       "oneOf": [
         {
@@ -6390,5 +6531,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 73
+  "x-protocol": 74
 }

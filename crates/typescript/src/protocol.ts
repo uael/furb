@@ -1000,6 +1000,46 @@ export type Where =
       kind: "folder";
     };
 /**
+ * A view that a word draws for the operator: a prompt to him, open, whose message is a tree of
+ * elements in a slot of a window, as `{"view": 1, "slot": "footer", "tree": {...}}`, and whose
+ * answer is what a person or a model did to one of its nodes, as
+ * `{"node": "add", "value": "milk"}`. So the record keeps the view and each gesture, and a
+ * replay draws it again.
+ */
+export type Viewed = {
+  prompt: string;
+  tree: Node;
+} & Viewed1;
+export type Viewed1 =
+  | {
+      on: string;
+      slot: "dock";
+    }
+  | {
+      slot: "sidebar";
+    }
+  | {
+      act: string;
+      slot: "row";
+    }
+  | {
+      act: string;
+      slot: "detail";
+    }
+  | {
+      act: string;
+      slot: "mark";
+    }
+  | {
+      slot: "footer";
+    }
+  | {
+      slot: "screen";
+    }
+  | {
+      slot: "overlay";
+    };
+/**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
  */
 export type ProtocolError =
@@ -1640,6 +1680,10 @@ export interface Page {
    * chain came to, a cd of its setup first.
    */
   folder?: string | null;
+  /**
+   * The views of the session that stand open, in the order that their words drew them.
+   */
+  views?: Viewed[];
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -1831,4 +1875,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 73;
+export const PROTOCOL = 74;

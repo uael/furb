@@ -27,7 +27,7 @@ impl Model {
     for view in self.client.shown_views() {
       let Some(tree) = &view.tree else { continue };
       rows.push(Row::default());
-      let drawn = self.node_rows(view, tree, room);
+      let drawn = self.node_rows(&view, tree, room);
       rows.extend(
         drawn.into_iter().map(|row| row.shifted(2).with_head(vec![run("  ", Style::new())])),
       );

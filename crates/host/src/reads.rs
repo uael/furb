@@ -86,7 +86,8 @@ impl Read {
         || page.agents != told.agents
         || page.context != told.context
         || page.sub != told.sub
-        || page.folder != told.folder;
+        || page.folder != told.folder
+        || page.views != told.views;
       if !changed.is_empty() || moved {
         let page = Page { exchanges: changed, ..page.clone() };
         let frame = Frame::Thread { life: self.life.clone(), thread: self.thread.clone(), page };

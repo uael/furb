@@ -346,6 +346,11 @@ impl Held {
       .collect()
   }
 
+  /// Each act that is not done, in the order the acts were first told.
+  pub(super) fn open(&self) -> impl Iterator<Item = &Act> {
+    self.live.iter().map(|at| &*self.acts[*at]).filter(|act| !act.done())
+  }
+
   /// Each run of a word that is not done, in the order the acts were first told.
   pub fn running(&self) -> impl Iterator<Item = &Arc<Act>> {
     self.live.iter().map(|at| &self.acts[*at]).filter(|act| act.kind == Kind::Run && !act.done())

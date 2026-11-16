@@ -5,11 +5,15 @@
 
 use std::{mem, process};
 
-use furb_wire::protocol::{
-  Dispose, Effect, Frame, Gesture, Mount, Node, Slot, Tree, Verb, ViewEffect, ViewEvent,
+use furb_wire::{
+  Viewed,
+  protocol::{
+    Dispose, Effect, Frame, Gesture, Mount, Node, Slot, Tree, Verb, ViewEffect, ViewEvent,
+  },
 };
+use serde_json::json;
 
-use crate::{Asked, Client, Target};
+use crate::{Asked, Client, Key, Target};
 
 /// A view that the client mounted: its machine, its life, the skill that serves it, the viewer
 /// that names it in the daemon, and the tree that the skill gave last with its version, none
@@ -24,6 +28,14 @@ pub struct View {
   pub version: u64,
 }
 
+impl View {
+  /// The view that a word draws, by its prompt, which names it as a viewer names a mounted one.
+  fn drawn(key: &Key, one: &Viewed) -> Self {
+    let (at, life, viewer) = (key.0, key.1.clone(), one.prompt.clone());
+    Self { at, life, skill: String::new(), viewer, tree: Some(one.tree.clone()), version: 0 }
+  }
+}
+
 /// The node of a view whose input the input of the client fills: its viewer and its id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filled {
@@ -34,10 +46,17 @@ pub struct Filled {
 impl Client {
   /// The views of the life of the target of the input, in the order that their skills attached,
   /// each once its skill gave a tree.
-  pub fn shown_views(&self) -> Vec<&View> {
+  pub fn shown_views(&self) -> Vec<View> {
     let Some((at, life)) = self.target_life() else { return Vec::new() };
     let mine = |one: &&View| one.at == at && one.life == life && one.tree.is_some();
-    self.views.iter().filter(mine).collect()
+    let mounted = self.views.iter().filter(mine).cloned();
+    mounted.chain(self.drawn().map(|(key, one)| View::drawn(key, one))).collect()
+  }
+
+  /// The views that the words of the session of the open thread draw, as prompts to the operator.
+  fn drawn(&self) -> impl Iterator<Item = (&Key, &Viewed)> {
+    let thread = self.thread.as_ref().map(|one| &one.thread);
+    thread.into_iter().flat_map(|one| one.views.iter().map(|view| (&one.key, view)))
   }
 
   /// The life of the target of the input, on its machine: none for a new session.
@@ -85,8 +104,7 @@ impl Client {
         due.push((at, Verb::ViewMount(mount), Asked::View));
       }
     }
-    let said = self.gestures.drain(..).map(|(at, event)| (at, Verb::ViewEvent(event), Asked::View));
-    due.extend(said);
+    due.append(&mut self.gestures);
     due
   }
 
@@ -97,10 +115,18 @@ impl Client {
       && attached.is_some_and(|skills| skills.contains(&view.skill))
   }
 
-  /// What the operator did to a node of a view, which goes to its skill.
+  /// What the operator did to a node of a view, which goes to its skill, or which answers the
+  /// prompt of a view that a word draws.
   pub fn gesture(&mut self, event: ViewEvent) {
+    let drawn =
+      self.drawn().find(|(_, one)| one.prompt == event.viewer).map(|(key, _)| key.clone());
+    if let Some((at, life, _)) = drawn {
+      let gesture = json!({ "node": event.node, "value": event.value }).to_string();
+      let verb = Verb::Answer { life, act: event.viewer, line: gesture };
+      return self.gestures.push((at, verb, Asked::Answer));
+    }
     let Some(view) = self.views.iter().find(|one| one.viewer == event.viewer) else { return };
-    self.gestures.push((view.at, event));
+    self.gestures.push((view.at, Verb::ViewEvent(event), Asked::View));
   }
 
   /// The input of the client turned to fill an input node of a view, from the value that it holds
