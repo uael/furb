@@ -1053,7 +1053,8 @@ impl Model {
     // A session with no project runs in a folder of its own, not in the folder of the window.
     let alone =
       self.client.target_folder().filter(|(at, one)| self.folder_named(*at, one) == NO_PROJECT);
-    let folder = alone.map_or_else(|| self.folder_shown(), |(_, one)| self.homed(&one));
+    let folder = alone.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
+    let folder = self.folder_shown(&folder);
     let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;

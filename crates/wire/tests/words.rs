@@ -46,4 +46,5 @@ fn a_time_of_a_work_shows_from_one_whole_second_and_an_age_from_one_minute() {
 fn a_path_of_the_home_folder_reads_with_a_tilde() {
   let home = "/Users/a";
   assert_eq!([homed("/Users/a", home), homed("in /Users/a/src", home)], ["~", "in ~/src"]);
+  assert_eq!(homed(r"in C:\Users\a\src", r"C:\Users\a"), r"in ~\src");
 }

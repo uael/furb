@@ -7,7 +7,10 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-use crate::{life::crossed, yard};
+use crate::{
+  life::{self, crossed},
+  yard,
+};
 
 use std::net::TcpListener;
 use yard::Yard;
@@ -806,7 +809,7 @@ async fn a_session_with_no_project_opens_in_a_folder_of_its_own_and_stands_in_no
   };
   assert_eq!(window.ask(verb).await, Ok(Answer::Done));
   let cwd = window.ask(Verb::Cwd { life: life.clone(), on: None }).await;
-  assert_eq!(cwd, Ok(Answer::Value(json!(folder.display().to_string()))));
+  assert_eq!(cwd, Ok(Answer::Value(json!(life::told(&folder)))));
   let listed = window.listed().await;
   assert_eq!(
     listed.iter().map(|one| (&*one.life, one.project.as_deref())).collect::<Vec<_>>(),

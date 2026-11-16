@@ -96,8 +96,9 @@ pub fn percent(part: u64, whole: u64) -> u64 {
   (part.saturating_mul(100) + whole.max(1) / 2) / whole.max(1)
 }
 
-/// A text with a home folder as `~`, as a person reads a path of his own machine.
+/// A text with a home folder as `~`, as a person reads a path of his own machine: a path whose
+/// parts a `/` parts, or a `\` on Windows.
 pub fn homed(text: &str, home: &str) -> String {
-  let text = text.replace(&format!("{home}/"), "~/");
+  let text = text.replace(&format!("{home}/"), "~/").replace(&format!("{home}\\"), "~\\");
   if text == home { "~".to_owned() } else { text }
 }

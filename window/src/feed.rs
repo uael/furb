@@ -845,7 +845,7 @@ impl Feed<'_> {
       let path = self.model.homed(&one.path);
       let path = folder
         .as_deref()
-        .and_then(|folder| path.strip_prefix(folder)?.strip_prefix('/'))
+        .and_then(|folder| path.strip_prefix(folder)?.strip_prefix(['/', '\\']))
         .map_or_else(|| path.clone(), str::to_owned);
       let counts = if one.known {
         self.model.counts(one.added, one.removed)

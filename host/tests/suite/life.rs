@@ -49,7 +49,7 @@ pub(crate) fn place(name: &str) -> yard::Yard {
 
 /// A path as the World writes it for a model: `~` in place of the home of the user that it stands
 /// under, as the temporary folder of Windows does, and the path as it stands otherwise.
-fn told(path: &Path) -> String {
+pub(crate) fn told(path: &Path) -> String {
   let home = env::home_dir().filter(|home| home.parent().is_some());
   match home.and_then(|home| path.strip_prefix(home).ok().map(Path::to_path_buf)) {
     Some(rest) => format!("~{MAIN_SEPARATOR}{}", rest.display()),

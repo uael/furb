@@ -146,17 +146,15 @@ impl Model {
     (place, actor)
   }
 
-  /// The folder of the window, with the home folder of the user as `~`, and `/` between its parts
-  /// on each system, so a folder of Windows shows as `~/furb` too. A folder outside the home shows
-  /// as it is.
-  pub(crate) fn folder_shown(&self) -> String {
-    let shown = self.client.folder.clone();
+  /// A folder with the home folder of the user as `~`, and `/` between its parts on each system,
+  /// so a folder of Windows shows as `~/furb` too. A folder outside the home shows as it is.
+  pub(crate) fn folder_shown(&self, folder: &str) -> String {
     let home = self.home.as_ref().map(|one| one.display().to_string());
-    match home.as_deref().and_then(|home| shown.strip_prefix(home)) {
+    match home.as_deref().and_then(|home| folder.strip_prefix(home)) {
       Some("") => "~".to_owned(),
       Some(rest) if rest.starts_with('/') => format!("~{rest}"),
       Some(rest) if rest.starts_with('\\') => format!("~{}", rest.replace('\\', "/")),
-      _ => shown,
+      _ => folder.to_owned(),
     }
   }
 
