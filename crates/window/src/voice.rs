@@ -188,11 +188,13 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   if CARRIED.is_empty() {
     return Ok(None);
   }
-  // A digest of its bytes names the build of the program, so a new build writes a new file, though
-  // two builds can take one size, in a folder of its own under the one name `listen`.
-  let build = folder.join(format!("speech-{:016x}", digest(CARRIED)));
+  // The program stands at one path for each build: the system keeps the model that it compiled for
+  // the Neural Engine by that path, and a new path compiled it again for minutes. A build whose
+  // bytes differ takes the place of the one before, under a name of its process and by a rename, so
+  // a program that runs keeps its file and two windows never collide.
+  let build = folder.join("speech");
   let path = build.join("listen");
-  if !path.is_file() {
+  if fs::read(&path).ok().as_deref() != Some(CARRIED) {
     fs::create_dir_all(&build)?;
     let written = build.join(format!("listen.{}.part", process::id()));
     fs::write(&written, CARRIED)?;
@@ -204,13 +206,6 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
     fs::rename(&written, &path)?;
   }
   Ok(Some(path))
-}
-
-/// The FNV-1a digest of some bytes, the same in each build.
-fn digest(bytes: &[u8]) -> u64 {
-  bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
-    (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
-  })
 }
 
 /// The program started on a runtime, on the folder of its models, the language that he speaks and

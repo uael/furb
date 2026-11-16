@@ -2,7 +2,7 @@
 // Engine of this Mac, with no network once its model stands, for the window of furb. The window
 // starts it with its first frame and gives it the folder of its models. A first start downloads
 // the model there, as {"loading":"download","done":42}, then prepares it for this Mac, as
-// {"loading":"prepare"}, which takes seconds; then it readies the
+// {"loading":"prepare"}, which takes minutes once and seconds after; then it readies the
 // microphone with no sound in and says {"ready":true}. Each line "start" on its input opens the
 // microphone and starts a record, and each line "stop" ends it. During a record it writes one line
 // of JSON for each change: the level of the microphone from 0 to 100, as {"level":12}, and the whole
@@ -54,14 +54,11 @@ func serve() async throws {
   }
   let folder = try await model(in: URL(fileURLWithPath: CommandLine.arguments[1]))
   told(["loading": "prepare"])
-  // The GPU runs each part of the model: the Neural Engine compiles the model again for each new
-  // path of this program, in the compiler service of the system, which took minutes, and in which
-  // a load waited for over an hour, while the GPU loads it in seconds.
-  let compute = ModelComputeOptions(
-    melCompute: .cpuAndGPU, audioEncoderCompute: .cpuAndGPU, textDecoderCompute: .cpuAndGPU)
+  // The Neural Engine reads a sentence in under a second, two to ten times faster than the GPU. It
+  // compiles the model once for the path of this program, which the window keeps for each build.
   let config = WhisperKitConfig(
-    modelFolder: folder.path, computeOptions: compute, verbose: false, logLevel: .none,
-    prewarm: true, load: true, download: false)
+    modelFolder: folder.path, verbose: false, logLevel: .none, prewarm: true, load: true,
+    download: false)
   let kit = try await WhisperKit(config)
   let microphone = try Microphone()
   told(["ready": true])
