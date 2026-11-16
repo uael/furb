@@ -4025,7 +4025,7 @@
         },
         "title": {
           "type": "string",
-          "description": "The name of the thread: the label of its chain for the first thread that no operator made on\na chain under the root, the name of the session for the first thread of the operator on the\nroot, and else the first line of its message that is not empty."
+          "description": "The name of the thread: the label of its chain for the first thread that no operator made on\na chain under the root, the name of the session for the first thread of the operator on the\nroot, and else the first line of its message that is not empty, with each image that it names\nas its name after [`PICTURE`]."
         },
         "messages": {
           "type": "array",

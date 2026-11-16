@@ -1449,7 +1449,8 @@ export interface ChainThread {
   /**
    * The name of the thread: the label of its chain for the first thread that no operator made on
    * a chain under the root, the name of the session for the first thread of the operator on the
-   * root, and else the first line of its message that is not empty.
+   * root, and else the first line of its message that is not empty, with each image that it names
+   * as its name after [`PICTURE`].
    */
   title: string;
   messages: string[];
