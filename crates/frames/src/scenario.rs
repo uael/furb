@@ -899,7 +899,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("a", &[Act::Key("C-x"), Act::Key(",")], "Settings"),
         // Enter flips a boolean in the local config of the project, as the key `skills` takes it,
         // and the list reads it again.
-        step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  local"),
+        step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "[x] on    local"),
         // The kit that the change turned on lists its keys, each with what it does.
         step(
           "c",
@@ -908,7 +908,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         ),
         // A key of text takes the value that he writes, in the layer of its scope.
         step("d", &[Act::Type(".actor"), Act::Key("Enter")], "a string"),
-        step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"  user"),
+        step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"     user"),
         // The arrows show the group of the keys of furb, which a tab names beside each kit.
         step("x-group", &[Act::Key("Left")], "max_thinking_tokens"),
         // A value that the property of its key does not take is refused, with what it takes.
