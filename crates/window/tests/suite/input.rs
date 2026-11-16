@@ -189,8 +189,9 @@ fn ctrl_r_searches_what_he_sent_here_from_what_he_wrote_and_writes_the_text_that
   // The search starts from what he wrote, and lists only what matches it, its letters lit.
   app.paste("mvd");
   app.press("ctrl+r");
-  let frame = shows(&app, "History");
-  assert!(frame.contains("say what moved") && frame.contains("1 / 1"), "{frame}");
+  // The list opens at once, and the daemon gives what he sent here after it.
+  let frame = shows(&app, "1 / 1");
+  assert!(frame.contains("History") && frame.contains("say what moved"), "{frame}");
   // The history rises from the input, so its row of the text stands under the same text in the
   // feed.
   let text = app.text();
