@@ -30,13 +30,14 @@ impl Model {
   /// its own, and a blank row under the last, so no view touches the input; none while no view
   /// shows.
   pub(crate) fn kit_rows(&self) -> Vec<Row> {
-    // A view stands at the left edge, as the bands of the threads and the input do.
-    let room = self.wide().saturating_sub(2);
+    // A view stands in the margins of the feed, from the column of the bars of the messages and
+    // of the input to the edge of their boxes.
+    let room = self.wide().saturating_sub(2 * MARGIN);
     let mut rows = Vec::new();
     for view in self.client.shown_views() {
       let Some(tree) = &view.tree else { continue };
       rows.push(Row::default());
-      rows.extend(self.node_rows(&view, tree, room));
+      rows.extend(self.node_rows(&view, tree, room).into_iter().map(inset));
     }
     // While the keys reach a control, the row under the views says which keys move and use it,
     // in the column of the text of the views.
@@ -137,7 +138,9 @@ impl Model {
     let pad = wide.saturating_sub(text.width());
     let line = vec![run(format!("{text}{}", " ".repeat(pad)), style)];
     let press = Click::Press { viewer: view.viewer.clone(), node: node.id.clone() };
-    if inert { Row::of(line) } else { Row::clicked(line, press) }
+    // The label takes the click, and not the row that a column pads it to.
+    let hot = (!inert).then(|| (0..text.width(), Some(press)));
+    Row { hot: hot.into_iter().collect(), ..Row::of(line) }
   }
 
   /// The row of an input of a view: its value, or its hint while it holds none, then what Enter
@@ -324,4 +327,15 @@ impl Row {
     self.loaders.extend(next.loaders);
     self
   }
+}
+
+/// The columns of each margin of the feed, left and right of its boxes.
+const MARGIN: usize = 2;
+
+/// A row of a view moved into the left margin of the feed, with the columns that take a click.
+fn inset(row: Row) -> Row {
+  let mut line = vec![run(" ".repeat(MARGIN), Style::new())];
+  line.extend(row.line);
+  let hot = row.hot.into_iter().map(|(at, click)| (at.start + MARGIN..at.end + MARGIN, click));
+  Row { line, hot: hot.collect(), ..row }
 }

@@ -10,6 +10,7 @@ use furb_window::open;
 use crate::{
   cards::{app, options, row, shows},
   daemon::{ANSWERS, DRAWS, Daemon, PATIENCE},
+  input::told,
   thread::clicked,
 };
 
@@ -142,4 +143,57 @@ fn the_keys_reach_each_control_of_a_view_as_a_click_does() {
   peer
     .ask(run("prompt(str, drawn('pressed ' + json.loads(peek(v))['node']), to=OPERATOR, on=side)"));
   shows(&app, "pressed clear");
+}
+
+/// The word that draws a view of a list with the button of its task and an input, as `v`.
+const LISTED: &str = r#"import json
+side = chain('views')
+said = {"id": "said", "node": "text", "runs": [{"text": "buy milk"}]}
+task = {"id": "task0", "node": "button", "label": "milk"}
+add = {"id": "add", "node": "input", "value": "", "hint": "a task"}
+tree = {"id": "todo", "node": "box", "axis": "column", "gap": 0, "border": True, "children": [said, task, add]}
+v = prompt(str, json.dumps({"view": 1, "slot": "footer", "tree": tree}), to=OPERATOR, on=side)"#;
+
+#[test]
+fn a_message_of_the_main_input_goes_to_its_thread_and_never_to_a_view_in_the_footer() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("listed.jsonl"), true);
+  peer.said(&life, "keep my list");
+  peer.ask(Verb::Run { life: life.clone(), word: LISTED.to_owned(), on: None });
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "keep my list"));
+  shows(&app, "buy milk");
+  // Two messages of the main input reach the thread, and the view, which takes the keys only on
+  // purpose, stands unanswered.
+  for said in ["what is left", "and after that"] {
+    app.type_text(said);
+    app.press("enter");
+    let reached =
+      app.wait_until(PATIENCE, || told(&daemon, &sessions).iter().any(|one| one == said));
+    assert!(
+      reached,
+      "{said:?} never reached the thread: {:?}\n{}",
+      told(&daemon, &sessions),
+      app.text()
+    );
+  }
+  // With the keys on the controls of the view, his words and his Enter still go to the thread.
+  app.press("ctrl+x");
+  app.press("v");
+  shows(&app, "back to the input");
+  app.type_text("one more");
+  app.press("enter");
+  let reached =
+    app.wait_until(PATIENCE, || told(&daemon, &sessions).iter().any(|one| one == "one more"));
+  assert!(reached, "{:?}\n{}", told(&daemon, &sessions), app.text());
+  // A click on the input of the view while he writes keeps his draft in the input.
+  app.type_text("my draft");
+  clicked(&app, "a task", 0, 0);
+  shows(&app, "Send or clear your message first");
+  assert!(app.text().contains("┃ my draft"), "{}", app.text());
+  assert!(app.text().contains("buy milk"), "{}", app.text());
 }

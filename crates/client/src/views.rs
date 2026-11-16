@@ -199,8 +199,13 @@ impl Client {
   }
 
   /// The input of the client turned to fill an input node of a view, from the value that it holds
-  /// now; or back to the target, with none.
+  /// now; or back to the target, with none. A draft of his stays his: the input turns to a view
+  /// only while it is empty, and else says so.
   pub fn fill(&mut self, filled: Option<Filled>, value: String) {
+    if filled.is_some() && !self.draft.text.trim().is_empty() {
+      self.notice = Some("Send or clear your message first: then the input fills the view.".into());
+      return;
+    }
     if filled.is_some() {
       self.restore = Some(value);
     }

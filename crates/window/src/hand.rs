@@ -982,7 +982,7 @@ fn keyed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   // A letter after the leader is a key of the window, and no letter of a text.
   let typed =
     !led && key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
-  if answered(app, window, does, typed) || reached(app, window, does) {
+  if answered(app, window, does, typed) || reached(app, window, does, typed) {
     return true;
   }
   match does {
@@ -1276,17 +1276,26 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
 }
 
 /// A key while the keys reach a control of the views: the arrows move among the controls, Enter
-/// uses the one that they reach, and Escape gives the keys back to the input. Whether it took
-/// the key.
-fn reached(app: &App, window: &Shared, does: Option<Does>) -> bool {
-  if window.borrow().screen.model.client.aimed.is_none() {
+/// on an empty input uses the one that they reach, and Escape gives the keys back to the input.
+/// A letter that he types, or Enter on his text, gives the keys back to the input too, which then
+/// takes it: a view never takes his words or his Enter. Whether it took the key.
+fn reached(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool {
+  let (aims, empty) = {
+    let held = window.borrow();
+    (held.screen.model.client.aimed.is_some(), held.area.text().trim().is_empty())
+  };
+  if !aims {
     return false;
   }
   let change: fn(&mut Model) = match does {
     Some(Does::Up) => |model| model.client.step_control(-1),
     Some(Does::Down) => |model| model.client.step_control(1),
-    Some(Does::Send) => |model| model.client.use_control(),
+    Some(Does::Send) if empty => |model| model.client.use_control(),
     Some(Does::Close) => |model| model.client.aimed = None,
+    _ if typed || does == Some(Does::Send) => {
+      tell(app, window, |model| model.client.aimed = None);
+      return false;
+    }
     _ => return false,
   };
   tell(app, window, change);

@@ -22,9 +22,9 @@ assertion_line: 34
   See the trace.
 
 
-│ • buy milk
-│ • walk the dog
-│ ▎a task ⏎ send    Clear
+  │ • buy milk
+  │ • walk the dog
+  │ ▎a task ⏎ send    Clear
 
   ┃
   ┃ A reply opens this thread again
