@@ -87,6 +87,9 @@ pub struct Options {
   pub system: System,
   /// The opener of an address of a link in the browser of the client.
   pub browse: fn(&str) -> io::Result<()>,
+  /// The editor of the operator, which writes the file of the input and ends: the program that
+  /// `VISUAL` or else `EDITOR` names, with its words, else `vi`, or `notepad` on Windows.
+  pub edit: fn(&Path) -> io::Result<()>,
   /// The program of the window, which it watches: once a build replaces it, the window writes where
   /// it stands beside its cards and ends, and the new program starts in its place. None watches
   /// nothing.
@@ -121,6 +124,7 @@ impl Options {
     // The home holds no link either, so a path of the folder shows its home as `~`.
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
     let browse = world::browse;
+    let edit = edited;
     let still = still().is_some();
     let program = env::current_exe().ok();
     let reloaded = env::var_os(RELOADED).is_some();
@@ -135,11 +139,27 @@ impl Options {
       still,
       system,
       browse,
+      edit,
       program,
       reloaded,
       tailnet,
       listen,
     })
+  }
+}
+
+/// The file of the input written in the editor of the operator, as [`Options::edit`] names it.
+fn edited(file: &Path) -> io::Result<()> {
+  let named = |key: &str| env::var(key).ok().filter(|one| !one.trim().is_empty());
+  let fallback = if cfg!(windows) { "notepad" } else { "vi" };
+  let editor = named("VISUAL").or_else(|| named("EDITOR")).unwrap_or_else(|| fallback.to_owned());
+  let mut words = editor.split_whitespace();
+  let program = words.next().unwrap_or(fallback);
+  let status = Command::new(program).args(words).arg(file).status()?;
+  if status.success() {
+    Ok(())
+  } else {
+    Err(io::Error::other(format!("{editor} ended with {status}")))
   }
 }
 

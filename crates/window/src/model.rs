@@ -8,7 +8,14 @@
 
 #[cfg(test)]
 use std::cell::Cell;
-use std::{cell::RefCell, collections::HashMap, io, path::PathBuf, rc::Rc, time::Duration};
+use std::{
+  cell::RefCell,
+  collections::HashMap,
+  io,
+  path::{Path, PathBuf},
+  rc::Rc,
+  time::Duration,
+};
 
 use furb::view::{Part, age, homed, since};
 use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
@@ -67,6 +74,8 @@ pub(crate) struct Model {
   pub(crate) speaks: CapabilityFlags,
   /// The opener of an address in the browser of the client.
   pub(crate) browse: fn(&str) -> io::Result<()>,
+  /// The editor of the operator, which writes a file and ends.
+  pub(crate) edit: fn(&Path) -> io::Result<()>,
   /// How long a form takes no key after it shows: [`HOLD`], which keeps a hand from answering what
   /// it did not read, and none while the clocks stand still, as in a capture, where a script
   /// presses each key and the clock that the hold reads never moves.
@@ -138,6 +147,7 @@ impl Model {
       system: options.system,
       speaks: CapabilityFlags::default(),
       browse: options.browse,
+      edit: options.edit,
       hold: if options.still { Duration::ZERO } else { HOLD },
       settles: if options.still { Duration::ZERO } else { ENDS },
       tokens,

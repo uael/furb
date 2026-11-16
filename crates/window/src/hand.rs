@@ -3,9 +3,10 @@
 
 use std::{
   cell::{Cell, RefCell},
-  fs, mem,
+  env, fs, mem,
   ops::Range,
   path::{Path, PathBuf},
+  process,
   rc::Rc,
   sync::Arc,
   time::{Duration, Instant},
@@ -757,6 +758,47 @@ fn copied(app: &App, window: &Shared) {
   tell(app, window, |model| model.client.notice = Some(notice.to_owned()));
 }
 
+/// The messages of the open thread that the window holds, as Markdown on the clipboard, and a
+/// notice that says whether they went.
+fn exported(app: &App, window: &Shared) {
+  let thread = window.borrow().screen.model.exported();
+  let notice = match thread {
+    None => "No thread is open to copy.".to_owned(),
+    Some((text, count)) if app.copy_to_clipboard(&text) => {
+      format!("Copied the {count} messages of the thread as Markdown.")
+    }
+    Some(_) => TAKES_NO_COPY.to_owned(),
+  };
+  tell(app, window, |model| model.client.notice = Some(notice));
+}
+
+/// The input written in the editor of the operator, which takes the terminal until it ends, then
+/// gives the input the text that it saved. An editor that fails leaves the input as it was.
+fn written_aside(app: &App, window: &Shared) {
+  let (text, edit) = {
+    let held = window.borrow();
+    (held.screen.model.client.draft.text.clone(), held.screen.model.edit)
+  };
+  let file = env::temp_dir().join(format!("furb-input-{}.md", process::id()));
+  if let Err(no) = fs::write(&file, &text) {
+    let why = format!("The input cannot go to your editor: {no}");
+    return tell(app, window, |model| model.client.notice = Some(why));
+  }
+  let on = Rc::clone(window);
+  app.release_terminal(move |cx| {
+    let written = edit(&file).and_then(|()| fs::read_to_string(&file));
+    fs::remove_file(&file).ok();
+    tell(cx.app(), &on, |model| match written {
+      Ok(text) => {
+        let text = text.trim_end_matches('\n').to_owned();
+        model.client.restore = Some(text.clone());
+        model.client.draft.text = text;
+      }
+      Err(no) => model.client.notice = Some(format!("Your editor gave no text: {no}")),
+    });
+  });
+}
+
 /// The image of the clipboard put in the input, else its text, as a paste puts it. A clipboard
 /// with neither says so.
 fn clipboard(app: &App, window: &Shared) {
@@ -1360,6 +1402,8 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Stash => stashed(app, window, does),
     Does::Picture => clipboard(app, window),
     Does::Copy => copied(app, window),
+    Does::Export => exported(app, window),
+    Does::Editor => written_aside(app, window),
     Does::Empty => controlled(app, window, |model| {
       model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
     }),
@@ -1392,6 +1436,8 @@ fn change_of(does: Does) -> Option<fn(&mut Model)> {
     Does::Aside => |model| model.client.drafted(ASIDE.trim_end()),
     Does::Cd => |model| model.client.drafted(CD),
     Does::Rename => |model| model.client.rename_draft(),
+    Does::Login => Model::login,
+    Does::Status => Model::status,
     Does::Running => Model::act_on_open,
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
@@ -1804,13 +1850,17 @@ fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, Line
           });
         }
       }
+      // The progress of the voice takes the place of a notice of its own alone, so it never wipes
+      // what a command or a key said to the operator.
       Ok(Said::Loading { loading, done }) => tell(cx.app(), &on, |model| {
-        model.client.notice = Some(match loading {
-          Stage::Download => format!("{VOICE}downloads its model, once: {}%", done.unwrap_or(0)),
-          Stage::Prepare => {
-            format!("{VOICE}prepares its model, which takes minutes the first time.")
-          }
-        });
+        if model.client.notice.as_deref().is_none_or(|one| one.starts_with(VOICE)) {
+          model.client.notice = Some(match loading {
+            Stage::Download => format!("{VOICE}downloads its model, once: {}%", done.unwrap_or(0)),
+            Stage::Prepare => {
+              format!("{VOICE}prepares its model, which takes minutes the first time.")
+            }
+          });
+        }
       }),
       Ok(Said::Level { level }) => tell(cx.app(), &on, |model| {
         if let Some(levels) = model.listening.as_mut() {

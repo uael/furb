@@ -129,6 +129,42 @@ impl Model {
     }
   }
 
+  /// What the input runs on, as a notice: the machine, the project, the model with its effort, the
+  /// share of the window of the open thread, and the version of furb.
+  pub(crate) fn status(&mut self) {
+    let at = self.client.target().machine();
+    let machine = self.client.machines.get(at).map(|one| one.name.clone());
+    let actor = self.maker().map(|(model, effort)| match effort {
+      Some(effort) => format!("{model} at {effort}"),
+      None => model,
+    });
+    let build = Some(format!("furb {}", env!("CARGO_PKG_VERSION")));
+    let parts = [machine, Some(self.project()), actor, self.ring(), build];
+    self.client.notice = Some(parts.into_iter().flatten().collect::<Vec<_>>().join(" · "));
+  }
+
+  /// The messages of the open thread that the window holds, as Markdown, and how many they are:
+  /// each message under who said it, the code that answered it, and what the answer said.
+  pub(crate) fn exported(&self) -> Option<(String, usize)> {
+    let thread = &self.client.thread.as_ref()?.thread;
+    let mut parts: Vec<String> = Vec::new();
+    for one in thread.exchanges.values() {
+      parts.push(match &one.by {
+        Maker::Operator | Maker::Member { .. } => "## You".to_owned(),
+        Maker::Model { model, .. } => format!("## {model}"),
+        Maker::Skill => "## A skill".to_owned(),
+        Maker::Engine => "## furb".to_owned(),
+      });
+      parts.extend((!one.text.trim().is_empty()).then(|| one.text.trim_end().to_owned()));
+      let code: Vec<&str> =
+        one.block.iter().flat_map(|block| &block.lines).map(|line| line.text.as_str()).collect();
+      parts.extend((!code.is_empty()).then(|| format!("```python\n{}\n```", code.join("\n"))));
+      let said = one.said.iter().filter(|said| !said.text.trim().is_empty());
+      parts.extend(said.map(|said| said.text.trim_end().to_owned()));
+    }
+    (!parts.is_empty()).then(|| (parts.join("\n\n") + "\n", thread.exchanges.len()))
+  }
+
   /// The reload of the session of the open thread: the word `await reload()` on the root of its
   /// life, which loads its skills again, reads its servers of MCP again and moves furb to its
   /// newest build, as a model that runs the word does.

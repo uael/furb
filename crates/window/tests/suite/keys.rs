@@ -4,9 +4,9 @@
 
 #![cfg(test)]
 
-use std::fs;
+use std::{fs, path::Path};
 
-use furb_window::open;
+use furb_window::{Options, open};
 use opentui::testing::TestApp;
 
 use crate::{
@@ -48,6 +48,61 @@ fn f5_runs_the_reload_on_the_root_of_the_session_of_the_open_thread() {
   let record = daemon.file("furb").join(".furb").join("sessions").join("keys.jsonl");
   let ran = || fs::read_to_string(&record).is_ok_and(|text| text.contains("await reload()"));
   assert!(app.wait_until(PATIENCE, ran), "{}", app.text());
+}
+
+/// A command that Go to finds by what it does, run with Enter.
+fn ran(app: &TestApp, says: &str) {
+  app.press("ctrl+p");
+  shows(app, "Search a thread");
+  app.type_text(says);
+  shows(app, &capitalized(says));
+  app.press("enter");
+}
+
+/// A text with its first letter in capitals, as a row of Go to writes what a command does.
+fn capitalized(text: &str) -> String {
+  let mut letters = text.chars();
+  letters.next().map(|one| one.to_uppercase().chain(letters).collect()).unwrap_or_default()
+}
+
+#[test]
+fn the_command_status_says_the_machine_the_project_the_model_and_the_build() {
+  let (app, _daemon) = opened();
+  ran(&app, "what the input runs on");
+  // The notice starts on the row under the input, which cuts what its width does not hold.
+  shows(&app, "mac · furb-try · opus at high · furb ");
+}
+
+#[test]
+fn the_command_login_opens_the_sign_in_of_codex() {
+  let (app, _daemon) = opened();
+  ran(&app, "sign in to the models of Codex");
+  shows(&app, "Sign in with ChatGPT");
+}
+
+#[test]
+fn alt_e_writes_the_input_in_the_editor_of_the_operator_and_takes_back_what_it_saved() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.project("furb");
+  daemon.served();
+  let edit = |file: &Path| fs::write(file, format!("{} and more\n", fs::read_to_string(file)?));
+  let options = Options { edit, ..options(&daemon.file("cards.json")) };
+  open(&app, vec![daemon.machine("mac")], options);
+  shows(&app, "opus  high");
+  app.type_text("a draft");
+  app.feed(b"\x1be");
+  shows(&app, "a draft and more");
+}
+
+#[test]
+fn the_command_export_copies_the_thread_and_with_no_thread_says_so() {
+  let (app, _daemon) = opened();
+  ran(&app, "copy the whole thread as Markdown");
+  shows(&app, "No thread is open to copy.");
+  let (app, _daemon) = threaded();
+  ran(&app, "copy the whole thread as Markdown");
+  shows(&app, "This terminal takes no copy.");
 }
 
 /// A window on the thread of a session that answered, open.

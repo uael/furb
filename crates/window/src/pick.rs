@@ -879,6 +879,11 @@ impl Model {
   /// The part open again on the rows of the sign-in of Codex, which change as it goes, so no
   /// filter hides them, with its first row chosen: the page of the sign-in once the machine gives
   /// it, and never its cancel, which an enter would take.
+  /// The models, at the sign-in of Codex, as the command login opens them.
+  pub(crate) fn login(&mut self) {
+    self.sign_in_shown(Pick::Models);
+  }
+
   fn sign_in_shown(&mut self, of: Pick) {
     self.picker =
       Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });

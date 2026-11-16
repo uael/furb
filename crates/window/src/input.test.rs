@@ -19,6 +19,7 @@ fn running() -> Model {
     still: true,
     system: System::MacOs,
     browse: |_| Ok(()),
+    edit: |_| Ok(()),
     program: None,
     reloaded: false,
     tailnet: None,
