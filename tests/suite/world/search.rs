@@ -1,8 +1,9 @@
 //! The native search of a model of the network: a search of an actor asks the API of its provider
 //! at the address that the config of the project names, and answers with the text of the response
 //! and the sources that it cites. Each test runs again as a child of itself, whose credentials
-//! offer each provider. Gemini and the free search ask an address that no config names, so their
-//! answers stand beside the module, in `src/world/provider/search.test.rs`.
+//! offer each provider, and whose model stands in the snapshot with its native search, so no test
+//! falls back to the free search on the network. The free search asks an address that no config
+//! names, so its answers stand beside the module, in `src/world/provider/search.test.rs`.
 
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
@@ -19,7 +20,11 @@ use crate::{
   child::{child, here},
   drive::park,
 };
-use furb::{Text, life::Opening};
+use furb::{
+  Text,
+  life::Opening,
+  world::{Catalog, Provider},
+};
 
 /// A response of a provider of the network with this body of JSON.
 fn ok(body: &Value) -> String {
@@ -66,12 +71,15 @@ fn searches(at: &Path) {
     serde_json::from_str(&fs::read_to_string(at.join("asks.json")).expect("the actors"))
       .expect("the actors are JSON");
   let actors = given["actors"].as_array().into_iter().flatten().filter_map(Value::as_str);
-  let mut said = Vec::new();
+  let (catalog, mut said) = (Catalog::load(None), Vec::new());
   for (actor, port) in actors.zip(given["ports"].as_array().into_iter().flatten()) {
     let provider = actor.split(':').next().unwrap_or_default();
     let url = json!({"url": format!("http://127.0.0.1:{port}/v1")});
     let config = json!({"providers": {provider: url}}).to_string();
     fs::write(at.join(".furb/config.local.json"), config).expect("the local config");
+    let model = catalog.find(actor).unwrap_or_else(|| panic!("{actor} stands in the catalog"));
+    let native = Provider::new(String::new(), vec![model]).search()(actor);
+    assert!(native.is_some(), "{actor} has a native search");
     let opening = Opening { actor: Some(actor.to_owned()), ..opened(at) };
     let mut engine = opening.boot::<String>([]).expect("the life opens").0;
     let word = format!("close(await act('search', '', None, 'rust', '{actor}'))");
@@ -167,4 +175,20 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
   );
   assert_eq!(said[1], "No result.");
   assert_eq!(asked[0], json!({"query": "rust", "count": 10, "need_content": false}));
+}
+
+#[test]
+fn gemini_answers_with_the_text_of_its_first_candidate_and_the_pages_that_grounded_it() {
+  if let Some(at) = child() {
+    return searches(&at);
+  }
+  let got = json!({"candidates": [{
+    "content": {"parts": [{"text": "Rust "}, {"text": "is fast."}]},
+    "groundingMetadata": {"groundingChunks": [{"web": {"uri": "https://g", "title": "g.dev"}}]},
+  }]});
+  let rows = [("google:gemini-flash", got), ("google:gemini-flash", json!({"candidates": []}))];
+  let (said, asked) = searched(here!(), &rows, &["GEMINI_API_KEY"]);
+  assert_eq!(said[0], "Rust is fast.\n\nSources:\n- [g.dev](https://g)");
+  assert!(said[1].contains("the search answered with no text"), "{}", said[1]);
+  assert_eq!(asked[0]["tools"], json!([{"google_search": {}}]));
 }

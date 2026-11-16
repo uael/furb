@@ -179,7 +179,8 @@ pub(super) fn native(client: Client, reach: &Reach) -> Option<Searches> {
 }
 
 /// The API of a native search: the Messages API of Anthropic, the Responses API at its default address, the
-/// generation of Gemini grounded in Google Search, and the search API of `DeepSeek`.
+/// generation of Gemini grounded in Google Search, and the search API of `DeepSeek`, each at the address that the
+/// client of the model asks.
 #[derive(Clone, Copy)]
 enum Native {
   Anthropic,
@@ -219,10 +220,9 @@ impl Native {
         posted(&url, &[("authorization", &bearer)], &body).await?
       }
       Self::Gemini => {
-        let url = format!(
-          "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
-          reach.id
-        );
+        let api = api("https://generativelanguage.googleapis.com");
+        let url =
+          format!("{}/v1beta/models/{}:generateContent", api.trim_end_matches('/'), reach.id);
         let body = json!({
           "systemInstruction": {"parts": [{"text": BRIEF}]},
           "contents": [{"role": "user", "parts": [{"text": query}]}],

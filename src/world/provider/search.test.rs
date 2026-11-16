@@ -1,20 +1,9 @@
-//! The native searches whose address no config names, so no door reaches them: the generation of
-//! Gemini grounded in Google Search, and the free search. The suite proves the other APIs and the
-//! claude command line through a search of a life.
+//! The free search, whose address no config names, so no door reaches it. The suite proves each
+//! native search and the search of the claude command line through a search of a life.
 
 use serde_json::json;
 
-use super::{found, gemini};
-
-#[test]
-fn gemini_answers_with_the_text_of_its_first_candidate_and_the_pages_that_grounded_it() {
-  let got = json!({"candidates": [{
-    "content": {"parts": [{"text": "Rust "}, {"text": "is fast."}]},
-    "groundingMetadata": {"groundingChunks": [{"web": {"uri": "https://g", "title": "g.dev"}}]},
-  }]});
-  assert_eq!(gemini(&got).unwrap(), "Rust is fast.\n\nSources:\n- [g.dev](https://g)");
-  assert_eq!(gemini(&json!({"candidates": []})), None);
-}
+use super::found;
 
 #[test]
 fn the_free_search_answers_each_result_under_its_title_and_its_address_with_its_excerpts_cut() {
