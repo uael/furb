@@ -10,7 +10,7 @@ use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, RENAME, Target, Where};
+use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Target, Where};
 
 use crate::{
   keys::Does,
@@ -362,7 +362,13 @@ impl Model {
     if let Some(thread) = sub
       && on.is_some_and(|key| key.0 == sent.at && key.1 == sent.life && key.2 == *thread)
     {
-      return self.open_agent(act);
+      // The sub thread shows the message that made it until its page comes, as a new thread does.
+      self.open_agent(act.clone());
+      if let Some(opened) = self.client.thread.as_mut() {
+        opened.thread.pending.push(Pending { act: Some(act), text: sent.text });
+        opened.thread.started = true;
+      }
+      return;
     }
     let thread = sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
     for next in self.client.outgoing.iter_mut().filter(|one| one.life == sent.life) {
@@ -786,7 +792,11 @@ impl Model {
     let card = card.or_else(|| opened.sub().map(|one| &one.card));
     let card = card.or_else(|| opened.agent()).map(|card| card.title.clone());
     let first = || opened.thread.exchanges.get(&0).map(|one| one.text.clone());
-    let pending = || opened.thread.pending.first().map(|one| one.text.clone());
+    // A message about a line is titled by what it says of the line, as the daemon titles its card.
+    let pending = || {
+      let text = &opened.thread.pending.first()?.text;
+      Some(Anchor::of(text).map_or(text.as_str(), |(_, said)| said).to_owned())
+    };
     let title = card.or_else(first).or_else(pending)?;
     title.lines().find(|line| !line.trim().is_empty()).map(str::to_owned)
   }
