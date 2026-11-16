@@ -10,6 +10,7 @@ mod config;
 mod disk;
 mod images;
 mod kits;
+mod local;
 mod offered;
 mod operator;
 mod provider;

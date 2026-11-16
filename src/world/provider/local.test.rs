@@ -1,5 +1,6 @@
-//! The local server of the catalog, asked on servers of the tests on ports of this machine, so no test asks a real
-//! one.
+//! The times of the local server of the catalog, on servers of the tests on ports of this machine: the delay
+//! before it is asked again and the deadline of its list, which a door would wait whole, 30 s and 5 s each time,
+//! so these tests shorten them. The suite of the world proves the rest through the catalog of a child.
 
 #![expect(
   clippy::let_underscore_must_use,
@@ -22,7 +23,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Heard, Server, names};
+use super::{Heard, Server};
 
 /// A local server on a port of this machine, which answers each request with the JSON that a function of the request
 /// gives, and with a 404 when it gives none; and its address, and each request it reads, as it reads it.
@@ -119,197 +120,6 @@ fn offered(heard: &Heard) -> Vec<(String, u64, bool, Option<u64>)> {
 /// The answer of a server of the tests to the request of a path, by the first line of the request.
 fn at(request: &str, path: &str) -> bool {
   request.lines().next().unwrap_or_default().split(' ').nth(1) == Some(path)
-}
-
-#[test]
-fn the_environment_names_the_address_of_the_server_its_key_and_the_window_and_the_tokens_of_its_models()
- {
-  let named = |pairs: &[(&str, &str)]| {
-    let pairs: Vec<(String, String)> =
-      pairs.iter().map(|(name, value)| ((*name).into(), (*value).into())).collect();
-    Server::named(move |name| {
-      pairs.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
-    })
-  };
-  assert!(named(&[]).is_none());
-  assert!(named(&[("FURB_LOCAL_URL", " ")]).is_none(), "an empty address names no server");
-  let server =
-    named(&[("FURB_LOCAL_URL", "https://user:secret@host:8080/v1")]).expect("the server");
-  assert_eq!(server.root, "https://host:8080", "the address loses its user and its password");
-  let roots = [
-    ("user:secret@host:8080", "http://host:8080"),
-    ("http://host:1/path@at/v1", "http://host:1/path@at"),
-  ];
-  let named_as =
-    [("local:qwen/high", true), ("qwen/high", true), ("local:qwen/x", false), ("local:qwen", true)];
-  assert_eq!(
-    named_as.map(|(name, _)| names(name, "qwen")),
-    named_as.map(|(_, holds)| holds),
-    "a slash names a level"
-  );
-  assert!(names("local:Qwen/Qwen3-8B", "Qwen/Qwen3-8B") && !names("local:Qwen/Qwen3-8B", "Qwen"));
-  for (address, root) in roots {
-    assert_eq!(named(&[("FURB_LOCAL_URL", address)]).expect("the server").root, root);
-  }
-  let server = named(&[
-    ("FURB_LOCAL_URL", "http://host:8080/v1/"),
-    ("FURB_LOCAL_KEY", "k"),
-    ("FURB_LOCAL_WINDOW", "4096"),
-    ("FURB_LOCAL_TOKENS", "0"),
-  ])
-  .expect("the server");
-  assert_eq!(
-    (server.root.as_str(), server.key.as_str(), server.window, server.tokens),
-    ("http://host:8080", "k", Some(4096), None),
-    "the address loses its /v1, and a count of zero says nothing"
-  );
-}
-
-#[test]
-fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_images_that_it_gives()
- {
-  let list = json!({"object": "list", "data": [
-    {"id": "qwen", "meta": {"n_ctx": 262_144}, "architecture": {"input_modalities": ["text", "image"],
-      "output_modalities": ["text"]}},
-    {"id": "llama", "max_model_len": 32768},
-    {"id": "odd", "meta": null, "architecture": null, "max_model_len": 8192},
-    {"id": 5},
-    {"id": "embed", "meta": {"n_ctx": 512}, "architecture": {"input_modalities": ["text"],
-      "output_modalities": ["embeddings"]}},
-  ]});
-  let (address, told) = fake(move |request| at(request, "/v1/models").then(|| list.clone()));
-  let heard =
-    on(&address, &[("FURB_LOCAL_KEY", "k"), ("FURB_LOCAL_TOKENS", "1000")]).heard_now(None);
-  assert_eq!(
-    offered(&heard),
-    [
-      ("local:qwen".to_owned(), 262_144, true, Some(1000)),
-      ("local:llama".to_owned(), 32_768, false, Some(1000)),
-      ("local:odd".to_owned(), 8192, false, Some(1000)),
-    ],
-    "an entry of another shape hides no other, and a model that writes no text is not offered"
-  );
-  assert_eq!(
-    heard.why("local:embed"),
-    Some("the local server says that it is not a model for chat")
-  );
-  let each =
-    heard.models.iter().map(|one| (one.efforts().len(), one.priced(), one.at(Some("high"))));
-  assert_eq!(
-    each.collect::<Vec<_>>(),
-    ["local:qwen", "local:llama", "local:odd"].map(|name| (
-      4,
-      Some([0.0; 4]),
-      format!("{name}/high")
-    )),
-    "a model of a local server takes the efforts off, low, medium and high, and costs nothing"
-  );
-  let requests: Vec<String> = told.try_iter().collect();
-  assert_eq!(
-    requests.len(),
-    1,
-    "a server that gives each window is asked nothing more: {requests:?}"
-  );
-  assert!(requests[0].starts_with("GET /v1/models "), "{requests:?}");
-  assert!(requests[0].to_ascii_lowercase().contains("authorization: bearer k"), "{requests:?}");
-}
-
-#[test]
-fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
-  let (address, _) = fake(|request| {
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "one"}]}))
-    } else {
-      at(request, "/props").then(|| json!({"default_generation_settings": {"n_ctx": 16384}}))
-    }
-  });
-  let quarter = ("local:one".to_owned(), 16_384, false, Some(4096));
-  assert_eq!(
-    offered(&on(&address, &[]).heard_now(None)),
-    [quarter],
-    "llama.cpp gives it at /props"
-  );
-  let (address, _) = fake(|request| {
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}))
-    } else {
-      at(request, "/api/v0/models").then(|| {
-        json!({"data": [{"id": "a", "type": "llm", "loaded_context_length": 8192, "max_context_length": 32768},
-          {"id": "b", "type": "embeddings", "max_context_length": 2048},
-          {"id": "c", "type": "vlm", "loaded_context_length": 4096, "max_context_length": 8192},
-          {"id": "d", "type": "llm", "max_context_length": 65536}]})
-      })
-    }
-  });
-  let heard = on(&address, &[]).heard_now(None);
-  let studio = [
-    ("local:a".to_owned(), 8192, false, Some(2048)),
-    ("local:c".to_owned(), 4096, true, Some(1024)),
-  ];
-  assert_eq!(offered(&heard), studio, "LM Studio gives it at /api/v0/models");
-  assert_eq!(heard.why("local:b"), Some("the local server says that it is not a model for chat"));
-  let reason = heard.why("local:d");
-  assert_eq!(
-    reason,
-    Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"),
-    "LM Studio loads it in its own"
-  );
-}
-
-#[test]
-fn a_server_of_ollama_gives_the_window_that_it_serves_and_one_that_gives_none_waits_for_the_environment()
- {
-  let (address, _) = fake(|request| {
-    let shows =
-      |id: &str| at(request, "/api/show") && request.contains(&format!("{{\"model\":\"{id}\"}}"));
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "x"}, {"id": "y"}, {"id": "w"}, {"id": "e"}]}))
-    } else if at(request, "/api/ps") {
-      Some(json!({"models": [{"name": "y", "model": "y", "context_length": 8192}]}))
-    } else if shows("x") {
-      let parameters = "num_ctx 32768\ntemperature 1";
-      Some(json!({"capabilities": ["completion"], "parameters": parameters,
-        "model_info": {"qwen3.context_length": 40960}}))
-    } else if shows("y") {
-      Some(
-        json!({"capabilities": ["completion", "vision"], "model_info": {"llama.context_length": 131_072}}),
-      )
-    } else if shows("w") {
-      Some(json!({"capabilities": ["completion"], "model_info": {"llama.context_length": 131_072}}))
-    } else {
-      shows("e")
-        .then(|| json!({"capabilities": ["embedding"], "model_info": {"bert.context_length": 512}}))
-    }
-  });
-  let heard = on(&address, &[]).heard_now(None);
-  let ollama = [
-    ("local:x".to_owned(), 32_768, false, Some(8192)),
-    ("local:y".to_owned(), 8192, true, Some(2048)),
-  ];
-  assert_eq!(
-    offered(&heard),
-    ollama,
-    "Ollama serves a model in its num_ctx, or in the window of /api/ps"
-  );
-  assert_eq!(
-    heard.why("local:w"),
-    Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"),
-    "the context that a model of Ollama was trained on is no window that Ollama serves"
-  );
-  assert_eq!(heard.why("local:e"), Some("the local server says that it is not a model for chat"));
-  let (address, _) =
-    fake(|request| at(request, "/v1/models").then(|| json!({"data": [{"id": "z"}]})));
-  let heard = on(&address, &[]).heard_now(None);
-  assert_eq!(
-    (heard.models.len(), heard.why("local:z")),
-    (0, Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"))
-  );
-  let heard = on(&address, &[("FURB_LOCAL_WINDOW", "2048")]).heard_now(None);
-  assert_eq!(
-    offered(&heard),
-    [("local:z".to_owned(), 2048, false, Some(512))],
-    "the environment gives it"
-  );
 }
 
 /// A server whose first list is an error, then two models, then four.

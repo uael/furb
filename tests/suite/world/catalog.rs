@@ -412,7 +412,8 @@ fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_i
     ended(5, Some(40)),
   ];
   let (at, url, asked_of) = local("local", None, vec![thought.concat()]);
-  ran(here!(), &at, &[("FURB_LOCAL_URL", &url)]);
+  // A count of zero says nothing, so the model writes a quarter of its window.
+  ran(here!(), &at, &[("FURB_LOCAL_URL", &url), ("FURB_LOCAL_TOKENS", "0")]);
   let [listed, request] = &asked_of.join().expect("the server read the requests")[..] else {
     panic!("a list and a request")
   };
@@ -431,6 +432,28 @@ fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_i
     (&json!("qwen"), &json!(250), None, Some(&json!("high"))),
     "a model writes a quarter of its window at most, and thinks at the effort of its actor"
   );
+}
+
+#[test]
+fn a_model_of_a_local_server_is_asked_with_the_key_and_the_most_tokens_that_the_environment_names()
+{
+  if let Some(at) = child() {
+    let (mut engine, id) = on_local(&at, "high");
+    assert_eq!(answered(&mut engine, &id), Some(3));
+    return;
+  }
+  let turn =
+    [chunk(&json!({"role": "assistant", "content": "close(3)"}), &json!("stop")), ended(5, None)];
+  let (at, url, asked_of) = local("local-tokens", None, vec![turn.concat()]);
+  ran(
+    here!(),
+    &at,
+    &[("FURB_LOCAL_URL", &url), ("FURB_LOCAL_KEY", "k"), ("FURB_LOCAL_TOKENS", "100")],
+  );
+  let asked = asked_of.join().expect("the server read the requests");
+  let keys: Vec<_> = asked.iter().map(|one| header(one, "authorization")).collect();
+  assert_eq!(keys, [Some("Bearer k"); 2], "the list and the turn go with the key");
+  assert_eq!(body(&asked[1])["max_tokens"], json!(100));
 }
 
 #[test]
