@@ -9,10 +9,10 @@ source: crates/window/tests/suite/screens.rs
                                                 opus/high         FU furb                    opus
     1  found = 2
     2  close('The open takes **329 s**. Two stages h…+251      Resolved 1 ▸
-
-  The open takes 329 s. Two stages hold most of it: 181 s     ▐ ✓ how long does an open take  now ▌
-  to send each entry to the ears of the host, and 104 s in
-  the boot.
+                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  The open takes 329 s. Two stages hold most of it: 181 s     ▐ ● how long does an open take  now ▌
+  to send each entry to the ears of the host, and 104 s in    ▐   FU furb                    opus ▌
+  the boot.                                                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
   • seed reads each chain once
   • the image skips the boot

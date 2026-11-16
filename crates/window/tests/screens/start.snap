@@ -3,27 +3,27 @@ source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         All projects ▾       studio offline
 
-  2 threads need you.                        ⌥A goes to one    Needs you 2
-  ● 3 sessions run, 1 with no window.
+                                                               Needs you 2
+
                                                                 ● TUI scope for the new…  ◆ Input
-  While no window was open                                        FU furb                    opus
-  ◌ which key sends the queue…            works since 22:10
-  ‖ Ground the branch on the carrier        paused at 22:10     ● Debug stuck TUI…       ✗ Failed
                                                                   FU furb                    opus
-  studio is offline: the daemon closed the connection. The
-  window dials it again.                                       Working 2
 
-  ⌃P          go to anything, or run a command                    run the…    Working as of 09:12
-  ⌃X ?        each key                                            FC furb-cloud@studio     opus ◌
+                                                                ● Debug stuck TUI…       ✗ Failed
+                                                                  FU furb                    opus
 
-                                                                ● which key sends…  ⠋ Working 11h
-                                                                  PH photowroom            opus ◌
+  2 threads need you.                        ⌥A goes to one    Working 2
+  1 answer is new.
+  ● 3 sessions run, 1 with no window.                             run the…    Working as of 09:12
+                                                                  FC furb-cloud@studio     opus ◌
+  While no window was open
+  ◌ which key sends the queue…            works since 22:10     ● which key sends…  ⠋ Working 11h
+  ‖ Ground the branch on the carrier        paused at 22:10       PH photowroom            opus ◌
 
-                                                               Resting 3
-
+  studio is offline: the daemon closed the connection. The     Resting 3
+  window dials it again.
                                                                   remove the gate from the…  ● 5h
-                                                                  FU furb                    opus
-
+  ⌃P          go to anything, or run a command                    FU furb                    opus
+  ⌃X ?        each key
                                                                   where does the time go      11h
 ┃                                                                 FU furb                    opus
 ┃ Ask for a change, a review or an answer

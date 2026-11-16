@@ -25,12 +25,10 @@ impl Model {
     if rows.len() > 2 {
       rows.extend([Does::GoTo, Does::Keys].map(|does| self.key_row(does)));
     }
-    // With no thread, what the home says stands just above the input, where the eye goes next.
-    if self.client.settled.is_empty() && self.known() {
-      let room = usize::from(self.size.1).saturating_sub(self.input_rows() + 1);
-      let pad = room.saturating_sub(rows.len());
-      rows.splice(2..2, iter::repeat_n(Row::default(), pad));
-    }
+    // What the home says stands just above the input, where the eye goes next.
+    let room = usize::from(self.size.1).saturating_sub(self.input_rows() + 1);
+    let pad = room.saturating_sub(rows.len());
+    rows.splice(2..2, iter::repeat_n(Row::default(), pad));
     rows
   }
 
@@ -76,16 +74,7 @@ impl Model {
       return rows;
     }
     if !self.client.settled.is_empty() {
-      let needs = self.client.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
-      let needed = self.key(Does::Needed);
-      let (says, key) = match needs {
-        0 => ("Nothing needs you.".to_owned(), String::new()),
-        1 => ("1 thread needs you.".to_owned(), format!("{needed} goes to it")),
-        count => (format!("{count} threads need you."), format!("{needed} goes to one")),
-      };
-      // The key shows where the row holds the two whole.
-      let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
-      rows.push(self.said(&says, prose, &key));
+      rows.extend(self.waiting(room));
       rows.extend(self.running());
       rows.push(Vec::new());
       let alone = self.alone();
@@ -122,6 +111,33 @@ impl Model {
         rows.extend(wrapped(&says, muted));
       }
     }
+    rows
+  }
+
+  /// What waits for the operator: how many threads need him, with the key that goes to one, and
+  /// how many answers he did not read, whose cards bear the mark of a new answer. Such an answer
+  /// asks for his reading and for no act, so the home names it apart from what needs him.
+  fn waiting(&self, room: usize) -> Vec<Line> {
+    let t = &self.tokens;
+    let needs = self.client.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
+    let needed = self.key(Does::Needed);
+    let (says, key) = match needs {
+      0 => ("Nothing needs you.".to_owned(), String::new()),
+      1 => ("1 thread needs you.".to_owned(), format!("{needed} goes to it")),
+      count => (format!("{count} threads need you."), format!("{needed} goes to one")),
+    };
+    // The key shows where the row holds the two whole.
+    let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
+    let mut rows = vec![self.said(&says, t.style(Role::Prose), &key)];
+    let unread = self.client.settled.iter().filter(|(_, key, card)| {
+      !self.needs(key, card) && card.thread.unread(&self.client.machines[key.0].login)
+    });
+    let new = match unread.count() {
+      0 => None,
+      1 => Some("1 answer is new.".to_owned()),
+      count => Some(format!("{count} answers are new.")),
+    };
+    rows.extend(new.map(|new| self.said(&new, t.style(Role::Muted), "")));
     rows
   }
 

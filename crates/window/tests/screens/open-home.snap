@@ -1,13 +1,13 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         All projects ▾        This computer
 
-  Nothing needs you.                                           Resting 2
-  ● 2 sessions run.
+                                                               Resting 2
+
                                                                 ● where does the time…  ⠴ Opening
-  ⌃P          go to anything, or run a command                    FU furb                    opus
-  ⌃X ?        each key
+                                                                  FU furb                    opus
+
                                                                 ● remove the gate…      ⠴ Opening
                                                                   FU furb                    opus
 
@@ -18,12 +18,12 @@ source: tests/suite/screens.rs
 
 
 
+  Nothing needs you.
+  2 answers are new.
+  ● 2 sessions run.
 
-
-
-
-
-
+  ⌃P          go to anything, or run a command
+  ⌃X ?        each key
 
 ┃
 ┃ Ask for a change, a review or an answer

@@ -278,7 +278,8 @@ impl Model {
   }
 
   /// The rows of the open list part that pass its filter: all of them in their order while no text
-  /// filters it, else those that match the text, the best match first.
+  /// filters it, else those that match the text, the best match first, with the rows of each part
+  /// together under its head, the part of the best match first.
   pub(crate) fn entries(&self) -> Vec<Entry> {
     let Some(picker) = &self.picker else { return Vec::new() };
     let all = match picker.of {
@@ -309,7 +310,18 @@ impl Model {
       entry.lit = one.lit.into_iter().filter(|at| *at < letters).collect();
       Some(entry)
     };
-    ranked(&picker.filter, texts.iter().map(String::as_str)).into_iter().filter_map(taken).collect()
+    let mut found: Vec<Entry> = ranked(&picker.filter, texts.iter().map(String::as_str))
+      .into_iter()
+      .filter_map(taken)
+      .collect();
+    let mut parts: Vec<Cow<'static, str>> = Vec::new();
+    for one in &found {
+      if !parts.contains(&one.part) {
+        parts.push(one.part.clone());
+      }
+    }
+    found.sort_by_key(|one| parts.iter().position(|part| *part == one.part));
+    found
   }
 
   /// The places of Go to: each thread that needs the operator, each thread that works, each
@@ -572,7 +584,8 @@ impl Model {
   /// The models of the machine of the input, under each provider once, each with what it holds, its
   /// context window and whether it sees images, and its effort, the one that it takes when the
   /// operator names none. A model takes the effort that the input speaks at when it offers it. The
-  /// model that the input speaks to says so, in the accent.
+  /// model that the input speaks to says so, in the accent, and an effort of it that he chose but
+  /// did not take yet stands after the one in use, as a change that waits.
   fn models(&self) -> Vec<Entry> {
     let at = self.client.target().machine();
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
@@ -590,13 +603,17 @@ impl Model {
       let taken = leaned.or(spoken).or(model.effort.as_ref());
       let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
       let used = using.as_deref() == Some(model.name.as_str());
+      let right = match (taken, spoken) {
+        (Some(new), Some(now)) if used && new != now => format!("{now} → {new}"),
+        _ => taken.cloned().unwrap_or_default(),
+      };
       let images = if model.images { " · images" } else { "" };
       let held = format!("  {} context{images}", tokens(model.window));
       Entry {
         part: provider_named(provider).into(),
         left: format!("{name:<wide$}"),
         says: if used { format!("{held}{USED}") } else { held },
-        right: taken.cloned().unwrap_or_default(),
+        right,
         tone: used.then_some(self.tokens.accent),
         choice: Choice::Actor(actor),
         ..Entry::default()
@@ -634,7 +651,8 @@ impl Model {
     };
     let Some(model) = offered.into_iter().find(named) else { return true };
     let Some(last) = model.efforts.len().checked_sub(1) else { return true };
-    let now = model.efforts.iter().position(|one| *one == entry.right).unwrap_or_default();
+    let taken = actor.strip_prefix(model.name.as_str()).and_then(|rest| rest.strip_prefix('/'));
+    let now = model.efforts.iter().position(|one| Some(one.as_str()) == taken).unwrap_or_default();
     let next = model.efforts[now.saturating_add_signed(by).min(last)].clone();
     if let Some(picker) = self.picker.as_mut() {
       picker.effort = Some((model.name.clone(), next));
@@ -1029,7 +1047,7 @@ impl Model {
   }
 
   /// The rows of the entries that the part shows: a head before the first entry of each part of the
-  /// list while no text filters it, and each entry, the chosen one on the lifted ground with a bar
+  /// list, and each entry, the chosen one on the lifted ground with a bar
   /// in the hue of its thread, as the selected card of the list. In a list of things that say what
   /// they do, what the chosen one says stands whole under its name, and what each other says on one
   /// row, so the list reads as a list and the one that he reads tells all. A row of an entry
@@ -1051,7 +1069,7 @@ impl Model {
     for (at, entry) in entries.iter().enumerate() {
       // The settings name their group in their tabs.
       let tabbed = picker.of == Pick::Settings;
-      if picker.filter.is_empty() && !tabbed && entry.part != part && !entry.part.is_empty() {
+      if !tabbed && entry.part != part && !entry.part.is_empty() {
         if !all.is_empty() {
           all.push((None, Vec::new()));
         }

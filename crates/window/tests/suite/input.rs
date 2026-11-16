@@ -1009,15 +1009,16 @@ fn the_arrows_change_the_effort_of_the_chosen_model_which_takes_it_with_its_row(
   app.press("ctrl+x");
   app.press("m");
   shows(&app, "←→ effort · ⏎ take it for the new session · ⎋ close");
-  // The effort steps from the one that the row shows, and stops at the most and the least.
+  // The effort steps from the one that the row shows, and stops at the most and the least. An
+  // effort that the row does not use yet stands after the one in use.
   for _ in 0..3 {
     app.press("right");
   }
-  shows(&app, "▌opus    1M context · images · in use            max");
+  shows(&app, "▌opus    1M context · images · in use     high → max");
   for _ in 0..3 {
     app.press("left");
   }
-  shows(&app, "▌opus    1M context · images · in use         medium");
+  shows(&app, "▌opus    1M context · images · in use  high → medium");
   // A row takes the effort that it shows, and the other rows keep theirs.
   let frame = app.text();
   assert!(frame.contains(" sonnet  1M context · images                    high"), "{frame}");

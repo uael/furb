@@ -930,7 +930,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("d", &[Act::Type("gpt"), Act::Key("Enter")], "with gpt-5.5"),
         // The arrows change the effort of the chosen model in the list, which takes it with its
         // row: the left one lowers it.
-        step("e", &[Act::Key("C-x"), Act::Key("m"), Act::Key("Left")], "in use         medium"),
+        step("e", &[Act::Key("C-x"), Act::Key("m"), Act::Key("Left")], "high → medium"),
         step("f", &[Act::Key("Enter")], "gpt-5.5  medium"),
       ],
     }),

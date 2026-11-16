@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● lab · plan the week (the model answers)      ✓ Resolved      All projects ▾           2 machines
 ┃
@@ -9,10 +9,10 @@ source: tests/suite/screens.rs
     1  found = 2                                                  LA lab@studio              opus
     2  close('The open takes **329 s**. Two stages h…+251
                                                                Resolved 1 ▸
-  The open takes 329 s. Two stages hold most of it: 181 s
-  to send each entry to the ears of the host, and 104 s in    ▐ ✓ plan the week (the model…   now ▌
-  the boot.
-
+  The open takes 329 s. Two stages hold most of it: 181 s     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  to send each entry to the ears of the host, and 104 s in    ▐ ● plan the week (the model…   now ▌
+  the boot.                                                   ▐   LA lab@studio              opus ▌
+                                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
   • seed reads each chain once
   • the image skips the boot
 

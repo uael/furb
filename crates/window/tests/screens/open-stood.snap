@@ -1,13 +1,13 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · remove the gate from the engine       ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ remove the gate from the engine                              Resolved 1 ▾
-┃ (the model answers)
-┃                                                             ▐ ✓ remove the gate from the…   now ▌
-                                                opus/high
-    1  found = 2
+┃ (the model answers)                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ ● remove the gate from the…   now ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    1  found = 2                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close('The open takes **329 s**. Two stages h…+251
 
   The open takes 329 s. Two stages hold most of it: 181 s

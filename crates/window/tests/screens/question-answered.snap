@@ -4,10 +4,10 @@ source: crates/window/tests/suite/screens.rs
 ● furb · where does the list stand             ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ where does the list stand                                    Resolved 1 ▸
-┃ (the model asks a choice)
-┃                                                             ▐ ✓ where does the list stand   now ▌
-                                                opus/high
-    1  side = await prompt(Literal['right', 'left'], …+51
+┃ (the model asks a choice)                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ ● where does the list stand   now ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    1  side = await prompt(Literal['right', 'left'], …+51     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close(side)
 
   ◆ Where does the list of cards stand?        left · you

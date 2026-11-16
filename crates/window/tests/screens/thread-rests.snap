@@ -4,10 +4,10 @@ source: crates/window/tests/suite/screens.rs
 ● furb · how long does an open take            ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ how long does an open take                                   Resolved 1 ▾
-┃ (the model answers)
-┃                                                             ▐ ✓ how long does an open take  now ▌
-                                                opus/high
-    1  found = 2
+┃ (the model answers)                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ ● how long does an open take  now ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    1  found = 2                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close('The open takes **329 s**. Two stages h…+251
 
   The open takes 329 s. Two stages hold most of it: 181 s

@@ -3,11 +3,11 @@ source: crates/window/tests/suite/screens.rs
 ---
   furb
 
-  Nothing needs you.
-  ● 1 session r
+
+
                  Each key
-  ⌃P          g  ▌Search a key                                              1 / 35
-  ⌃X ?        e
+                 ▌Search a key                                              1 / 35
+
                  Go                                                                 ┃
                  ▌⌃P or ⌃O    go to anything, or run a command                      ┃
                   ⌃X ?        each key                                              ┃
@@ -19,11 +19,11 @@ source: crates/window/tests/suite/screens.rs
                  The thread
                   ⌃N          a new thread, and back to the thread
                   ↘           jump to the latest
-                  ⇞           a page up
-                  ⇟           a page down
+  Nothing needs   ⇞           a page up
+  ● 1 session r   ⇟           a page down
                   ⎋ ⎋         stop the work of the thread
-                  ⌃X R        resolve the thread
-                  ⌃X D        revert the files that the last answer wrote
+  ⌃P          g   ⌃X R        resolve the thread
+  ⌃X ?        e   ⌃X D        revert the files that the last answer wrote
                   ⌃X Z        pause the thread, or resume it
 ┃
 ┃ Ask for a cha  ↑↓ move · ⏎ run · ⎋ close

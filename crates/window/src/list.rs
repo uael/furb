@@ -53,12 +53,21 @@ impl Model {
       }
       rows.push(Row::Head(part));
       // The open thread keeps its card in view while the resolved threads fold, so the list and
-      // the feed always show the same thread.
+      // the feed always show the same thread, and its card stands whole, with its session, as the
+      // card of each other part: a resolved thread takes one line only while he does not read it.
       if part == Part::Resolved {
         let open = |at: &usize| self.client.selected.as_ref() == Some(&self.client.settled[*at].1);
         let shown: Vec<usize> = cards.filter(|at| self.open || open(at)).collect();
-        rows.extend((!shown.is_empty()).then_some(Row::Blank));
-        rows.extend(shown.into_iter().map(Row::Resolved));
+        // A whole card brings the rows of its edges, as in each other part.
+        rows.extend(shown.first().filter(|at| !open(at)).map(|_| Row::Blank));
+        for at in shown {
+          if open(&at) {
+            rows.extend([Row::Gap(None, Some(at)), Row::Card(at, false), Row::Card(at, true)]);
+            rows.push(Row::Gap(Some(at), None));
+          } else {
+            rows.push(Row::Resolved(at));
+          }
+        }
         continue;
       }
       let mut above = None;
