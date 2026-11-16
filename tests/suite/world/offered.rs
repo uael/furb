@@ -17,7 +17,10 @@ use std::{
 use furb::Text;
 use furb::{
   life::Opening,
-  world::{Catalog, Model, catalog::clamp},
+  world::{
+    Catalog, Model,
+    catalog::{self, Source, Status, clamp},
+  },
 };
 use serde_json::{Value, json};
 
@@ -1342,4 +1345,54 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
   let at = run(test, commanded("accounts-search", &none, &accounts(&search), "search"), &[]);
   let said = fs::read_to_string(at.join("said")).expect("said");
   assert_eq!(said, json!("token=tok-a\n---\nwhat is rust").to_string());
+}
+
+/// A yard whose cache holds a copy of the providers of pi-ai, as an update writes it, of this
+/// release, which gives the provider radius these models.
+fn pied(name: &str, version: &str, models: &Value) -> Yard {
+  let at = cached(name, "{}");
+  let copy = json!({"version": version, "providers": {"radius": {"models": models}}});
+  fs::write(at.join("cache/furb/pi.json"), copy.to_string()).expect("the copy of pi-ai");
+  at
+}
+
+#[test]
+fn a_copy_of_pi_ai_as_new_as_the_snapshot_replaces_the_models_of_its_provider_and_any_other_leaves_them()
+ {
+  if let Some(at) = child() {
+    let catalog = Catalog::load(None);
+    let held = (catalog.find("radius:new").is_some(), catalog.find("radius:balanced").is_some());
+    let renewed = fs::read_to_string(at.join("renewed")).is_ok();
+    assert_eq!(held, (renewed, !renewed), "{}", at.display());
+    return;
+  }
+  let new = json!({"new": {"limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}}});
+  let at = pied("pi-new", "99.0.0", &new);
+  fs::write(at.join("renewed"), "").expect("the mark");
+  run(here!(), at, &["RADIUS_API_KEY"]);
+  for (name, version, models) in [("pi-old", "0.1.0", &new), ("pi-empty", "99.0.0", &json!({}))] {
+    run(here!(), pied(name, version, models), &["RADIUS_API_KEY"]);
+  }
+  let broken = cached("pi-broken", "{}");
+  fs::write(broken.join("cache/furb/pi.json"), "{not json").expect("the copy");
+  run(here!(), broken, &["RADIUS_API_KEY"]);
+}
+
+#[test]
+fn a_status_reads_the_name_of_each_source_in_its_file_and_the_newer_of_the_cache_and_the_snapshot()
+{
+  if let Some(_at) = child() {
+    let fetched = Some("2999-01-01T00:00:00Z".to_owned());
+    let pi = Source { version: Some("9.0.0".to_owned()), fetched: fetched.clone(), error: None };
+    let dev = Source { version: None, fetched, error: Some("no".to_owned()) };
+    assert_eq!(catalog::status(), Status { models_dev: dev, pi_ai: pi });
+    return;
+  }
+  let at = cached("status", "{}");
+  let status = json!({
+    "models.dev": {"fetched": "2999-01-01T00:00:00Z", "error": "no"},
+    "pi-ai": {"version": "9.0.0", "fetched": "2999-01-01T00:00:00Z"},
+  });
+  fs::write(at.join("cache/furb/catalog.status.json"), status.to_string()).expect("the status");
+  run(here!(), at, &[]);
 }
