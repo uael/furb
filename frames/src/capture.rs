@@ -276,10 +276,12 @@ impl Rig {
     // The daemon ends by its grace once the window is gone. A kill before that lets a window that
     // still dies dial again, find no daemon and start one of its own, which no peer reaches and
     // which outlives the capture: so the kill comes only when the daemon outlived its patience.
-    for daemon in [Some(&mut daemon), far.as_mut()].into_iter().flatten() {
-      if timeout(PATIENCE, daemon.wait()).await.is_err() {
-        daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
-      }
+    if timeout(PATIENCE, daemon.wait()).await.is_err() {
+      daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+    }
+    // A daemon on the tailnet ends by no grace, and the window never starts one there.
+    if let Some(far) = far.as_mut() {
+      far.kill().await.map_err(|source| Error::Process { what: "the far daemon", source })?;
     }
     let (shown, marks, start) = walked?;
     ended?;
@@ -371,8 +373,11 @@ impl Rig {
     let lab = self.far().join("home/lab");
     let record = lab.join(".furb/sessions/2026-11-01T09-00-00-0000.jsonl");
     self.prompted(&environment, &record, "Set up the lab.").await?;
-    let mut daemon = Command::new(self.bin.join("furb"))
-      .args(["host", "--grace", "1"])
+    // A daemon on the tailnet ends by no bound, so it ends with this process.
+    let mut daemon = Command::new("sh")
+      .arg("-c")
+      .arg(format!("{} exec \"$0\" host --grace 1", tied()))
+      .arg(self.bin.join("furb"))
       .env_clear()
       .envs(environment)
       .stdout(Stdio::null())
@@ -466,15 +471,11 @@ impl Rig {
     let env: Vec<String> =
       self.environment().into_iter().map(|(key, value)| format!("{key}={value}")).collect();
     let read = if walk.reads { " --read" } else { "" };
-    // The window ends once this process is gone, as when a bound of a test kills it before its
-    // end, so the server of tmux, left with no pane, ends too and no capture outlives its run.
-    let watch = format!(
-      "w=$$; (while kill -0 {} 2>/dev/null; do sleep 0.2; done; kill -9 $w) </dev/null >/dev/null 2>&1 &",
-      process::id()
-    );
+    // The server of tmux, left with no pane once the window ends with this process, ends too.
     let started = format!(
-      "env -i {} sh -c '{watch} until [ -e {} ]; do sleep 0.01; done; exec furb-window{read}'",
+      "env -i {} sh -c '{} until [ -e {} ]; do sleep 0.01; done; exec furb-window{read}'",
       env.join(" "),
+      tied(),
       go.display()
     );
     let (cols, rows) = (size.cols.to_string(), size.rows.to_string());
@@ -650,6 +651,15 @@ pub(crate) fn stamp(path: &Path) -> Result<(), Error> {
     writeln!(file, "{micros}\t{}", serde_json::to_string(&text)?).map_err(wrote)?;
     file.flush().map_err(wrote)?;
   }
+}
+
+/// The words of a shell that tie the program that it then runs with `exec` to this process: a watch
+/// beside it ends it once this process is gone, as when the bound of a test kills it before its
+/// end, so no program of a capture outlives its run. The watch ends with the program.
+fn tied() -> String {
+  let watch = "while kill -0 {} 2>/dev/null && kill -0 $w 2>/dev/null; do sleep 0.2; done";
+  let watch = watch.replace("{}", &process::id().to_string());
+  format!("w=$$; ({watch}; kill -9 $w 2>/dev/null) </dev/null >/dev/null 2>&1 &")
 }
 
 /// A server of tmux of one capture.
