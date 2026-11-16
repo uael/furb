@@ -119,6 +119,20 @@ impl Model {
     rows
   }
 
+  /// How many rows the bar of the time takes, as [`Model::time_rows`] lays them out, with no row
+  /// of it made.
+  pub(crate) fn time_count(&self) -> usize {
+    let calm =
+      || usize::from(self.client.thread.as_ref().is_some_and(|one| !one.thread.key.2.is_empty()));
+    let Some(time) = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref()) else {
+      return calm();
+    };
+    if time.reads() && self.client.moved.saturating_sub(time.since) < QUIET {
+      return calm();
+    }
+    1 + time.chains.as_ref().map_or(0, |chains| chains.shown().len())
+  }
+
   /// The words at the end of the bar of the time, the columns that they take, and the axis of its
   /// track. The words take the room of the farthest moment, so the track keeps its columns as the
   /// thread steps through its time.
@@ -140,7 +154,10 @@ impl Model {
   /// other chains are there, and whether they show.
   fn chains_toggle(&self, open: bool) -> Line {
     let sign = if open { "▴" } else { "▾" };
-    vec![run("  ", Style::new()), run(format!("chains {sign}"), Style::new().fg(self.tokens.accent))]
+    vec![
+      run("  ", Style::new()),
+      run(format!("chains {sign}"), Style::new().fg(self.tokens.accent)),
+    ]
   }
 
   /// What the status row says of the bar of the time, in the place of a notice: under the pointer
@@ -245,14 +262,25 @@ impl Model {
       .map(|(row, (track, depth))| {
         let at = chains.tracks.iter().position(|one| ptr::eq(one, *track)).unwrap_or(row);
         let ink = self.ink(chains, at);
-        let acted: Vec<usize> = track.moments.iter().map(column).collect();
-        let began: Vec<usize> = track.threads.iter().map(|one| column(&one.at)).collect();
+        // Each column of the track once, so a row costs its moments and its columns, not their
+        // product.
+        let marked = |moments: &mut dyn Iterator<Item = &u64>| {
+          let mut cells = vec![false; axis.room];
+          for one in moments {
+            if let Some(cell) = cells.get_mut(column(one)) {
+              *cell = true;
+            }
+          }
+          cells
+        };
+        let acted = marked(&mut track.moments.iter());
+        let began = marked(&mut track.threads.iter().map(|one| &one.at));
         let before = track.moments.iter().any(|moment| *moment < first);
         let mut line: Line = vec![run("  ", muted), run("▪", ink), run("  ", muted)];
         let mut hot: Vec<Hot> = Vec::new();
         for one in 0..axis.room {
           let flow = flows.at(row, one);
-          let (sign, style) = match (began.contains(&one), acted.contains(&one), one == mark) {
+          let (sign, style) = match (began[one], acted[one], one == mark) {
             _ if one == 0 && before => ("‹", ink),
             _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender)),
             (true, ..) => ("◆", ink),

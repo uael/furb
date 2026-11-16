@@ -529,9 +529,10 @@ impl Model {
     self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum()
   }
 
-  /// How many rows the input, the launcher and the hints take at the bottom of the left side.
+  /// How many rows the input, the launcher, the hints and the bar of the time take at the bottom of
+  /// the left side, with no row of them made.
   pub(crate) fn input_rows(&self) -> usize {
-    self.input().len()
+    self.input_box().len() + 1 + self.time_count()
   }
 
   /// The box of the text of the input: over its bands, or over the row of a form where the
@@ -608,7 +609,16 @@ impl Model {
   /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
   /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
-    let mut rows = if self.client.only_reads(self.client.target().machine()).is_some() {
+    let mut rows = self.input_box();
+    rows.push(self.hints());
+    // The bar of the time stands under the status row, always: calm at now, or the bar he holds.
+    rows.extend(self.time_rows());
+    rows
+  }
+
+  /// The rows of the input above its row of hints: the form of a question, or its box.
+  fn input_box(&self) -> Vec<Row> {
+    if self.client.only_reads(self.client.target().machine()).is_some() {
       vec![self.reader()]
     } else if self.form().is_some() {
       let mut rows = self.form_rows(self.grown()).0;
@@ -630,11 +640,7 @@ impl Model {
       let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
       rows.extend([self.launcher(), self.band(Vec::new(), None)]);
       rows
-    };
-    rows.push(self.hints());
-    // The bar of the time stands under the status row, always: calm at now, or the bar he holds.
-    rows.extend(self.time_rows());
-    rows
+    }
   }
 
   /// The keys of what stands over the input: a form, the completion, or the bar of the time; else
@@ -1017,7 +1023,7 @@ impl Model {
   /// it, or while a pause holds it, with what resumes it, else the keys of the mode of Python while
   /// it is on, else the folder of the window; and at its right how many other threads ask the
   /// operator, and the key that turns the input, or that refuses the question of a form.
-  fn hints(&self) -> Row {
+  pub(crate) fn hints(&self) -> Row {
     let t = &self.tokens;
     // The row keeps two blank columns at each side, as the text of the box of the input above it.
     let wide = self.wide().saturating_sub(4);

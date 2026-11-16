@@ -799,9 +799,16 @@ impl Model {
     // The bar of the time says what the pointer is on, so its rows show the place of the pointer.
     let bar = self.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some());
     let stamp = (self.changes, self.clock(), self.pointed().filter(|_| bar));
-    if let Some((at, rows)) = &*self.laid.borrow()
-      && *at == stamp
+    if let Some((at, rows)) = &mut *self.laid.borrow_mut()
+      && (at.0, at.1) == (stamp.0, stamp.1)
     {
+      // A move of the pointer over the bar changes only what the row of hints says it is on.
+      if at.2 != stamp.2
+        && let Some(hints) = rows.len().checked_sub(1 + self.time_count())
+      {
+        rows[hints] = self.hints();
+        at.2 = stamp.2;
+      }
       return rows.clone();
     }
     let rows = self.laid_rows();

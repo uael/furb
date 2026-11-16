@@ -7,12 +7,12 @@ use std::{
 };
 
 use furb::view::{self, Block, Exchange, Line, Maker, Mark, Standing, Work};
-use furb_client::{Link, Opened, Thread, Told};
+use furb_client::{Chains, Link, Opened, Thread, Time, Told};
 use furb_host::protocol::Card;
 use jiff::tz::TimeZone;
 use opentui::testing::TestApp;
 
-use super::{Shared, tell, windowed};
+use super::{Shared, steadily, tell, windowed};
 use crate::{Options, keys::System};
 
 const LIFE: &str = "/furb/b.jsonl";
@@ -222,5 +222,64 @@ fn wheeled() {
     println!(
       "{answers} answers: a step {step:?} with {laid} layouts for {runs}, a burst of 5 {burst:?}"
     );
+  }
+}
+
+/// The bar of the time of the open thread: none, open on its moments, or open with the chains of a
+/// life that holds many, each of which asks the one before it.
+fn timed(window: &Shared, app: &TestApp, chains: Option<usize>) {
+  let moments: Vec<u64> = (0..3000).map(|at| at * 10).collect();
+  let messages = (0..100).map(|at| (at * 300, format!("message {at}"))).collect();
+  let chains = chains.map(|count| {
+    let track = |at: usize| {
+      let moments: Vec<u64> = (0..400).map(|one| (one * 70 + at as u64 * 3) % 30_000).collect();
+      let threads: Vec<serde_json::Value> = (0..5)
+        .map(|one| {
+          let by = (at > 0).then(|| format!("chain{}", at - 1));
+          serde_json::json!({"prompt": format!("prompt{at}x{one}"), "at": one * 5000 + at as u64,
+            "by": by, "ended": one * 5000 + at as u64 + 900, "says": "count the lines"})
+        })
+        .collect();
+      let state = if at % 2 == 0 { "runs" } else { "done" };
+      serde_json::json!({"chain": format!("chain{at}"), "label": format!("work {at}"),
+        "parent": (at > 0).then(|| "chain0"), "state": state, "moments": moments, "threads": threads})
+    };
+    let tracks = (0..count).map(track).collect::<Vec<_>>();
+    let tracks = serde_json::from_value(serde_json::Value::Array(tracks)).expect("tracks read");
+    Chains { tracks, stale: false, find: String::new() }
+  });
+  tell(app, window, |model| {
+    let time = Time { moments, messages, chains, ..Time::default() };
+    if let Some(opened) = model.client.thread.as_mut() {
+      opened.thread.time = Some(time);
+    }
+  });
+}
+
+/// What a change and a move of the pointer over the bar cost, with the bar of the time at now,
+/// open, and open with sixty chains:
+/// `cargo test -p furb-window --lib -- --ignored --nocapture time_laid_out`.
+#[test]
+#[ignore = "a measure, which prints its times"]
+fn time_laid_out() {
+  for (name, chains) in [("closed", None), ("open", Some(0)), ("chains", Some(60))] {
+    let app = TestApp::new(200, 60);
+    let window = window(&app, 114);
+    if let Some(count) = chains {
+      timed(&window, &app, (count > 0).then_some(count));
+    }
+    let runs = 200u32;
+    let start = Instant::now();
+    for at in 0..runs {
+      tell(&app, &window, |model| model.client.notice = Some(format!("{at}")));
+    }
+    let change = start.elapsed() / runs;
+    let start = Instant::now();
+    for at in 0..runs {
+      let x = u16::try_from(10 + at % 150).unwrap_or_default();
+      steadily(&app, &window, |model| model.pointer = Some((x, 58)));
+    }
+    let moved = start.elapsed() / runs;
+    println!("{name}: {change:?} a change, {moved:?} a move of the pointer");
   }
 }
