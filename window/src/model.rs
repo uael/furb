@@ -9,7 +9,7 @@
 use std::{io, path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, Fold, HOLD, Hold, Listing, Step};
+use furb_client::{Ask, Asked, Client, Fold, HOLD, Hold, Listing, Step, Time};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event,
@@ -479,7 +479,14 @@ impl Model {
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
     let plays = self.client.plays();
-    self.slow && !self.known() || opens || pulses || plays || self.client.settled.iter().any(works)
+    let time = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
+    let reads = time.is_some_and(Time::reads);
+    self.slow && !self.known()
+      || opens
+      || pulses
+      || plays
+      || reads
+      || self.client.settled.iter().any(works)
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {

@@ -18,6 +18,7 @@ use crate::{
   keys::Does,
   line::{Line, cut, run},
   model::Model,
+  opens::QUIET,
   thread::{Click, Hot, Row},
   tokens::Role,
 };
@@ -67,6 +68,11 @@ impl Model {
     let Some(time) = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref()) else {
       return Vec::new();
     };
+    // A bar that opens draws once its moments and its chains came, or from [`QUIET`] on, so the
+    // feed moves down once, by the whole height of the bar.
+    if time.reads() && self.client.moved.saturating_sub(time.since) < QUIET {
+      return Vec::new();
+    }
     let t = &self.tokens;
     let key = &self.client.thread.as_ref().map(|one| one.thread.key.clone()).unwrap_or_default();
     // The track is the history of this thread, so what it passed takes the hue of the bar of its
@@ -262,7 +268,8 @@ impl Model {
     }
     self.open_agent(prompt);
     if let (Some(opened), Some(_)) = (self.client.thread.as_mut(), moment) {
-      opened.thread.time = Some(Time { at: moment, stale: true, ..Time::default() });
+      let since = self.client.moved;
+      opened.thread.time = Some(Time { at: moment, stale: true, since, ..Time::default() });
     }
   }
 }

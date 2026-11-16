@@ -24,9 +24,11 @@ const STEP: Duration = Duration::from_millis(120);
 /// The bar of the time of a thread: the moments that its machine gave, the moment that the thread
 /// shows, none for now, whether they changed since the machine gave them, when the play last
 /// stepped while it plays, the first line of each message that a page of the thread gave, by the
-/// moment that it was said, which the track marks, and the chains of the life while they show.
+/// moment that it was said, which the track marks, the chains of the life while they show, and
+/// when the bar opened, on the clock of the loaders.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Time {
+  pub since: Duration,
   pub moments: Vec<u64>,
   pub at: Option<u64>,
   pub stale: bool,
@@ -158,6 +160,11 @@ pub fn resting(state: State) -> bool {
 }
 
 impl Time {
+  /// Whether the bar waits for what its machine gives: its moments, or the chains that it shows.
+  pub fn reads(&self) -> bool {
+    self.stale || self.chains.as_ref().is_some_and(|one| one.stale && one.tracks.is_empty())
+  }
+
   /// The place among the moments of the moment that the thread shows: the last for now, and for a
   /// moment between two of them, as a chain opens it, the next one.
   pub fn place(&self) -> usize {
@@ -203,7 +210,7 @@ impl Client {
     if thread.time.take().is_some_and(|time| time.at.is_some()) {
       thread.moved();
     } else if !thread.key.2.is_empty() {
-      let mut time = Time { stale: true, ..Time::default() };
+      let mut time = Time { stale: true, since: self.moved, ..Time::default() };
       time.heard(thread.exchanges.values());
       thread.time = Some(time);
     }
