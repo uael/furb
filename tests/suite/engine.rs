@@ -863,6 +863,23 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
 }
 
 #[test]
+fn a_word_that_calls_the_operating_system_or_imports_a_module_that_monty_lacks_raises_there_and_goes_on()
+ {
+  let mut lived = Lived::new("sandboxed", &[], true).unwrap();
+  let root = lived.root();
+  let word = "got = []\n\
+              try:\n  open('a.txt')\nexcept RuntimeError as no:\n  got.append(str(no))\n\
+              try:\n  import numpy\nexcept ModuleNotFoundError as no:\n  got.append(str(no))\n\
+              close(got)";
+  let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
+  let got = block_on(lived.engine.rung(rung).unwrap()).unwrap();
+  assert_eq!(
+    got.as_ref().py_repr(),
+    "['open asks the operating system, and a life asks nothing of it', \"No module named 'numpy'\"]"
+  );
+}
+
+#[test]
 fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   let (root, _yard) = {
     let mut first = Lived::new("pending", &[], true).unwrap();

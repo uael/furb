@@ -505,7 +505,3 @@ fn inside(root: &Path) -> Vec<PathBuf> {
   folders.sort();
   folders
 }
-
-#[cfg(test)]
-#[path = "skills.test.rs"]
-mod test;

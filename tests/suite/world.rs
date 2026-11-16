@@ -20,4 +20,5 @@ mod reader;
 mod schema;
 mod scratch;
 mod search;
+mod skills;
 mod store;
