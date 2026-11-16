@@ -2018,6 +2018,77 @@ fn imaged(name: &str, model: &MockCompletionModel) -> (Engine, Yard, String) {
   (lived(provider), at, images::reference("a.png", &kept.uri))
 }
 
+/// A prompt on the root of a life with this message, which wants an int.
+fn messaged(engine: &mut Engine, message: String) -> String {
+  let root = engine.root().to_owned();
+  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
+}
+
+/// How many images the user turns of a request hold.
+fn pictured(request: &CompletionRequest) -> usize {
+  parts(chat(&request.chat_history)).concat().iter().filter(|one| **one == "image").count()
+}
+
+#[test]
+fn a_read_of_an_image_hands_it_to_the_model_and_a_text_that_names_an_image_hands_none() {
+  let at = yard("read-images");
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let gallery = at.join("images");
+  let kept = images::attach(&gallery, &at.join("a.png")).expect("the image is attached");
+  fs::write(at.join("a.md"), format!("see {}", images::reference("a.png", &kept.uri)))
+    .expect("the text is written");
+  let read = |name: &str| format!("read({:?})", at.join(name).display().to_string());
+  let (text, image) = (read("a.md"), read("a.png"));
+  let model =
+    streaming(&[(&text, Usage::new()), (&image, Usage::new()), ("close(1)", Usage::new())]);
+  let provider =
+    Provider::new(at.display().to_string(), vec![scripted(&model).images()]).images(&gallery);
+  let mut engine = seeing(provider, Some(gallery));
+  let id = asked(&mut engine);
+  block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let requests = model.requests();
+  assert_eq!((pictured(&requests[1]), pictured(&requests[2])), (0, 1));
+}
+
+#[test]
+fn an_image_that_a_message_names_twice_comes_once_and_a_life_with_no_gallery_hands_none() {
+  let model = streaming(&[("close(1)", Usage::new())]);
+  let (mut engine, at, named) = imaged("images-twice", &model);
+  let id = messaged(&mut engine, format!("look at {named} and {named}"));
+  block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let request = model.requests().remove(0);
+  let [.., Message::User { content }] = chat(&request.chat_history) else { panic!("a user turn") };
+  let parts: Vec<_> = content.iter().collect();
+  let place = parts.iter().position(|one| matches!(one, UserContent::Image(_))).expect("an image");
+  assert!(
+    matches!(parts[place - 1], UserContent::Text(text) if text.text.ends_with(&format!("look at {named}")))
+  );
+  assert_eq!(pictured(&request), 1, "the image comes after its first name alone");
+  let blind = streaming(&[("close(1)", Usage::new())]);
+  let provider = Provider::new(at.display().to_string(), vec![scripted(&blind).images()]);
+  let mut engine = lived(provider);
+  let id = messaged(&mut engine, format!("look at {named}"));
+  block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(pictured(&blind.requests()[0]), 0, "a life with no gallery hands no image");
+}
+
+#[test]
+fn an_image_whose_file_fails_to_load_for_another_cause_than_its_loss_fails_the_reply() {
+  let model = streaming(&[("close(1)", Usage::new())]);
+  let (mut engine, at, named) = imaged("images-broken", &model);
+  let file = fs::read_dir(at.join("images")).expect("the gallery").next().expect("an image");
+  let file = file.expect("an entry").path();
+  fs::remove_file(&file).expect("the image goes");
+  fs::create_dir(&file).expect("a folder stands where the image stood");
+  messaged(&mut engine, format!("look at {named}"));
+  assert!(until(&mut engine, |engine| said(engine).len() >= 2), "{:?}", said(&mut engine));
+  let (kind, about, word) = said(&mut engine).remove(1);
+  assert_eq!((kind.as_str(), about.as_str()), ("done", "reply1"));
+  assert!(word.starts_with("Refused("), "{word}");
+  assert_eq!(model.request_count(), 0, "the model is asked nothing");
+}
+
 #[test]
 fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_gives_its_origin_again()
  {
@@ -2060,6 +2131,8 @@ fn a_message_with_an_image_in_the_middle_goes_as_text_image_text_in_the_order_of
   };
   assert!(before.text.ends_with(&format!("before {named}")), "{}", before.text);
   assert!(after.text.starts_with(" after"), "{}", after.text);
+  let opened = |one: &&UserContent| matches!(one, UserContent::Text(text) if text.text.starts_with("#chain1\n"));
+  assert!(parts.iter().any(opened), "the open of the chain stays a block of its own: {parts:?}");
 }
 
 #[test]

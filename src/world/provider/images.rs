@@ -369,7 +369,3 @@ pub(super) fn sequence(
   text(&mut parts, from, python.len());
   parts
 }
-
-#[cfg(test)]
-#[path = "images.test.rs"]
-mod test;

@@ -7,6 +7,7 @@ mod catalog;
 mod claude;
 mod config;
 mod disk;
+mod images;
 mod kits;
 mod offered;
 mod operator;
