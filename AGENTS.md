@@ -341,9 +341,10 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
-`cargo xtask tree new` makes the `.venv` of a new worktree, so run one test file there as
-`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the task could not make
-it, probe with the `.venv/bin/python` of the main checkout, which imports main and not your change.
+Run a test file of python as `cargo xtask test python -- <file> -p no:cacheprovider --no-cov`: it syncs the `.venv` of
+its tree first, which builds only after a change that the `cache-keys` name, so the test imports the engine and the
+words of that tree. The `.venv` of another tree imports another engine, and a test that compares the engine with a word
+fails there for that reason alone.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
@@ -422,7 +423,7 @@ fix what your change broke, and report what was broken before.
   PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves
   out of the word. A name of a word before it in `.furb/config.json` is in `builtins` of `[tool.ruff]`, which
   `.furb/skills/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
-  `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
+  `cargo xtask test python -- <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
   suite only.
 - `cargo xtask comment-width [--base <ref>] [files]`: fail on a comment line of a `.rs` file that the change adds
   past 100 characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when

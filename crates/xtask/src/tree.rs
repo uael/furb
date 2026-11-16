@@ -202,10 +202,10 @@ fn warmed(main: &Path, path: &Path) -> Result<(), Fault> {
         || ran(path, "bun", &["install", "--frozen-lockfile", "--offline"])
           && ran(path, "bun", &["run", "build"])
     });
+    // A .venv that `uv run --no-sync` made holds no package, so only one that holds the wheel is
+    // synced.
     let synced = scope.spawn(|| {
-      path.join(".venv").exists()
-        || !path.join("uv.lock").is_file()
-        || ran(path, "uv", &["sync", "--locked"])
+      wheeled(path) || !path.join("uv.lock").is_file() || ran(path, "uv", &["sync", "--locked"])
     });
     (built.join().unwrap_or(false), synced.join().unwrap_or(false))
   });
