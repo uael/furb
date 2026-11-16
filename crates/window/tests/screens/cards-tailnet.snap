@@ -5,7 +5,7 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃ plan the week (the model answers)                            Resting 1
 ┃
-                                                opus/high         set up the lab            ● now
+                                                opus/high         set up the lab            • now
     1  found = 2                                                  LA lab@studio              opus
     2  close('The open takes **329 s**. Two stages h…+251
                                                                Resolved 1 ▸

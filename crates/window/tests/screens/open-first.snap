@@ -1,11 +1,11 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · remove the gate from the engine       ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ remove the gate from the engine                              Resting 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ ● remove the gate from…     ● now ▌
+                                                              ▐ ● remove the gate from…     • now ▌
                                                               ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 

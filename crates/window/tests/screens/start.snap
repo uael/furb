@@ -21,7 +21,7 @@ source: crates/window/tests/suite/screens.rs
 
   studio is offline: the daemon closed the connection. The     Resting 3
   window dials it again.
-                                                                  remove the gate from the…  ● 5h
+                                                                  remove the gate from the…  • 5h
   ⌃P          go to anything, or run a command                    FU furb                    opus
   ⌃X ?        each key
                                                                   where does the time go      11h

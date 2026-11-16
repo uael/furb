@@ -77,7 +77,7 @@ fn the_first_frame_shows_the_cards_that_the_window_kept_then_each_machine_answer
   peer.said(&life, "remove the gate from the engine");
   let kept = daemon.file("cards.json");
   open(&first, vec![daemon.machine("mac")], options(&kept));
-  shows(&first, "remove the gate from…     ● now");
+  shows(&first, "remove the gate from…     • now");
   // The window writes its cards a moment after it heard them.
   assert!(!kept.exists());
   first.advance(Duration::from_secs(1));
@@ -138,7 +138,7 @@ fn a_machine_that_does_not_answer_holds_nothing_back_and_the_list_says_so_after_
   // A second machine takes the dial of the window and never answers it.
   let mut far = Daemon::bound(&app);
   open(&app, vec![here.machine("mac"), far.machine("studio")], options(&here.file("cards.json")));
-  let frame = shows(&app, "remove the gate from…     ● now");
+  let frame = shows(&app, "remove the gate from…     • now");
   assert!(frame.contains("2 machines"), "{frame}");
   // A wait under 400 ms shows no loader.
   app.advance(Duration::from_millis(399));
@@ -148,7 +148,7 @@ fn a_machine_that_does_not_answer_holds_nothing_back_and_the_list_says_so_after_
   // The machine is gone: the list says so, and the card of the other machine stands.
   far.lost();
   let frame = shows(&app, "studio offline");
-  assert!(frame.contains("remove the gate from…     ● now"), "{frame}");
+  assert!(frame.contains("remove the gate from…     • now"), "{frame}");
   assert!(frame.contains("studio is offline: the daemon closed the connection"), "{frame}");
 }
 

@@ -341,8 +341,9 @@ impl Model {
       Standing::Paused { .. } if needs => ("‖", "Paused".into(), Some(t.attention), None),
       Standing::Paused { .. } => ("‖", "Paused".into(), None, age.clone()),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
+      // A new answer takes the small dot of an unread mail, apart from the dot of a live session.
       Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
-        ("●", String::new(), Some(t.attention), since())
+        ("•", String::new(), Some(t.attention), since())
       }
       // A thread that works took its loader above.
       Standing::Thinks

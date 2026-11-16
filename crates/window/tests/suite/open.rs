@@ -335,7 +335,7 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   assert!(back, "the message never came back to the input:\n{}", app.text());
   assert!(app.text().contains("Another process owns"), "{}", app.text());
   // The machine says that no life holds the record: the card rests again.
-  shows(&app, "● now");
+  shows(&app, "• now");
   screen("open-failed", &app);
   // The way back takes a click, as its key does, and lights under the pointer.
   clicked(&app, "⎋ back", 0, 0);

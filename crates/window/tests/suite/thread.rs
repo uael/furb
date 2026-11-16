@@ -676,7 +676,7 @@ fn a_thread_that_a_login_that_only_reads_opens_shows_read_from_its_first_frame()
   });
   assert!(paged, "the page never showed:\n{frame}");
   let card = frame.lines().find(|line| line.contains("▐ ● where")).unwrap_or_default();
-  assert!(!card.contains("● now"), "the thread that he reads shows unread:\n{frame}");
+  assert!(!card.contains("• now"), "the thread that he reads shows unread:\n{frame}");
 }
 
 #[test]
