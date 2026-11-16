@@ -20,6 +20,11 @@ site: Final[ContextVar[str]] = ContextVar("site", default=OPERATOR)
 Work that an ear begins while it speaks keeps the site of that ear, so what the work says later is said by that ear.
 """
 
+hearer: Final[ContextVar[str]] = ContextVar("hearer", default="")
+"""The hearer is the ear that hears a fact now, empty while no ear hears, and the Kernel makes the rung of a word the hearer while it steps that word.
+A fact said under the site of an ear while another ear is the hearer is said by the code that runs there, so the record keeps it not, and a later life says it again when it runs that code again.
+"""
+
 type Fact = tuple[str, str, str, *tuple[object, ...]]
 """A fact is a tuple: its kind, the act it is about, who said it, and its words, deconstructed only by match.
 Everything that the engine, the World, the Kernel and the operator say is a fact, and the kind of a fact is its first slot.
@@ -1140,7 +1145,7 @@ def boot(record: Iterable[Entry] = (), **outside: Ear) -> Act[Never]:
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more.
-  The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
+  The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said and whose speaker is the hearer, or speaks while no ear hears, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
   A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
   Given at its birth what the World kept of an earlier life, the journal says each entry again at its place, once the life said as many facts as the place counts: a fact under the site of its speaker; an act whose maker is neither an act nor an ear that boot was given through its verb under the site of its maker, since that maker makes nothing again of what the record holds; an act whose maker is an ear that boot was given under the site of that ear, when that ear did not make it again by then, through the verb that binds its kind in the engine, so its ear is the verb's as when that ear made it, or else through act with no ear of its own, so a view of a later life holds it where the first life held it; and an act whose maker is an act not at all, since the word of that act makes it again there.

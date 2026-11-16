@@ -12,6 +12,7 @@ TIMEOUT = 120.0
 LARGEST = 524288
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
+hearer = ContextVar("hearer", default="")
 raised = None
 actor = ""
 accepts = None
@@ -924,7 +925,12 @@ def boot(record=(), **outside):
     if due and (at := (*due[0], n)[1]) is not None and at < n:
       drift(a)
     elif (
-      not (due or broke) and n > tip + 1 and (question(a) or (a[2] not in known and a[2] not in owned and get(a[1])))
+      not (due or broke)
+      and n > tip + 1
+      and (
+        question(a)
+        or (a[2] not in known and a[2] not in owned and get(a[1]) and (not a[2] or hearer.get() in ("", a[2])))
+      )
     ):
       return a, n - 1, not busy
     return None
@@ -1051,7 +1057,7 @@ def boot(record=(), **outside):
 
   def hear(name, g, a):
     if name not in busy and alive.get(name) is g:
-      with site.set(name):
+      with site.set(name), hearer.set(name):
         busy.add(name)
         try:
           heed[name] = w = lives(g, a)

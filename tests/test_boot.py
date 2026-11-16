@@ -425,7 +425,7 @@ async def test_the_record_a_life_was_opened_from_from_which_the_journal_answers(
 
 
 async def test_the_journal_the_part_of_the_life_that_keeps_every_act_that_the_life_makes() -> None:
-  """The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
+  """The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said and whose speaker is the hearer, or speaks while no ear hears, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
   sand, log, _ = await lived()
   assert {e[0][0] for e in sand.record} == {
     "chain",
