@@ -237,14 +237,18 @@ fn whole(model: impl CompletionModel + 'static) -> Streams {
 }
 
 /// What an [`Amended`] client changes on its way: the request before it goes, and the streamed
-/// reply before it is read. A method that a type leaves out changes nothing.
+/// reply before it is read, or the failure in its place, as a status that is no success, which
+/// the client of rig gives as an error. A method that a type leaves out changes nothing.
 pub(super) trait Amend: Clone + fmt::Debug + Send + Sync + 'static {
   fn request<T>(&self, request: Request<T>) -> Request<T> {
     request
   }
 
-  fn streamed(&self, response: StreamingResponse) -> http_client::Result<StreamingResponse> {
-    Ok(response)
+  fn streamed(
+    &self,
+    response: http_client::Result<StreamingResponse>,
+  ) -> http_client::Result<StreamingResponse> {
+    response
   }
 }
 
@@ -284,7 +288,7 @@ impl<A: Amend> HttpClientExt for Amended<A> {
   where
     T: Into<Bytes> + WasmCompatSend,
   {
-    self.1.streamed(self.0.send_streaming(self.1.request(request)).await?)
+    self.1.streamed(self.0.send_streaming(self.1.request(request)).await)
   }
 }
 

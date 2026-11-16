@@ -82,24 +82,34 @@ impl CompletionModel for Codex {
 struct CodexHttp(PathBuf);
 
 impl Amend for CodexHttp {
-  fn streamed(&self, mut response: StreamingResponse) -> http_client::Result<StreamingResponse> {
-    if matches!(response.status().as_u16(), 401 | 403) {
-      auth::needs_login(&self.0);
-      return Err(http_client::Error::InvalidStatusCodeWithMessage(
-        response.status(),
-        "Sign in to codex again from Providers.".to_owned(),
-      ));
+  fn streamed(
+    &self,
+    response: http_client::Result<StreamingResponse>,
+  ) -> http_client::Result<StreamingResponse> {
+    match response {
+      Err(
+        http_client::Error::InvalidStatusCode(status)
+        | http_client::Error::InvalidStatusCodeWithMessage(status, _)
+        | http_client::Error::InvalidStatusCodeWithDetails { status, .. },
+      ) if matches!(status.as_u16(), 401 | 403) => {
+        auth::needs_login(&self.0);
+        Err(http_client::Error::InvalidStatusCodeWithMessage(
+          status,
+          "Sign in to codex again from Providers.".to_owned(),
+        ))
+      }
+      Ok(mut response) => {
+        if !response.headers().contains_key("content-type") {
+          response
+            .headers_mut()
+            .insert("content-type", HeaderValue::from_static("text/event-stream"));
+        }
+        Ok(response)
+      }
+      failed => failed,
     }
-    if response.status().is_success() && !response.headers().contains_key("content-type") {
-      response.headers_mut().insert("content-type", HeaderValue::from_static("text/event-stream"));
-    }
-    Ok(response)
   }
 }
-
-#[cfg(test)]
-#[path = "mod.test.rs"]
-mod test;
 
 #[derive(Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]

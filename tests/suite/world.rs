@@ -5,6 +5,7 @@ mod bash;
 mod catalog;
 #[cfg(unix)]
 mod claude;
+mod codex;
 mod config;
 mod disk;
 mod images;

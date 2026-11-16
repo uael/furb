@@ -761,7 +761,3 @@ async fn posted(url: &str, body: &Value) -> Result<reqwest::Response, AuthError>
   let request = request.header("content-type", "application/json").body(body.to_string());
   Ok(request.send().await?)
 }
-
-#[cfg(test)]
-#[path = "auth.test.rs"]
-mod test;
