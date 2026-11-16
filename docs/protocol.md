@@ -550,9 +550,11 @@ once it listens. A second daemon refuses to start there.
   fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
-  The new daemon says `handover`, in the protocol of the daemon that runs when that daemon refuses its own. The daemon that runs ends each life, which writes its image, stops to listen
-  and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
-  its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
+  The new daemon says `handover`, in the protocol of the daemon that runs when that daemon refuses its own. The
+  daemon that runs first waits until no life runs a command, and serves each peer meanwhile: the end of a life cuts
+  each command that it runs, and its log names the lives that it waits for. It then ends each life, which writes its
+  image, stops to listen and answers `handed` with each life, its folder and its pins. The new daemon listens and
+  opens each life again with its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
   from its image when the new build reads it, else from its record. A life that ran another engine, Kernel or
   checkpointer reaches its tip on them, writes the fact made of the new build, tells each chain the lines of the
   engine that differ, and goes on with those of the new build, at the stage `cross`. The handover waits for each life to end, however long it takes, and the log of the daemon

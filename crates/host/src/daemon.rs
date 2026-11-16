@@ -11,9 +11,11 @@
 //! of a new build takes the place of the one that runs only through [`upgrade`], never by a
 //! takeover: the daemon that runs writes the image of each life, stops to listen, and gives
 //! its lives and their pins, which the new one opens again. Each window then dials again and
-//! attaches, with no loss. The handover waits for each life to end, however long it takes: a life
-//! given up before its end would still hold the lease of its record and the facts that its record
-//! does not hold yet, and the new daemon would open a second life on that record.
+//! attaches, with no loss. The handover first waits until no life runs a command, while the daemon
+//! serves each peer, since the end of a life cuts its commands and no later life takes one again.
+//! It then waits for each life to end, however long it takes: a life given up before its end would
+//! still hold the lease of its record and the facts that its record does not hold yet, and the new
+//! daemon would open a second life on that record.
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
 //! tailnet, by TCP and by WebSocket, and lets in each peer whose operator the access list names,
@@ -477,6 +479,8 @@ enum Asked {
   Restand,
   /// What a site sent in the project of a record, with what the life of the record holds now.
   History { life: String, site: String, held: Vec<Sent>, reply: oneshot::Sender<Vec<Sent>> },
+  /// A handover that a peer asked, once no life runs a command that it ran when it was asked.
+  Settled { asker: Outbox, reply: Replied },
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -1058,8 +1062,9 @@ impl Lives {
       match asked {
         None => return,
         Some(Asked::Verb { verb, outbox, reply, .. }) if *verb == Verb::Handover => {
-          return self.handover(outbox, reply);
+          self.settle(outbox, reply);
         }
+        Some(Asked::Settled { asker, reply }) => return self.handover(asker, reply),
         Some(asked) => self.heard(asked),
       }
       let empty = self.held.is_empty();
@@ -1106,6 +1111,8 @@ impl Lives {
         }
       }
       Asked::Stop(reply) => self.stop(reply),
+      // The task hands the lives over before it hears an ask, since the handover ends it.
+      Asked::Settled { .. } => {}
       Asked::Restand => self.restand(),
       Asked::History { life, site, held, reply } => {
         reply.send(self.history(&life, &site, held)).ok();
@@ -1698,6 +1705,28 @@ impl Lives {
     for (birth, one) in waiting {
       one.send(opened.clone().and_then(|()| self.held_by(life, birth.holder))).ok();
     }
+  }
+
+  /// The handover asked, once each life that lives holds no command in flight: the end of a life
+  /// cuts its commands, which no later life takes again. The daemon serves each peer meanwhile,
+  /// and its log names each life that it waits for.
+  fn settle(&self, asker: Outbox, reply: Replied) {
+    let living = self.held.iter().filter(|(_, held)| matches!(held.stage, Stage::Living(_)));
+    let runs = living.filter(|(_, held)| held.handle.runs_commands());
+    let lives: Vec<(String, LifeHandle)> =
+      runs.map(|(life, held)| (life.clone(), held.handle.clone())).collect();
+    let (log, asks) = (self.settings.opening.log.clone(), self.asks.clone());
+    tokio::spawn(async move {
+      if !lives.is_empty() {
+        let records: Vec<&str> = lives.iter().map(|(record, _)| record.as_str()).collect();
+        let waits = records.join(", ");
+        report(log.as_ref(), &format_args!("the handover waits for each command of: {waits}"));
+      }
+      future::join_all(lives.iter().map(|(_, life)| life.settled())).await;
+      if let Some(asks) = asks.upgrade() {
+        asks.send(Asked::Settled { asker, reply }).ok();
+      }
+    });
   }
 
   /// The handover: each window detached, each life told to end, then each life that lives, with

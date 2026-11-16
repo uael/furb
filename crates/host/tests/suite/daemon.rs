@@ -1527,6 +1527,50 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
   assert!(!new.is_finished());
 }
 
+#[tokio::test]
+async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_meanwhile() {
+  let at = place();
+  let (local, old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let go = at.join("go");
+  let word =
+    format!("r = await bash('while [ ! -f {} ]; do sleep 0.05; done; echo ran')", go.display());
+  let verb = Verb::Run { life: life.clone(), word, on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  let runs = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
+  };
+  window.until(runs).await;
+  let settings = Settings {
+    opening: opening(&at),
+    grace: SHORT,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    home: None,
+    data: None,
+  };
+  let next = local.clone();
+  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  time::sleep(PAST).await;
+  assert!(!old.is_finished(), "the handover waits for the command");
+  window.ran(&life, "x = 41 + 1").await;
+  File::create(&go).unwrap();
+  assert!(window.closed().await);
+  assert!(matches!(old.await, Ok(Ok(()))));
+  listening(&local, &mut new).await;
+  let mut window = Window::dialed(&local).await;
+  window.attach(&life).await;
+  window.ran(&life, "out = r.stdout.content").await;
+  let inspect = Verb::Inspect { life: life.clone(), name: "out".to_owned(), on: None };
+  let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
+  assert_eq!(value, json!("ran\n"), "the command ran to its end in the old daemon");
+}
+
 /// The new daemon of a handover, once it listens: the old one ends before the new one binds. A new
 /// daemon that ends before it listens fails the test with its error.
 async fn listening(local: &Local, new: &mut JoinHandle<Result<(), DaemonError>>) {

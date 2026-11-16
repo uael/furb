@@ -358,6 +358,8 @@ pub struct Life {
   opens: Told,
   /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
   cards: watch::Sender<Option<Arc<Session>>>,
+  /// Whether a command of the life runs, which a handover waits to see false.
+  commands: watch::Sender<bool>,
   times: Times,
   /// Whether an event changed what the cards read since the life last told them, and when it may
   /// tell them next.
@@ -512,6 +514,7 @@ pub struct LifeHandle {
   name: Arc<Mutex<Option<String>>>,
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
+  commands: watch::Receiver<bool>,
 }
 
 impl Life {
@@ -531,12 +534,14 @@ impl Life {
     let named = Arc::clone(&name);
     let (opened, opens) = Told::new();
     let (carded, cards) = watch::channel(None);
-    let told = Tells { readers: told, name: named, opens: opened, cards: carded };
+    let (running, commands) = watch::channel(false);
+    let told =
+      Tells { readers: told, name: named, opens: opened, cards: carded, commands: running };
     thread::Builder::new()
       .name("furb-life".to_owned())
       .spawn(move || lived(opening, lease, received, told))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name, opens, cards })
+    Ok(LifeHandle { inbox, readers, name, opens, cards, commands })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -1093,6 +1098,7 @@ struct Tells {
   name: Arc<Mutex<Option<String>>>,
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
+  commands: watch::Sender<bool>,
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
@@ -1103,7 +1109,7 @@ async fn run(
   mut received: UnboundedReceiver<Message>,
   tells: Tells,
 ) {
-  let Tells { readers, name, opens, cards } = tells;
+  let Tells { readers, name, opens, cards, commands } = tells;
   let record = opening.record.clone().filter(|_| opening.keeps());
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
@@ -1122,6 +1128,7 @@ async fn run(
     record,
     opens,
     cards,
+    commands,
     stale: false,
     due: Instant::now(),
   };
@@ -1371,6 +1378,8 @@ async fn driven(
       }
     }
     drained(&mut engine, life);
+    let runs = life.kept.held.commands();
+    life.commands.send_if_modified(|was| mem::replace(was, runs) != runs);
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
       drop(engine);
@@ -1788,6 +1797,20 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 }
 
 impl LifeHandle {
+  /// Whether a command of the life runs now.
+  #[must_use]
+  pub fn runs_commands(&self) -> bool {
+    *self.commands.borrow()
+  }
+
+  /// Once no command of the life runs, or the life ended: the end of a life cuts each command
+  /// that it runs, which no later life takes again.
+  pub async fn settled(&self) {
+    let mut commands = self.commands.clone();
+    // A life that ended runs no command.
+    commands.wait_for(|runs| !runs).await.ok();
+  }
+
   /// The name of the session of the life, as its facts fold it: the one that the operator said last
   /// on the root, which wins, else the one that the skill naming gave, and nothing while it
   /// holds neither.
