@@ -188,10 +188,9 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   if CARRIED.is_empty() {
     return Ok(None);
   }
-  // The size names the build of the program, so a new build writes a new file, in a folder of its
-  // own under the one name `listen`: the system keeps the model that it prepared for the Neural
-  // Engine by the name of the program, and a new name prepared it again for minutes.
-  let build = folder.join(format!("speech-{}", CARRIED.len()));
+  // A digest of its bytes names the build of the program, so a new build writes a new file, though
+  // two builds can take one size, in a folder of its own under the one name `listen`.
+  let build = folder.join(format!("speech-{:016x}", digest(CARRIED)));
   let path = build.join("listen");
   if !path.is_file() {
     fs::create_dir_all(&build)?;
@@ -205,6 +204,13 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
     fs::rename(&written, &path)?;
   }
   Ok(Some(path))
+}
+
+/// The FNV-1a digest of some bytes, the same in each build.
+fn digest(bytes: &[u8]) -> u64 {
+  bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+    (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+  })
 }
 
 /// The program started on a runtime, on the folder of its models, the language that he speaks and
