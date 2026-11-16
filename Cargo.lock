@@ -1603,7 +1603,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tree-sitter-python",
- "unicode-width",
+ "unicode-segmentation",
  "windows-sys 0.61.2",
 ]
 

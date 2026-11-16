@@ -13,13 +13,13 @@ use std::{
   ops::Range,
 };
 
+use crate::cells::Cells;
 use furb::{
   engine::OPERATOR,
   view::{self, Page, Standing},
 };
 use furb_host::protocol::{Card, Gesture, Verb, ViewEvent};
 use opentui::style::{Color, Span, Style};
-use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Filled, Fold, Hold, Opened, Place, Thread};
 

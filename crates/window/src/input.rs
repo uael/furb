@@ -4,11 +4,11 @@
 
 use std::{mem, ops::Range, path::Path};
 
+use crate::cells::Cells;
 use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, said, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
-use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Target, Where};
 
@@ -1097,7 +1097,7 @@ impl Model {
       Some(format!(" · {BRANCH}{}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
     });
     let folder = self.folder_shown(at, &folder);
-    let room = room.saturating_sub(2 + branch.as_deref().map_or(0, UnicodeWidthStr::width));
+    let room = room.saturating_sub(2 + branch.as_deref().map_or(0, Cells::width));
     let new = matches!(self.client.target(), Target::New(..));
     let machine = !new && name.width() + 3 + folder.width() <= room;
     let folder = tail(&folder, room);

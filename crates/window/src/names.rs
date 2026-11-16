@@ -4,8 +4,8 @@
 
 use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 
+use crate::cells::Cells;
 use opentui::syntax::tree_sitter::{Node, Parser};
-use unicode_width::UnicodeWidthStr;
 
 /// A name in a line of code: its columns in the line, its text, and whether the line binds it.
 #[derive(Debug, Clone, PartialEq, Eq)]

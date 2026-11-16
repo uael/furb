@@ -6,13 +6,13 @@
 
 use std::{borrow::Cow, cmp::Reverse, ops::Range};
 
+use crate::cells::Cells;
 use furb::view::{Part, Sent, Skill, tokens};
 use furb_host::protocol::Card;
 use opentui::{
   input::{MouseButton, MouseEvent, MouseEventKind},
   style::{Color, Style},
 };
-use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;

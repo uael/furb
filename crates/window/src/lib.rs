@@ -11,6 +11,7 @@
 //! as the headless app of a test. [`tokens`] holds each color, each loader and each role of a text
 //! of the design, which each screen reads.
 
+mod cells;
 mod code;
 mod complete;
 mod context;

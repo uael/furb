@@ -3,7 +3,7 @@
 //! on its last row walks back. While no walk runs, the input shows in grey the rest of the newest
 //! text that starts with what he wrote, which the right arrow takes.
 
-use unicode_width::UnicodeWidthStr;
+use crate::cells::Cells;
 
 use crate::{line::cut, model::Model};
 
@@ -18,7 +18,7 @@ impl Model {
       return None;
     }
     // The editor breaks a line that passes its columns at any character.
-    let mut lines = self.client.draft.text.split('\n').map(UnicodeWidthStr::width);
+    let mut lines = self.client.draft.text.split('\n').map(Cells::width);
     let last = lines.next_back()?;
     let above: usize = lines.map(|one| one.div_ceil(width).max(1)).sum();
     let (row, column) = (above + last / width, last % width);

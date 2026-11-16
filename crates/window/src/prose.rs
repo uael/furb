@@ -5,9 +5,9 @@
 
 use std::mem;
 
+use crate::cells::Cells;
 use opentui::style::{Span, Style};
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   code::{Colors, Gutter},

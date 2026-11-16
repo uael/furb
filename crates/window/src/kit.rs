@@ -3,10 +3,10 @@
 //! the protocol. A button takes a press, and an input takes the input of the window, whose next
 //! send goes to that node.
 
+use crate::cells::Cells;
 use furb_client::View;
 use furb_host::protocol::{Axis, Node, Run, Shape, Tone};
 use opentui::style::{Span, Style};
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,

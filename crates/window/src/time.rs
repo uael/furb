@@ -10,9 +10,9 @@
 
 use std::{cmp::Ordering, collections::HashMap, ptr};
 
+use crate::cells::Cells;
 use furb_client::{Chains, Flow, Time, resting};
 use opentui::style::{Color, Style};
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,

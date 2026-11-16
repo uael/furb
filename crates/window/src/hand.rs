@@ -11,7 +11,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use unicode_width::UnicodeWidthStr;
+use crate::cells::Cells;
 
 use opentui::{
   App,
@@ -31,7 +31,7 @@ use furb::world::images;
 use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, mentioned};
 
 use crate::{
-  Machine, Options, Screen,
+  Machine, Options, Screen, cells,
   code::syntax,
   input::Armed,
   kept,
@@ -116,6 +116,7 @@ type Shared = Rc<RefCell<Window>>;
 /// dialed, where the window before stood when it gave its place to this one. Whether the window
 /// ended to give its place to a new build of its program, once the app ends.
 pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<Cell<bool>> {
+  cells::follow(app);
   let tokens = Tokens::on(app.palette().and_then(|palette| palette.background));
   app.set_theme(tokens.theme());
   let mut before: Vec<Told> = kept::kept(&options.kept);
@@ -541,6 +542,7 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   let now = (held.clock)();
   // The terminal tells what it speaks some time after the window opens, so each change reads it.
   let speaks = app.session().capabilities().map(|one| one.flags).unwrap_or_default();
+  cells::follow(app);
   let given = held.screen.tell(|model| {
     (model.client.now, model.client.moved, model.speaks) = (now, moved, speaks);
     let given = change(model);
@@ -1385,7 +1387,7 @@ fn colored(window: &Shared) {
     let mark = ExtmarkOptions::default().style(Style::new().fg(t.accent).bg(t.lifted));
     // The editor counts the cells of the text, and one for each end of a line.
     let cells = |bytes: &str| {
-      bytes.split('\n').map(UnicodeWidthStr::width).sum::<usize>() + bytes.matches('\n').count()
+      bytes.split('\n').map(Cells::width).sum::<usize>() + bytes.matches('\n').count()
     };
     let place = |span: Range<usize>| {
       let start = u32::try_from(cells(&text[..span.start])).unwrap_or_default();

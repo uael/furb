@@ -2,10 +2,11 @@
 
 use std::{mem, ops::Range};
 
+use crate::{
+  cells::{Cells, characters},
+  thread::columns,
+};
 use opentui::style::{Color, Span, Style};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-
-use crate::thread::columns;
 
 /// A row of text, as its runs.
 pub(crate) type Line = Vec<Span<'static>>;
@@ -23,12 +24,12 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
     return text.to_owned();
   }
   let (mut kept, mut used) = (String::new(), 1);
-  for one in text.chars() {
-    used += one.width().unwrap_or_default();
+  for (one, wide) in characters(text) {
+    used += wide;
     if used > room {
       break;
     }
-    kept.push(one);
+    kept.push_str(one);
   }
   let split = !text[kept.len()..].starts_with(' ');
   let pad = kept.len() - kept.trim_start().len();
@@ -105,13 +106,12 @@ pub(crate) fn balanced(text: &str, room: usize) -> Vec<String> {
 /// A word as parts of a count of columns at most, each of one character at least.
 fn broken(word: &str, room: usize) -> Vec<String> {
   let mut parts = vec![String::new()];
-  for one in word.chars() {
-    let wide = one.width().unwrap_or_default();
+  for (one, wide) in characters(word) {
     if parts.last().is_some_and(|last| !last.is_empty() && last.width() + wide > room) {
       parts.push(String::new());
     }
     if let Some(last) = parts.last_mut() {
-      last.push(one);
+      last.push_str(one);
     }
   }
   parts
@@ -142,13 +142,12 @@ pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
 fn kept(line: &Line, room: usize) -> (Line, usize) {
   let (mut out, mut kept, mut left) = (Vec::new(), 0, room);
   for one in line {
-    let fits = |char: &char| {
-      let wide = char.width().unwrap_or_default();
-      let fits = wide <= left;
+    let fits = |(_, wide): &(&str, usize)| {
+      let fits = *wide <= left;
       left = if fits { left - wide } else { 0 };
       fits
     };
-    let part: String = one.content.chars().take_while(fits).collect();
+    let part: String = characters(&one.content).take_while(fits).map(|(one, _)| one).collect();
     let whole = part.len() == one.content.len();
     kept += part.chars().count();
     out.push(run(part, one.style));
@@ -171,15 +170,15 @@ pub(crate) fn styled(line: Line, range: &Range<usize>, style: impl Fn(Style) -> 
   let mut column = 0;
   for one in line {
     let mut part = (String::new(), None);
-    for char in one.content.chars() {
+    for (character, wide) in characters(&one.content) {
       let inside = range.contains(&column);
       if part.1.is_some_and(|was| was != inside) {
         let (text, was) = mem::take(&mut part);
         out.push(run(text, if was == Some(true) { style(one.style) } else { one.style }));
       }
-      part.0.push(char);
+      part.0.push_str(character);
       part.1 = Some(inside);
-      column += char.width().unwrap_or(0);
+      column += wide;
     }
     if let (text, Some(inside)) = part {
       out.push(run(text, if inside { style(one.style) } else { one.style }));
@@ -197,25 +196,26 @@ pub(crate) fn marked(line: &Line) -> Option<Range<usize>> {
 /// A line as rows of a count of columns at most, each run in its style. A row breaks after the
 /// last blank that it holds, else where it is full, as a text wraps.
 pub(crate) fn sliced(line: &[Span<'static>], room: usize) -> Vec<Line> {
-  let cells = line.iter().flat_map(|one| one.content.chars().map(|char| (char, one.style)));
-  let wide =
-    |row: &[(char, Style)]| -> usize { row.iter().map(|one| one.0.width().unwrap_or(0)).sum() };
+  let cells = line
+    .iter()
+    .flat_map(|one| characters(&one.content).map(|(character, wide)| (character, wide, one.style)));
+  let wide = |row: &[(&str, usize, Style)]| -> usize { row.iter().map(|one| one.1).sum() };
   let (mut rows, mut row) = (Vec::new(), Vec::new());
   for cell in cells {
-    if wide(&row) + cell.0.width().unwrap_or(0) > room && !row.is_empty() {
-      let blank = row.iter().rposition(|one| one.0 == ' ').filter(|at| *at + 1 < row.len());
+    if wide(&row) + cell.1 > room && !row.is_empty() {
+      let blank = row.iter().rposition(|one| one.0 == " ").filter(|at| *at + 1 < row.len());
       let rest = blank.map_or_else(Vec::new, |at| row.split_off(at + 1));
       rows.push(mem::replace(&mut row, rest));
     }
     row.push(cell);
   }
   rows.push(row);
-  let runs = |row: Vec<(char, Style)>| {
+  let runs = |row: Vec<(&str, usize, Style)>| {
     let mut line: Line = Vec::new();
-    for (char, style) in row {
+    for (character, _, style) in row {
       match line.last_mut() {
-        Some(last) if last.style == style => last.content.to_mut().push(char),
-        _ => line.push(run(char.to_string(), style)),
+        Some(last) if last.style == style => last.content.to_mut().push_str(character),
+        _ => line.push(run(character, style)),
       }
     }
     line

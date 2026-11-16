@@ -6,8 +6,8 @@
 
 use std::{iter, mem};
 
+use crate::cells::Cells;
 use opentui::style::Style;
-use unicode_width::UnicodeWidthStr;
 
 use furb::view::Agent;
 use furb_client::{Anchor, Opened, Review, Where, rests};

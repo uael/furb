@@ -43,8 +43,8 @@ serde_json = "1"
 thiserror = "2"
 # The hour of a card that the window did not confirm, in the zone of the machine.
 jiff = "0.2"
-# How many columns a text takes.
-unicode-width = "0.2"
+# The characters of a text as the renderer splits it, each of which the renderer measures.
+unicode-segmentation = "1.13"
 # The grammar of python, which colors the code of a thread on each whole statement and the diff of a review.
 tree-sitter-python = "0.25"
 # The prose of a model, which is markdown.

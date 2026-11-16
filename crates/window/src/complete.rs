@@ -4,8 +4,8 @@
 //! stands among the rows that match, the chosen one on the lifted ground. The completion itself
 //! stands in the client.
 
+use crate::cells::Cells;
 use opentui::style::Style;
-use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Asked, Completes, Kind, Offer, Target};
 
@@ -71,8 +71,7 @@ impl Model {
     };
     let commands = commands.unwrap_or_default();
     // The folders of the files that show stand in one column, past the longest name of a file.
-    let file =
-      |one: &(usize, Offer, Vec<usize>)| one.1.name.rsplit('/').next().map(UnicodeWidthStr::width);
+    let file = |one: &(usize, Offer, Vec<usize>)| one.1.name.rsplit('/').next().map(Cells::width);
     let files = shown.iter().filter_map(file).max().unwrap_or_default();
     if shown.is_empty() {
       let says = self.unmatched();
@@ -111,11 +110,8 @@ impl Model {
         (left, Vec::new())
       }
       Kind::Emoji => {
-        // The selector that asks a symbol of text to draw as an emoji takes two columns in some
-        // terminals and one in others, as tmux, so the list draws the symbol without it, and a
-        // symbol of one column takes a slot of two: each name starts on one column. What he
-        // takes keeps the selector.
-        let glyph: String = offer.says.chars().filter(|one| *one != '\u{fe0f}').collect();
+        // A symbol of one column takes a slot of two, so each name starts on one column.
+        let glyph = &offer.says;
         let pad = " ".repeat(2usize.saturating_sub(glyph.width()) + 2);
         let mut left = vec![run(format!("{glyph}{pad}:"), prose)];
         left.extend(lit(&offer.name, letters, prose, bright));

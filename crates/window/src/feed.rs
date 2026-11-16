@@ -6,6 +6,7 @@
 
 use std::{cell::OnceCell, collections::HashMap, mem, path::Path};
 
+use crate::cells::Cells;
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
   Standing, Thought, Work, homed, lines, operator, timer,
@@ -17,7 +18,6 @@ use furb_host::{
   protocol::{Card, Present},
 };
 use opentui::style::{Color, Span, Style};
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   code::Gutter,

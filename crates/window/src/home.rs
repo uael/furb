@@ -3,10 +3,10 @@
 
 use std::{iter, path::Path};
 
+use crate::cells::Cells;
 use furb::view::Standing;
 use furb_client::Target;
 use opentui::style::Style;
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::{self, Does},

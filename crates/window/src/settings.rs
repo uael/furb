@@ -5,10 +5,10 @@
 
 use std::borrow::Cow;
 
+use crate::cells::Cells;
 use furb::view::Skill;
 use furb::world::config::{Layer, Property, Setting};
 use serde_json::Value;
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   model::Model,
