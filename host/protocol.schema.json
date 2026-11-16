@@ -5010,6 +5010,18 @@
         {
           "type": "object",
           "properties": {
+            "is": {
+              "type": "string",
+              "const": "waits"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "work": {
               "$ref": "#/definitions/Work"
             },
@@ -5097,7 +5109,7 @@
           ]
         }
       ],
-      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nmillisecond of the epoch at which the host saw it begin, so a time of a second shows after a\nwhole second; it asks the operator; its model is asked again after a call that failed; it\nfailed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch\nat which the host saw the stop, which a host that opened the life after it does not know."
+      "description": "How a line stands: it ran, or will not run; it waits to run, as a line that its model wrote\nbefore its word runs, or a line under the line where a running word stands; it runs, with the\nwork that it waits for and the millisecond of the epoch at which the host saw it begin, so a\ntime of a second shows after a whole second; it asks the operator; its model is asked again\nafter a call that failed; it failed, with the reason that a person reads; or a stop ended it, at\nthe millisecond of the epoch at which the host saw the stop, which a host that opened the life\nafter it does not know."
     },
     "Work": {
       "type": "string",
@@ -6236,5 +6248,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 65
+  "x-protocol": 66
 }

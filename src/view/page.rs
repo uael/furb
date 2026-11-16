@@ -550,8 +550,14 @@ impl<'a> Reader<'a> {
         .collect();
       let awaits = open.map(|at| awaited(made[at].0)).unwrap_or_default();
       let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
-      if let Some(at) = line(&lines, source) {
+      let stands = line(&lines, source);
+      if let Some(at) = stands {
         (lines[at].mark, lines[at].awaits) = (mark, awaits);
+      }
+      // The lines under the last line where the word stands have not run in this pass: they wait.
+      let last = asking.iter().copied().chain(stands).max();
+      for one in last.map_or(&mut [][..], |at| &mut lines[at + 1..]) {
+        one.mark = Mark::Waits;
       }
       for at in asking {
         lines[at].mark = Mark::Asks;
@@ -578,8 +584,8 @@ impl<'a> Reader<'a> {
     }
   }
 
-  /// The lines that the model of a rung with no word wrote so far: those that came ran, and the
-  /// line that comes runs from the moment its model is asked, waits for the retry of its call,
+  /// The lines that the model of a rung with no word wrote so far: those that came wait to run, and
+  /// the line that comes runs from the moment its model is asked, waits for the retry of its call,
   /// failed with the last reply of the rung, or a stop ended it.
   fn writing(self, rung: &Act, before: usize) -> Vec<Line> {
     let reply = self.held.made_by(&rung.id).filter(|act| act.kind == Kind::Reply).last();
@@ -600,12 +606,13 @@ impl<'a> Reader<'a> {
     }
     let came = writing(text, "");
     let ran = came.lines.split('\n').zip(&came.numbers).filter(|_| !came.lines.is_empty());
+    // The engine runs a word once its model wrote it whole, so each line that came waits.
     let mut lines: Vec<Line> =
-      ran.map(|(text, at)| Line::of(before + at, text.to_owned(), Mark::Ran)).collect();
+      ran.map(|(text, at)| Line::of(before + at, text.to_owned(), Mark::Waits)).collect();
     // A model whose reply is done writes no line: its word waits to run, from its first line.
     let whole = mark.is_none() && reply.is_some_and(Act::done);
     let mark = match mark {
-      _ if whole => Mark::Ran,
+      _ if whole => Mark::Waits,
       mark => mark.unwrap_or(Mark::Runs { work: Work::Writes, began }),
     };
     lines.push(Line::of(before + came.count + 1, came.tail, mark));

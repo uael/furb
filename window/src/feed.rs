@@ -742,6 +742,7 @@ impl Feed<'_> {
       Mark::Asks => ("◆".to_owned(), t.attention, None),
       Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
       Mark::Stopped { .. } => ("■".to_owned(), t.muted, None),
+      Mark::Waits => (line.number.to_string(), t.muted, None),
       // A line that ended while he read the thread lights its number in the accent of its work,
       // which settles into the grey of a line that ran, so the eye sees where the work moved on.
       Mark::Ran => {

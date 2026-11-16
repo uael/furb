@@ -193,15 +193,18 @@ pub fn wrote(fact: &Value) -> bool {
   fact.get(0).and_then(Value::as_str) == Some("out")
 }
 
-/// How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
-/// millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
-/// whole second; it asks the operator; its model is asked again after a call that failed; it
-/// failed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch
-/// at which the host saw the stop, which a host that opened the life after it does not know.
+/// How a line stands: it ran, or will not run; it waits to run, as a line that its model wrote
+/// before its word runs, or a line under the line where a running word stands; it runs, with the
+/// work that it waits for and the millisecond of the epoch at which the host saw it begin, so a
+/// time of a second shows after a whole second; it asks the operator; its model is asked again
+/// after a call that failed; it failed, with the reason that a person reads; or a stop ended it, at
+/// the millisecond of the epoch at which the host saw the stop, which a host that opened the life
+/// after it does not know.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", rename_all = "snake_case")]
 pub enum Mark {
   Ran,
+  Waits,
   Runs { work: Work, began: Option<u64> },
   Asks,
   Retries(Retrying),
@@ -291,7 +294,10 @@ impl Block {
 /// Where a word stands among its lines: the last line that runs, asks, failed or stopped, else its
 /// last line, none when it has no line.
 pub fn stands(lines: &[Line]) -> Option<usize> {
-  lines.iter().rposition(|line| line.mark != Mark::Ran).or(lines.len().checked_sub(1))
+  lines
+    .iter()
+    .rposition(|line| !matches!(line.mark, Mark::Ran | Mark::Waits))
+    .or(lines.len().checked_sub(1))
 }
 
 impl Line {

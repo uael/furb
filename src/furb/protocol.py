@@ -1645,13 +1645,16 @@ class Began(TypedDict):
 Mark1 = TypedDict("Mark1", {"is": Literal["ran"]})
 
 
-Mark3 = TypedDict("Mark3", {"is": Literal["asks"]})
+Mark2 = TypedDict("Mark2", {"is": Literal["waits"]})
 
 
-Mark5 = TypedDict("Mark5", {"why": str, "is": Literal["failed"]})
+Mark4 = TypedDict("Mark4", {"is": Literal["asks"]})
 
 
-Mark6 = TypedDict("Mark6", {"at": NotRequired[int | None], "is": Literal["stopped"]})
+Mark6 = TypedDict("Mark6", {"why": str, "is": Literal["failed"]})
+
+
+Mark7 = TypedDict("Mark7", {"at": NotRequired[int | None], "is": Literal["stopped"]})
 
 
 type Work = Literal["writes", "command", "agent"]
@@ -2541,19 +2544,21 @@ class ChainTrack(TypedDict):
   threads: list[Began]
 
 
-Mark2 = TypedDict("Mark2", {"work": Work, "began": NotRequired[int | None], "is": Literal["runs"]})
+Mark3 = TypedDict("Mark3", {"work": Work, "began": NotRequired[int | None], "is": Literal["runs"]})
 
 
-Mark4 = TypedDict("Mark4", {"attempt": int, "most": int, "wait": int, "at": int, "why": str, "is": Literal["retries"]})
+Mark5 = TypedDict("Mark5", {"attempt": int, "most": int, "wait": int, "at": int, "why": str, "is": Literal["retries"]})
 
 
-type Mark = Mark1 | Mark2 | Mark3 | Mark4 | Mark5 | Mark6
+type Mark = Mark1 | Mark2 | Mark3 | Mark4 | Mark5 | Mark6 | Mark7
 """
-How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
-millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
-whole second; it asks the operator; its model is asked again after a call that failed; it
-failed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch
-at which the host saw the stop, which a host that opened the life after it does not know.
+How a line stands: it ran, or will not run; it waits to run, as a line that its model wrote
+before its word runs, or a line under the line where a running word stands; it runs, with the
+work that it waits for and the millisecond of the epoch at which the host saw it begin, so a
+time of a second shows after a whole second; it asks the operator; its model is asked again
+after a call that failed; it failed, with the reason that a person reads; or a stop ended it, at
+the millisecond of the epoch at which the host saw the stop, which a host that opened the life
+after it does not know.
 """
 
 
@@ -3189,4 +3194,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 65
+PROTOCOL = 66

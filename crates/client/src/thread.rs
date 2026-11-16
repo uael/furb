@@ -8,7 +8,7 @@ use std::{
 };
 
 use furb_wire::{
-  Agent, Context, Exchange, Mark, OPERATOR, Page, Standing, Work, card,
+  Agent, Context, Exchange, Mark, OPERATOR, Page, Standing, card,
   protocol::{Card, Verb},
 };
 
@@ -173,11 +173,7 @@ impl Thread {
       let lines = lines.flat_map(|block| &block.lines);
       lines.filter(|line| mark(&line.mark)).map(|line| line.number).collect()
     };
-    // A line whose model wrote it waits to run once its model goes on: only the end of work that
-    // ran, a command or an agent, ends a line.
-    let ran = marked(&self.exchanges, |mark| {
-      matches!(mark, Mark::Runs { work: Work::Command | Work::Agent, .. })
-    });
+    let ran = marked(&self.exchanges, |mark| matches!(mark, Mark::Runs { .. }));
     if mem::take(&mut self.replaces) {
       (self.exchanges, self.above) = (BTreeMap::new(), None);
     }

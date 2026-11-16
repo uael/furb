@@ -24,12 +24,12 @@ fn page(mark: Mark) -> Page {
 }
 
 #[test]
-fn a_line_ends_when_its_work_ends_and_not_when_its_model_goes_on_to_the_next_line() {
+fn a_line_ends_when_its_work_ends_and_not_when_it_waits_to_run() {
   let (now, later) = (Duration::from_millis(100), Duration::from_millis(200));
   let mut thread = Thread::default();
   // The model wrote the line and goes on: the line waits to run, and nothing ended.
   thread.took(page(Mark::Runs { work: Work::Writes, began: None }), now);
-  thread.took(page(Mark::Ran), now);
+  thread.took(page(Mark::Waits), now);
   assert!(thread.ended.is_empty(), "{:?}", thread.ended);
   // Its command ran and ended: the line ended then.
   thread.took(page(Mark::Runs { work: Work::Command, began: None }), now);

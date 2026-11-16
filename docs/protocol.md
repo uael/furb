@@ -390,7 +390,9 @@ daemon answers requests in any order.
     `thought`, the `text` that its model thought before it wrote, `began`, the millisecond of the epoch at which the
     daemon saw it begin, and the seconds that it `took`, null while it thinks, and `lines`. A line has its `number` in
     the thread, which goes on from block to block, its `text`, in which a quote stands as the binding that it makes and
-    a string of many lines as one line with its escapes, and its `mark`: `ran`; `runs` with the `work` that it waits
+    a string of many lines as one line with its escapes, and its `mark`: `ran`, which a line that will not run takes
+    too; `waits`, a line that its model wrote before its word runs, or a line under the line where a word that runs
+    stands; `runs` with the `work` that it waits
     for, `writes` while its model writes it, `command` or `agent`, and `began`, the millisecond of the epoch at which
     the daemon saw that work begin; `asks`; `retries`, the line that its model writes while its provider waits to ask it
     again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry; `failed` with `why`, which

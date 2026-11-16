@@ -67,12 +67,12 @@ fn a_page_gives_each_message_with_its_block_numbered_through_the_thread_and_what
     ]
   );
   // The block of the second message goes on from the lines of the first, and its line that awaits
-  // the command runs since the host saw the command begin.
+  // the command runs since the host saw the command begin, while the line under it waits to run.
   let block = second.block.as_ref().unwrap();
   let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
   assert_eq!(
     texts(block),
-    [(3, "a = 2", &Mark::Ran), (4, "b = await bash('ls')", &runs), (5, "c = 3", &Mark::Ran)]
+    [(3, "a = 2", &Mark::Ran), (4, "b = await bash('ls')", &runs), (5, "c = 3", &Mark::Waits)]
   );
   assert!(block.more);
 }
@@ -111,7 +111,8 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
   assert_eq!(block.thought, thought(Some(3)));
   assert_eq!(block.thought.as_ref().unwrap().first(), "The seed is read once.");
   let writes = Mark::Runs { work: Work::Writes, began: Some(101_000) };
-  assert_eq!(&texts(&block)[3..], [(6, "d = 4", &Mark::Ran), (7, "e = rea", &writes)]);
+  // The engine runs a word once its model wrote it whole, so the lines that came wait to run.
+  assert_eq!(&texts(&block)[3..], [(6, "d = 4", &Mark::Waits), (7, "e = rea", &writes)]);
 }
 
 #[test]
@@ -126,7 +127,7 @@ fn a_word_that_came_whole_waits_from_its_first_line_and_no_line_is_written() {
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.clone().unwrap();
   let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
-  assert_eq!(&texts(&block)[3..], [(6, "d = 4", &runs), (7, "e = 5", &Mark::Ran)]);
+  assert_eq!(&texts(&block)[3..], [(6, "d = 4", &runs), (7, "e = 5", &Mark::Waits)]);
 }
 
 #[test]
@@ -408,7 +409,7 @@ fn each_line_that_asks_a_question_that_waits_carries_the_mark_of_a_question() {
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
   let block = page.exchanges[0].block.as_ref().unwrap();
   let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
-  assert_eq!(marks, [&Mark::Asks, &Mark::Asks, &Mark::Ran]);
+  assert_eq!(marks, [&Mark::Asks, &Mark::Asks, &Mark::Waits]);
 }
 
 /// A thread whose prompt stays open while the operator says more on it, as a model of a long work
@@ -535,14 +536,14 @@ fn a_word_with_no_act_open_runs_the_line_after_its_last_act_and_its_first_line_b
   let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
   let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
   assert_eq!(marks, [&Mark::Ran, &Mark::Ran, &runs]);
-  // A word that made no act yet runs its first line, never its last.
+  // A word that made no act yet runs its first line, never its last, and the lines under it wait.
   facts.truncate(facts.len() - 2);
   let mut streams = Streamed::default();
   let none = held(facts, &mut streams);
   let page = none.page(&streams, "prompt1", Reach { before: None, limit: 10 });
   let block = page.exchanges[1].block.as_ref().unwrap();
   let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
-  assert_eq!(marks, [&runs, &Mark::Ran, &Mark::Ran]);
+  assert_eq!(marks, [&runs, &Mark::Waits, &Mark::Waits]);
 }
 
 #[test]
@@ -557,7 +558,7 @@ fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
     [
       (1, "for c in ['a', 'b']:", &Mark::Ran),
       (2, "  await bash(c)", &runs),
-      (3, "print('done')", &Mark::Ran)
+      (3, "print('done')", &Mark::Waits)
     ]
   );
 }
