@@ -1,5 +1,5 @@
 //! The skills and extensions of a session as a list part, on a real daemon: how each plays, and
-//! enter, which turns an extension on or off.
+//! the view of an extension that enter opens, which turns it on or off in place.
 
 #![cfg(test)]
 
@@ -25,14 +25,15 @@ fn plays(app: &TestApp, name: &str, stands: &str) -> String {
   let shown = app.wait_until(PATIENCE, || {
     let frame = app.text();
     let row = line(&frame, name);
-    row.starts_with(&said) && row.trim_end().ends_with(stands)
+    // The thumb of a list that scrolls stands at the right of its rows.
+    row.starts_with(&said) && row.trim_end_matches([' ', '┃']).ends_with(stands)
   });
   assert!(shown, "{name} never stood as {stands:?}:\n{}", app.text());
   app.text()
 }
 
 #[test]
-fn the_skills_of_a_session_say_how_each_plays_and_enter_turns_one_on_at_once() {
+fn the_skills_of_a_session_say_how_each_plays_and_the_view_of_one_turns_it_on_at_once() {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");
@@ -54,9 +55,23 @@ fn the_skills_of_a_session_say_how_each_plays_and_enter_turns_one_on_at_once() {
   }
   app.type_text("web");
   plays(&app, "web", "off  furb");
+  // Enter opens the view of the extension: what it is, how it plays, and what he does to it.
   app.press("enter");
+  let view = shows(&app, "Turn it on");
+  assert!(view.contains("plays not in this session") && view.contains("From      furb"), "{view}");
+  assert!(view.contains("Reload the extensions of this session"), "{view}");
+  // Its first action turns it on at once, and the view says so in place.
+  app.press("enter");
+  let view = shows(&app, "Turn it off");
+  assert!(view.contains("plays in this session"), "{view}");
+  // Escape goes back to the extensions, on its row.
+  app.press("escape");
   plays(&app, "web", " on  furb");
-  // A second enter turns it off, and it plays on until the session ends.
+  // Turned off, it plays on until the session ends.
   app.press("enter");
+  shows(&app, "Turn it off");
+  app.press("enter");
+  shows(&app, "Next      off at the next session");
+  app.press("escape");
   plays(&app, "web", "off at the next session  furb");
 }

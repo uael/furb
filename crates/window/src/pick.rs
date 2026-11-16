@@ -58,6 +58,9 @@ pub(crate) enum Pick {
   Value(usize),
   /// The skills of the session that the input sends to, with how each plays.
   Skills,
+  /// One extension, by its place among the skills: what it is, how it plays, and what he does to
+  /// it.
+  Extension(usize),
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, the place of the
@@ -106,6 +109,8 @@ pub(crate) enum Choice {
   /// A skill, by its place among the skills of the session: one with code turns on or off, and the
   /// draft adds the mention of one with none.
   Skill(usize),
+  /// An extension, by its place among the skills, turned on or off in its view.
+  Turn(usize),
   /// The sign-in of Codex on the machine that the input sends to, in the browser of this computer
   /// or from any device with a code.
   SignIn(bool),
@@ -208,6 +213,7 @@ impl Pick {
       Self::Leave => "Leave the window",
       Self::Settings | Self::Value(_) => "Settings",
       Self::Skills => "Extensions",
+      Self::Extension(_) => "Extension",
     }
   }
 
@@ -225,6 +231,7 @@ impl Pick {
       Self::Settings => "Search a setting",
       Self::Value(_) => "Write the value",
       Self::Skills => "Search a skill or an extension",
+      Self::Extension(_) => "Search what to do",
     }
   }
 
@@ -239,7 +246,8 @@ impl Pick {
       Self::Session | Self::Leave => "do it",
       Self::Settings => "change it",
       Self::Value(_) => "set it",
-      Self::Skills => "turn it on or off",
+      Self::Skills => "open it",
+      Self::Extension(_) => "do it",
     }
   }
 }
@@ -339,6 +347,7 @@ impl Model {
       Pick::Leave => self.leave_choices(),
       Pick::Settings => self.settings(),
       Pick::Skills => self.played(),
+      Pick::Extension(place) => self.extension(place),
       // The part that writes a value stands in the columns of the settings that it came from.
       Pick::Value(place) => self.settings().into_iter().chain(self.value(place)).collect(),
     }
@@ -847,13 +856,17 @@ impl Model {
         self.client.write_setting(place, &filter);
         self.set_back(place);
       }
-      Choice::Skill(place) => {
-        if self.client.turn_skill(place) {
-          self.picker = Some(Picker { of, filter, at, effort: None, tab: String::new() });
-        } else if let Some(one) = self.client.skill_at(place) {
+      Choice::Skill(place) => match self.client.skill_at(place) {
+        Some(one) if one.turned_by.is_null() => {
           let mention = format!("/{}", one.name);
           self.client.added(&mention);
         }
+        Some(_) => self.opened_extension(place),
+        None => {}
+      },
+      Choice::Turn(place) => {
+        self.client.turn_skill(place);
+        self.opened_extension(place);
       }
       Choice::SignIn(device) => {
         self.client.sign_in(device);
@@ -874,6 +887,33 @@ impl Model {
       }
     }
     None
+  }
+
+  /// The view of an extension open, on its first action.
+  fn opened_extension(&mut self, place: usize) {
+    let of = Pick::Extension(place);
+    self.picker =
+      Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
+    self.chose(0);
+  }
+
+  /// The list part closed, or, from the view of an extension, back to the extensions on its row.
+  pub(crate) fn closed_part(&mut self) {
+    let Some(Pick::Extension(place)) = self.picker.as_ref().map(|one| one.of) else {
+      self.picker = None;
+      return;
+    };
+    self.picker = Some(Picker {
+      of: Pick::Skills,
+      filter: String::new(),
+      at: 0,
+      effort: None,
+      tab: String::new(),
+    });
+    let at = self.entries().iter().position(|one| one.choice == Choice::Skill(place));
+    if let Some(picker) = self.picker.as_mut() {
+      picker.at = at.unwrap_or_default();
+    }
   }
 
   /// The part open again on the rows of the sign-in of Codex, which change as it goes, so no
