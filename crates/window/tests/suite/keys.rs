@@ -4,7 +4,7 @@
 
 #![cfg(test)]
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, process};
 
 use furb_window::{Options, open};
 use opentui::testing::TestApp;
@@ -117,6 +117,17 @@ fn the_command_delete_offers_the_trash_among_the_choices_of_the_session_and_its_
   app.press("enter");
   let moved = || !record.exists() && sessions.join("trash").is_dir();
   assert!(app.wait_until(PATIENCE, moved), "{}", app.text());
+}
+
+#[test]
+fn a_send_keeps_what_the_operator_saw_beside_the_cards_of_the_window() {
+  let (app, daemon) = threaded();
+  app.type_text("does it hold");
+  app.press("enter");
+  let seen = daemon.file(&format!("seen-{}.json", process::id()));
+  let kept = || fs::read_to_string(&seen).unwrap_or_default();
+  assert!(app.wait_until(PATIENCE, || kept().contains("keys.jsonl")), "{}", kept());
+  assert!(kept().contains("\"cols\":100") && kept().contains("\"rows\":30"), "{}", kept());
 }
 
 /// A window on the thread of a session that answered, open.

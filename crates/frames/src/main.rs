@@ -12,6 +12,7 @@ mod motion;
 mod openai;
 mod probe;
 mod raster;
+mod render;
 mod replay;
 mod scenario;
 #[path = "../../../tests/common/tailscale.rs"]
@@ -28,7 +29,7 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use tokio::task::JoinSet;
+use tokio::task::{self, JoinSet};
 
 use crate::{
   capture::Programs,
@@ -123,6 +124,33 @@ enum Does {
     #[arg(long)]
     bin: Option<PathBuf>,
   },
+  /// The window of this build on a session as it stood at a moment, headless at a size, with no
+  /// model and no network: a copy of the record opens read only, the window opens the thread at
+  /// that moment of its time, and its frame is written in `<out>/frame.txt`, `frame.json` and
+  /// `frame.png`. `--seen` draws what the operator saw at his last send, from the file that his
+  /// window wrote, at his size.
+  Render {
+    /// The record of the session.
+    record: Option<PathBuf>,
+    /// The moment: an act of the record, as `prompt660`, a millisecond of the epoch, or a count of
+    /// facts. By default the tip.
+    #[arg(long)]
+    at: Option<String>,
+    /// The prompt of the thread that the window opens: by default the thread of the act of `--at`.
+    #[arg(long)]
+    thread: Option<String>,
+    /// The size of the terminal, as `200x60`.
+    #[arg(long, default_value = "200x60")]
+    size: String,
+    /// The file of what the operator saw, `seen-<pid>.json` beside the cards of his window.
+    #[arg(long)]
+    seen: Option<PathBuf>,
+    #[arg(long, default_value = "target/frames/render")]
+    out: PathBuf,
+    /// The most seconds that the open of the session may take.
+    #[arg(long, default_value_t = 600)]
+    wait: u64,
+  },
   /// The findings of the probes on frames of the window, from their cells as JSON: on each frame,
   /// then across the sizes of each step that frames of one name in folders of their sizes show, as
   /// `120x40/05-prompt-box.a.json` and `80x24/05-prompt-box.a.json`.
@@ -160,6 +188,17 @@ async fn main() -> ExitCode {
       Err(fault) => Err(fault),
     },
     Does::Probe { frames } => probes(&frames),
+    Does::Render { record, at, thread, size, seen, out, wait } => match sized(&size) {
+      Some(size) => {
+        let wait = Duration::from_secs(wait);
+        let asked = render::Asked { record, at, thread, size, seen, out, wait };
+        let drawn = task::spawn_blocking(move || render::render(&asked)).await;
+        drawn
+          .unwrap_or_else(|no| Err(Error::Render(no.to_string())))
+          .map(|text| println!("{}", text.display()))
+      }
+      None => Err(Error::Render(format!("{size} is no size as 200x60"))),
+    },
     Does::Stamp { file } => capture::stamp(&file),
   };
   match done {
@@ -169,6 +208,12 @@ async fn main() -> ExitCode {
       ExitCode::FAILURE
     }
   }
+}
+
+/// A size of a terminal from its words, as `200x60`.
+fn sized(words: &str) -> Option<Size> {
+  let (cols, rows) = words.split_once('x')?;
+  Some(Size { cols: cols.parse().ok()?, rows: rows.parse().ok()? })
 }
 
 /// Each walk of the scenarios that the words name at each size, a few at once. Each says a line

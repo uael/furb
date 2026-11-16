@@ -64,6 +64,7 @@ pub use error::Error;
 pub use keys::System;
 pub use machine::{Machine, Reach, Tailnet};
 use reload::RELOADED;
+pub use reload::{Seen, Stood};
 use screen::Screen;
 
 /// What a window stands on, beside its machines.

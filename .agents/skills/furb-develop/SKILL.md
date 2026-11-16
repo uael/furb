@@ -58,3 +58,30 @@ nice -n 19 cargo nextest run -j 4 -p furb-window --test suite <name>
 A change of what a screen shows changes its capture in `crates/window/tests/screens`. Run the test again with
 `INSTA_UPDATE=always`, read the diff of each `.snap`, and delete the line `assertion_line` that insta adds. To see
 the real window in a terminal at each size, run `furb-frames capture` and read the frames in `target/frames`.
+
+## See what the owner sees
+
+At each message that he sends, his window writes what he saw beside its cards, in the cache of furb:
+`~/Library/Caches/furb/window/seen-<pid>.json` on macOS, `~/.cache/furb/window/` on Linux, one file for each
+window. It holds the size of the window and where it stood: the thread, the agent of it that he read, the place of
+the feed, the draft and the moment of the time that he held. When he says that something does not work, draw it
+again as he saw it, on the build of this tree:
+
+```sh
+target/debug/furb-frames render --seen ~/Library/Caches/furb/window/seen-<pid>.json --out "$TMPDIR/seen"
+```
+
+Read `frame.txt` of the folder that it prints, then `frame.json`, the cells with their colors, and `frame.png`
+when the look matters. It opens a copy of his record that only inspects it, so nothing of his session moves.
+
+## Render a session at a moment on a build
+
+```sh
+target/debug/furb-frames render <record> --at <act|millisecond|count of facts> [--thread <prompt>] [--size 200x60]
+```
+
+It copies the record up to the fact of that moment, opens the copy in a life that only inspects it, with no model
+and no network, and draws the window of this build headless on the thread of that act, or on `--thread`. A record
+of a long life replays for minutes, and the command says each ten seconds that it waits. To draw it on another
+version, make a tree at that commit with `cargo xtask tree new <path> <branch> --base <commit>`, build its
+`furb-frames`, and run that one.

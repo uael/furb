@@ -50,7 +50,7 @@ use crate::{
   pick::Pick,
   picture,
   question::Keyed,
-  reload::{self, Watch},
+  reload::{self, Seen, Watch},
   review::{MARKS, NEXT, PREVIOUS},
   thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
@@ -1524,6 +1524,9 @@ fn sent(app: &App, window: &Shared) {
     tell(app, window, |model| model.client.edited(broken, caret));
     return;
   }
+  if !text.trim().is_empty() {
+    seen(window);
+  }
   if text.trim().is_empty() || !tell(app, window, |model| model.send(text)) {
     return;
   }
@@ -1531,6 +1534,16 @@ fn sent(app: &App, window: &Shared) {
   tell(app, window, |model| model.client.draft.text.clear());
   // A thread that the message starts shows in the list at once.
   rest(app, window);
+}
+
+/// What the operator saw as he sent a message, written beside the cards of the window, so a chain
+/// that he asks about his window draws it again as he saw it.
+fn seen(window: &Shared) {
+  let held = window.borrow();
+  let model = &held.screen.model;
+  let seen = Seen { cols: model.size.0, rows: model.size.1, stood: model.stood() };
+  // A file that cannot be written keeps what he saw at the send before, which no send needs.
+  kept::keep(&reload::seen_of(&held.kept), &seen).ok();
 }
 
 /// The text of the input queued on the open thread, which its life sends once the thread rests.

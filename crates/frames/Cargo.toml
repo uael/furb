@@ -18,6 +18,8 @@ workspace = true
 [dependencies]
 # The scale of the window, which the probes hold each frame to.
 furb-window = { path = "../window" }
+# The opening of the life of a render, which only inspects its record.
+furb = { path = "../.." }
 # Another window of the operator, which a walk dials to say a message to the daemon of the window.
 furb-host = { path = "../host" }
 # The terminal of Ghostty that OpenTUI embeds, which replays each recording, of furb or of another

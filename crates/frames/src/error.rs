@@ -50,4 +50,6 @@ pub(crate) enum Error {
   Scenario(String),
   #[error("{0} of the captures failed")]
   Failed(usize),
+  #[error("the render cannot draw the session: {0}")]
+  Render(String),
 }
