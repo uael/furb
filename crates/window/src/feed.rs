@@ -10,7 +10,8 @@ use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
   Standing, Thought, Work, lines, operator, timer,
 };
-use furb_client::{Anchor, Fold, Opened, Target, rests};
+use furb::world::images;
+use furb_client::{Anchor, Fold, Opened, PICTURE, Picture, Shown, Target, rests};
 use furb_host::{
   FollowUp,
   protocol::{Card, Present},
@@ -29,7 +30,7 @@ use crate::{
   picture, prose,
   question::{closed, person},
   review::shown_at,
-  thread::{Click, Item, Items, Row, width},
+  thread::{Boxed, Click, Item, Items, Row, width},
   tokens::{APART, Loader, PROMPT, Role, WORKS, mixed},
 };
 
@@ -409,16 +410,11 @@ impl Feed<'_> {
   }
 
   /// A text on the raised band of a message, after the bar in a hue, in a style, with a line at
-  /// the right of its first row, and a blank row under it.
+  /// the right of its first row, then the box of each image that it names, and a blank row under
+  /// it.
   fn band(&self, text: &str, (hue, style): (Color, Style), right: Line) -> Vec<Row> {
     let t = &self.model.tokens;
-    let band = Style::new().bg(t.raised);
-    let bar = run("┃", Style::new().fg(hue).bg(t.raised));
-    let banded = |text: Line, right: Line| {
-      let mut line = vec![bar.clone(), run(" ", band)];
-      line.extend(spread(text, right, self.wide.saturating_sub(4), band));
-      Row::of(line)
-    };
+    let pictures = images::references(text);
     let room = self.wide.saturating_sub(6 + width(&right) + 2 * usize::from(!right.is_empty()));
     let lines = picture::shown(&self.model.homed(text))
       .lines()
@@ -428,14 +424,61 @@ impl Feed<'_> {
     // shows them.
     let (plain, mark) = (style.bg(t.raised), Style::new().fg(t.accent).bg(t.lifted));
     let mut right = Some(right);
-    let text = lines
-      .into_iter()
-      .map(|line| banded(picture::marked(&line, plain, mark), right.take().unwrap_or_default()));
-    [banded(Vec::new(), Vec::new())]
+    let text = lines.into_iter().map(|line| {
+      self.banded(hue, picture::marked(&line, plain, mark), right.take().unwrap_or_default())
+    });
+    [self.banded(hue, Vec::new(), Vec::new())]
       .into_iter()
       .chain(text)
-      .chain([banded(Vec::new(), Vec::new()), Row::default()])
+      .chain(pictures.iter().flat_map(|one| self.picture(hue, one)))
+      .chain([self.banded(hue, Vec::new(), Vec::new()), Row::default()])
       .collect()
+  }
+
+  /// A row of the band of a message: the bar in a hue, then a text, and a line at its right.
+  fn banded(&self, hue: Color, text: Line, right: Line) -> Row {
+    let band = Style::new().bg(self.model.tokens.raised);
+    let mut line =
+      vec![run("┃", Style::new().fg(hue).bg(self.model.tokens.raised)), run(" ", band)];
+    line.extend(spread(text, right, self.wide.saturating_sub(4), band));
+    Row::of(line)
+  }
+
+  /// The box of an image that a message names, on its band under its text, which the image fills
+  /// once its machine gave it. Until then its first row names it, and an image that does not draw
+  /// takes one row, which says why.
+  fn picture(&self, hue: Color, named: &images::Named) -> Vec<Row> {
+    let (at, life, _) = &self.opened.thread.key;
+    let held = self.model.client.pictures.get(&(*at, life.clone(), named.uri.clone()));
+    let room = self.wide.saturating_sub(6);
+    let (wide, high) = picture::cells(held, room);
+    let blank = || self.banded(hue, Vec::new(), Vec::new());
+    let mut rows: Vec<Row> = (0..=high).map(|_| blank()).collect();
+    let muted = self.style(Role::Muted).bg(self.model.tokens.raised);
+    let said = |text: String| {
+      let lines = wrapped(&text, room).into_iter();
+      lines.map(|line| self.banded(hue, vec![run(line, muted)], Vec::new())).collect::<Vec<_>>()
+    };
+    match held {
+      Some(Picture::Held(_)) => {
+        rows[1].picture = Some(Boxed { source: named.uri.clone(), x: 2, y: 0, wide, high });
+      }
+      Some(Picture::Refused(why)) => {
+        rows.extend(said(format!("{PICTURE}{} does not show: {why}", named.name)));
+      }
+      _ => {
+        rows.splice(1..2, said(format!("{PICTURE}{}", named.name)).into_iter().take(1));
+      }
+    }
+    rows
+  }
+
+  /// The images that the messages of the open thread name, by its machine and its life.
+  pub(crate) fn pictures(&self) -> Vec<Shown> {
+    let (at, life, _) = &self.opened.thread.key;
+    let pending = self.opened.thread.pending.iter().map(|one| one.text.as_str());
+    let texts = self.opened.thread.exchanges.values().map(|one| one.text.as_str()).chain(pending);
+    texts.flat_map(images::references).map(|one| (*at, life.clone(), one.uri)).collect()
   }
 
   /// A line inside the box of a block, on a ground, from the column of the text to its right

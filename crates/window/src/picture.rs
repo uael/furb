@@ -4,13 +4,19 @@
 use std::{fs, ops::Range, path::Path};
 
 use furb::world::images;
-use furb_client::{PICTURE, mentioned};
+use furb_client::{PICTURE, Picture, mentioned};
 use opentui::style::Style;
 
 use crate::line::{Line, run};
 
 /// The most bytes of a file that a paste reads as an image, as a life keeps one.
 const LARGEST: u64 = 20 << 20;
+
+/// The most rows that the box of an image in the feed takes.
+const HIGH: u64 = 12;
+
+/// The pixels of an image that one row of its box shows when it is smaller than the box.
+const ROW: u64 = 16;
 
 /// The bytes of the image file whose path a paste is, as a terminal pastes a file dragged on it:
 /// one path, quoted or with its spaces escaped, or a `file://` url, from the folder of the window
@@ -64,4 +70,24 @@ pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
     out.push(run(&line[from..], plain));
   }
   out
+}
+
+/// The columns and the rows of the box of an image in a room of columns: as high as `HIGH` rows,
+/// or as the image at `ROW` pixels a row when it is smaller, and as wide as its shape, with a cell
+/// twice as high as it is wide, inside the room. An image that its machine has not given yet keeps
+/// the most rows, so the feed moves little once it comes, and one that does not draw takes none.
+pub(crate) fn cells(held: Option<&Picture>, room: usize) -> (u16, u16) {
+  let room = u64::try_from(room).unwrap_or(u64::MAX).max(1);
+  let (wide, high) = match held {
+    Some(Picture::Held(one)) => {
+      let (width, height) = (u64::from(one.width.max(1)), u64::from(one.height.max(1)));
+      let high = height.div_ceil(ROW).clamp(1, HIGH);
+      let wide = (high * 2 * width).div_ceil(height);
+      if wide <= room { (wide, high) } else { (room, (room * height / (2 * width)).max(1)) }
+    }
+    Some(Picture::Refused(_)) => (room, 0),
+    _ => (room, HIGH),
+  };
+  let cells = |count: u64| u16::try_from(count).unwrap_or(u16::MAX);
+  (cells(wide), cells(high))
 }

@@ -304,8 +304,11 @@ impl Client {
     let asked = Asked::Moments(thread.key.clone());
     let asking = self.asked.values().any(|one| *one == asked);
     let (life, on) = (thread.key.1.clone(), Some(thread.key.2.clone()));
-    (thread.time.as_ref()?.stale && !asking)
-      .then(|| (thread.key.0, Verb::Moments { life, on }, asked))
+    (thread.time.as_ref()?.stale && !asking).then_some((
+      thread.key.0,
+      Verb::Moments { life, on },
+      asked,
+    ))
   }
 
   /// What a machine said to the ask of the moments of the bar of a thread. A refusal or a lost
@@ -366,7 +369,7 @@ impl Client {
     let asked = Asked::Tracks(thread.key.clone());
     let asking = self.asked.values().any(|one| *one == asked);
     let life = thread.key.1.clone();
-    (chains.stale && !asking).then(|| (thread.key.0, Verb::Tracks { life }, asked))
+    (chains.stale && !asking).then_some((thread.key.0, Verb::Tracks { life }, asked))
   }
 
   /// The chains under the bar asked again when a frame changed the cards of their life.

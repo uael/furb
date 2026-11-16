@@ -7,7 +7,7 @@ use std::fs;
 
 use crate::{
   cards::shows,
-  daemon::ANSWERS,
+  daemon::{ANSWERS, WORKS},
   input::{sent, started, told},
 };
 
@@ -60,4 +60,23 @@ fn an_image_that_no_frame_holds_stays_out_of_the_input_and_says_why() {
   app.paste("large.png");
   let frame = shows(&app, "An image of at most 12 MiB goes to a session.");
   assert!(!frame.contains("▣"), "{frame}");
+}
+
+#[test]
+fn an_image_that_a_message_names_draws_under_its_text_and_one_that_does_not_draw_says_why() {
+  let (app, daemon, _) = started();
+  let folder = daemon.file("furb-try");
+  fs::write(folder.join("shot.png"), include_bytes!("../../../frames/src/shot.png")).unwrap();
+  fs::write(folder.join("broken.png"), PNG).unwrap();
+  app.type_text("see ");
+  app.paste("shot.png");
+  app.paste("broken.png");
+  sent(&app, &format!(" {WORKS}"));
+  let frame = shows(&app, "┃ ▣ image-2.png does not show: its bytes are no whole");
+  // The image of 192 by 108 pixels takes 7 rows of 16 pixels and the columns of its shape, a
+  // blank row under the text.
+  let rows: Vec<&str> = frame.lines().skip_while(|row| !row.contains("(the model works")).collect();
+  let drawn = |row: &&str| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one));
+  let image: Vec<&str> = rows.iter().skip(3).copied().take_while(drawn).collect();
+  assert_eq!((image.len(), rows[2].chars().nth(2)), (7, Some(' ')), "{frame}");
 }

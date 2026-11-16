@@ -71,8 +71,11 @@ impl Client {
     let asked = Asked::Parts(thread.key.clone(), read);
     let asking = self.asked.values().any(|one| *one == asked);
     let (life, on) = (thread.key.1.clone(), Some(thread.key.2.clone()));
-    (self.split == Split::Kinds && !held && !asking)
-      .then(|| (thread.key.0, Verb::Turns { life, on }, asked))
+    (self.split == Split::Kinds && !held && !asking).then_some((
+      thread.key.0,
+      Verb::Turns { life, on },
+      asked,
+    ))
   }
 
   /// The turns that a machine gave for the box of a thread, parted by kind; a refusal parts

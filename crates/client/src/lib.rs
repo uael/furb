@@ -17,6 +17,7 @@ mod machine;
 mod matched;
 mod opens;
 mod outbox;
+mod picture;
 mod presence;
 mod question;
 mod running;
@@ -47,6 +48,7 @@ pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
+pub use picture::{Held, Picture, Shown};
 pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
@@ -104,6 +106,8 @@ pub struct Client {
   pub signing: Option<SignIn>,
   /// The name of the code of a thread that the pointer is on, and what its machine told of it.
   pub inspected: Option<Inspection>,
+  /// The images that the open thread shows, by machine, life and uri, and where each stands.
+  pub pictures: HashMap<Shown, Picture>,
   /// The thread whose follow-ups the client asks next, after a change of its queue: its machine,
   /// its life and its prompt.
   following: Option<(usize, String, String)>,

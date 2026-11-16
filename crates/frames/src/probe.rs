@@ -4,7 +4,7 @@
 //! each box as wide inside on its left as on its right, and as high above as below; each slot of a
 //! repeated row in one column; and each box the same at each size.
 
-use std::{array, collections::BTreeMap};
+use std::{array, collections::BTreeMap, ops::RangeInclusive};
 
 use furb_window::tokens::{HEAD, SYNTAX, TEXT, Tokens};
 
@@ -111,15 +111,24 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
   colors
 }
 
+/// The block elements, by which a terminal with no protocol of images draws the pixels of one.
+const PIXELS: RangeInclusive<char> = '\u{2580}'..='\u{259f}';
+
 /// Each color of a glyph or of a ground that no token gives, once, at its first cell, with how
-/// many cells take it. A color one step from a token is that token, rounded by a blend.
+/// many cells take it. A color one step from a token is that token, rounded by a blend. A cell of
+/// a block element is pixels of an image, as a terminal with no protocol of images draws one,
+/// whose colors are its own: the window draws no other block element in a color of no token.
 fn colors(cells: &[Vec<Cell>], palette: &[Rgb]) -> Vec<Finding> {
   let near = |color: Rgb| {
     palette.iter().any(|token| token.0.iter().zip(color.0).all(|(a, b)| a.abs_diff(b) <= 1))
   };
   let mut seen: BTreeMap<(Rgb, &str), (usize, usize, usize)> = BTreeMap::new();
   for (row, line) in cells.iter().enumerate() {
-    for (col, cell) in line.iter().enumerate() {
+    for (col, cell) in line
+      .iter()
+      .enumerate()
+      .filter(|(_, cell)| !cell.glyph.chars().next().is_some_and(|one| PIXELS.contains(&one)))
+    {
       let glyph = (!cell.glyph.trim().is_empty()).then_some(cell.fg);
       for (color, role) in [(glyph, "glyph"), (Some(cell.bg), "ground")] {
         let Some(color) = color.filter(|color| !near(*color)) else { continue };

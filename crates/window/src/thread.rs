@@ -94,6 +94,19 @@ pub(crate) struct Row {
   /// For the head of a block, the column of its code and what the head says at its right, beside
   /// which it shows what the name under the pointer in the block holds, from that column.
   pub(crate) inspector: Option<(usize, Line)>,
+  /// The box of an image whose first row the row is, which the image fills.
+  pub(crate) picture: Option<Boxed>,
+}
+
+/// The box of an image on the left side: the uri by which a message names the image, its column
+/// and its row, and its size in cells.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Boxed {
+  pub(crate) source: String,
+  pub(crate) x: u16,
+  pub(crate) y: u16,
+  pub(crate) wide: u16,
+  pub(crate) high: u16,
 }
 
 impl Row {
@@ -167,6 +180,8 @@ pub(crate) fn columns(line: &[Span<'_>]) -> Vec<Range<usize>> {
 pub(crate) struct Left {
   pub(crate) rows: Vec<Line>,
   pub(crate) loaders: Vec<Spot>,
+  /// The box of each image, whose rows all show.
+  pub(crate) pictures: Vec<Boxed>,
 }
 
 /// The cell of a loader: its column, its row, its marks and its look.
@@ -663,7 +678,12 @@ impl Model {
       })
     });
     let loaders = loaders.collect();
-    Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders }
+    let pictures = rows
+      .iter()
+      .enumerate()
+      .filter_map(|(y, row)| Some(Boxed { y: u16::try_from(y).ok()?, ..row.picture.clone()? }));
+    let pictures = pictures.collect();
+    Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders, pictures }
   }
 
   /// The name of the code at a place of the left side, among its rows.
@@ -699,6 +719,11 @@ impl Model {
           && let Some(last) = rows.last_mut()
         {
           *last = feed.jump();
+        }
+        // An image draws only where each row of its box shows, as it cannot draw a part of itself.
+        let bottom = above + room - usize::from(!shown.end);
+        for (y, row) in rows.iter_mut().enumerate().skip(above) {
+          row.picture.take_if(|one| y + usize::from(one.high) > bottom);
         }
         rows.extend(feed.dock());
         rows.extend(self.kit_rows());

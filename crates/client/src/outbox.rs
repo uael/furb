@@ -9,7 +9,7 @@ use furb_wire::protocol::{Frame, Hello, Kind, PROTOCOL, Request, Role, Verb};
 use serde_json::Value;
 
 use crate::{
-  Client, Key, Life, Link, Pasted,
+  Client, Key, Life, Link, Pasted, Shown,
   opens::{Ask, Hold},
 };
 
@@ -136,13 +136,18 @@ pub enum Asked {
   Writes,
   /// A name of the code of a thread that the pointer is on, by the thread and the name.
   Inspect(Key, String),
+  /// An image that the open thread shows.
+  Picture(Shown),
 }
 
 impl Asked {
   /// Whether the client alone reads the answer to the ask: the moments and the chains of the bar
-  /// of the time, the follow-ups of a thread, and a name of its code.
+  /// of the time, the follow-ups of a thread, a name of its code, and an image that it shows.
   pub fn read_here(&self) -> bool {
-    matches!(self, Self::Moments(_) | Self::Tracks(_) | Self::Queued(..) | Self::Inspect(..))
+    matches!(
+      self,
+      Self::Moments(_) | Self::Tracks(_) | Self::Queued(..) | Self::Inspect(..) | Self::Picture(_)
+    )
   }
 }
 
@@ -154,6 +159,7 @@ impl Client {
       Asked::Tracks(key) => self.tracked(&key, heard),
       Asked::Queued(life, thread) => self.followed(at, (life, thread), heard),
       Asked::Inspect(key, name) => self.told_inspected((&key, &name), heard),
+      Asked::Picture(shown) => self.pictured(&shown, heard),
       _ => {}
     }
   }
@@ -188,6 +194,7 @@ impl Client {
     due.extend(self.settings_due());
     due.extend(self.sign_in_due());
     due.extend(self.inspect_due());
+    due.extend(self.pictures_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {

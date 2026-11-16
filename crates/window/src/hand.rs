@@ -7,6 +7,7 @@ use std::{
   ops::Range,
   path::PathBuf,
   rc::Rc,
+  sync::Arc,
   time::{Duration, Instant},
 };
 
@@ -17,9 +18,9 @@ use opentui::{
   input::KeyEventKind,
   native::ClipboardOutcome,
   prelude::{
-    Container, Diff, DiffView, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers,
-    MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View,
-    Widget, WrapMode,
+    Container, Diff, DiffView, Edge, EditorAction, ExtmarkOptions, ImageView, KeyCode, KeyEvent,
+    Modifiers, MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId,
+    View, Widget, WrapMode,
   },
   style::Style,
 };
@@ -27,7 +28,7 @@ use opentui::{
 use furb_host::protocol::Verb;
 
 use furb::world::images;
-use furb_client::{Anchor, Asked, Folded, Pasted, Where, mentioned};
+use furb_client::{Anchor, Asked, Folded, Pasted, Picture, Where, mentioned};
 
 use crate::{
   Machine, Options, Screen,
@@ -44,7 +45,7 @@ use crate::{
   question::Keyed,
   reload::{self, Watch},
   review::{MARKS, NEXT, PREVIOUS},
-  thread::Spot,
+  thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
 };
 
@@ -70,6 +71,9 @@ const WATCH: Duration = Duration::from_secs(1);
 /// How many loaders move at once at most: the line that runs and its light, the thought, the mark
 /// and the word of each agent of the dock, and the row of hints.
 const LOADERS: usize = 16;
+
+/// How many images of the feed draw at once at most.
+const PICTURES: usize = 4;
 
 /// How many rows one step of the wheel moves the list, the feed or a diff.
 const WHEEL: u8 = 3;
@@ -295,6 +299,7 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
   );
   placed(app, &stage, &mut screen, area);
   loaded(app, &stage, &mut screen);
+  imaged(app, &stage, &mut screen);
   screen.part(Model::list, move |lines| {
     list.set_text(written(lines));
   });
@@ -342,6 +347,52 @@ fn loaded(app: &App, stage: &View, screen: &mut Screen<Model>) {
           cell.visible(false);
         }
       }
+    }
+  });
+}
+
+/// An image of the left side in its box, with its bytes, which stay the same bytes while the
+/// client holds them, so a change of the feed that keeps them decodes nothing.
+#[derive(Clone)]
+struct Drawn(Boxed, Arc<[u8]>);
+
+impl PartialEq for Drawn {
+  fn eq(&self, other: &Self) -> bool {
+    self.0 == other.0 && Arc::ptr_eq(&self.1, &other.1)
+  }
+}
+
+/// The images of the left side on its stage, each over the rows of its box. An image that does
+/// not decode leaves its box blank, over the row that names it.
+fn imaged(app: &App, stage: &View, screen: &mut Screen<Model>) {
+  let views = (0..PICTURES)
+    .map(|_| (ImageView::new(app).absolute().visible(false), RefCell::new(None)))
+    .collect::<Vec<(ImageView, RefCell<Option<Arc<[u8]>>>)>>();
+  for (view, _) in &views {
+    stage.child(view);
+  }
+  let shown = |model: &Model| {
+    let Some((at, life, _)) = model.client.thread.as_ref().map(|one| &one.thread.key) else {
+      return Vec::new();
+    };
+    let held =
+      |one: Boxed| match model.client.pictures.get(&(*at, life.clone(), one.source.clone())) {
+        Some(Picture::Held(held)) => Some(Drawn(one, Arc::clone(&held.bytes))),
+        _ => None,
+      };
+    model.left().pictures.into_iter().filter_map(held).take(PICTURES).collect::<Vec<_>>()
+  };
+  screen.part(shown, move |shown| {
+    for (at, (view, loaded)) in views.iter().enumerate() {
+      let Some(Drawn(boxed, bytes)) = shown.get(at) else {
+        view.visible(false);
+        continue;
+      };
+      let fresh = !loaded.borrow().as_ref().is_some_and(|one| Arc::ptr_eq(one, bytes));
+      let decoded = !fresh || view.load(bytes).is_ok();
+      *loaded.borrow_mut() = decoded.then(|| Arc::clone(bytes));
+      let view = view.position(Edge::Top, boxed.y).position(Edge::Left, boxed.x);
+      view.size(boxed.wide, boxed.high).visible(decoded);
     }
   });
 }
@@ -673,9 +724,9 @@ fn pictured(app: &App, window: &Shared, bytes: &[u8]) {
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
 /// the models of each machine, the page of the end of the open thread, the next message of the
-/// queue of the input, what the operator saw of the open thread, and the end of the word that the
-/// window ran, each with its id kept until its answer comes. Whether the operator saw the open
-/// thread, which marks its card read.
+/// queue of the input, what the operator saw of the open thread, each image that it shows, and the
+/// end of the word that the window ran, each with its id kept until its answer comes. Whether the
+/// operator saw the open thread, which marks its card read.
 fn pump(window: &Shared) -> bool {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
@@ -699,6 +750,8 @@ fn pump(window: &Shared) -> bool {
     opened.thread.again = false;
   }
   said(askers, model);
+  let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
+  model.client.show_pictures(pictures);
   let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
   for (at, verb, asked) in model.client.asks_due(listing) {
     if let Some(id) = ask(askers, model, at, verb) {

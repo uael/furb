@@ -21,6 +21,8 @@ emojis = "0.9"
 furb-wire = { path = "../wire", version = "0.4.2" }
 # The second of the name of the record of a new session.
 jiff = "0.2"
+# The size in pixels of an image that a thread shows, from the head of its bytes.
+imagesize = "0.13"
 # The match of what the operator types against the rows of a list.
 nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }
