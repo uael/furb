@@ -616,7 +616,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Where does the time of the open go? THINK"), Act::Key("Enter")],
           "sleep 2",
         ),
-        // The code line holds the words of the answer from frame a, so the step waits for the close.
+        // The code line holds the words of the answer from frame a, so the step waits for the
+        // close.
         step("c", &[], "✓ Resolved"),
         // A click on the line of the thought opens it whole, under the block.
         step("d", &[Act::Pointer { on: "thought ·", button: 0 }], "checkpoint"),

@@ -547,10 +547,10 @@ impl Model {
     self.client.sent().iter().map(entry).collect()
   }
 
-  /// The models of the machine of the input, under each provider once, each with what it holds,
-  /// its context window and whether it sees images, and its effort, the one that it takes when the operator
-  /// names none. A model takes the effort that the input speaks at when it offers it. The model
-  /// that the input speaks to says so, in the accent.
+  /// The models of the machine of the input, under each provider once, each with what it holds, its
+  /// context window and whether it sees images, and its effort, the one that it takes when the
+  /// operator names none. A model takes the effort that the input speaks at when it offers it. The
+  /// model that the input speaks to says so, in the accent.
   fn models(&self) -> Vec<Entry> {
     let at = self.client.target().machine();
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
@@ -927,9 +927,8 @@ impl Model {
   /// list while no text filters it, and each entry, the chosen one on the lifted ground with a bar
   /// in the hue of its thread, as the selected card of the list. In a list of things that say what
   /// they do, what the chosen one says stands whole under its name, and what each other says on one
-  /// row, so the list reads as a list and the one that he reads tells all. A row of an entry carries
-  /// its place. The
-  /// rows start at the one that keeps the chosen entry in view.
+  /// row, so the list reads as a list and the one that he reads tells all. A row of an entry
+  /// carries its place. The rows start at the one that keeps the chosen entry in view.
   fn shown_entries(
     &self,
     entries: &[Entry],

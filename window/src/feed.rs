@@ -618,8 +618,8 @@ impl Feed<'_> {
     rows
   }
 
-  /// The names of the code of the first row of a line, up to where the row cuts it, each with what a
-  /// click on it does: a call of `prompt` that made an agent opens the thread of that agent, as a
+  /// The names of the code of the first row of a line, up to where the row cuts it, each with what
+  /// a click on it does: a call of `prompt` that made an agent opens the thread of that agent, as a
   /// change to the chain that runs it, and a name that an earlier line of the thread binds goes to
   /// that line. The terminal keeps the command key for itself, so the click needs none.
   fn name(&self, row: &mut Row, (line, names): (&Code, &[Named]), gutter: usize) {
@@ -927,7 +927,8 @@ impl Feed<'_> {
       let rest = if rest.is_empty() { Vec::new() } else { wrapped(rest, room) };
       [vec![start], rest].concat()
     } else if thought.took.is_none() {
-      // The time of a thought that runs grows, so its row keeps the room of a time of eight columns.
+      // The time of a thought that runs grows, so its row keeps the room of a time of eight
+      // columns.
       vec![tail(&thought.text, room.saturating_sub(10))]
     } else {
       vec![thought.first().to_owned()]

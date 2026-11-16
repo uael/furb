@@ -455,7 +455,8 @@ impl Model {
   }
 
   /// The column of the window where the left side starts, which centers it in its room. The left
-  /// side draws up to two columns before its last, apart from the list, so it centers what it draws.
+  /// side draws up to two columns before its last, apart from the list, so it centers what it
+  /// draws.
   pub(crate) fn margin(&self) -> u16 {
     let spare = self.side().saturating_sub(MEASURE);
     u16::midpoint(spare, 2).min(spare)

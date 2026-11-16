@@ -123,11 +123,11 @@ pub trait Host {
   ) -> impl Future<Output = Result<Answer, ProtocolError>> + Send;
 }
 
-/// One peer served on a stream until it ends: its hello first, then each verb that its role
-/// allows, answered at once and in any order. The role is the one that `granted` gives at the
-/// moment of the verb, so a role that moves holds from the next verb, and the peer hears it as a
-/// frame; an operator that the list drops is refused and closed at once. A hello of another protocol, a first frame that is no
-/// hello, and a frame past the bound close the peer, each with its refusal.
+/// One peer served on a stream until it ends: its hello first, then each verb that its role allows,
+/// answered at once and in any order. The role is the one that `granted` gives at the moment of the
+/// verb, so a role that moves holds from the next verb, and the peer hears it as a frame; an
+/// operator that the list drops is refused and closed at once. A hello of another protocol, a first
+/// frame that is no hello, and a frame past the bound close the peer, each with its refusal.
 pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   host: &H,
   stream: S,

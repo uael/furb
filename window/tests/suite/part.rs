@@ -266,7 +266,8 @@ fn the_bar_of_the_chosen_row_and_the_badge_of_its_project_keep_their_hues_under_
   app.hover(u16::try_from(x + 6).unwrap(), u16::try_from(y).unwrap());
   let lit = app.render();
   let width = usize::try_from(lit.width).unwrap();
-  // The cell under the pointer lights, and the bar and the two letters of the badge keep their hues.
+  // The cell under the pointer lights, and the bar and the two letters of the badge keep their
+  // hues.
   assert_eq!(lit.cells[y * width + x + 6].fg, Color::hex(0xff_ffff), "{}", app.text());
   let (lit, before): (Vec<_>, Vec<_>) = (
     (x..x + 3).map(|at| lit.cells[y * width + at].fg).collect(),
