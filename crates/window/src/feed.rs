@@ -246,8 +246,9 @@ impl Feed<'_> {
     let accent = self.style(Role::Title).fg(self.model.tokens.accent);
     left.extend(picture::marked(&title, self.style(Role::Title), accent));
     let (mark, button) = self.closer(card, branch);
-    // The thread of an agent that the operator went back from stands ahead, beside the closer.
-    let ahead = self.opened.ahead.as_ref().map(|_| run(" Forward ", self.style(Role::Button)));
+    // A place that the operator went back from stands ahead, beside the closer.
+    let ahead = (self.opened.ahead.is_some() || self.model.client.trail.ahead())
+      .then(|| run(" Forward ", self.style(Role::Button)));
     let parts = self.present().into_iter().chain(mark).chain(ahead.clone());
     let parts = parts.chain(button.clone().map(|one| one.0));
     let apart = |(at, one)| [(at > 0).then(|| run(" ".repeat(APART), Style::new())), Some(one)];

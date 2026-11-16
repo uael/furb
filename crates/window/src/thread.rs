@@ -347,6 +347,7 @@ impl Model {
       return;
     }
     self.client.hold((key.0, key.1.clone()), self.client.cwd(key.0, &key.1), self.client.moved);
+    self.client.leave();
     let thread = Thread { key, since: self.client.moved, ..Thread::default() };
     self.client.thread = Some(Opened { thread, ..Opened::default() });
     self.client.aim = None;
@@ -357,6 +358,7 @@ impl Model {
   /// opens again, since the daemon tells a window the changes of one thread at a time.
   pub(crate) fn open_agent(&mut self, prompt: String) {
     let Some(mut from) = self.client.thread.take() else { return };
+    self.client.went_on();
     let key = (from.thread.key.0, from.thread.key.1.clone(), prompt);
     (from.thread.asked, from.thread.again, from.ahead) = (HashMap::new(), true, None);
     let thread = Thread { key, since: self.client.moved, ..Thread::default() };
@@ -397,31 +399,60 @@ impl Model {
       self.client.restore = Some(String::new());
       return true;
     }
-    if let Some(mut agent) = self.client.thread.take_if(|one| one.from.is_some())
-      && let Some(mut from) = agent.from.take()
-    {
-      (agent.thread.asked, agent.thread.again) = (HashMap::new(), true);
-      from.ahead = Some(Box::new(agent));
-      (self.client.thread, self.client.aim) = (Some(*from), None);
+    if self.up() {
       return true;
     }
     let leaves = self.leaves();
     if leaves {
-      (self.client.thread, self.client.selected, self.client.aim) = (None, None, None);
+      self.client.leave();
+      (self.client.selected, self.client.aim) = (None, None);
     }
     leaves
   }
 
-  /// Forward to the thread of the agent that the operator went back from, where he read it.
-  pub(crate) fn forward(&mut self) {
-    let Some(mut from) = self.client.thread.take_if(|one| one.ahead.is_some()) else {
-      self.client.notice = Some("No thread stands ahead: go back from an agent first.".to_owned());
+  /// A step back or forward, as the side keys of a mouse step in a browser: back from a part
+  /// that stands over the feed, from the thread of an agent back to the thread that it came from,
+  /// forward to the agent that he went back from, and else to the place that he left before, or
+  /// that he went back from.
+  pub(crate) fn walk(&mut self, back: bool) {
+    // A part that stands over the feed was the last move, so a step back closes it first.
+    let over = self.picker.is_some() || self.client.review.is_some();
+    if back && over {
+      (self.picker, self.client.review) = (None, None);
       return;
+    }
+    let went = if back { self.up() } else { self.down() };
+    if !went && !self.client.walk_trail(back) {
+      let side = if back { "behind" } else { "ahead" };
+      self.client.notice = Some(format!("No place stands {side}."));
+    }
+    self.armed = None;
+  }
+
+  /// From the thread of an agent back to the thread that it came from, where he read it, with the
+  /// agent ahead. Whether the open thread was the thread of an agent.
+  fn up(&mut self) -> bool {
+    let Some(mut agent) = self.client.thread.take_if(|one| one.from.is_some()) else {
+      return false;
     };
-    let Some(mut agent) = from.ahead.take() else { return };
+    let Some(mut from) = agent.from.take() else { return false };
+    (agent.thread.asked, agent.thread.again) = (HashMap::new(), true);
+    from.ahead = Some(Box::new(agent));
+    (self.client.thread, self.client.aim) = (Some(*from), None);
+    true
+  }
+
+  /// Forward to the thread of the agent that the operator went back from, where he read it.
+  /// Whether one stood ahead.
+  fn down(&mut self) -> bool {
+    let Some(mut from) = self.client.thread.take_if(|one| one.ahead.is_some()) else {
+      return false;
+    };
+    let Some(mut agent) = from.ahead.take() else { return false };
     (from.thread.asked, from.thread.again) = (HashMap::new(), true);
     agent.from = Some(Box::new(from));
-    (self.client.thread, self.client.aim, self.armed) = (Some(*agent), None, None);
+    (self.client.thread, self.client.aim) = (Some(*agent), None);
+    true
   }
 
   /// The feed moved to the line of the open thread that binds a name, which shows the name in the

@@ -506,6 +506,49 @@ fn a_name_under_the_pointer_shows_what_it_holds_and_a_click_goes_where_it_was_bo
   app.press("ctrl+x");
   app.press("right");
   shows(&app, " furb · agent · Run the bench of the replay ");
+  // The side keys of a mouse step the same way, as a terminal tells them: back, then forward.
+  app.feed(b"\x1b[<128;10;10M\x1b[<128;10;10m");
+  shows(&app, " Forward ");
+  app.feed(b"\x1b[<129;10;10M\x1b[<129;10;10m");
+  shows(&app, " furb · agent · Run the bench of the replay ");
+}
+
+#[test]
+fn the_back_key_of_a_mouse_opens_the_thread_left_where_he_read_it_and_forward_goes_there_again() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let read = peer.opened(&sessions.join("read.jsonl"), true);
+  peer.said(&read, &format!("how long does an open take {ANSWERS}"));
+  let other = peer.opened(&sessions.join("other.jsonl"), true);
+  peer.said(&other, "say nothing");
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  // A short window, where the answer of the thread is taller than the feed.
+  app.resize(100, 16);
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "See the trace.");
+  // The rows of the feed under its head, whose buttons change with the places that stand ahead.
+  let feed = |app: &TestApp| {
+    let frame = app.text();
+    frame.lines().skip(1).map(|one| one.chars().take(LEFT).collect::<String>()).collect::<Vec<_>>()
+  };
+  let end = feed(&app);
+  app.scroll(10, 6, false);
+  assert!(app.wait_until(PATIENCE, || feed(&app) != end), "{}", app.text());
+  let place = feed(&app);
+  app.click(80, row(&app, "say nothing"));
+  shows(&app, "A reply opens this thread again");
+  app.feed(b"\x1b[<128;10;10M\x1b[<128;10;10m");
+  let back = app.wait_until(PATIENCE, || feed(&app) == place);
+  assert!(back, "the thread left did not open where he read it:\n{}", app.text());
+  shows(&app, " Forward ");
+  app.feed(b"\x1b[<129;10;10M\x1b[<129;10;10m");
+  shows(&app, "A reply opens this thread again");
+  // Nothing stands ahead of the last place, and the window says so.
+  app.feed(b"\x1b[<129;10;10M\x1b[<129;10;10m");
+  shows(&app, "No place stands ahead.");
 }
 
 /// The rows of the box of the context, from its head to the foot of the window, each cut to the

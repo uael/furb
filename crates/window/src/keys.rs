@@ -48,6 +48,7 @@ pub(crate) enum Does {
   Tick,
   NextQuestion,
   Agent,
+  Back,
   Forward,
   Take,
   TakeWord,
@@ -181,8 +182,14 @@ const THREAD: &[Bound] = &[
     &[&[LEADER, plain(KeyCode::Down)]],
   ),
   bound(
+    Does::Back,
+    "back to where you were, as the back key of a mouse",
+    Some("back"),
+    &[&[LEADER, plain(KeyCode::Left)]],
+  ),
+  bound(
     Does::Forward,
-    "forward to the agent that you went back from",
+    "forward to where you went back from",
     Some("forward"),
     &[&[LEADER, plain(KeyCode::Right)]],
   ),

@@ -1235,7 +1235,34 @@ fn act(app: &App, window: &Shared, does: Does) {
   if let Some(pick) = Pick::of(does) {
     return changed(app, window, does, |model| model.pick(pick));
   }
-  let change: fn(&mut Model) = match does {
+  if let Some(change) = change_of(does) {
+    return changed(app, window, does, change);
+  }
+  match does {
+    Does::Close => escaped(app, window, forgot),
+    Does::Stop | Does::Resolve | Does::Revert | Does::Pause => {
+      controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
+    }
+    Does::Send => sent(app, window),
+    Does::Queue => queued(app, window),
+    Does::Empty if !window.borrow().area.text().is_empty() => stashed(app, window, does),
+    Does::Stash => stashed(app, window, does),
+    Does::Picture => clipboard(app, window),
+    Does::Copy => copied(app, window),
+    Does::Empty => controlled(app, window, |model| {
+      model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
+    }),
+    Does::Leave => left(app, window),
+    Does::PageUp | Does::PageDown => paged(app, window, does == Does::PageUp),
+    // The keys of a form, of a list part and of the input, which the key that heard them did, and
+    // the keys that open a list part, which the start of this function took.
+    _ => {}
+  }
+}
+
+/// The change that a key makes to the model alone, after which the thread that it names opens.
+fn change_of(does: Does) -> Option<fn(&mut Model)> {
+  Some(match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
     Does::Needed => Model::needed,
@@ -1254,44 +1281,10 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Running => Model::act_on_open,
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
-    Does::Forward => Model::forward,
-    Does::Close => return escaped(app, window, forgot),
-    Does::Stop | Does::Resolve | Does::Revert | Does::Pause => {
-      return controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
-    }
-    Does::Send => return sent(app, window),
-    Does::Queue => return queued(app, window),
-    Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
-    Does::Stash => return stashed(app, window, does),
-    Does::Picture => return clipboard(app, window),
-    Does::Copy => return copied(app, window),
-    Does::Empty => {
-      return controlled(app, window, |model| {
-        model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
-      });
-    }
-    Does::Leave => return left(app, window),
-    Does::PageUp | Does::PageDown => return paged(app, window, does == Does::PageUp),
-    // The keys of a form, of a list part and of the input, which the key that heard them did, and
-    // the keys that open a list part, which the start of this function took.
-    Does::Up
-    | Does::Down
-    | Does::Lean
-    | Does::Tick
-    | Does::NextQuestion
-    | Does::Take
-    | Does::TakeWord
-    | Does::Sessions
-    | Does::GoTo
-    | Does::Machines
-    | Does::Projects
-    | Does::History
-    | Does::Model
-    | Does::Settings
-    | Does::Skills
-    | Does::Keys => return,
-  };
-  changed(app, window, does, change);
+    Does::Back => |model| model.walk(true),
+    Does::Forward => |model| model.walk(false),
+    _ => return None,
+  })
 }
 
 /// The change that a key makes to the window, then the thread that it opens.
@@ -1467,6 +1460,11 @@ fn colored(window: &Shared) {
 /// rows under it. A click on a card opens its thread, and a click on a thing of the left side does
 /// what its key does.
 fn mouse(app: &App, window: &Shared, event: MouseEvent) {
+  // The side keys of a mouse, which a terminal tells as the buttons 8 and 9, step back and forward
+  // as in a browser, wherever the pointer stands.
+  if let MouseEventKind::Down(MouseButton::Other(side @ (8 | 9))) = event.kind {
+    return act(app, window, if side == 8 { Does::Back } else { Does::Forward });
+  }
   if window.borrow().screen.model.picker.is_some() {
     let does = tell(app, window, |model| {
       model.pointer = Some((event.x, event.y));

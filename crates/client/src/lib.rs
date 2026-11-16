@@ -25,6 +25,7 @@ mod settings;
 mod sign_in;
 mod thread;
 mod time;
+mod trail;
 mod views;
 
 use std::{
@@ -56,6 +57,7 @@ pub use settings::Settings;
 pub use sign_in::SignIn;
 pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
+pub use trail::Trail;
 pub use views::{Filled, View, ViewControl};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
@@ -72,6 +74,8 @@ pub struct Client {
   pub holds: HashMap<Life, Hold>,
   /// The thread that the operator reads.
   pub thread: Option<Opened>,
+  /// The places that the operator left, and those that he went back from.
+  pub trail: Trail,
   /// The folder of the client, whose project a new session on its own machine starts in.
   pub folder: String,
   /// Where the operator turned the input, away from the open thread.
