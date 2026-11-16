@@ -44,12 +44,13 @@ const KEPT: usize = 4096;
 
 /// The output of a command from the ends of its two streams, none when it wrote nothing and its
 /// time is not known.
-fn output_of([stdout, stderr]: &[Kept; 2], took: Option<u64>) -> Option<Output> {
+fn output_of([stdout, stderr]: &[Kept; 2], took: Option<u64>, act: &str) -> Option<Output> {
   let lines: Vec<&str> = stdout.end.lines().chain(stderr.end.lines()).collect();
   let skip = lines.len().saturating_sub(TAIL);
   let more = stdout.before + stderr.before + skip;
   let tail: Vec<String> = lines[skip..].iter().map(|line| shown_line(line)).collect();
-  (!tail.is_empty() || took.is_some()).then_some(Output { tail, more, took })
+  let acts = vec![act.to_owned()];
+  (!tail.is_empty() || took.is_some()).then_some(Output { tail, more, took, acts })
 }
 
 /// The output of a line that awaited more than one command: what each wrote, in the order that
@@ -59,7 +60,8 @@ fn joined(before: Output, after: Output) -> Output {
   let skip = tail.len().saturating_sub(TAIL);
   tail.drain(..skip);
   let took = before.took.zip(after.took).map(|(one, other)| one.max(other));
-  Output { tail, more: before.more + after.more + skip, took }
+  let acts = [before.acts, after.acts].concat();
+  Output { tail, more: before.more + after.more + skip, took, acts }
 }
 
 /// The end of what one stream of a command wrote: its last lines, at most `KEPT` bytes of them, and
@@ -635,9 +637,9 @@ impl<'a> Reader<'a> {
       Some(exit) => {
         let stream = |name: &str| exit.get(name)?.get("content")?.as_str();
         let (stdout, stderr) = (stream("stdout")?, stream("stderr")?);
-        output_of(&[Kept::of(stdout), Kept::of(stderr)], took)
+        output_of(&[Kept::of(stdout), Kept::of(stderr)], took, &act.id)
       }
-      None => output_of(self.streams.outs.get(&act.id)?, None),
+      None => output_of(self.streams.outs.get(&act.id)?, None, &act.id),
     }
   }
 

@@ -9,7 +9,7 @@ use furb_wire::protocol::{Frame, Hello, Kind, PROTOCOL, Request, Role, Verb};
 use serde_json::Value;
 
 use crate::{
-  Client, Key, Life, Link, Pasted, Shown,
+  Client, Command, Key, Life, Link, Pasted, Shown,
   opens::{Ask, Hold},
 };
 
@@ -138,6 +138,8 @@ pub enum Asked {
   Inspect(Key, String),
   /// An image that the open thread shows.
   Picture(Shown),
+  /// The whole of what a command wrote, which the open thread shows.
+  Whole(Command),
 }
 
 impl Asked {
@@ -146,7 +148,12 @@ impl Asked {
   pub fn read_here(&self) -> bool {
     matches!(
       self,
-      Self::Moments(_) | Self::Tracks(_) | Self::Queued(..) | Self::Inspect(..) | Self::Picture(_)
+      Self::Moments(_)
+        | Self::Tracks(_)
+        | Self::Queued(..)
+        | Self::Inspect(..)
+        | Self::Picture(_)
+        | Self::Whole(_)
     )
   }
 }
@@ -160,6 +167,7 @@ impl Client {
       Asked::Queued(life, thread) => self.followed(at, (life, thread), heard),
       Asked::Inspect(key, name) => self.told_inspected((&key, &name), heard),
       Asked::Picture(shown) => self.pictured(&shown, heard),
+      Asked::Whole(command) => self.told_whole(command, heard),
       _ => {}
     }
   }
@@ -195,6 +203,7 @@ impl Client {
     due.extend(self.sign_in_due());
     due.extend(self.inspect_due());
     due.extend(self.pictures_due());
+    due.extend(self.wholes_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {

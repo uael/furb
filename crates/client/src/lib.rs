@@ -27,6 +27,7 @@ mod thread;
 mod time;
 mod trail;
 mod views;
+mod whole;
 
 use std::{
   collections::{HashMap, VecDeque},
@@ -57,6 +58,7 @@ pub use settings::Settings;
 pub use sign_in::SignIn;
 pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
+pub use whole::{Command, Whole};
 pub use trail::Trail;
 pub use views::{Filled, View, ViewControl};
 
@@ -120,6 +122,10 @@ pub struct Client {
   pub inspected: Option<Inspection>,
   /// The images that the open thread shows, by machine, life and uri, and where each stands.
   pub pictures: HashMap<Shown, Picture>,
+  /// The whole of what each command wrote that the open thread shows open, and where each stands.
+  pub wholes: HashMap<Command, Whole>,
+  /// The commands whose whole the window shows and the client did not ask yet.
+  wanted: Vec<Command>,
   /// The thread whose follow-ups the client asks next, after a change of its queue: its machine,
   /// its life and its prompt.
   following: Option<(usize, String, String)>,

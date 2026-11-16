@@ -1702,6 +1702,11 @@ class Output(TypedDict):
   tail: list[str]
   more: int
   took: NotRequired[int | None]
+  acts: NotRequired[list[str]]
+  """
+    The name of each command whose lines these are, in the order that the line made them, from
+    which a window asks what each wrote whole.
+    """
 
 
 class Made1(TypedDict):
@@ -3394,4 +3399,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 75
+PROTOCOL = 76

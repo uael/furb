@@ -938,7 +938,8 @@ fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_e
   facts.push(json!(["out", "bash1", "bash", "4\n\u{1b}[1m5\u{1b}[0m", "stdout"]));
   facts.push(json!(["out", "bash1", "bash", "50%\r100%\tok\n", "stderr"]));
   let tail = ["4", "5", "100% ok"].map(str::to_owned).to_vec();
-  let runs = Output { tail: tail.clone(), more: 3, took: None };
+  let acts = vec!["bash1".to_owned()];
+  let runs = Output { tail: tail.clone(), more: 3, took: None, acts: acts.clone() };
   assert_eq!(output(&facts), (None, Some(runs)));
   let text = |content: &str| json!({"is": "Text", "path": "bash1/out", "content": content});
   let exit = json!({
@@ -946,7 +947,7 @@ fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_e
     "stdout": text("1\n2\n3\n4\n\u{1b}[1m5\u{1b}[0m"), "stderr": text("50%\r100%\tok\n"),
   });
   facts.push(json!(["done", "bash1", "bash", exit]));
-  assert_eq!(output(&facts), (None, Some(Output { tail, more: 3, took: Some(0) })));
+  assert_eq!(output(&facts), (None, Some(Output { tail, more: 3, took: Some(0), acts })));
 }
 
 #[test]
@@ -966,7 +967,8 @@ fn a_line_that_awaited_two_commands_carries_what_each_wrote_and_the_time_of_the_
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
   let tail = ["a", "b"].map(str::to_owned).to_vec();
-  assert_eq!(block.lines[0].output, Some(Output { tail, more: 0, took: Some(0) }));
+  let acts = ["bash1", "bash2"].map(str::to_owned).to_vec();
+  assert_eq!(block.lines[0].output, Some(Output { tail, more: 0, took: Some(0), acts }));
 }
 
 /// The last line of the last block of the thread of these facts: its number, its text and its mark.
@@ -984,7 +986,12 @@ fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
     number,
     text: String::new(),
     mark: Mark::Ran,
-    output: (tail > 0).then(|| Output { tail: vec![String::new(); tail], more: 9, took: None }),
+    output: (tail > 0).then(|| Output {
+      tail: vec![String::new(); tail],
+      more: 9,
+      took: None,
+      acts: Vec::new(),
+    }),
     made: Vec::new(),
     writes: Vec::new(),
     awaits: Vec::new(),

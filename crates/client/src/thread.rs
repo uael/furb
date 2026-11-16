@@ -106,6 +106,8 @@ pub enum Fold {
   Block(String),
   Thought(String),
   Line(usize),
+  /// The whole of what the commands of a line wrote, by the number of the line.
+  Output(usize),
   /// The parts of the context.
   Context,
 }

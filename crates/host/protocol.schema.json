@@ -5243,6 +5243,13 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "acts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The name of each command whose lines these are, in the order that the line made them, from\nwhich a window asks what each wrote whole."
         }
       },
       "required": [
@@ -6539,5 +6546,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 75
+  "x-protocol": 76
 }

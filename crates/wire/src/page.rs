@@ -240,6 +240,10 @@ pub struct Output {
   pub tail: Vec<String>,
   pub more: usize,
   pub took: Option<u64>,
+  /// The name of each command whose lines these are, in the order that the line made them, from
+  /// which a window asks what each wrote whole.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub acts: Vec<String>,
 }
 
 /// Whether a fact says what a command wrote while it runs, which a page shows under its line.

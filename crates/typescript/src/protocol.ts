@@ -1766,6 +1766,11 @@ export interface Output {
   tail: string[];
   more: number;
   took?: number | null;
+  /**
+   * The name of each command whose lines these are, in the order that the line made them, from
+   * which a window asks what each wrote whole.
+   */
+  acts?: string[];
 }
 /**
  * What a write of a file that a line made changed: the name of its act, the path of the file, the
@@ -1881,4 +1886,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 75;
+export const PROTOCOL = 76;
