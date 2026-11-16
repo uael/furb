@@ -119,3 +119,31 @@ fn an_image_that_a_word_reads_draws_under_the_line_that_read_it() {
   let drawn = app.wait_until(PATIENCE, || under(&app.text()) == 7);
   assert!(drawn, "{}", app.text());
 }
+
+#[test]
+fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
+  let (app, daemon, _) = started();
+  let shot = include_bytes!("../../../frames/src/shot.png");
+  fs::write(daemon.file("furb-try").join("shot.png"), shot).unwrap();
+  sent(&app, &format!("first {ANSWERS}"));
+  shows(&app, "Resolved 1");
+  sent(&app, &format!("second {ANSWERS}"));
+  app.paste("shot.png");
+  sent(&app, &format!(" {ANSWERS}"));
+  // The wheel takes the feed on until the image draws whole, then back until its box crosses the
+  // foot of the feed, where the image cannot draw a part of itself: its row names it there.
+  let drawn = |frame: &str| {
+    frame.lines().any(|row| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one)))
+  };
+  let named = |frame: &str| frame.lines().any(|row| row.trim_end() == "┃ ▣ image-1.png");
+  let (x, y) = (10, 5);
+  let turned = |down: bool, found: &dyn Fn(&str) -> bool| {
+    let reached = app.wait_until(PATIENCE, || {
+      app.scroll(x, y, down);
+      found(&app.text())
+    });
+    assert!(reached, "{}", app.text());
+  };
+  turned(true, &drawn);
+  turned(false, &named);
+}
