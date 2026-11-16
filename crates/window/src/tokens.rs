@@ -80,8 +80,11 @@ pub struct Tokens {
   pub lifted: Color,
   /// A line between two parts.
   pub border: Color,
-  /// Prose and code. It is never pure white.
+  /// Code, titles and his messages. It is never pure white.
   pub text: Color,
+  /// The body of an answer, as the markdown of a thread draws it: one step under the text, so a
+  /// long answer reads soft, while its titles, its bold words and its code stand in the text.
+  pub prose: Color,
   /// The text of a thing that takes a click while the pointer is on it, which changes nothing else.
   pub hover: Color,
   /// The second line of a card, a thought, a hint, a placeholder, a mark of what is done.
@@ -149,6 +152,7 @@ impl Tokens {
       lifted,
       border,
       text,
+      prose: Color::hex(SOFT),
       hover: WHITE,
       muted: Color::hex(0x94_9494),
       accent: orange,
@@ -233,6 +237,9 @@ pub(crate) fn mixed(from: Color, to: Color, share: u16) -> Color {
 
 /// The color of what a person reads, prose and code.
 const READS: u32 = 0xe4_e4e4;
+
+/// The body of an answer, one step under [`READS`].
+const SOFT: u32 = 0xc8_c8c8;
 
 /// The colors of python inside a block of code, by the name of a capture of its grammar, from the
 /// syntax of `OpenCode` v2, less its green: a string takes a pale cyan. A name that this list does

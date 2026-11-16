@@ -112,7 +112,10 @@ impl Prose<'_> {
           rows.push(Vec::new());
         }
       }
-      Tag::Strong | Tag::Heading { .. } => self.styles.push(self.style().bold()),
+      // A title and a bold word stand in the bright text, over the softer body.
+      Tag::Strong | Tag::Heading { .. } => {
+        self.styles.push(self.style().fg(self.tokens.text).bold());
+      }
       Tag::Emphasis => self.styles.push(self.style().italic()),
       Tag::Link { dest_url, .. } => {
         self.styles.push(self.style().fg(self.tokens.accent).underline());
@@ -169,7 +172,7 @@ impl Prose<'_> {
   }
 
   fn style(&self) -> Style {
-    self.styles.last().copied().unwrap_or_else(|| self.tokens.style(Role::Prose))
+    self.styles.last().copied().unwrap_or_else(|| Style::new().fg(self.tokens.prose))
   }
 
   /// A text added to the words, each word with its style and the link that stands.
