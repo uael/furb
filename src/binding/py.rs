@@ -3,10 +3,6 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 
 use indexmap::IndexMap;
 use std::{
@@ -1491,8 +1487,8 @@ fn bare(shown: &str) -> String {
 
 /// The extension module: every function of the host API, the engine, its act, the ear of the crate, the engine and
 /// the system prompt, and each constant of the contract.
-#[pymodule]
-fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pymodule(name = "_monty")]
+fn monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<PyAct>()?;
   module.add_class::<NativeEar>()?;
