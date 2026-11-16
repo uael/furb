@@ -30,12 +30,17 @@ done
 
 /// A window on a program of the speech that says the script, once its models came.
 fn listened() -> (TestApp, Daemon) {
+  listened_to(SAYS)
+}
+
+/// A window on a program of the speech that says a script, once its models came.
+fn listened_to(says: &str) -> (TestApp, Daemon) {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   daemon.project("furb");
   daemon.served();
   let listen = daemon.file("listen");
-  fs::write(&listen, SAYS).unwrap();
+  fs::write(&listen, says).unwrap();
   fs::set_permissions(&listen, fs::Permissions::from_mode(0o755)).unwrap();
   let options = Options { listen: Some(listen), ..options(&daemon.file("cards.json")) };
   open(&app, vec![daemon.machine("mac")], options);
@@ -95,4 +100,15 @@ fn a_held_space_records_over_the_bar_of_the_time_which_a_tap_plays() {
   typed(&app, "read the engine.");
   let same = |frame: &str| frame.lines().take(3).map(str::to_owned).collect::<Vec<_>>();
   assert_eq!(same(&app.text()), same(&bar));
+}
+
+#[test]
+fn a_speech_that_ends_before_a_hold_says_nothing_and_the_hold_says_why() {
+  // The window starts the program with its first frame, before he asks for his voice, as on a
+  // machine whose speech cannot run.
+  let (app, _daemon) = listened_to("#!/bin/sh\nexit 0\n");
+  app.advance(Duration::from_millis(400));
+  assert!(!app.text().contains("The speech ended."), "{}", app.text());
+  hold(&app);
+  shows(&app, "The speech ended.");
 }

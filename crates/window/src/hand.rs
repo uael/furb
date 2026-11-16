@@ -1728,11 +1728,11 @@ fn stop(voice: &Voice) {
 }
 
 /// The record dropped, with the input as it stood before it, and why when a fault ended it. The
-/// program stops the record, whose text then comes to no record.
+/// program stops the record, whose text then comes to no record. A fault with no record says
+/// nothing: the program starts with the window, before he asks for it, and the next hold starts it
+/// again and says why it fails then.
 fn dropped(app: &App, window: &Shared, why: Option<String>) {
-  let Some(record) = window.borrow_mut().voice.record.take() else {
-    return tell(app, window, |model| model.client.notice = why.or(model.client.notice.take()));
-  };
+  let Some(record) = window.borrow_mut().voice.record.take() else { return };
   if !record.stops {
     stop(&window.borrow().voice);
   }
