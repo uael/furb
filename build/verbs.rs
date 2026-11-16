@@ -736,6 +736,6 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
     out,
     "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
   );
-  out!(out, "    let got = slf.borrow().said({:?}, args, kwargs)?;", verb.name);
+  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, args, kwargs)?;", verb.name);
   out!(out, "    Ok({made})\n  }}\n");
 }

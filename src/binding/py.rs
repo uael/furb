@@ -10,8 +10,6 @@
 
 use indexmap::IndexMap;
 use std::{
-  cell::{OnceCell, RefCell, RefMut},
-  rc::{Rc, Weak},
   sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -382,34 +380,9 @@ impl Ear for PyEar {
 /// as `furb_monty.engine` does, and it goes back to the life once that code is done.
 #[pyclass(module = "furb_monty._monty", name = "Life")]
 struct PyLife {
-  /// The way to the life, a weak one: no code of python keeps the life past the step that lent it.
-  life: Homed<Weak<RefCell<Life>>>,
-}
-
-/// The life, held while python has it lent: the frame of [`with_life`] holds the only strong hold
-/// of it.
-struct Lent(Rc<RefCell<Life>>);
-
-impl Lent {
-  /// The life gives itself to be lent.
-  fn new(life: Life) -> Self {
-    Self(Rc::new(RefCell::new(life)))
-  }
-
-  /// The way that python reaches the life by while it is lent.
-  fn way(&self) -> Weak<RefCell<Life>> {
-    Rc::downgrade(&self.0)
-  }
-
-  /// The life, back once the step is done.
-  #[expect(
-    clippy::expect_used,
-    reason = "python holds the lent life weakly, and a call ends before its step"
-  )]
-  fn back(self) -> Life {
-    let shared = Rc::into_inner(self.0);
-    shared.expect("only the frame that lent the life holds it strongly").into_inner()
-  }
+  /// The life while it is lent, which [`with_life`] takes back once the step is done, so no code
+  /// of python keeps the life past the step that lent it.
+  life: Homed<Option<Life>>,
 }
 
 #[pymethods]
@@ -418,7 +391,7 @@ impl PyLife {
   /// in it, after the life went back, and a verb it calls is a verb of the operator.
   #[getter]
   fn lent(&self) -> bool {
-    self.life.strong_count() > 0
+    self.life.is_some()
   }
 
   /// One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
@@ -429,16 +402,13 @@ impl PyLife {
     reason = "pyo3 extracts the kwargs of a call as an owned map"
   )]
   fn call(
-    &self,
+    &mut self,
     verb: &str,
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let refused = || Fault::refused(format!("{verb} is called after the life went back"));
-    let lent = self.life.upgrade().ok_or_else(refused)?;
-    let mut life = lent.try_borrow_mut().map_err(|no| {
-      Fault::refused(format!("{verb} is called while the life is in a call: {no}"))
-    })?;
+    let life = self.life.as_mut().ok_or_else(refused)?;
     let (args, kwargs) = words(args, kwargs.as_ref());
     life.call(verb, args, kwargs).map(Value)
   }
@@ -446,16 +416,25 @@ impl PyLife {
 
 /// What `step` gives, with the life lent to the code of python it runs, which `_monty.life` holds for that code alone,
 /// and the life, taken back once `step` is done.
+#[expect(
+  clippy::expect_used,
+  reason = "the step is over, so no call of python holds the lent life, and the life comes back"
+)]
 fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResult<T>, Life) {
-  let lent = Lent::new(life);
-  let got = Py::new(py, PyLife { life: Homed::new(lent.way()) }).and_then(|handle| {
-    let made = made(py)?;
+  let handle = match Py::new(py, PyLife { life: Homed::new(None) }) {
+    Ok(handle) => handle,
+    Err(no) => return (Err(no), life),
+  };
+  *handle.borrow_mut(py).life = Some(life);
+  let made = made(py);
+  let got = made.and_then(|made| {
     let token = made.life.bind(py).call_method1("set", (&handle,))?;
     let got = step();
     made.life.bind(py).call_method1("reset", (token,))?;
     Ok(got)
   });
-  (got, lent.back())
+  let life = handle.borrow_mut(py).life.take();
+  (got, life.expect("the life stays lent until the step that lent it is over"))
 }
 
 impl PyEar {
@@ -702,8 +681,8 @@ pub struct PyEngine {
 
 /// The engine of a [`PyEngine`] and the waker it is driven with, which are of the thread of python that booted it.
 struct Driven {
-  engine: RefCell<Option<Engine>>,
-  waker: OnceCell<Waker>,
+  engine: Option<Engine>,
+  waker: Option<Waker>,
 }
 
 impl PyEngine {
@@ -712,46 +691,31 @@ impl PyEngine {
     made(py)?.faults.bind(py).clear();
     let root = engine.root().to_owned();
     let raised = engine.raised().cloned();
-    let home = Homed::new(Driven { engine: RefCell::new(Some(engine)), waker: OnceCell::new() });
+    let home = Homed::new(Driven { engine: Some(engine), waker: None });
     let held = Self { home, root, raised, record };
     let held = Py::new(py, held)?;
     let weak = py.import("weakref")?.getattr("ref")?.call1((&held,))?.unbind();
     let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<Self>() {
-      Ok(engine) => engine.borrow().pump().map_err(Into::into),
+      Ok(engine) => engine.try_borrow_mut()?.pump().map_err(Into::into),
       Err(_) => Ok(()),
     })?;
-    held
-      .borrow(py)
-      .home
-      .waker
-      .set(waker)
-      .map_err(|_held| PyRuntimeError::new_err("a new engine holds its waker already"))?;
-    held.borrow(py).pump()?;
+    let mut engine = held.borrow_mut(py);
+    engine.home.waker = Some(waker);
+    engine.pump()?;
+    drop(engine);
     Ok(held)
   }
 
-  /// The engine, taken whole: only when no call of the host holds it.
-  fn idle(&self) -> Result<RefMut<'_, Option<Engine>>, Fault> {
-    self
-      .home
-      .engine
-      .try_borrow_mut()
-      .map_err(|no| Fault::refused(format!("the engine is in a call of the host: {no}")))
-  }
-
-  /// One call of the engine.
-  fn call<T>(&self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> Result<T, Fault> {
-    let mut held = self.home.engine.try_borrow_mut().map_err(|no| {
-      Fault::refused(format!(
-        "the engine hears an ear, which calls the engine by its verbs alone: {no}"
-      ))
-    })?;
-    call(held.as_mut().ok_or_else(|| Fault::refused("the engine is disposed"))?)
+  /// One call of the engine. Python holds the engine for the call, so code of python that the
+  /// engine runs and that calls the engine again is refused by pyo3: an ear calls the engine by
+  /// its verbs alone.
+  fn call<T>(&mut self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> Result<T, Fault> {
+    call(self.home.engine.as_mut().ok_or_else(|| Fault::refused("the engine is disposed"))?)
   }
 
   /// One verb, said by what the life hears now while it hears, and by the operator otherwise.
   fn said(
-    &self,
+    &mut self,
     name: &str,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
@@ -761,11 +725,11 @@ impl PyEngine {
 
   /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and whoever awaits
   /// an act that is done now is told.
-  fn pump(&self) -> Result<(), Fault> {
-    let (Some(waker), true) = (self.home.waker.get(), self.home.engine.borrow().is_some()) else {
+  fn pump(&mut self) -> Result<(), Fault> {
+    let Driven { engine: Some(engine), waker: Some(waker) } = &mut *self.home else {
       return Ok(());
     };
-    self.call(|engine| engine.pump(waker))
+    engine.pump(waker)
   }
 }
 
@@ -816,13 +780,13 @@ impl PyEngine {
   /// Whether the engine is gone.
   #[getter]
   fn disposed(&self) -> bool {
-    self.home.engine.try_borrow().is_ok_and(|engine| engine.is_none())
+    self.home.engine.is_none()
   }
 
   /// Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the
   /// work an ear began sets to the name of that ear before it speaks.
   #[pyo3(signature = (value = None))]
-  fn site(&self, value: Option<&str>) -> Result<String, Fault> {
+  fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
     self.call(|engine| engine.site(value))
   }
 
@@ -833,7 +797,7 @@ impl PyEngine {
     reason = "pyo3 extracts the kwargs of a call as an owned map"
   )]
   fn verb(
-    &self,
+    &mut self,
     name: &str,
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
@@ -845,13 +809,13 @@ impl PyEngine {
   /// A function of the checkpointer of the engine, `seed` or `gathered`, said by its name with
   /// these words, and what it gave.
   #[pyo3(signature = (name, args = None))]
-  fn checkpointed(&self, name: &str, args: Option<Vec<Value>>) -> Result<Value, Fault> {
+  fn checkpointed(&mut self, name: &str, args: Option<Vec<Value>>) -> Result<Value, Fault> {
     let (args, _) = words(args, None);
     self.call(|engine| engine.checkpointed(name, args)).map(Value)
   }
 
   /// The entries that follow the tip of the life, which its journal says again at once.
-  fn feed(&self, tail: Vec<Value>) -> Result<(), Fault> {
+  fn feed(&mut self, tail: Vec<Value>) -> Result<(), Fault> {
     let tail: Vec<Object> = tail.into_iter().map(|one| one.0).collect();
     self.call(|engine| engine.feed(&tail))
   }
@@ -859,7 +823,7 @@ impl PyEngine {
   /// The names of the acts that the journal of the life holds, each that an ear of the outside
   /// took and that is not done.
   #[pyo3(name = "held")]
-  fn journal_held(&self) -> Result<Value, Fault> {
+  fn journal_held(&mut self) -> Result<Value, Fault> {
     self.call(Engine::held).map(Value)
   }
 
@@ -870,7 +834,7 @@ impl PyEngine {
     reason = "pyo3 extracts the kwargs of a call as an owned map"
   )]
   fn made(
-    &self,
+    &mut self,
     n: i64,
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
@@ -880,29 +844,29 @@ impl PyEngine {
   }
 
   /// A callable the engine made, forgotten: the host holds its number no more.
-  fn forget(&self, n: i64) -> Result<(), Fault> {
+  fn forget(&mut self, n: i64) -> Result<(), Fault> {
     self.call(|engine| engine.forget(n))
   }
 
   /// The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
   /// kind, as the engine of the crate finds it.
-  fn pending(&self) -> Result<Vec<(String, String)>, Fault> {
+  fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
     self.call(Engine::pending)
   }
 
   /// The state of the record as a list of records shows it while no life holds it, `runs` or
   /// `saved`, as the engine of the crate decides it.
-  fn saved(&self) -> Result<String, Fault> {
+  fn saved(&mut self) -> Result<String, Fault> {
     self.call(|engine| engine.saved().map(str::to_owned))
   }
 
   /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
-  fn parked(&self) -> Result<Vec<(String, String)>, Fault> {
+  fn parked(&mut self) -> Result<Vec<(String, String)>, Fault> {
     self.call(Engine::parked)
   }
 
   /// A parked act, run again, as the engine of the crate runs it.
-  fn retry(&self, act: &str) -> Result<(), Fault> {
+  fn retry(&mut self, act: &str) -> Result<(), Fault> {
     self.call(|engine| engine.retry(act))
   }
 
@@ -914,7 +878,7 @@ impl PyEngine {
     reason = "pyo3 extracts the kwargs of a call as an owned map"
   )]
   fn keyed(
-    &self,
+    &mut self,
     key: &str,
     kind: &str,
     args: Option<Vec<Value>>,
@@ -925,7 +889,7 @@ impl PyEngine {
   }
 
   /// What an act comes to, which python awaits: its value, or the exception it completed with, raised.
-  fn result<'py>(&self, py: Python<'py>, act: &str) -> PyResult<Bound<'py, PyAny>> {
+  fn result<'py>(&mut self, py: Python<'py>, act: &str) -> PyResult<Bound<'py, PyAny>> {
     let future =
       py.import("asyncio")?.call_method0("get_running_loop")?.call_method0("create_future")?;
     let settled = future.clone().unbind();
@@ -942,29 +906,28 @@ impl PyEngine {
   }
 
   /// What an act came to, and whether it is done.
-  fn outcome(&self, act: &str) -> Result<super::Outcome, Fault> {
+  fn outcome(&mut self, act: &str) -> Result<super::Outcome, Fault> {
     let got = self.call(|engine| engine.outcome(act))?;
     Ok(super::Outcome { done: got.is_some(), value: Value(got.unwrap_or_else(Object::none)) })
   }
 
   /// One name of a chain, the root when none is given, read without calling it.
   #[pyo3(signature = (name, chain = None))]
-  fn inspect(&self, name: &str, chain: Option<&str>) -> Result<super::Inspection, Fault> {
+  fn inspect(&mut self, name: &str, chain: Option<&str>) -> Result<super::Inspection, Fault> {
     let (kind, representation, value) = self.call(|engine| engine.inspect(name, chain))?;
     Ok(super::Inspection { name: name.to_owned(), kind, representation, value: Value(value) })
   }
 
   /// Every name the module of a chain binds, the root when none is given, in the order it bound them.
   #[pyo3(signature = (chain = None))]
-  fn names(&self, chain: Option<&str>) -> Result<Vec<String>, Fault> {
+  fn names(&mut self, chain: Option<&str>) -> Result<Vec<String>, Fault> {
     self.call(|engine| engine.names(chain))
   }
 
   /// The engine is gone, and its ears with it: a command of the crate ends, a wait ends, and the store lets its
   /// record go.
-  fn dispose(&self) -> Result<(), Fault> {
-    self.idle()?.take();
-    Ok(())
+  fn dispose(&mut self) {
+    self.home.engine.take();
   }
 }
 
@@ -1009,7 +972,7 @@ impl PyAct {
   }
 
   fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    self.engine.bind(py).borrow().result(py, &self.id)?.call_method0("__await__")
+    self.engine.bind(py).try_borrow_mut()?.result(py, &self.id)?.call_method0("__await__")
   }
 }
 
