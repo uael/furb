@@ -18,6 +18,7 @@ mod promise;
 mod scope;
 mod tree;
 mod unused;
+mod watch;
 mod width;
 
 use std::{

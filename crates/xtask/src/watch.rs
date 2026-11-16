@@ -93,7 +93,14 @@ impl Watch {
         heard(moves.recv_timeout(left))?;
       }
       next = Instant::now() + self.every;
-      self.check(&self.head()?, &moves)?;
+      let head = self.head()?;
+      // A check that cannot run, as a part that a move of a folder left with no place to start,
+      // is a red of its head: the watch tells it and goes on to the next head, and never ends on
+      // it.
+      if let Err(fault) = self.check(&head, &moves) {
+        append(&self.table, &format!("{}\t{head}\tred\t0\t1\n", now()))?;
+        self.tell(&format!("the check of {head} could not run: {fault}"))?;
+      }
       if self.once {
         return Ok(ExitCode::SUCCESS);
       }
