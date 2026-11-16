@@ -1,6 +1,5 @@
 //! The door of the daemon to one peer: its hello, the role of each verb, and the frames of its
 //! answers and of what the daemon pushes to it.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -268,7 +267,7 @@ async fn heard<R: AsyncRead + Unpin>(
       None => Ok(None),
       Some(Ok(line)) if line.trim().is_empty() => continue,
       Some(Ok(line)) => Ok(Some(serde_json::from_str(&line).map_err(|no| {
-        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one["id"].as_u64());
+        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one.get("id")?.as_u64());
         (id, ProtocolError::Unread { why: no.to_string() })
       }))),
       Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {

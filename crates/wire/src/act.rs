@@ -1,5 +1,4 @@
 //! An act with its meaning, and what its models cost.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::fmt;
 
@@ -279,8 +278,8 @@ impl Read {
     reason = "the usage holds each count of tokens, a whole number of at least 0, as a float"
   )]
   fn of(usage: &[f64; 5]) -> Self {
-    let whole = |at: usize| usage[at] as u64;
-    Self { tokens: whole(0), cached: whole(2), written: whole(3) }
+    let [tokens, _, cached, written, _] = *usage;
+    Self { tokens: tokens as u64, cached: cached as u64, written: written as u64 }
   }
 }
 

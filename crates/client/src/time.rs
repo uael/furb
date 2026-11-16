@@ -3,7 +3,6 @@
 //! that moment, page by page, as the daemon folds it. A play steps forward on its own until now.
 //! Under the bar, the chains of the life stand on the same moments: each that works, and each
 //! that a text that he types finds.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap},
@@ -65,29 +64,31 @@ impl Chains {
     if !self.find.is_empty() {
       let labels = self.tracks.iter().map(|one| one.label.as_str());
       let found = ranked(&self.find, labels).into_iter();
-      return found.map(|one| (&self.tracks[one.at], 0)).collect();
+      return found.filter_map(|one| Some((self.tracks.get(one.at)?, 0))).collect();
     }
     let count = self.tracks.len();
     let places: HashMap<&str, usize> =
       self.tracks.iter().enumerate().map(|(at, one)| (one.chain.as_str(), at)).collect();
     let parent = |at: usize| {
-      let made = self.tracks[at].parent.as_deref().and_then(|one| places.get(one).copied());
+      let made = self.tracks.get(at)?.parent.as_deref().and_then(|one| places.get(one).copied());
       made.filter(|one| *one != at)
     };
-    // Each chain that works shows, and each chain whose word made it, up the tree.
+    // Each chain that works shows, and each chain whose word made it, up the tree. Each list below
+    // holds one value for each track, at the place of the track.
     let mut keep = vec![false; count];
-    for start in (0..count).filter(|at| !resting(self.tracks[*at].state)) {
+    let working = self.tracks.iter().enumerate().filter(|(_, one)| !resting(one.state));
+    for (start, _) in working {
       let mut at = Some(start);
-      while let Some(one) = at.filter(|one| !keep[*one]) {
-        keep[one] = true;
-        at = parent(one);
+      while let Some(kept) = at.and_then(|one| keep.get_mut(one)).filter(|kept| !**kept) {
+        *kept = true;
+        at = at.and_then(parent);
       }
     }
     let mut under = vec![Vec::new(); count];
     let mut stack = Vec::new();
     for at in 0..count {
-      match parent(at) {
-        Some(made) => under[made].push(at),
+      match parent(at).and_then(|made| under.get_mut(made)) {
+        Some(made) => made.push(at),
         None => stack.push((at, 0)),
       }
     }
@@ -95,11 +96,16 @@ impl Chains {
     let mut seen = vec![false; count];
     let mut out = Vec::new();
     while let Some((at, depth)) = stack.pop() {
-      if mem::replace(&mut seen[at], true) || !keep[at] {
+      let (Some(once), Some(track), Some(below)) =
+        (seen.get_mut(at), self.tracks.get(at), under.get(at))
+      else {
+        continue;
+      };
+      if mem::replace(once, true) || keep.get(at) != Some(&true) {
         continue;
       }
-      out.push((&self.tracks[at], depth));
-      stack.extend(under[at].iter().rev().map(|one| (*one, depth + 1)));
+      out.push((track, depth));
+      stack.extend(below.iter().rev().map(|one| (*one, depth + 1)));
     }
     out
   }

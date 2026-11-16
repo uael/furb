@@ -1,6 +1,5 @@
 //! One life of the engine, as the operator holds it: the World of this machine it stands on, the
 //! record it keeps, and what the operator hears of it.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   future::{Future, poll_fn},
@@ -84,7 +83,7 @@ impl Life {
     Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
       let words =
         a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
-      (words.len() == 7 && words[2..] == wanted).then(|| a.about().to_owned())
+      (words.len() == 7 && words.get(2..) == Some(&wanted[..])).then(|| a.about().to_owned())
     }))
   }
 

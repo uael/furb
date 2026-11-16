@@ -8,7 +8,6 @@
 //! from it.
 //! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -775,7 +774,10 @@ impl Life {
     let Ok(retold) = world::retold_with(record, reads) else { return true };
     // A fact that the record kept after its last entry stands nowhere, so a whole read reads on to
     // the end of the facts.
-    let last = if whole { retold.entries + 1 } else { marks[marks.len() - 1] };
+    let last = match marks.last() {
+      Some(last) if !whole => *last,
+      _ => retold.entries + 1,
+    };
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
@@ -843,8 +845,9 @@ impl Life {
       };
       Some((at as Seq, event))
     });
-    let wanted =
-      |places: &[(Seq, Digest)]| places[places.partition_point(|(at, _)| *at < from)..].to_vec();
+    let wanted = |places: &[(Seq, Digest)]| {
+      places.iter().skip(places.partition_point(|(at, _)| *at < from)).cloned().collect::<Vec<_>>()
+    };
     let retells = self.record.as_deref().map_or_else(Vec::new, |path| {
       let gone = &self.kept.gone;
       let record = Retell { from: Source::Record(path.to_owned()), wanted: wanted(&gone.places) };

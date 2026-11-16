@@ -1,6 +1,5 @@
 //! The audit of a record: a replay with no model and no network that checks each word and each
 //! answer of the record, as `docs/audit.md` says.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{env, fs, path::Path, process};
 
@@ -34,9 +33,11 @@ pub(crate) fn audited(record: &Path, sha256: &str, report: Option<&Path>) -> Res
   } else {
     wrong.push(format!("the record hashes as {hashed}, not as {sha256}"));
   }
-  told["agrees"] = json!(wrong.is_empty());
   let count = wrong.len();
-  told["wrong"] = json!(wrong);
+  if let Some(fields) = told.as_object_mut() {
+    fields.insert("agrees".to_owned(), json!(wrong.is_empty()));
+    fields.insert("wrong".to_owned(), json!(wrong));
+  }
   let text = serde_json::to_string_pretty(&told).unwrap_or_default() + "\n";
   if let Some(report) = report {
     fs::write(report, &text)
@@ -105,7 +106,7 @@ fn checked(
   told["crossings"] = json!(crossings.len());
   let tip = crossings.last().copied().unwrap_or(0);
   let (mut answers, mut words) = (Vec::new(), Vec::new());
-  for fact in &facts[tip..] {
+  for fact in facts.iter().skip(tip) {
     let (kind, about, maker) = (word(fact, 0), word(fact, 1), word(fact, 2));
     if kind == "done" && question("reply", &about) {
       let said = entry(fact, 3).map_or_else(String::new, |one| hashed(&wire::outward(one)));
@@ -146,7 +147,9 @@ fn hashed_of(
 ) -> Result<String, CliError> {
   let made = engine.verb(view, vec![Object::string(about)], vec![])?;
   let line = (0..depth).fold(made, |held, _| Object::list(vec![held]));
-  let kept = (0..depth).fold(wire::record(line.as_ref()), |mut held, _| held[0].take());
+  let kept = (0..depth).fold(wire::record(line.as_ref()), |mut held, _| {
+    held.get_mut(0).map(Value::take).unwrap_or_default()
+  });
   Ok(hashed(&kept))
 }
 

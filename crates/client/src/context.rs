@@ -2,8 +2,6 @@
 //! prompt, the doctrine, the code of the kits, the skills, the tools of MCP, the memory files
 //! and the turns of the work, which the client parts from the turns of the chain while the box of
 //! the context shows them.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::mem;
 
@@ -114,26 +112,29 @@ fn kinds(turns: &[Value], system: &str) -> Vec<(Content, u64)> {
   let answers: Vec<(usize, f64)> = turns
     .iter()
     .enumerate()
-    .filter(|(_, turn)| turn[0] == "assistant")
-    .filter_map(|(at, turn)| Some((at, turn[2][0].as_f64()?)))
+    .filter(|(_, turn)| turn.get(0).and_then(Value::as_str) == Some("assistant"))
+    .filter_map(|(at, turn)| Some((at, turn.get(2)?.get(0)?.as_f64()?)))
     .collect();
   let (Some(&(first, opened)), Some(&(last, read))) = (answers.first(), answers.last()) else {
     return Vec::new();
   };
-  let mut characters = [0.0; Content::ALL.len()];
-  characters[slot(Content::Engine)] = count(system);
+  let mut characters =
+    Content::ALL.map(|kind| (kind, if kind == Content::Engine { count(system) } else { 0.0 }));
   let mut before = count(system);
-  for (at, _, kind, text) in pieces(&turns[..last]) {
-    characters[slot(kind)] += count(text);
+  for (at, _, kind, text) in pieces(turns.get(..last).unwrap_or_default()) {
+    for one in characters.iter_mut().filter(|one| one.0 == kind) {
+      one.1 += count(text);
+    }
     before += if at < first { count(text) } else { 0.0 };
   }
   let rate = if before > 0.0 { opened / before } else { 1.0 / CHARACTERS };
   let mut kinds: Vec<(Content, u64)> =
-    Content::ALL.into_iter().map(|kind| (kind, tokens(characters[slot(kind)] * rate))).collect();
+    characters.into_iter().map(|(kind, characters)| (kind, tokens(characters * rate))).collect();
   // The turns take what the rounding left, so the kinds sum to what the answer read.
-  let turns = slot(Content::Turns);
-  let others: u64 = kinds.iter().enumerate().filter(|one| one.0 != turns).map(|one| one.1.1).sum();
-  kinds[turns].1 = tokens(read).saturating_sub(others);
+  let others: u64 = kinds.iter().filter(|one| one.0 != Content::Turns).map(|one| one.1).sum();
+  for one in kinds.iter_mut().filter(|one| one.0 == Content::Turns) {
+    one.1 = tokens(read).saturating_sub(others);
+  }
   kinds.retain(|one| one.1 > 0);
   kinds
 }
@@ -159,11 +160,6 @@ pub(crate) fn pieces(turns: &[Value]) -> Vec<(usize, bool, Content, &str)> {
   pieces
 }
 
-/// The place of a kind in the order of the bar.
-fn slot(kind: Content) -> usize {
-  Content::ALL.iter().position(|one| *one == kind).unwrap_or_default()
-}
-
 /// The kind of a paragraph of a user turn, by the path that it tells or by its act.
 fn kind(paragraph: &str) -> Content {
   if paragraph.starts_with("#mcp") {
@@ -186,10 +182,12 @@ fn kind(paragraph: &str) -> Content {
 /// markdown in a text that a paragraph quotes, as `# Title`, starts none.
 fn paragraphs(python: &str) -> Vec<&str> {
   let heads = python.match_indices("\n\n#").map(|(at, _)| at + 2).filter(|at| {
-    python[at + 1..].starts_with(|next: char| next.is_ascii_alphanumeric() || next == '_')
+    python.get(at + 1..).is_some_and(|rest| {
+      rest.starts_with(|next: char| next.is_ascii_alphanumeric() || next == '_')
+    })
   });
   let starts: Vec<usize> = [0].into_iter().chain(heads).chain([python.len()]).collect();
-  starts.windows(2).map(|pair| &python[pair[0]..pair[1]]).collect()
+  starts.windows(2).filter_map(|pair| python.get(*pair.first()?..*pair.last()?)).collect()
 }
 
 /// The characters of a text.

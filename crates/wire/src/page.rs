@@ -1,8 +1,6 @@
 //! A page of a thread: some exchanges of it, each message with the block of code that answers it
 //! and what the answer says to the operator, with the agents of the thread and the context of its
 //! chain.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::ops::Range;
 
@@ -340,13 +338,15 @@ impl Block {
     let taken: Vec<usize> = self.lines.iter().map(Line::rows).collect();
     let edges =
       |first: usize, end: usize| usize::from(first > 0) + usize::from(end < all || self.more);
-    let (mut first, mut end, mut used) = (at, at + 1, taken[at]);
+    // Each place that the loop reads stands in the lines, as `first > 0` and `end < all` hold.
+    let rows = |at: usize| taken.get(at).copied().unwrap_or_default();
+    let (mut first, mut end, mut used) = (at, at + 1, rows(at));
     loop {
-      if first > 0 && used + taken[first - 1] + edges(first - 1, end) <= ROLLS {
+      if first > 0 && used + rows(first - 1) + edges(first - 1, end) <= ROLLS {
         first -= 1;
-        used += taken[first];
-      } else if end < all && used + taken[end] + edges(first, end + 1) <= ROLLS {
-        used += taken[end];
+        used += rows(first);
+      } else if end < all && used + rows(end) + edges(first, end + 1) <= ROLLS {
+        used += rows(end);
         end += 1;
       } else {
         break first..end;
@@ -393,7 +393,7 @@ impl Thought {
   pub fn first(&self) -> &str {
     let text = self.text.trim_start();
     let line = text.split('\n').next().unwrap_or_default();
-    line.find(". ").map_or(line, |at| &line[..=at]).trim_end()
+    line.find(". ").and_then(|at| line.get(..=at)).unwrap_or(line).trim_end()
   }
 }
 

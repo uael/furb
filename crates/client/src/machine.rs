@@ -1,6 +1,5 @@
 //! What each machine told a client: its login, its cards and the records that it lists, and the
 //! order of the cards of every machine in one list.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   Event, FollowUp, Part, Standing,
@@ -129,7 +128,7 @@ impl Client {
         return Listing::Changed;
       }
     }
-    let told = &mut self.machines[at];
+    let Some(told) = self.machines.get_mut(at) else { return Listing::Same };
     let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));
     if matches!(told.link, Link::Lost(_)) && !welcome {
       return Listing::Same;
@@ -173,7 +172,7 @@ impl Client {
     }
     for (_, key, card) in self.settled.iter_mut().filter(|one| one.1.0 == at) {
       let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
-      if let Some(now) = self.machines[at].cards.iter().rfind(told) {
+      if let Some(now) = self.machines.get(at).and_then(|one| one.cards.iter().rfind(told)) {
         card.clone_from(now);
       }
     }
@@ -199,9 +198,10 @@ impl Client {
   pub fn settle(&mut self, untold: Option<&(usize, Card)>) {
     let told = self.machines.iter().enumerate();
     let told = told.flat_map(|(at, told)| told.cards.iter().map(move |card| (at, card)));
-    let cards = told
-      .chain(untold.map(|(at, card)| (*at, card)))
-      .map(|(at, card)| (card.place(&self.machines[at].login), &card.thread.title, at, card));
+    let cards = told.chain(untold.map(|(at, card)| (*at, card))).map(|(at, card)| {
+      let login = self.machines.get(at).map_or("", |one| one.login.as_str());
+      (card.place(login), &card.thread.title, at, card)
+    });
     let mut cards: Vec<_> = cards.collect();
     cards.sort_by(|one, other| (&one.0, one.1, one.2).cmp(&(&other.0, other.1, other.2)));
     let keyed = |((part, ..), _, at, card): ((Part, u8, i64), _, usize, &Card)| {

@@ -1,7 +1,6 @@
 //! The follow-ups that the operator queues on a thread while its chain works: the life sends each
 //! as a message of the thread once the chain rests, and each window of the life shows it until it
 //! goes.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   Event, FollowUp,
@@ -28,7 +27,10 @@ impl Client {
     self.draft.folds.clear();
     // The client holds the life, so its machine pushes each change of the queue.
     self.hold((at, life.clone()), self.cwd(at, &life), self.moved);
-    let entry = format!("{}-{}", self.machines[at].login, self.now);
+    let Some(told) = self.machines.get(at) else {
+      return Err("The machine of this thread is not in the list.".to_owned());
+    };
+    let entry = format!("{}-{}", told.login, self.now);
     let message = text.trim().to_owned();
     let on = Some(thread.clone());
     let verb = Verb::Queue { life: life.clone(), entry, shape: "None".to_owned(), message, on };

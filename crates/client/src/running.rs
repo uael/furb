@@ -3,7 +3,6 @@
 //! the next open, a kill, which cancels that work first, or a pin, which keeps it running in the
 //! background once no window holds it. The same three come when he leaves while a session that
 //! the client holds lives: a thread of it works or asks him.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{
   card::Standing,
@@ -65,14 +64,20 @@ impl Client {
     for (at, told) in self.machines.iter().enumerate() {
       for card in told.cards.iter().filter(|card| card.held) {
         let place = all.iter().position(|one| one.at == at && one.life == card.life);
-        let place = place.unwrap_or_else(|| {
+        if place.is_none() {
           all.push(self.runs(at, card));
-          all.len() - 1
-        });
+        }
+        let one = match place {
+          Some(place) => all.get_mut(place),
+          None => all.last_mut(),
+        };
+        let Some(one) = one else {
+          continue;
+        };
         let standing = &card.thread.standing;
         if standing.works() || matches!(standing, Standing::Asks { .. }) {
           let title = card.thread.title.clone();
-          all[place].live.push(Live { title, standing: standing.clone() });
+          one.live.push(Live { title, standing: standing.clone() });
         }
       }
     }

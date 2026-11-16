@@ -1,7 +1,6 @@
 //! The records of the sessions of the workspaces that `workspaces.json` in a config folder names,
 //! which the verb `list` gives: the `.furb/sessions` of the main checkout of each workspace and of
 //! each worktree of it, as a window lists them, and those of each session with no project.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs,
@@ -23,7 +22,7 @@ pub(crate) struct Sessions {
 pub(crate) fn recorded(config: &Path, data: &Path) -> Vec<Sessions> {
   let text = fs::read_to_string(config.join("workspaces.json")).unwrap_or_default();
   let list = serde_json::from_str::<Value>(&text).unwrap_or_default();
-  let saved = list["workspaces"].as_array().into_iter().flatten();
+  let saved = list.get("workspaces").and_then(Value::as_array).into_iter().flatten();
   let mut found = Vec::new();
   for main in saved.filter_map(|one| one["directory"].as_str()) {
     for checkout in checkouts(Path::new(main)) {

@@ -1,6 +1,5 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashSet,
@@ -196,10 +195,10 @@ pub(crate) fn json_of(a: &Fact) -> Value {
 pub(crate) fn json_of_line(line: &str) -> Option<Value> {
   let mut fact: Value = serde_json::from_str(line).ok()?;
   let held = fact.as_array_mut()?;
-  if held.len() < 2 || !held[..2].iter().all(Value::is_string) {
+  if held.len() < 2 || !held.iter().take(2).all(Value::is_string) {
     return None;
   }
-  if held[0] == "module" {
+  if held.first().and_then(Value::as_str) == Some("module") {
     held.resize(3, json!(""));
   }
   Some(fact)
@@ -224,7 +223,7 @@ async fn covered<W: 'static>(
     }
   } else if a.question() && followed(a.kind()) {
     let oldest = controls.iter().position(|one| one.kind() == "pause").unwrap_or(controls.len());
-    for control in controls[oldest..].iter().rev() {
+    for control in controls.iter().skip(oldest).rev() {
       if covers(co, control, a.about()).await? {
         return Ok((found, Pause::of(&json_of(control))));
       }

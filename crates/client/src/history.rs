@@ -7,7 +7,6 @@
 //! that start with what the input held when the walk began, as fish does, and a step forward past
 //! the newest gives that text back. While no walk runs, the input offers the rest of the newest
 //! text that starts with what he wrote.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use furb_wire::{Sent, protocol::Verb};
 
@@ -147,14 +146,18 @@ impl Client {
   fn stepped(&mut self) {
     let Some(walk) = self.walk.as_ref() else { return };
     let Some(found) = self.found(walk) else { return };
-    let (shown, place) = match (walk.place, found.len().checked_sub(1)) {
+    // A walk past the oldest text that it found stays on that text.
+    let oldest = walk.place.and_then(|place| {
+      let at = place.min(found.len().checked_sub(1)?);
+      Some((at, *found.get(at)?))
+    });
+    let (shown, place) = match (walk.place, oldest) {
       (None, _) => (walk.from.clone(), None),
-      (Some(place), Some(oldest)) => {
-        let one = found[place.min(oldest)];
+      (Some(_), Some((place, one))) => {
         let anchor = walk.from.anchor.clone();
         let draft =
           Draft { text: one.text.clone(), python: one.python, anchor, ..Draft::default() };
-        (draft, Some(place.min(oldest)))
+        (draft, Some(place))
       }
       (Some(_), None) => {
         let says = if walk.from.text.is_empty() {

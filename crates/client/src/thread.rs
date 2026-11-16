@@ -1,6 +1,5 @@
 //! A thread that a client reads: the exchanges that the daemon gave of it, page by page, and the
 //! messages of the operator that it shows before the daemon tells them.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
@@ -54,7 +53,7 @@ impl Opened {
   pub fn docked(&self) -> (usize, &[Agent]) {
     let agents = &self.thread.agents;
     let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(agents.len());
-    (first, &agents[first..])
+    (first, agents.get(first..).unwrap_or_default())
   }
 
   /// The agents that the line of a block numbered so made, or those of the dock that no line made,
@@ -64,7 +63,7 @@ impl Opened {
     let agents: Vec<&Agent> = self.thread.agents.iter().filter(|one| one.at == at).collect();
     let rested = if at.is_some() { 0 } else { agents.len() };
     let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(rested);
-    (first, agents[first..].to_vec())
+    (first, agents.into_iter().skip(first).collect())
   }
 
   /// The card of the thread of an agent, as the dock of the thread that it came from holds it,
@@ -187,7 +186,7 @@ impl Thread {
     let rewound = |at: usize| {
       blocks.clone().any(|block| {
         let found = block.lines.binary_search_by_key(&at, |line| line.number);
-        found.is_ok_and(|found| rewinds(&block.lines[found].text))
+        found.ok().and_then(|found| block.lines.get(found)).is_some_and(|line| rewinds(&line.text))
       })
     };
     self.agents.iter().filter(|one| one.at.is_some_and(rewound)).collect()
@@ -273,7 +272,7 @@ impl Client {
     if self.fault_of(key.0, &key.1).is_some() {
       return None;
     }
-    let login = self.machines[key.0].login.clone();
+    let login = self.machines.get(key.0)?.login.clone();
     // A card that the daemon told before it read the last Seen says unread once more.
     let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
     if saying || !self.card(key)?.thread.unread(&login) {
@@ -282,7 +281,8 @@ impl Client {
     let reader = format!("{OPERATOR}/{login}");
     let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
     let settled = self.settled.iter_mut().map(|one| &mut one.2);
-    for card in self.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card)) {
+    let cards = self.machines.get_mut(key.0).into_iter().flat_map(|one| one.cards.iter_mut());
+    for card in cards.chain(settled).filter(|card| told(card)) {
       card.thread.readers.push(reader.clone());
     }
     let (life, about) = (key.1.clone(), key.2.clone());
