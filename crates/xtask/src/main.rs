@@ -78,8 +78,8 @@ enum Task {
   ///
   /// The suites share no file, so they run together, and the slowest alone sets the time of the
   /// run. Each log stands in target/xtask/<suite>.log, and a suite that fails prints its tail. A
-  /// whole suite of rust or of python runs within its limit, as the task budget says, so the whole
-  /// run fails once it passes a minute on this machine.
+  /// whole suite of rust or of python builds first, then runs within its limit, as the task budget
+  /// says, so the whole run fails once it passes a minute on this machine.
   Test {
     /// The suite to run.
     suite: Option<Suite>,
@@ -641,9 +641,13 @@ impl Suite {
         with("uv", &["sync", "--inexact"], &[]),
         limited("pytest", with("uv", &["run", "--no-sync", "pytest", "-q"], words)),
       ],
-      Self::Typescript => {
-        vec![with("bun", &["run", "build"], &[]), with("bun", &["run", "test"], words)]
-      }
+      // The install links each package of the workspace where it stands now, so a tree that a move
+      // of a package crossed imports no build that its old folder kept.
+      Self::Typescript => vec![
+        with("bun", &["install", "--frozen-lockfile"], &[]),
+        with("bun", &["run", "build"], &[]),
+        with("bun", &["run", "test"], words),
+      ],
     }
   }
 
