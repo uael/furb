@@ -1,9 +1,9 @@
 //! The image of a frame: each cell drawn on its ground with the face `JetBrains Mono`, at the size
-//! where a cell is 10 pixels wide, and an emoji with the face `Noto Emoji`. A glyph that the faces
-//! lack is named, and drawn from a face of the system that holds it, as a terminal falls back to
-//! one, or as a box when none does.
+//! where a cell is 10 pixels wide, a symbol that it lacks with a face of symbols, and an emoji with
+//! the face `Noto Emoji`. Each machine draws a frame the same way, from these faces alone. A glyph
+//! that the faces lack is named, and drawn as a box.
 
-use std::{collections::HashMap, fs, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use fontdue::{Font, FontSettings, Metrics};
 
@@ -14,18 +14,26 @@ use crate::frame::{BOLD, Cell, Frame, ITALIC, Rgb, STRIKE, UNDERLINE};
 const WIDTH: usize = 10;
 const PX: f32 = 10.0 / 0.6;
 
-/// The face of an emoji among `FACES`.
-const EMOJI: usize = 3;
+/// The face of symbols and the face of an emoji among `FACES`.
+const SYMBOLS: usize = 3;
+const EMOJI: usize = 4;
 
-/// The faces that the program carries: the three of `JetBrains Mono`, under the license that
-/// `fonts/OFL.txt` holds, and the face of an emoji, under `fonts/OFL-NotoEmoji.txt`. That face is
-/// `NotoEmoji[wght].ttf` of google/fonts at 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5, set to its
-/// weight 400 by `fonttools varLib.instancer`, then cut of its hints and its rules of layout, which
-/// this rasterizer does not read, by `pyftsubset --unicodes='*' --layout-features='' --no-hinting
-/// --name-IDs='*'`, so each machine draws an emoji the same way. It has no color, which no face of
-/// this rasterizer draws, and a joined emoji or a flag shows as its first part.
+/// The faces that the program carries, each under the license beside it in `fonts`:
+/// - the three of `JetBrains Mono`, under `OFL.txt`;
+/// - the face of symbols, under `OFL-FramesSymbols.txt`: `JuliaMono-Regular.ttf` of the release
+///   v0.63.2 of cormullion/juliamono, whose `JuliaMono-ttf.tar.gz` has the sha256
+///   be6517295198ec5c92bdbaad42f4f6f8d83f921d80512b79f54fe036add95c0c, cut to the symbols from
+///   U+2000 to U+2BFF by `pyftsubset --unicodes='U+2000-2BFF' --layout-features=''
+///   --no-hinting --name-IDs='*'`, and named `Frames Symbols` in its table of names, since its
+///   license keeps the name `JuliaMono` for the face as its authors made it;
+/// - the face of an emoji, under `OFL-NotoEmoji.txt`: `NotoEmoji[wght].ttf` of google/fonts at
+///   8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5, set to its weight 400 by `fonttools
+///   varLib.instancer`, then cut the same way with `--unicodes='*'`. It has no color, which no
+///   face of this rasterizer draws, and a joined emoji or a flag shows as its first part.
+///
+/// No hint and no rule of layout is read by this rasterizer, so each cut draws as its face.
 #[expect(clippy::expect_used, reason = "the faces that the program carries parse")]
-static FACES: LazyLock<[Font; 4]> = LazyLock::new(|| {
+static FACES: LazyLock<[Font; 5]> = LazyLock::new(|| {
   let face = |bytes: &[u8]| {
     Font::from_bytes(bytes, FontSettings { scale: PX, ..FontSettings::default() })
       .expect("the faces that the program carries parse")
@@ -34,27 +42,9 @@ static FACES: LazyLock<[Font; 4]> = LazyLock::new(|| {
     face(include_bytes!("../fonts/JetBrainsMono-Regular.ttf")),
     face(include_bytes!("../fonts/JetBrainsMono-Bold.ttf")),
     face(include_bytes!("../fonts/JetBrainsMono-Italic.ttf")),
+    face(include_bytes!("../fonts/FramesSymbols-Regular.ttf")),
     face(include_bytes!("../fonts/NotoEmoji-Regular.ttf")),
   ]
-});
-
-/// The faces of macOS that hold each glyph of the rivals that `JetBrains Mono` lacks, a face of a
-/// terminal first: the frame then shows each mark that a terminal shows, in a face near to its own.
-const SYSTEM: [&str; 3] = [
-  "/System/Library/Fonts/Menlo.ttc",
-  "/System/Library/Fonts/Apple Symbols.ttf",
-  "/System/Library/Fonts/Supplemental/STIXTwoMath.otf",
-];
-
-/// Each face of `SYSTEM` that stands and parses, read once. A system with none of them draws each
-/// glyph that the face lacks as a box, which says so.
-static FALLBACKS: LazyLock<Vec<Font>> = LazyLock::new(|| {
-  let settings = FontSettings { scale: PX, ..FontSettings::default() };
-  SYSTEM
-    .iter()
-    .filter_map(|path| fs::read(path).ok())
-    .filter_map(|bytes| Font::from_bytes(bytes, settings).ok())
-    .collect()
 });
 
 /// The height of a cell and the row of its base line, from the face: a line of box drawing then
@@ -120,13 +110,14 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
         continue;
       }
       let face = face(cell.attributes, glyph, wide);
-      if face.is_none_or(|face| face >= FACES.len()) && !missing.contains(&glyph) {
+      if face.is_none() && !missing.contains(&glyph) {
         missing.push(glyph);
       }
       match face {
         Some(face) => {
-          let rasterized =
-            glyphs.entry((glyph, face)).or_insert_with(|| font(face).rasterize(glyph, px(density)));
+          let rasterized = glyphs
+            .entry((glyph, face))
+            .or_insert_with(|| FACES[face].rasterize(glyph, px(density)));
           canvas.glyph(rasterized, cell, place);
         }
         None => canvas.outline(cell.fg, place),
@@ -140,9 +131,8 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
 }
 
 /// The face of a glyph in a look: bold, italic or regular, the regular one when the face of the
-/// look lacks it, then the first of `FALLBACKS` that holds it, after the faces that the program
-/// carries. A glyph of two cells, as a terminal draws an emoji, takes the face of an emoji first.
-/// None when no face holds it.
+/// look lacks it, then the face of symbols. A glyph of two cells, as a terminal draws an emoji,
+/// takes the face of an emoji first. None when no face holds it.
 fn face(attributes: u8, glyph: char, wide: bool) -> Option<usize> {
   let wanted = if attributes & BOLD != 0 {
     1
@@ -151,15 +141,9 @@ fn face(attributes: u8, glyph: char, wide: bool) -> Option<usize> {
   } else {
     0
   };
-  let system = (0..FALLBACKS.len()).map(|fallback| FACES.len() + fallback);
   let emoji = wide.then_some(EMOJI);
-  let faces = emoji.into_iter().chain([wanted, 0]).chain(system);
-  faces.into_iter().find(|&face| font(face).lookup_glyph_index(glyph) != 0)
-}
-
-/// A face by its place: the faces that the program carries, then `FALLBACKS`.
-fn font(face: usize) -> &'static Font {
-  FACES.get(face).unwrap_or_else(|| &FALLBACKS[face - FACES.len()])
+  let faces = emoji.into_iter().chain([wanted, 0, SYMBOLS]);
+  faces.into_iter().find(|&face| FACES[face].lookup_glyph_index(glyph) != 0)
 }
 
 /// A rectangle of pixels.

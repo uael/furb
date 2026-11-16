@@ -25,14 +25,15 @@ fn drawn(name: &str, cols: u16, texts: &[&str]) -> (String, Vec<Vec<u8>>) {
 
 #[test]
 fn a_glyph_that_the_face_lacks_is_named_once() {
-  let (said, _) = drawn("lacks", 4, &["a⏺b⏺"]);
-  assert!(said.ends_with(", the face lacks ⏺\n"), "{said}");
+  let (said, _) = drawn("lacks", 4, &["aᚠbᚠ"]);
+  assert!(said.ends_with(", the face lacks ᚠ\n"), "{said}");
 }
 
-#[cfg(target_os = "macos")]
 #[test]
-fn a_glyph_that_the_face_lacks_is_drawn_from_a_face_of_the_system_and_not_as_a_box() {
-  let (_, images) = drawn("system", 1, &["\u{10fffd}", "\r⏺", "\r⬝", "\r⎿", "\r✻"]);
+fn a_symbol_that_the_face_lacks_is_drawn_from_the_face_of_symbols_on_each_system() {
+  // Each mark of the rivals that JetBrains Mono lacks, as ⎿, which only a face of macOS held.
+  let (said, images) = drawn("symbols", 1, &["\u{10fffd}", "\r⏺", "\r⬝", "\r⎿", "\r✻"]);
+  assert!(said.ends_with(", the face lacks \u{10fffd}\n"), "{said}");
   for (glyph, image) in ["⏺", "⬝", "⎿", "✻"].iter().zip(&images[1..]) {
     assert_ne!(*image, images[0], "{glyph}");
   }
