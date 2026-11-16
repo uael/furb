@@ -123,7 +123,9 @@ pub(crate) fn named(held: &[&str; 3]) -> (String, String) {
 }
 
 /// The records of the promise: those of each folder of `tests/corpus` of the major of this build,
-/// which each later build of the major opens, as `tests/corpus/README.md` says.
+/// which each later build of the major opens, as `tests/corpus/README.md` says. A record whose
+/// bytes a folder before it holds already comes once, as `next` holds those of the last major
+/// until the coming release changes them.
 pub(crate) fn corpus() -> Vec<PathBuf> {
   let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
   let folders =
@@ -134,6 +136,8 @@ pub(crate) fn corpus() -> Vec<PathBuf> {
     .filter(|one| world::unopened(one).is_none())
     .collect();
   records.sort();
+  let mut held = std::collections::HashSet::new();
+  records.retain(|one| held.insert(fs::read(one).unwrap()));
   records
 }
 

@@ -24,6 +24,7 @@ use std::{
   path::{Path, PathBuf},
   process,
   sync::{Arc, Mutex},
+  thread,
 };
 
 #[cfg(unix)]
@@ -797,37 +798,37 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
 /// Each record of each folder of the corpus opens from the image that a life that keeps it wrote at
 /// its tip to the state that its record gives, in a life that inspects, in one that works and keeps
 /// nothing, and in one that keeps the record. An image is a cache of its record, so a record that a
-/// build cannot open by its image is a defect of that build.
+/// build cannot open by its image is a defect of that build. Each record opens on a thread of its
+/// own, as the lives of a daemon do, so the test takes the time of its longest record.
 #[test]
 fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
   let word = "[[c, turns(on=c), sorted(k for k in module(c) if not k.startswith('__'))] \
               for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
-  for one in corpus() {
+  let opens = |one: &Path| {
     let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let open = |at: &Path, inspecting, keeps| {
+      Opening { inspecting: Some(inspecting), ..opening(at, keeps) }.boot::<String>([])
+    };
+    // The record and the image that a life that keeps it wrote at its tip.
+    let kept = yard(&format!("imaged-{name}"));
+    let record = kept.join("record.jsonl");
+    fs::copy(one, &record).unwrap();
+    let mut first = open(&kept, false, true)
+      .unwrap_or_else(|no| panic!("{name}: a life that keeps it opens: {no}"))
+      .0;
+    assert!(image::keep(&mut first, &record, &()).unwrap(), "{name}: the life writes its image");
+    drop(first);
     for (how, inspecting, keeps) in
       [("inspects", true, false), ("works", false, false), ("keeps", false, true)]
     {
-      // The state of the life of the mode, opened by the image that a life that keeps the record
-      // wrote, or by the record once that image is gone.
+      // The state of the life of the mode, opened by that image, or by the record alone.
       let read = |imaged: bool| {
         let at = yard(&format!("imaged-{name}-{how}"));
-        let record = at.join("record.jsonl");
-        fs::copy(&one, &record).unwrap();
-        let open = |inspecting, keeps| {
-          Opening { inspecting: Some(inspecting), ..opening(&at, keeps) }.boot::<String>([])
-        };
-        let mut first = open(false, true)
-          .unwrap_or_else(|no| panic!("{name}: a life that keeps it opens: {no}"))
-          .0;
-        assert!(
-          image::keep(&mut first, &record, &()).unwrap(),
-          "{name}: the life writes its image"
-        );
-        drop(first);
-        if !imaged {
-          drop_image(&record);
+        fs::copy(&record, at.join("record.jsonl")).unwrap();
+        if imaged {
+          fs::copy(format!("{}.image", record.display()), at.join("record.jsonl.image")).unwrap();
         }
-        let mut life = open(inspecting, keeps)
+        let mut life = open(&at, inspecting, keeps)
           .unwrap_or_else(|no| panic!("{name} {how}: the life opens: {no}"))
           .0;
         let shown = life.word(word, vec![]).unwrap().as_ref().py_repr();
@@ -836,7 +837,13 @@ fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
       };
       assert_eq!(read(true), read(false), "{name} {how}: the image gives the state of the record");
     }
-  }
+  };
+  let (records, opens) = (corpus(), &opens);
+  thread::scope(|scope| {
+    for one in &records {
+      scope.spawn(move || opens(one));
+    }
+  });
 }
 
 /// An image that an earlier build wrote opens on each later build by the image, to the state of its
