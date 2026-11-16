@@ -268,11 +268,9 @@ impl Rig {
       None => None,
     };
     let mut daemon = self.daemon().await?;
-    let name =
-      self.root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-    // A tmux server can outlive the turn of the capture before it for a moment, so each run
-    // speaks to a server of its own.
-    let tmux = Tmux { socket: format!("ff{name}-{}", process::id()) };
+    // The server listens in the folder of the capture. It can outlive the turn of the capture
+    // before it for a moment, so each run speaks to a server of its own.
+    let tmux = Tmux { socket: self.root.join(format!("tmux-{}", process::id())) };
     let walked = self.walked(&tmux, walk, size).await;
     let ended = tmux.run(&["kill-server"]).await;
     // The daemon ends by its grace once the window is gone. A kill before that lets a window that
@@ -468,8 +466,14 @@ impl Rig {
     let env: Vec<String> =
       self.environment().into_iter().map(|(key, value)| format!("{key}={value}")).collect();
     let read = if walk.reads { " --read" } else { "" };
+    // The window ends once this process is gone, as when a bound of a test kills it before its
+    // end, so the server of tmux, left with no pane, ends too and no capture outlives its run.
+    let watch = format!(
+      "w=$$; (while kill -0 {} 2>/dev/null; do sleep 0.2; done; kill -9 $w) </dev/null >/dev/null 2>&1 &",
+      process::id()
+    );
     let started = format!(
-      "env -i {} sh -c 'until [ -e {} ]; do sleep 0.01; done; exec furb-window{read}'",
+      "env -i {} sh -c '{watch} until [ -e {} ]; do sleep 0.01; done; exec furb-window{read}'",
       env.join(" "),
       go.display()
     );
@@ -650,13 +654,15 @@ pub(crate) fn stamp(path: &Path) -> Result<(), Error> {
 
 /// A server of tmux of one capture.
 struct Tmux {
-  socket: String,
+  socket: PathBuf,
 }
 
 impl Tmux {
   async fn run(&self, args: &[&str]) -> Result<String, Error> {
     let done = Command::new("tmux")
-      .args(["-L", &self.socket, "-f", "/dev/null", "-u"])
+      .arg("-S")
+      .arg(&self.socket)
+      .args(["-f", "/dev/null", "-u"])
       .args(args)
       .output()
       .await
