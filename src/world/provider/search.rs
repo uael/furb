@@ -3,7 +3,8 @@
 //! search of the Messages API of Anthropic and of the Responses API of `OpenAI` and of xAI, the
 //! grounding of Gemini in Google Search, and the search API of `DeepSeek`. A search answers with
 //! text in Markdown, which ends with its sources. The provider leaves the search of an actor whose
-//! provider has none to the ears after it, as the process of the kit `web`, which asks a free search.
+//! provider has none to the ears after it, as the process of the kit `web`, which asks a free
+//! search.
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
