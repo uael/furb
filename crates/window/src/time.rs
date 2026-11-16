@@ -19,12 +19,15 @@ use crate::{
   line::{Line, cut, run},
   model::Model,
   opens::QUIET,
-  thread::{Click, Hot, Row},
+  thread::{Click, Hot, Row, width},
   tokens::{Loader, Role},
 };
 
 /// The columns before the track: the margin, the play button, and a blank.
 const BEFORE: usize = 5;
+
+/// The columns of the toggle of the chains at the end of a bar of the time.
+const TOGGLE: usize = 10;
 
 /// The flows between the chains under the bar, and their cells by row and column: the sign, and the
 /// place of the flow among the flows.
@@ -61,9 +64,9 @@ impl Axis {
 }
 
 impl Model {
-  /// The row of the bar of the time of the open thread while it shows, under it the first line of
-  /// the message in force at the moment under the pointer while the pointer is on its track, and
-  /// the chains while they show.
+  /// The rows of the bar of the time of the open thread, which always stands: the calm bar at now,
+  /// or the bar that he holds, with its toggle of the chains at its end, and the chains while they
+  /// show.
   pub(crate) fn time_rows(&self) -> Vec<Row> {
     let Some(time) = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref()) else {
       return self.calm_row().into_iter().collect();
@@ -78,21 +81,9 @@ impl Model {
     // The track is the history of this thread, so what it passed takes the hue of the bar of its
     // messages, and the knob the bright text, as the hand on a scale.
     let (hue, muted) = (Style::new().fg(self.hue(key)), self.tokens.style(Role::Muted));
-    let count = time.moments.len();
-    let last = count.saturating_sub(1);
+    let (says, said, axis) = self.axis(time);
     let at = time.place();
-    let says = match count {
-      0 if time.stale => " reading".to_owned(),
-      0 | 1 => " nothing before now".to_owned(),
-      _ => back(last - at),
-    };
-    // The words take the room of the farthest moment, so the track keeps its columns as the
-    // thread steps through its time.
-    let said = says.width().max(back(last).width());
     let play = if time.played.is_some() { "❚❚" } else { "▶ " };
-    // The words end at the column of the text, as each label at the right of the feed.
-    let room = self.wide().saturating_sub(BEFORE + said + 4);
-    let axis = Axis { last, span: room.max(2) - 1, room };
     let text = Style::new().fg(t.text);
     let mut line: Line = vec![run("  ", muted), run(play, text), run(" ", muted)];
     let mut hot: Vec<Hot> = vec![(2..4, Some(Click::Play))];
@@ -104,7 +95,7 @@ impl Model {
       .map(|moment| axis.column(time.moments.partition_point(|one| one < moment)))
       .collect();
     let mark = axis.column(at);
-    for one in 0..room {
+    for one in 0..axis.room {
       let past = one < mark;
       let (sign, style) = match (one.cmp(&mark), told.contains(&one)) {
         (Ordering::Equal, _) => ("●", text),
@@ -113,29 +104,64 @@ impl Model {
         (Ordering::Greater, false) => ("─", Style::new().fg(t.border)),
       };
       line.push(run(sign, style));
-      if count > 1 {
+      if time.moments.len() > 1 {
         hot.push((BEFORE + one..BEFORE + one + 1, Some(Click::Time(axis.place(one)))));
       }
     }
-    let label = BEFORE + room;
-    hot.push((label..label + said, Some(Click::Key(Does::Chains))));
     line.push(run(format!("{says:>said$}"), muted));
+    let (toggle, start) = (self.chains_toggle(time.chains.is_some()), BEFORE + axis.room + said);
+    hot.push((start..start + width(&toggle), Some(Click::Key(Does::Chains))));
+    line.extend(toggle);
     let flows = time.chains.as_ref().map(|chains| flowed(time, chains, &axis)).unwrap_or_default();
-    let chained = self.chain_rows(time, &axis, &flows);
-    // The bar, its chains and the row under them stand right above the row of hints, the last row.
-    let top = usize::from(self.size.1).saturating_sub(chained.len() + 3);
-    let under = self.under(time, &axis, &flows, top);
-    // The chains stand right under the bar, so a column reads as one moment down each row, and one
-    // row under them says what is under the pointer, else what finds a chain.
+    // The chains stand right under the bar, so a column reads as one moment down each row.
     let mut rows = vec![Row { line, hot, ..Row::default() }];
-    rows.extend(chained);
-    let wide = self.wide().saturating_sub(BEFORE);
-    let said = under.map(|text| cut(&text, wide)).or_else(|| found(time));
-    rows.push(Row::of(vec![run(
-      format!("{}{}", " ".repeat(BEFORE), said.unwrap_or_default()),
-      muted,
-    )]));
+    rows.extend(self.chain_rows(time, &axis, &flows));
     rows
+  }
+
+  /// The words at the end of the bar of the time, the columns that they take, and the axis of its
+  /// track. The words take the room of the farthest moment, so the track keeps its columns as the
+  /// thread steps through its time.
+  fn axis(&self, time: &Time) -> (String, usize, Axis) {
+    let last = time.moments.len().saturating_sub(1);
+    let says = match time.moments.len() {
+      0 if time.stale => " reading".to_owned(),
+      0 | 1 => " nothing before now".to_owned(),
+      _ => back(last - time.place()),
+    };
+    let said = says.width().max(back(last).width());
+    // The toggle of the chains ends at the column of the text, as each label at the right of the
+    // feed.
+    let room = self.wide().saturating_sub(BEFORE + said + TOGGLE + 2);
+    (says, said, Axis { last, span: room.max(2) - 1, room })
+  }
+
+  /// The toggle of the chains at the end of each bar of the time: it says that the tracks of the
+  /// other chains are there, and whether they show.
+  fn chains_toggle(&self, open: bool) -> Line {
+    let sign = if open { "▴" } else { "▾" };
+    vec![run("  ", Style::new()), run(format!("chains {sign}"), Style::new().fg(self.tokens.accent))]
+  }
+
+  /// What the status row says of the bar of the time, in the place of a notice: under the pointer
+  /// on the track, the moment and the message then, and on a flow between two chains, what it asks
+  /// or answers; else the text that finds a chain; else, while he walks the time, the moment that
+  /// the thread shows.
+  pub(crate) fn time_said(&self) -> Option<String> {
+    let time = self.client.thread.as_ref()?.thread.time.as_ref()?;
+    if time.reads() && self.client.moved.saturating_sub(time.since) < QUIET {
+      return None;
+    }
+    let (_, _, axis) = self.axis(time);
+    let flows = time.chains.as_ref().map(|chains| flowed(time, chains, &axis)).unwrap_or_default();
+    // The bar and its chains are the last rows of the left side, under the status row.
+    let chained = time.chains.as_ref().map_or(0, |chains| chains.shown().len());
+    let top = usize::from(self.size.1).saturating_sub(1 + chained);
+    let walked = || {
+      let at = time.place();
+      time.at.and_then(|_| time.message(at)).map(|one| moment(time, at, one))
+    };
+    self.under(time, &axis, &flows, top).or_else(|| found(time)).or_else(walked)
   }
 
   /// The bar of the time while the operator does not hold it: one calm row under the input, from
@@ -148,13 +174,16 @@ impl Model {
       return None;
     }
     let t = &self.tokens;
-    let span = self.wide().saturating_sub(5);
-    let line: Line = vec![
+    let span = self.wide().saturating_sub(5 + TOGGLE);
+    let mut line: Line = vec![
       run("  ", Style::new()),
       run("─".repeat(span), Style::new().fg(t.border)),
       run("●", Style::new().fg(t.muted)),
     ];
-    let hot = (0..=span).map(|one| (2 + one..3 + one, Some(Click::Aim(one, span)))).collect();
+    let mut hot: Vec<Hot> =
+      (0..=span).map(|one| (2 + one..3 + one, Some(Click::Aim(one, span)))).collect();
+    hot.push((3 + span..3 + span + TOGGLE, Some(Click::Key(Does::Chains))));
+    line.extend(self.chains_toggle(false));
     let works = self.client.card(key).is_some_and(|card| card.thread.works());
     let loaders = if works { vec![(2 + span, Loader::Model)] } else { Vec::new() };
     Some(Row { line, hot, loaders, ..Row::default() })
@@ -166,7 +195,10 @@ impl Model {
     let (x, y) = self.pointed()?;
     let column = usize::from(x).checked_sub(BEFORE).filter(|one| *one < axis.room)?;
     match usize::from(y).checked_sub(row)? {
-      0 => time.message(axis.place(column)).map(str::to_owned),
+      0 => {
+        let at = axis.place(column);
+        time.message(at).map(|one| moment(time, at, one))
+      }
       below => flows.at(below - 1, column).map(|(_, flow)| flow_says(time, flow)),
     }
   }
@@ -343,6 +375,12 @@ fn flow_says(time: &Time, flow: &Flow) -> String {
   } else {
     format!("{sender} asks {receiver}: {says} · click to open it")
   }
+}
+
+/// A moment of the bar as the status row says it: how far back it stands, and the message then.
+fn moment(time: &Time, at: usize, message: &str) -> String {
+  let last = time.moments.len().saturating_sub(1);
+  format!("{} · {message}", back(last.saturating_sub(at)).trim())
 }
 
 /// Where the thread stands in its time: now, or a count of moments back from now.

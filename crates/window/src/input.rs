@@ -603,8 +603,8 @@ impl Model {
   }
 
   /// The rows of the input: the form of a question of the open thread, or its box under the row
-  /// that says that a question waits; then the bar of the time of the open thread, and the row of
-  /// hints. The box is the box of a message of the
+  /// that says that a question waits; then the row of hints, and the bar of the time of the open
+  /// thread. The box is the box of a message of the
   /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
   /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
@@ -631,9 +631,9 @@ impl Model {
       rows.extend([self.launcher(), self.band(Vec::new(), None)]);
       rows
     };
-    // The bar of the time stands under the box, always: calm at now, or the bar that he holds.
-    rows.extend(self.time_rows());
     rows.push(self.hints());
+    // The bar of the time stands under the status row, always: calm at now, or the bar he holds.
+    rows.extend(self.time_rows());
     rows
   }
 
@@ -1047,7 +1047,10 @@ impl Model {
     let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));
     // While his voice records, the record takes the row, over any notice.
     let notice = notice.filter(|_| self.listening.is_none());
-    let says = armed.map(|one| (one, t.attention)).or(notice);
+    // The moment under the pointer on the bar of the time, or the one he walks to, takes the place
+    // of a notice while he is on the bar.
+    let moment = self.time_said().map(|one| (one, t.text));
+    let says = armed.map(|one| (one, t.attention)).or(moment).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of the input go first, then the line of a file that the next message is about.
     let keyed = self.over_input().or_else(|| self.anchored()).or_else(|| self.folded());
