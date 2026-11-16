@@ -4,7 +4,7 @@
 
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
-use std::{env, fs, path::Path, process};
+use std::{env, fs, io::Write, path::Path, process};
 
 use crate::{drive::block_on, yard::Yard};
 use furb::{Ear, Engine, Object, verbs, world};
@@ -40,7 +40,7 @@ fn written(engine: &mut Engine, at: &Path, text: &str) -> Result<(), String> {
   let root = engine.root().to_owned();
   let rung = verbs::Rung { word: Some(word), on: Some(root), ..Default::default() };
   let got = block_on(engine.rung(rung).expect("a rung is made"));
-  got.map(drop).map_err(|no| format!("{no:?}"))
+  got.map(drop).map_err(|no| no.to_string())
 }
 
 #[test]
@@ -75,9 +75,7 @@ fn a_part_file_passes_each_name_that_a_crash_left() {
   let (at, mut engine) = (yard("stale"), life());
   let parts: Vec<String> =
     (0..3).map(|count| format!(".a.txt.{}.{count}.part", process::id())).collect();
-  for part in &parts {
-    fs::write(at.join(part), "stale").unwrap();
-  }
+  let held: Vec<fs::File> = parts.iter().map(|part| live(&at.join(part))).collect();
   written(&mut engine, &at.join("a.txt"), "new").unwrap();
   assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "new");
   for part in &parts {
@@ -87,6 +85,23 @@ fn a_part_file_passes_each_name_that_a_crash_left() {
       "a part of a live writer stays"
     );
   }
+  drop(held);
+}
+
+/// A part file that a writer that runs holds, as a write of the World holds its own: on Windows
+/// open with no share of delete, and elsewhere named by the pid of this process, which runs.
+fn live(path: &Path) -> fs::File {
+  let mut options = fs::OpenOptions::new();
+  options.write(true).create_new(true);
+  #[cfg(windows)]
+  {
+    use std::os::windows::fs::OpenOptionsExt;
+    // FILE_SHARE_READ and FILE_SHARE_WRITE, with no FILE_SHARE_DELETE.
+    options.share_mode(1 | 2);
+  }
+  let mut file = options.open(path).expect("the part file opens");
+  file.write_all(b"stale").expect("the part file is written");
+  file
 }
 
 /// A pid that no process holds: past the largest pid of each system.

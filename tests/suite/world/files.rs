@@ -75,7 +75,10 @@ fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_names_the_home_and_a_pa
     assert_eq!(named.0, at.join("w").join("~a.txt").display().to_string());
     let inside = read(&mut engine, "a/~/b").expect_err("no such file");
     assert!(
-      inside.contains(&format!("There is no file at {}.", at.join("w").join("a/~/b").display())),
+      inside.contains(&format!(
+        "There is no file at {}.",
+        at.join("w").join("a").join("~").join("b").display()
+      )),
       "{inside}"
     );
     let back = read(&mut engine, "~\\a.txt");
@@ -123,7 +126,13 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder
 
 #[test]
 fn a_read_of_an_image_keeps_it_in_the_gallery_and_gives_the_markdown_image_that_names_it() {
-  let at = yard("image");
+  // The yard stands under the home of the user on a runner of Windows, so the test runs again as a
+  // child whose home is a folder of its yard.
+  let Some(at) = child() else {
+    let at = yard("image");
+    homed(here!(), &at);
+    return;
+  };
   fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nthe rest").expect("the image");
   fs::write(at.join("b.bin"), b"\x89 no image").expect("the bytes");
   let gallery = at.join("images");
@@ -198,7 +207,13 @@ fn a_path_of_the_sh_of_git_names_a_drive_and_the_scratch_directory_on_windows_al
 #[test]
 fn a_path_resolves_against_its_directory_with_every_dot_read_and_an_absolute_path_stands_as_it_is()
 {
-  let at = yard("resolved");
+  // The yard stands under the home of the user on a runner of Windows, so the test runs again as a
+  // child whose home is a folder of its yard.
+  let Some(at) = child() else {
+    let at = yard("resolved");
+    homed(here!(), &at);
+    return;
+  };
   fs::create_dir(at.join("w")).expect("the folder of the chain");
   let mut engine = life(&at, None);
   closed(&mut engine, &format!("cd({})\nclose(0)", quoted(&at.join("w"))))
