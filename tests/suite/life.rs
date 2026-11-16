@@ -317,6 +317,48 @@ fn a_life_whose_record_ends_in_a_fact_made_that_a_stop_tore_opens_at_each_crossi
 }
 
 #[test]
+fn a_log_after_a_crossing_goes_on_from_the_log_before_it_when_that_log_agrees_and_else_counts_the_record()
+ {
+  for case in ["agrees", "none", "short"] {
+    let at = yard(&format!("log-{case}"));
+    let open = || Opening { skills: Some(false), ..opening(&at, true) };
+    let mut first = open().boot::<String>([]).unwrap().0;
+    assert_eq!(closed(&mut first, "k = 1\nclose(1)").as_ref().as_int(), Some(1));
+    drop(first);
+    crossing(&at);
+    let mut crossed = open().boot::<String>([]).unwrap().0;
+    assert_eq!(closed(&mut crossed, "k += 1\nclose(1)").as_ref().as_int(), Some(1));
+    drop(crossed);
+    let (record, log) = (at.join("record.jsonl"), at.join("record.jsonl.log"));
+    let tip = *world::crossings(&record).unwrap().last().expect("the record crossed");
+    let before = fs::read_to_string(&log).unwrap();
+    let held = world::kept(&record).unwrap().len();
+    match case {
+      "none" => fs::remove_file(&log).unwrap(),
+      "short" => fs::write(&log, "{\"entries\":0}\n").unwrap(),
+      _ => {}
+    }
+    // The image would open the life with no read of its record, and so with no new log.
+    drop(fs::remove_file(format!("{}.image", record.display())));
+    drop(open().boot::<String>([]).unwrap().0);
+    let after = fs::read_to_string(&log).unwrap();
+    if case == "agrees" {
+      // The log before keeps its lines up to the entries before the crossing, and the life says
+      // the segment after it again.
+      let lines: Vec<&str> = before.lines().collect();
+      let crossed = format!("[\"keep\",\"\",{tip}]");
+      let kept = lines.iter().position(|one| *one == crossed).expect("the keep of the crossing");
+      let kept: String = lines[..=kept].iter().flat_map(|one| [*one, "\n"]).collect();
+      assert!(after.starts_with(&kept) && after.len() > kept.len(), "{case}: {after}");
+    } else {
+      // A log that does not agree is written again: its head counts each entry of the record,
+      // which the life says no more but for each act that it owes.
+      assert!(after.starts_with(&format!("{{\"entries\":{held}}}\n")), "{case}: {after}");
+    }
+  }
+}
+
+#[test]
 fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
   for name in ["record.jsonl", "record.db"] {
     let at = yard(&format!("made-{name}"));

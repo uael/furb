@@ -12,6 +12,7 @@ mod files;
 mod images;
 mod kits;
 mod local;
+mod log;
 mod offered;
 mod operator;
 mod provider;
