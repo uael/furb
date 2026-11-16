@@ -102,7 +102,7 @@ impl Scratch {
     let path = absolute(record)?;
     let path = match (path.parent(), path.file_name()) {
       (Some(folder), Some(name)) => {
-        fs::canonicalize(folder).map_or(path.clone(), |real| real.join(name))
+        fs::canonicalize(folder).map_or_else(|_| path.clone(), |real| real.join(name))
       }
       _ => path,
     };

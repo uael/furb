@@ -1469,7 +1469,7 @@ impl Lives {
     }
     (was || skill)
       .then_some(Answer::Done)
-      .ok_or(ProtocolError::Unattached { life: life.to_owned() })
+      .ok_or_else(|| ProtocolError::Unattached { life: life.to_owned() })
   }
 
   /// The skills attached to a life told to each of its windows, after a skill attached or left.

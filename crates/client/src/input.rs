@@ -168,7 +168,10 @@ impl Client {
     // A message about a line of a file carries that line, as it stands now. On a thread, it is a
     // sub thread of its own, which opens once its life named it, so the thread does not show it.
     let anchor = self.draft.anchor.take().filter(|_| !python);
-    let text = anchor.as_ref().map_or(text.clone(), |anchor| anchor.said(&text));
+    let text = match &anchor {
+      Some(anchor) => anchor.said(&text),
+      None => text,
+    };
     let images = mem::take(&mut self.draft.images);
     let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();
     self.draft.folds.clear();

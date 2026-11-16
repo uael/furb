@@ -1480,7 +1480,10 @@ async fn pumped(engine: &mut Engine, waits: bool) -> Woke {
 /// chain: a follow-up on a thread waits on the chain of the thread.
 fn queued_on(life: &Life, on: String) -> (String, Option<String>) {
   let thread = life.kept.held.shared(&on).filter(|act| act.kind == Kind::Prompt);
-  thread.map_or((on.clone(), None), |act| (act.chain.clone(), Some(on)))
+  match thread {
+    Some(act) => (act.chain.clone(), Some(on)),
+    None => (on, None),
+  }
 }
 
 /// What a command comes to: on the configs of the life for a command of its configs, on the home of

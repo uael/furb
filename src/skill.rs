@@ -1198,7 +1198,11 @@ fn reborn(
   for (chain, had) in chains.iter_mut() {
     had.clone_from(&every);
     if chain == ROOT {
-      had.extend(root.iter().filter(|one| !had.contains(one)).cloned().collect::<Vec<_>>());
+      for one in &root {
+        if !had.contains(one) {
+          had.push(one.clone());
+        }
+      }
     }
   }
   Some(all)

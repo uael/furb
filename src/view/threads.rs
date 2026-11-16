@@ -450,8 +450,8 @@ pub fn nest_threads(list: Vec<ChainThread>, rows: &Rows<'_>) -> Vec<ThreadNode> 
     })
     .collect();
   let mut threads: Vec<Option<ChainThread>> = list.into_iter().map(Some).collect();
-  let tops: Vec<usize> = (0..threads.len()).filter(|n| parents.get(*n) == Some(&None)).collect();
-  tops.into_iter().filter_map(|top| node(top, &parents, &mut threads)).collect()
+  let tops = (0..threads.len()).filter(|n| parents.get(*n) == Some(&None));
+  tops.filter_map(|top| node(top, &parents, &mut threads)).collect()
 }
 
 /// The node of a thread of the list, with its agents.

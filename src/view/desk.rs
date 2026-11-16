@@ -93,12 +93,12 @@ fn said(form: &Shape) -> String {
     Shape::Choice(values) => {
       format!("one of {}", values.iter().map(json_of).collect::<Vec<_>>().join(", "))
     }
-    Shape::List(of) => {
-      of.as_ref().map_or("a list".to_owned(), |of| format!("a list, each item {}", said(of)))
-    }
-    Shape::Dict(of) => {
-      of.as_ref().map_or("an object".to_owned(), |of| format!("an object, each value {}", said(of)))
-    }
+    Shape::List(of) => of
+      .as_ref()
+      .map_or_else(|| "a list".to_owned(), |of| format!("a list, each item {}", said(of))),
+    Shape::Dict(of) => of
+      .as_ref()
+      .map_or_else(|| "an object".to_owned(), |of| format!("an object, each value {}", said(of))),
     Shape::Tuple(of) => {
       let noun = if of.len() == 1 { "item" } else { "items" };
       let each: Vec<String> = of.iter().map(said).collect();
@@ -118,11 +118,12 @@ fn sample(form: &Shape, n: usize) -> String {
     Shape::Bool => two("true", "false"),
     Shape::None => "null".to_owned(),
     Shape::Choice(values) => values.get(n % values.len().max(1)).map_or_else(String::new, json_of),
-    Shape::List(of) => of
-      .as_ref()
-      .map_or("[\"a\", 1]".to_owned(), |of| format!("[{}, {}]", sample(of, 0), sample(of, 1))),
+    Shape::List(of) => of.as_ref().map_or_else(
+      || "[\"a\", 1]".to_owned(),
+      |of| format!("[{}, {}]", sample(of, 0), sample(of, 1)),
+    ),
     Shape::Dict(of) => {
-      format!("{{\"a\": {}}}", of.as_ref().map_or("1".to_owned(), |of| sample(of, n)))
+      format!("{{\"a\": {}}}", of.as_ref().map_or_else(|| "1".to_owned(), |of| sample(of, n)))
     }
     Shape::Tuple(of) => {
       format!("[{}]", of.iter().map(|one| sample(one, n)).collect::<Vec<_>>().join(", "))

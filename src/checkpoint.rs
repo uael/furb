@@ -155,7 +155,7 @@ impl Next {
       };
       (key.to_owned(), one)
     });
-    Ok(Object::dict(pairs.collect::<Vec<_>>()))
+    Ok(Object::dict(pairs))
   }
 }
 
