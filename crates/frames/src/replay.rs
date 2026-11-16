@@ -2,14 +2,16 @@
 //! each marker, and one at each step of time where the screen changed. Each key frame is written as
 //! its text, its cells as JSON and, for a marker, its image.
 
-use std::{collections::HashMap, fs, path::Path, time::Duration};
+use std::{collections::HashMap, fmt::Write, fs, path::Path, time::Duration};
 
-use avt::Terminal;
+use opentui::native::{
+  Buffer, Context, ContextOptions, EmbeddedTerminal, EmbeddedTerminalOptions, WidthMethod,
+};
 
 use crate::{
   cast::{Cast, What},
   error::Error,
-  frame::Frame,
+  frame::{BACKGROUND, FOREGROUND, Frame, PALETTE, Rgb},
   raster,
 };
 
@@ -24,25 +26,33 @@ pub(crate) struct Key {
 }
 
 /// A terminal as a person sees it: the writes of a synchronized update, from `CSI ? 2026 h` to
-/// `CSI ? 2026 l`, show at once at its end, so no screen holds half of a frame of the program.
+/// `CSI ? 2026 l`, show at once at its end, so no screen holds half of a frame of the program. It
+/// is the terminal of Ghostty that OpenTUI embeds, whose cell holds a whole character as a terminal
+/// joins it, as a flag of an emoji with its joiners.
 pub(crate) struct Screen {
-  terminal: Terminal,
+  terminal: EmbeddedTerminal,
+  buffer: Buffer,
   inside: bool,
   shown: Frame,
 }
 
 impl Screen {
   pub(crate) fn new(cast: &Cast) -> Result<Self, Error> {
-    let terminal = Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
-    let shown = Frame::of(&terminal);
-    Ok(Self { terminal, inside: false, shown })
+    let (cols, rows) = sized(cast.cols, cast.rows)?;
+    let context = Context::new(ContextOptions::default())?;
+    let options = EmbeddedTerminalOptions { cols, rows, max_scrollback: 0 };
+    let terminal = EmbeddedTerminal::new(&context, options)?;
+    terminal.write(colors()?.as_bytes())?;
+    let buffer = Buffer::new(&context, u32::from(cols), u32::from(rows), WidthMethod::Unicode)?;
+    let shown = shot(&terminal, &buffer)?;
+    Ok(Self { terminal, buffer, inside: false, shown })
   }
 
   /// What the program wrote, or the new size of the terminal.
-  pub(crate) fn feed(&mut self, what: &What) {
+  pub(crate) fn feed(&mut self, what: &What) -> Result<(), Error> {
     match what {
       What::Output(data) => {
-        self.terminal.feed([data.as_str()]);
+        self.terminal.write(data.as_bytes())?;
         self.inside = match (data.rfind(BEGIN), data.rfind(END)) {
           (Some(begin), Some(end)) => begin > end,
           (Some(_), None) => true,
@@ -50,18 +60,46 @@ impl Screen {
           (None, None) => self.inside,
         };
       }
-      What::Resize { cols, rows } => self.terminal.resize(*cols, *rows),
-      What::Input(_) | What::Marker(_) | What::Other => return,
+      What::Resize { cols, rows } => {
+        let (cols, rows) = sized(*cols, *rows)?;
+        self.terminal.resize(cols, rows)?;
+        self.buffer.resize(u32::from(cols), u32::from(rows))?;
+      }
+      What::Input(_) | What::Marker(_) | What::Other => return Ok(()),
     }
     if !self.inside {
-      self.shown = Frame::of(&self.terminal);
+      self.shown = shot(&self.terminal, &self.buffer)?;
     }
+    Ok(())
   }
 
   /// The frame that the screen shows.
   pub(crate) fn frame(&self) -> &Frame {
     &self.shown
   }
+}
+
+/// The columns and the rows of a terminal, each from 1 to the most that a terminal takes.
+fn sized(cols: usize, rows: usize) -> Result<(u16, u16), Error> {
+  let size = |count: usize| u16::try_from(count).ok().filter(|count| *count > 0);
+  size(cols).zip(size(rows)).ok_or(Error::Cast("its size is 0 or past 65535"))
+}
+
+/// The frame that a terminal shows now, drawn into a buffer of its size.
+fn shot(terminal: &EmbeddedTerminal, buffer: &Buffer) -> Result<Frame, Error> {
+  terminal.compose(buffer, 0, 0)?;
+  Ok(Frame::of(&buffer.capture()?))
+}
+
+/// What sets the colors of the terminal of a replay to those that a frame reads as the default,
+/// so a frame of any program reads the same colors: the ground, the text and the 16 colors.
+fn colors() -> Result<String, Error> {
+  let rgb = |Rgb([r, g, b]): Rgb| format!("rgb:{r:02x}/{g:02x}/{b:02x}");
+  let mut set = format!("\x1b]10;{}\x1b\\\x1b]11;{}\x1b\\", rgb(FOREGROUND), rgb(BACKGROUND));
+  for (at, one) in PALETTE.into_iter().enumerate() {
+    write!(set, "\x1b]4;{at};{}\x1b\\", rgb(Rgb::hex(one)))?;
+  }
+  Ok(set)
 }
 
 /// The start and the end of a synchronized update.
@@ -89,7 +127,7 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
       }
       tick = Some(at + step);
     }
-    screen.feed(&event.what);
+    screen.feed(&event.what)?;
     if let What::Marker(label) = &event.what {
       let seen = labels.entry(label.as_str()).and_modify(|seen| *seen += 1).or_insert(1);
       let name = if *seen == 1 { label.clone() } else { format!("{label}-{seen}") };
@@ -109,7 +147,7 @@ pub(crate) fn shows(
 ) -> Result<bool, Error> {
   let mut screen = Screen::new(cast)?;
   for event in cast.events.iter().take_while(|event| event.at <= until) {
-    screen.feed(&event.what);
+    screen.feed(&event.what)?;
     if event.at >= from && screen.frame().text() == text {
       return Ok(true);
     }

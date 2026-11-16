@@ -11,6 +11,8 @@ pub(crate) enum Error {
   Lock { path: PathBuf, source: io::Error },
   #[error("the recording is not valid: {0}")]
   Cast(&'static str),
+  #[error("the terminal of the replay failed: {0}")]
+  Terminal(#[from] opentui::Error),
   #[error("a frame or a recording is not valid JSON: {0}")]
   Json(#[from] serde_json::Error),
   #[error("a text cannot be written: {0}")]

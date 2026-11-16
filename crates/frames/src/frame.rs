@@ -1,11 +1,14 @@
 //! A frame: the grid of a terminal at one moment, as rows of runs of one look. Its JSON is the one
 //! that each frame of the window and of another program takes, so one reader reads both.
 
-use std::{array, fs, path::Path};
+use std::{array, cell::RefCell, fs, path::Path};
 
-use avt::{Color, Line, Pen, Terminal};
+use opentui::{
+  native::{Capture, Context, ContextOptions, WidthMethod},
+  style::{Attributes, Color},
+};
 use serde::{Deserialize, Serialize};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::error::Error;
 
@@ -14,19 +17,44 @@ pub(crate) const BOLD: u8 = 1;
 pub(crate) const DIM: u8 = 2;
 pub(crate) const ITALIC: u8 = 4;
 pub(crate) const UNDERLINE: u8 = 8;
-pub(crate) const REVERSE: u8 = 32;
 pub(crate) const STRIKE: u8 = 128;
 
 /// The colors of a cell that says none: those of the terminal of the captures of the other
 /// programs, so a frame of any program reads the same default.
-const FOREGROUND: Rgb = Rgb([0xd4, 0xd4, 0xd4]);
-const BACKGROUND: Rgb = Rgb([0x1e, 0x1e, 0x1e]);
+pub(crate) const FOREGROUND: Rgb = Rgb([0xd4, 0xd4, 0xd4]);
+pub(crate) const BACKGROUND: Rgb = Rgb([0x1e, 0x1e, 0x1e]);
 
 /// The 16 colors of the terminal.
-const PALETTE: [u32; 16] = [
+pub(crate) const PALETTE: [u32; 16] = [
   0x00_0000, 0xcd_3131, 0x0d_bc79, 0xe5_e510, 0x24_72c8, 0xbc_3fbc, 0x11_a8cd, 0xe5_e5e5,
   0x66_6666, 0xf1_4c4c, 0x23_d18b, 0xf5_f543, 0x3b_8eea, 0xd6_70d6, 0x29_b8db, 0xff_ffff,
 ];
+
+thread_local! {
+  /// The native context that measures each character, made once for each thread that reads cells.
+  static MEASURE: RefCell<Option<Context>> = const { RefCell::new(None) };
+}
+
+/// The cells that a text takes in a row: each character, a grapheme cluster, as the terminal of
+/// the replay joins it, takes the cells of its width by the method of Unicode.
+pub(crate) fn width(text: &str) -> usize {
+  text.graphemes(true).map(cells_of).sum()
+}
+
+/// The cells of one character. A character that no native context measures takes one cell.
+fn cells_of(character: &str) -> usize {
+  if character.is_ascii() {
+    return character.len();
+  }
+  MEASURE.with_borrow_mut(|measure| {
+    if measure.is_none() {
+      *measure = Context::new(ContextOptions::default()).ok();
+    }
+    let measured =
+      measure.as_ref().and_then(|one| one.text_width(character, WidthMethod::Unicode).ok());
+    measured.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX))
+  })
+}
 
 /// A color of a cell, which the JSON of a frame writes `#rrggbb`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -103,26 +131,26 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-  /// The screen that a terminal shows. A wide glyph takes its two cells, and its text holds it
-  /// once.
-  pub(crate) fn of(terminal: &Terminal) -> Self {
-    let (cols, rows) = terminal.size();
-    let screen = terminal.screen();
+  /// The screen that the terminal of a replay shows, from its cells: a wide character stands in
+  /// its first cell, and its text holds it once.
+  pub(crate) fn of(screen: &Capture) -> Self {
+    let (cols, rows) = (screen.width, screen.height);
     let lines = (0..rows).map(|row| {
-      let cells = screen.line(row).map(Line::cells).unwrap_or_default();
+      let cells = (0..cols).filter_map(|col| screen.cell(col, row));
       let mut runs: Vec<Run> = Vec::new();
-      for cell in cells.iter().filter(|cell| cell.width() > 0) {
-        let (fg, bg, attributes) = look(cell.pen());
+      for cell in cells.filter(|cell| !cell.symbol.is_empty()) {
+        let (fg, bg, attributes) = look(cell.fg, cell.bg, cell.attributes);
         match runs.last_mut() {
           Some(run) if (run.fg, run.bg, run.attributes) == (fg, bg, attributes) => {
-            run.text.push(cell.char());
+            run.text.push_str(&cell.symbol);
           }
-          _ => runs.push(Run { text: cell.char().to_string(), fg, bg, attributes }),
+          _ => runs.push(Run { text: cell.symbol.clone(), fg, bg, attributes }),
         }
       }
       runs
     });
-    Self { cols, rows, lines: lines.collect() }
+    let size = |count: u32| usize::try_from(count).unwrap_or(usize::MAX);
+    Self { cols: size(cols), rows: size(rows), lines: lines.collect() }
   }
 
   /// A frame of rows of cells, each row as wide as the first: a wide glyph stands in its first
@@ -170,14 +198,10 @@ impl Frame {
       for run in runs {
         let look =
           |glyph: String| Cell { glyph, fg: run.fg, bg: run.bg, attributes: run.attributes };
-        for glyph in run.text.chars() {
-          match glyph.width() {
-            Some(0) | None => match cells.last_mut() {
-              Some(cell) => cell.glyph.push(glyph),
-              None => cells.push(look(glyph.to_string())),
-            },
-            Some(1) => cells.push(look(glyph.to_string())),
-            Some(_) => cells.extend([look(glyph.to_string()), look(String::new())]),
+        for glyph in run.text.graphemes(true) {
+          cells.push(look(glyph.to_owned()));
+          for _ in 1..cells_of(glyph) {
+            cells.push(look(String::new()));
           }
         }
       }
@@ -188,38 +212,11 @@ impl Frame {
   }
 }
 
-/// The colors and the attributes of a pen, as the cells of a frame hold them: a reversed pen swaps
-/// its colors, and a dim one takes its color halfway toward its ground.
-fn look(pen: &Pen) -> (Rgb, Rgb, u8) {
-  let fg = pen.foreground().map_or(FOREGROUND, rgb);
-  let bg = pen.background().map_or(BACKGROUND, rgb);
-  let (fg, bg) = if pen.is_inverse() { (bg, fg) } else { (fg, bg) };
-  let fg = if pen.is_faint() { fg.half(bg) } else { fg };
-  let bits = [
-    (pen.is_bold(), BOLD),
-    (pen.is_faint(), DIM),
-    (pen.is_italic(), ITALIC),
-    (pen.is_underline(), UNDERLINE),
-    (pen.is_inverse(), REVERSE),
-    (pen.is_strikethrough(), STRIKE),
-  ];
-  (fg, bg, bits.iter().filter(|(on, _)| *on).fold(0, |all, (_, bit)| all | bit))
-}
-
-/// A color of the terminal: one of its 16, of the cube of 216 or of the ramp of greys, or one that
-/// it was told.
-fn rgb(color: Color) -> Rgb {
-  match color {
-    Color::RGB(told) => Rgb([told.r, told.g, told.b]),
-    Color::Indexed(n) if n < 16 => Rgb::hex(PALETTE[usize::from(n)]),
-    Color::Indexed(n) if n < 232 => {
-      let step = |level: u8| if level == 0 { 0 } else { 55 + level * 40 };
-      let n = n - 16;
-      Rgb([step(n / 36), step(n / 6 % 6), step(n % 6)])
-    }
-    Color::Indexed(n) => {
-      let grey = 8 + (n - 232) * 10;
-      Rgb([grey; 3])
-    }
-  }
+/// The colors and the attributes of a cell, as a frame holds them: the terminal swapped the
+/// colors of a reversed cell already, and a dim one takes its color halfway toward its ground.
+fn look(fg: Color, bg: Color, attributes: Attributes) -> (Rgb, Rgb, u8) {
+  let (fg, bg) = (Rgb([fg.r, fg.g, fg.b]), Rgb([bg.r, bg.g, bg.b]));
+  let dim = attributes.contains(Attributes::DIM);
+  let fg = if dim { fg.half(bg) } else { fg };
+  (fg, bg, attributes.bits() & (BOLD | DIM | ITALIC | UNDERLINE | STRIKE))
 }

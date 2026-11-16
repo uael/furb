@@ -128,7 +128,7 @@ fn shown(cast: &Cast, span: Span) -> Result<(Vec<Shown>, Vec<Key>), Error> {
       screens.push(Shown::of(span.from, screen.frame().clone()));
     }
     match &event.what {
-      What::Output(_) | What::Resize { .. } => screen.feed(&event.what),
+      What::Output(_) | What::Resize { .. } => screen.feed(&event.what)?,
       What::Input(read) if event.at >= span.from => {
         keys.push(Key { at: event.at, read: read.clone() });
       }

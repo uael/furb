@@ -26,11 +26,11 @@ use tokio::{
   task,
   time::{sleep, timeout},
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
   cast::{Cast, Event, What},
   error::Error,
+  frame::width,
   openai,
   replay::put,
   scenario::{Act, Size, Step, Walk},
@@ -766,7 +766,7 @@ impl Tmux {
     let found = screen
       .lines()
       .enumerate()
-      .find_map(|(row, line)| line.find(text).map(|at| (line[..at].width(), row)));
+      .find_map(|(row, line)| line.find(text).map(|at| (width(&line[..at]), row)));
     found.ok_or_else(|| Error::Step { step: "pointer".to_owned(), until: text.to_owned(), screen })
   }
 }

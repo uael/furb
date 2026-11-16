@@ -10,11 +10,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use unicode_width::UnicodeWidthStr;
-
 use crate::{
   error::Error,
-  frame::Frame,
+  frame::{Frame, width},
   raster,
   replay::put,
   scenario::{Has, SIZES, Scenario, Size},
@@ -42,7 +40,7 @@ struct Column {
 impl Column {
   fn of(head: String, text: &str) -> Self {
     let lines: Vec<String> = text.lines().map(str::to_owned).collect();
-    let width = lines.iter().map(|line| line.width()).max().unwrap_or(0);
+    let width = lines.iter().map(|line| width(line)).max().unwrap_or(0);
     Self { head, lines, width }
   }
 }
@@ -203,7 +201,7 @@ fn scores(best: &str, scenario: &str, winners: &[Winner]) -> String {
 fn beside(columns: &[&Column]) -> String {
   let rows = columns.iter().map(|column| column.lines.len()).max().unwrap_or(0);
   let pad =
-    |text: &str, width: usize| format!("{text}{}", " ".repeat(width.saturating_sub(text.width())));
+    |text: &str, room: usize| format!("{text}{}", " ".repeat(room.saturating_sub(width(text))));
   let line = |cells: Vec<String>| cells.join(" │ ").trim_end().to_owned() + "\n";
   let mut text = line(columns.iter().map(|column| pad(&column.head, column.width)).collect());
   for row in 0..rows {

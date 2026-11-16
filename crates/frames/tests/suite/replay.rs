@@ -115,7 +115,7 @@ fn a_frame_holds_each_run_of_one_look_with_its_colors_in_the_json_of_the_capture
     json!([
       ["ab", "#010203", "#1e1e1e", 1],
       ["c", "#cd3131", "#2472c8", 0],
-      ["d", "#2472c8", "#cd3131", 32],
+      ["d", "#2472c8", "#cd3131", 0],
       ["e", "#797979", "#1e1e1e", 2],
       [" ", "#d4d4d4", "#1e1e1e", 0]
     ])
@@ -128,6 +128,32 @@ fn a_wide_glyph_takes_two_cells_and_shows_once_in_its_text() {
   assert_eq!(read(&yard.join("out/rec.a.txt")), "日x\n\n");
   let frame = json_of(&yard.join("out/rec.a.json"));
   assert_eq!(frame["lines"][0], json!([["日x ", "#d4d4d4", "#1e1e1e", 0]]));
+}
+
+#[test]
+fn a_joined_emoji_takes_one_cell_of_its_width_whole_as_the_window_wrote_it() {
+  // The rows of the list of emojis as the window writes them in a terminal that joins characters,
+  // which it asks with the mode 2027: each emoji moves to the cell after its two, where the name
+  // starts in the same column on each row.
+  let row = |at: usize, emoji: &str, name: &str| {
+    let look = "\x1b[38;2;228;228;228m\x1b[48;2;27;27;27m";
+    format!("\x1b[{at};1H{look}┃\x1b[{at};2H {emoji}\x1b[{at};5H  :{name}\x1b[0m")
+  };
+  let shown = [
+    ("✡\u{fe0f}", "star_of_david"),
+    ("🔀", "twisted_rightwards_arrows"),
+    ("🏳\u{fe0f}\u{200d}⚧\u{fe0f}", "transgender_flag"),
+    ("💁\u{200d}♂\u{fe0f}", "tipping_hand_man"),
+  ];
+  let rows = shown.iter().enumerate().map(|(at, (emoji, name))| row(at + 1, emoji, name));
+  let text = format!("\x1b[?2027h\x1b[48;2;27;27;27m\x1b[2J{}", rows.collect::<String>());
+  let (yard, _) = replayed("joined", (40, 4), &[(0.0, "o", &text), (0.1, "m", "a")], &[]);
+  let wanted: Vec<String> =
+    shown.iter().map(|(emoji, name)| format!("┃ {emoji}  :{name}\n")).collect();
+  assert_eq!(read(&yard.join("out/rec.a.txt")), wanted.concat());
+  // The probes find each name of the list in one column, on the ground of the window.
+  let done = frames(&["probe", "out/rec.a.json"], &yard);
+  assert_eq!(said(&done), "");
 }
 
 #[test]

@@ -159,7 +159,7 @@ API of its own:
   `furb-window` in tmux at 120 by 40, 80 by 24 and 200 by 60, on a daemon whose claude command line answers each turn
   from the words of the walk, so it asks no model and no network, and walks each scenario of
   `crates/frames/src/scenario.rs` that the window has. It writes in `target/frames/<cols>x<rows>/` the recording of each
-  walk in the format 3 of asciinema, and the key frames that its replay through the terminal of asciinema gives: at each
+  walk in the format 3 of asciinema, and the key frames that its replay through the terminal of Ghostty that OpenTUI embeds gives: at each
   step a text, the cells as JSON and an image, and every 200 ms where the screen changed, a text and the cells. It then
   writes the findings of the probes, which hold each frame to the tokens of the window, and the compare of each scenario
   with the two winner frames of the other programs that `FURB_RIVALS` names, which stay out of the repository.
