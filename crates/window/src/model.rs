@@ -540,7 +540,9 @@ impl Model {
   pub(crate) fn steps(&self) -> bool {
     let opens = self.client.holds.values().any(Hold::runs);
     let thread = self.client.thread.as_ref().map(|one| &one.thread);
-    let reads = thread.and_then(|one| one.time.as_ref()).is_some_and(Time::reads);
+    // A bar that he holds shows its read; the bar that stands at rest reads with no clock.
+    let reads =
+      thread.and_then(|one| one.time.as_ref()).is_some_and(|one| one.engaged() && one.reads());
     let settles = thread.is_some_and(|one| {
       one.ended.values().any(|at| self.client.moved.saturating_sub(*at) < self.settles)
     });
