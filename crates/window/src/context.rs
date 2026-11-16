@@ -256,6 +256,17 @@ impl Model {
       kinds.extend(free.map(|tokens| Kind { name: "Free", tokens, color: t.border }));
       return kinds;
     }
+    // The view of the kinds shows kinds alone: until the machine parts the turns, the read stands
+    // as one part that says so, and never as the parts of the cache under the tab of the kinds.
+    if self.client.split == Split::Kinds {
+      let name = if parts.is_some() { "Turns (not parted)" } else { "Reading the parts…" };
+      let free = context.window.map(|window| window.saturating_sub(context.read.tokens));
+      let read = Kind { name, tokens: context.read.tokens, color: t.muted };
+      return [read]
+        .into_iter()
+        .chain(free.map(|tokens| Kind { name: "Free", tokens, color: t.border }))
+        .collect();
+    }
     let kind = |(portion, tokens)| {
       let (name, color) = match portion {
         Portion::Cached => ("From the cache", gold),
