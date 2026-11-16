@@ -106,7 +106,9 @@ pub(crate) struct Programs {
   pub(crate) moving: bool,
 }
 
-/// The walk of a scenario captured at a size, in a folder of its own that it removes at its end.
+/// The walk of a scenario captured at a size, in a folder of its own that it removes at its end. A
+/// walk that fails leaves its folder, with the record and the log of its daemon, to trace the
+/// failure, until the next capture of the walk at that size.
 pub(crate) async fn capture(
   walk: &Walk,
   size: Size,
@@ -116,10 +118,9 @@ pub(crate) async fn capture(
   let _turn = turn(root).await?;
   let openai = openai::served().await?;
   let rig = Rig::made(walk, programs, root, &openai.url)?;
-  let captured = rig.captured(walk, size).await;
-  let removed = fs::remove_dir_all(&rig.root);
-  let captured = captured?;
-  removed.map_err(|source| Error::Write { path: rig.root.clone(), source })?;
+  let captured = rig.captured(walk, size).await?;
+  fs::remove_dir_all(&rig.root)
+    .map_err(|source| Error::Write { path: rig.root.clone(), source })?;
   Ok(captured)
 }
 

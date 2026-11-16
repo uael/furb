@@ -202,9 +202,13 @@ async fn captured(
       let number = name.split('-').next().unwrap_or(name);
       let root = PathBuf::from(format!("/tmp/ff{number}-{}", size.name()));
       runs.spawn(async move {
-        let done = walked(&Job { name, walk, size, root }, &setup).await;
+        let job = Job { name, walk, size, root };
+        let done = walked(&job, &setup).await;
         match &done {
           Ok(line) => println!("{line}"),
+          Err(fault) if job.root.exists() => {
+            println!("{name} {}: {fault}; its folder stays: {}", size.name(), job.root.display());
+          }
           Err(fault) => println!("{name} {}: {fault}", size.name()),
         }
         done.is_ok()
