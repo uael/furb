@@ -1,5 +1,5 @@
-//! The one write of a file, where no door reaches it: a write that fails or waits midway, which only
-//! the body of [`filled`] holds open. The suite proves the rest through a life that writes.
+//! The one write of a file, where no door reaches it: a write that fails or waits midway, which
+//! only the body of [`filled`] holds open. The suite proves the rest through a life that writes.
 
 use std::{fs, io::Write};
 

@@ -1,7 +1,7 @@
-//! The file of lines, where no door reaches it: the read that a store takes from the open of a life,
-//! which only that open hands over; the heads of the lines, whose law is what a read parses; and a
-//! line that a write left torn, which only a write that failed midway leaves. The suite of the
-//! stores proves the rest.
+//! The file of lines, where no door reaches it: the read that a store takes from the open of a
+//! life, which only that open hands over; the heads of the lines, whose law is what a read parses;
+//! and a line that a write left torn, which only a write that failed midway leaves. The suite of
+//! the stores proves the rest.
 
 use std::{fs, io::Write};
 

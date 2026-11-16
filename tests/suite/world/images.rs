@@ -1,5 +1,5 @@
-//! The images that a host attaches and that a message names, through `furb::world::images`, on files
-//! of a yard of each test. The images of a turn run through a life in `provider.rs`.
+//! The images that a host attaches and that a message names, through `furb::world::images`, on
+//! files of a yard of each test. The images of a turn run through a life in `provider.rs`.
 
 use std::{fs, process};
 

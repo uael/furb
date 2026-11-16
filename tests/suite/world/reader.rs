@@ -37,7 +37,8 @@ fn told(name: &str, kept: &[&str]) -> Vec<String> {
   shown(&retold(&at).expect("the record is told").facts().expect("its facts"))
 }
 
-/// The opening of a life: its root chain, a prompt of the operator on it, and the reply that rung1 asked for.
+/// The opening of a life: its root chain, a prompt of the operator on it, and the reply that rung1
+/// asked for.
 const OPENS: [&str; 3] = [
   r#"["chain", "chain1", "operator", "", "root", ""]"#,
   r#"["prompt", "prompt1", "operator", "chain1", "str", "Go.", ""]"#,

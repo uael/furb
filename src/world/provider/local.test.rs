@@ -1,6 +1,7 @@
-//! The times of the local server of the catalog, on servers of the tests on ports of this machine: the delay
-//! before it is asked again and the deadline of its list, which a door would wait whole, 30 s and 5 s each time,
-//! so these tests shorten them. The suite of the world proves the rest through the catalog of a child.
+//! The times of the local server of the catalog, on servers of the tests on ports of this machine:
+//! the delay before it is asked again and the deadline of its list, which a door would wait whole,
+//! 30 s and 5 s each time, so these tests shorten them. The suite of the world proves the rest
+//! through the catalog of a child.
 
 #![expect(
   clippy::let_underscore_must_use,

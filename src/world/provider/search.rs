@@ -178,9 +178,9 @@ pub(super) fn native(client: Client, reach: &Reach) -> Option<Searches> {
   Some(Arc::new(move |query| timed(native.asked(reach.clone(), query))))
 }
 
-/// The API of a native search: the Messages API of Anthropic, the Responses API at its default address, the
-/// generation of Gemini grounded in Google Search, and the search API of `DeepSeek`, each at the address that the
-/// client of the model asks.
+/// The API of a native search: the Messages API of Anthropic, the Responses API at its default
+/// address, the generation of Gemini grounded in Google Search, and the search API of `DeepSeek`,
+/// each at the address that the client of the model asks.
 #[derive(Clone, Copy)]
 enum Native {
   Anthropic,
