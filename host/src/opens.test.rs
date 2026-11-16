@@ -1,3 +1,7 @@
+//! The pace of the frames of an open, where no door shows it in a test that ends fast: a stage that
+//! goes on is told at most each `PACE`, which a door shows only on a record whose open outlasts it.
+//! The suite of the host proves the stages of an open in order, whole, and before the events.
+
 #![expect(
   clippy::disallowed_methods,
   reason = "the tests block on the runtime that tokio starts for them"
