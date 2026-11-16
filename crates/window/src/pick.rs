@@ -892,9 +892,11 @@ impl Model {
       run(picker.filter.clone(), prose)
     };
     // The count counts the rows that take something, and the place of the chosen one among them.
+    // The filter of a value is the value that he writes, which no count follows.
     let takes: Vec<usize> =
       (0..entries.len()).filter(|at| entries[*at].choice != Choice::None).collect();
     let count = match takes.len() {
+      _ if matches!(picker.of, Pick::Value(_)) => String::new(),
       0 => "nothing".to_owned(),
       many => format!("{} / {many}", takes.partition_point(|at| *at < picker.at) + 1),
     };
@@ -1004,8 +1006,10 @@ impl Model {
     let close = format!("{} close", self.key(Does::Close));
     let rest =
       effort.into_iter().chain(groups).chain([takes, close]).collect::<Vec<_>>().join(" · ");
+    // The editor of a value holds one row, which no move leaves.
     let whole = format!("{moves} · {rest}");
-    if whole.width() <= room { whole } else { rest }
+    let one = matches!(picker.of, Pick::Value(_));
+    if !one && whole.width() <= room { whole } else { rest }
   }
 
   /// The rows of the entries that the part shows: a head before the first entry of each part of the
