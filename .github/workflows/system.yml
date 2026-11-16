@@ -58,7 +58,6 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: tools
-          hashed: crates/typescript/build.ts
       # The native library of OpenTUI, which the build of the window makes with Zig in minutes and keeps in
       # target/opentui, under the commit that crates/window/Cargo.toml pins. The cache of rust keeps no file of a
       # package of the workspace, so the folder has a cache of its own, restored after that one, and named by that

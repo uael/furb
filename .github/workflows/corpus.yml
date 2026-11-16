@@ -68,7 +68,6 @@ jobs:
         with:
           python: none
           shared: build
-          hashed: crates/typescript/build.ts
       # In bash on each system: the shell of a step on Windows is PowerShell, where "$GITHUB_ENV" is an empty string.
       - shell: bash
         run: |

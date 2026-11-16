@@ -26,11 +26,6 @@ inputs:
       Each workspace of cargo that the gate builds, with its target, as the cache reads them: it keeps the dependencies
       of each in its target, and removes each other one.
     default: ". -> target"
-  hashed:
-    description: >-
-      Each file beyond the manifests of cargo that decides what the gate builds, as a script of the build, whose hash
-      the key of its cache holds.
-    default: ""
   rust:
     description: >-
       The rust that the gate needs: `build`, the rust of rust-toolchain.toml with the cache of what cargo built; `tools`,
@@ -106,12 +101,10 @@ runs:
     # Only a job that passes saves it, or a job that sets CACHE_ON_FAILURE once its build passed. A job that fails or
     # is cancelled holds part of the build, and a key that matches whole is never saved again, so every later run would
     # build again what that part lacks.
-    # A script of the build that starts to build a new crate changes no manifest, so with no hash of it the key stayed
-    # whole and each run built that crate and each of its dependencies again: the program furb took 8 minutes and 34
-    # seconds on Windows, on a cache saved before the script built it.
-    - if: inputs.rust == 'build' && inputs.hashed != ''
-      run: echo "FURB_CACHE_HASHED=${{ hashFiles(inputs.hashed) }}" >> "$GITHUB_ENV"
-      shell: bash
+    # The key holds no hash of a script of the build: the build of each system compiles every crate of the workspace
+    # for its tests, so its cache holds each dependency that a script of the build can select. A hash of the build
+    # script of TypeScript stood beside the hash of the rust, so each change of that script, 9 in 14 days, restored
+    # nothing and built every crate again: 59 minutes on Windows in run 43806453852.
     - id: rust
       if: inputs.rust == 'build'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -120,7 +113,6 @@ runs:
         shared-key: ${{ inputs.shared }}
         workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
-        env-vars: FURB_CACHE
         save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/w/converge' || github.head_ref == 'w/converge') && inputs.shared == '' && inputs.saved == 'true' }}
         cache-on-failure: false
     - if: inputs.rust == 'build'
