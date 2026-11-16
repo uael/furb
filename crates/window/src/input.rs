@@ -16,7 +16,7 @@ use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::{NO_PROJECT, project},
-  model::{Key, Model, Told},
+  model::{Key, Model},
   picture,
   review::shown_at,
   thread::{Click, Hot, Row, columns, width},
@@ -867,8 +867,7 @@ impl Model {
   /// The name of the project of a folder of a machine where a new session runs: the last part of
   /// the folder, or that it has none for a folder in that of the sessions with no project.
   pub(crate) fn folder_named(&self, at: usize, folder: &str) -> String {
-    let alone = self.client.machines.get(at).and_then(Told::detached).map(Path::new);
-    if Path::new(folder).parent() == alone { NO_PROJECT.to_owned() } else { named(folder) }
+    if self.client.alone(at, folder) { NO_PROJECT.to_owned() } else { named(folder) }
   }
 
   /// The effort that a model of the catalog of a machine takes when none is named.

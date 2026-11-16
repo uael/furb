@@ -115,7 +115,7 @@ impl Client {
         at: *at,
         life: life.clone(),
         name: title.clone(),
-        project: self.cwd(*at, life),
+        project: self.project(*at, life),
         live: vec![Live { title, standing: Standing::Thinks }],
         here: true,
         viewers: Vec::new(),

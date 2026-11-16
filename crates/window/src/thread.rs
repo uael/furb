@@ -768,7 +768,7 @@ impl Model {
       agents: 0,
       readers: vec![format!("{OPERATOR}/{}", told.login)],
     };
-    let (life, project, since) = (key.1.clone(), self.client.cwd(key.0, &key.1), self.second());
+    let (life, project, since) = (key.1.clone(), self.client.project(key.0, &key.1), self.second());
     let card = Card {
       life,
       session,

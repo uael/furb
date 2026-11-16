@@ -1134,22 +1134,27 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   let frame = shows(&app, "This… ▾   No project ▾");
   assert!(frame.contains("It runs in a new session with no project on this"), "{frame}");
   sent(&app, &format!("plan the week {ANSWERS}"));
-  // The head of the thread names no project, and the input runs in the folder of the session, once
-  // the answer came.
-  let both =
-    |frame: &str| frame.contains("No project · plan the week") && frame.contains("Two stages");
-  assert!(app.wait_until(PATIENCE, || both(&app.text())), "{}", app.text());
+  // The head of the thread names no project from its first frame, before the machine tells its
+  // card, and the input runs in the folder of the session, once the answer came.
+  let mut heads = Vec::new();
+  let answered = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    heads.extend(frame.lines().next().map(str::to_owned));
+    frame.contains("Two stages")
+  });
+  assert!(answered, "{}", app.text());
+  let named = heads.iter().filter(|one| one.contains("plan the week")).collect::<Vec<_>>();
+  assert!(!named.is_empty() && named.iter().all(|one| one.contains("No project · ")), "{heads:#?}");
   // The record stands in a folder of its own, in the folder of the sessions with no project, and
   // none in the project of the window.
   let alone = daemon.file("data").join("sessions");
   let folders: Vec<PathBuf> =
     fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
   assert_eq!(folders, [alone.join("plan-the-week")]);
-  let folder = &folders[0];
-  assert_eq!(
-    told(&daemon, &folder.join(".furb").join("sessions")),
-    [format!("plan the week {ANSWERS}")]
-  );
+  // The machine tells the card of the session once its life stands.
+  let sessions_of = folders[0].join(".furb").join("sessions");
+  let said = [format!("plan the week {ANSWERS}")];
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions_of) == said));
   assert!(!sessions.exists());
   screen("input-no-project", &app);
   // A second session of the same words takes a count after the slug, since the first has it.

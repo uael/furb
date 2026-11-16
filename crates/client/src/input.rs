@@ -350,6 +350,19 @@ impl Client {
     named(n).display().to_string()
   }
 
+  /// Whether a folder of a machine is that of a session with no project: a folder in the folder of
+  /// those sessions that the machine gave.
+  pub fn alone(&self, at: usize, folder: &str) -> bool {
+    let sessions = self.machines.get(at).and_then(|told| told.detached()).map(Path::new);
+    sessions.is_some() && Path::new(folder).parent() == sessions
+  }
+
+  /// The project of a record: the folder that its life opens in, or none for a session with no
+  /// project, as a card of its machine says it once the machine told one.
+  pub fn project(&self, at: usize, life: &str) -> Option<String> {
+    self.cwd(at, life).filter(|folder| !self.alone(at, folder))
+  }
+
   /// The folder of a new session with no project on a machine, in the folder of those sessions
   /// that the machine gave, which its first message names.
   pub fn detached(&self, at: usize) -> Option<String> {
