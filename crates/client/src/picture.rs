@@ -2,7 +2,10 @@
 //! the thread once for each, by the uri by which a message names it, and keeps its bytes while the
 //! thread shows it.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  collections::{HashMap, hash_map::Entry},
+  sync::Arc,
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use furb_wire::protocol::{Answer, Frame, Verb};
@@ -35,9 +38,12 @@ impl Client {
   /// each new one, and lets go of the others, so it holds the bytes of one thread at most.
   pub fn show_pictures(&mut self, shown: impl IntoIterator<Item = Shown>) {
     let mut kept: HashMap<Shown, Picture> = HashMap::new();
+    // Two messages can name one image, which the client asks once.
     for one in shown {
-      let picture = self.pictures.remove(&one).unwrap_or(Picture::Due);
-      kept.insert(one, picture);
+      if let Entry::Vacant(slot) = kept.entry(one) {
+        let picture = self.pictures.remove(slot.key()).unwrap_or(Picture::Due);
+        slot.insert(picture);
+      }
     }
     self.pictures = kept;
   }

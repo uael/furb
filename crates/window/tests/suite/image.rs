@@ -7,7 +7,7 @@ use std::fs;
 
 use crate::{
   cards::shows,
-  daemon::{ANSWERS, WORKS},
+  daemon::{ANSWERS, PATIENCE, WORKS},
   input::{sent, started, told},
 };
 
@@ -79,4 +79,22 @@ fn an_image_that_a_message_names_draws_under_its_text_and_one_that_does_not_draw
   let drawn = |row: &&str| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one));
   let image: Vec<&str> = rows.iter().skip(3).copied().take_while(drawn).collect();
   assert_eq!((image.len(), rows[2].chars().nth(2)), (7, Some(' ')), "{frame}");
+}
+
+#[test]
+fn an_image_that_a_message_names_twice_draws_twice() {
+  let (app, daemon, _) = started();
+  let shot = include_bytes!("../../../frames/src/shot.png");
+  fs::write(daemon.file("furb-try").join("shot.png"), shot).unwrap();
+  app.paste("shot.png");
+  app.paste("shot.png");
+  sent(&app, &format!(" {WORKS}"));
+  shows(&app, "(the model works");
+  // Both boxes draw once the one image of the two marks came, each in 7 rows.
+  let drawn = |frame: &str| {
+    let pixels = |row: &&str| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one));
+    frame.lines().filter(pixels).count()
+  };
+  let twice = app.wait_until(PATIENCE, || drawn(&app.text()) == 14);
+  assert!(twice, "{}", app.text());
 }
