@@ -422,7 +422,8 @@ pub(crate) fn manifests() -> impl Iterator<Item = &'static str> {
 }
 
 /// Each file that the crate carries of the official extension of a name, by its name in the folder
-/// of that extension: its manifest, its word and its interface.
+/// of that extension: its manifest, its word, its interface, its keys and the program of its
+/// process.
 pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
   OFFICIAL.iter().find_map(|(manifest, word, interface, keys)| {
     let front = frontmatter(manifest);
@@ -431,10 +432,16 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
       let mut files = vec![(MANIFEST.to_owned(), *manifest), (file, *word)];
       files.extend(front.meta(INTERFACE).map(|one| (one.to_owned(), *interface)));
       files.extend(front.meta(CONFIG).zip(*keys).map(|(one, keys)| (one.to_owned(), keys)));
+      let process = PROCESSES.iter().find(|one| one.0 == name).map(|one| one.1);
+      files.extend(front.meta(PROCESS).zip(process).map(|(file, text)| (file.to_owned(), text)));
       files
     })
   })
 }
+
+/// The program of the process of each official extension that has one, by the name of the
+/// extension.
+const PROCESSES: [(&str, &str); 1] = [("mcp", include_str!("../.agents/skills/mcp/process.py"))];
 
 /// The name of each official extension, in the order a life runs them, and whether it plays by
 /// default.

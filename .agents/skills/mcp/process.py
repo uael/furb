@@ -44,11 +44,11 @@ import tempfile
 import time
 import urllib.parse
 import webbrowser
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from pathlib import Path
 from typing import IO, NoReturn
 
-from furb.skill import Skill
+from furb.skill import Fact, Skill
 
 try:
   import anyio
@@ -1487,13 +1487,19 @@ class Hub:
 
 
 async def main() -> None:
-  skill = await Skill.attach(kinds=[])
-  folders = skill.connection.welcome.get("folders") or {}
   changes: asyncio.Queue[str] = asyncio.Queue()
-  images = folders.get("images")
-  hub = Hub(Path(folders["project"]), Path(folders["config"]), Path(images) if images else None, changes.put_nowait)
-  for kind in KINDS:
-    skill.answers(kind, lambda fact, kind=kind: hub.answer(kind, fact[4:]))  # ty: ignore[invalid-argument-type]
+  hubs: list[Hub] = []
+
+  def answering(welcome: Mapping[str, object]) -> dict[str, Callable[[Fact], object]]:
+    folders = welcome.get("folders") or {}
+    assert isinstance(folders, dict)
+    images = folders.get("images")
+    hub = Hub(Path(folders["project"]), Path(folders["config"]), Path(images) if images else None, changes.put_nowait)
+    hubs.append(hub)
+    return {kind: lambda fact, kind=kind: hub.answer(kind, fact[4:]) for kind in KINDS}  # ty: ignore[invalid-argument-type]
+
+  skill = await Skill.attach(kinds=[], answering=answering)
+  (hub,) = hubs
 
   async def told() -> None:
     while True:
