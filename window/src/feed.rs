@@ -856,7 +856,8 @@ impl Feed<'_> {
         let runs = colored.as_ref().and_then(|all| all.get(at)).cloned();
         let runs = runs.unwrap_or_else(|| vec![run(plain.to_owned(), prose)]);
         at += 1;
-        [vec![pad("  "), run(mark.to_owned(), sign)], clipped(runs, room - 1, muted)].concat()
+        // A blank parts the mark from the code, as the review of the file shows it.
+        [vec![pad("  "), run(format!("{mark} "), sign)], clipped(runs, room - 2, muted)].concat()
       };
       rows.push(Row::of(self.boxed(shown, ground)));
     }

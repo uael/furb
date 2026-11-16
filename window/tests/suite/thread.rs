@@ -326,7 +326,7 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
   );
   // A click on a file opens the block, which shows the diff of each file under its line.
   clicked(&app, "notes.md  +2", 0, 0);
-  let open = app.wait_until(PATIENCE, || app.text().contains("+B"));
+  let open = app.wait_until(PATIENCE, || app.text().contains("+ B"));
   assert!(open, "{}", app.text());
   // The rows move as the block opens, so the pointer leaves them, where it would light a row.
   app.hover(0, 0);
@@ -336,17 +336,17 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
     [
       "    1  write(Text('notes.md', 'a\\nb\\nc\\n'))",
       "       └ notes.md  wrote 3 lines",
-      "         +a",
-      "         +b",
-      "         +c",
+      "         + a",
+      "         + b",
+      "         + c",
       "    2  m = read('notes.md')",
       "    3  write(m.replace('b\\n', 'B\\nb2\\n'))",
       "       └ notes.md  +2 −1",
-      "          a",
-      "         -b",
-      "         +B",
-      "         +b2",
-      "          c",
+      "           a",
+      "         - b",
+      "         + B",
+      "         + b2",
+      "           c",
     ]
   );
   screen("thread-files", &app);

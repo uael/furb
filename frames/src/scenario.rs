@@ -652,7 +652,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("c", &[Act::Key("Down")], "return sum"),
         step("d", &[Act::Key("Escape")], "Each item"),
         // A click on a file that a line wrote opens the block, with the diff under the line.
-        step("x-diff", &[Act::Pointer { on: "models.py  +2", button: 0 }], "+    self.count = 0"),
+        step("x-diff", &[Act::Pointer { on: "models.py  +2", button: 0 }], "+     self.count = 0"),
         // A revert writes back what the life knew before the answer, as a word of his.
         step("x-revert", &[Act::Pointer { on: "↶ Revert", button: 0 }], "models.py  +1 −2"),
         // A click on a line of the diff makes the next message about that line.
