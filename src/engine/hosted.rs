@@ -10,7 +10,7 @@ use std::{
   collections::{HashMap, HashSet, VecDeque},
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 use monty_types::{MontyUuid, unstable};
@@ -296,6 +296,7 @@ impl Outside {
     let (speaks, spoke) = (self.opened.speaks.clone(), self.opened.spoke.clone());
     let mut next = Some(first);
     while let Some((by, spoken)) = next {
+      self.asking.clear();
       let token = sand.call(self, &speaks, vec![Object::string(&by)], vec![])?;
       let got = match spoken {
         Spoken::Saying(saying) => self.says(sand, &saying),
@@ -367,6 +368,9 @@ impl Outside {
       (At::Waiting, None) => {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
+      (At::Waiting, Some(_)) if let Some((_, refusal)) = self.ending.take_if(|one| one.0 == on) => {
+        return self.inward(sand, &refusal.0).map_or_else(Answer::Abort, Answer::Value);
+      }
       (At::Waiting, Some(a)) => match self.told(sand, a) {
         Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
@@ -378,6 +382,12 @@ impl Outside {
       && let Some(bound) = sand::past()
     {
       return self.refused(sand, on, fact, bound);
+    }
+    if let Heard::Fact(fact) = &heard
+      && fact.question()
+      && let Some(answer) = self.overran(sand, on, fact)
+    {
+      return answer;
     }
     let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
@@ -443,6 +453,41 @@ impl Outside {
         self.inward(sand, &done.0).map_or_else(Answer::Abort, Answer::Value)
       }
     }
+  }
+
+  /// The answer to a question of an act that asked questions of the ears of the host for longer
+  /// than the bound of a turn, in live work of the ears outside any step of a word, which holds the
+  /// host from its commands and from every other chain: the ear of the host that heard the
+  /// question says the act done with a refusal that names it, then the question refused, so the
+  /// record holds both and a later life takes them from it and from no clock. An act whose ear is
+  /// `controlled` stops at its own end. Nothing when the act stands within the bound or the asker
+  /// is no act.
+  fn overran(&mut self, sand: &mut Sand, on: MontyUuid, fact: &Fact) -> Option<Answer> {
+    if !self.stepping.is_empty() {
+      return None;
+    }
+    let by = fact.by().to_owned();
+    let bound = sand::turn();
+    if self.asking.entry(by.clone()).or_insert_with(Instant::now).elapsed() < bound {
+      return None;
+    }
+    let asker = self.named_call(sand, "get", vec![Object::string(&by)], vec![]).ok()?;
+    let kind = asker.as_ref().items()?.first()?.as_str()?.to_owned();
+    let why = format!(
+      "{by}, an act of {kind}, asked the World for longer than the bound of a turn of {bound:?} \
+       with no step of a word, so the life ends it and refuses its {}",
+      fact.about()
+    );
+    let refusal = Fault::refused(why).object();
+    let question = Fact::says("done", fact.about(), [refusal.clone()]);
+    let over = self.named_call(sand, "over", vec![Object::string(&by)], vec![]).ok()?;
+    let ends = if over.as_ref().as_bool() == Some(true) {
+      question
+    } else {
+      self.ending = Some((on, question));
+      Fact::says("done", &by, [refusal])
+    };
+    Some(self.inward(sand, &ends.0).map_or_else(Answer::Abort, Answer::Value))
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that

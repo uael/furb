@@ -55,7 +55,8 @@ const STACK: usize = DEPTH * 1024;
 /// life goes on. The bound holds while a word steps, live or run again by a replay, and in each
 /// live entry of the host; the replay, the seed and the gather of a checkpoint around the words are
 /// the engine's own work, which grows with the life, so they run unbounded and a life that ran
-/// within its bounds always resumes.
+/// within its bounds always resumes. The live work of the ears outside any step of a word holds the
+/// bound too: an act that asks the World past it ends, with its question refused.
 pub(crate) const TURN: Duration = Duration::from_secs(30);
 
 #[cfg(test)]
@@ -443,7 +444,7 @@ pub(crate) fn past() -> Option<Duration> {
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.
-fn turn() -> Duration {
+pub(crate) fn turn() -> Duration {
   #[cfg(test)]
   let bound = BOUND.get();
   #[cfg(not(test))]

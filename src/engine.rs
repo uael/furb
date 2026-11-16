@@ -42,6 +42,7 @@ mod record;
 use std::{
   collections::{HashMap, HashSet},
   task::Waker,
+  time::Instant,
 };
 
 use monty_types::{ExcType, MontyUuid, NamedValues};
@@ -191,6 +192,13 @@ struct Outside {
   /// The question that the host refused in this step of a word, past the bound of a turn, and its
   /// maker.
   past: Option<(String, String)>,
+  /// When each act first asked a question that an ear of the host heard, in the live work of the
+  /// ears outside any step of a word: since the host went in, an ear said a thing of its own
+  /// accord, or a step of a word began or ended.
+  asking: HashMap<String, Instant>,
+  /// The refusal of the question of an act that the host ended past the bound of a turn, which the
+  /// ear of the host says next, in place of what the ear hears then, as [`Outside::overran`] says.
+  ending: Option<(MontyUuid, Fact)>,
   /// The questions of the record that the life opened on, as [`settled`] gives them: while boot
   /// replays the record, no bound of a turn holds a step of the word of such a run.
   settled: HashSet<String>,
@@ -219,6 +227,7 @@ impl Host for Outside {
         // starts none.
         sand::step(bounded && !self.stepping.is_empty());
         self.past = None;
+        self.asking.clear();
         Ok(Object::bool(sand.bound(bounded)))
       }
       None => self.called(sand, name, &args),
@@ -261,6 +270,8 @@ impl Outside {
       given: 0,
       stepping: Vec::new(),
       past: None,
+      asking: HashMap::new(),
+      ending: None,
       settled: HashSet::new(),
     })
   }
@@ -610,6 +621,7 @@ impl Engine {
         cut.message()
       )));
     }
+    self.outside.asking.clear();
     let ids: Vec<String> = self.watchers.keys().cloned().collect();
     let entered = self.sand.enter(&mut self.outside, |sand, outside| {
       let got = body(sand, outside);
