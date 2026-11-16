@@ -1397,6 +1397,21 @@ fn a_life_whose_act_holds_a_callable_in_its_words_replays_with_no_drift() {
 }
 
 #[test]
+fn a_life_whose_act_holds_a_coroutine_in_its_words_replays_with_no_drift() {
+  let word =
+    "async def c():\n  return 0\na = act('bash', '', None, 'true', '', 30.0, c())\nclose(8)";
+  let (_yard, root, record) = lived_once("coroutine", word);
+  assert!(
+    record.contains(r#""Repr('<coroutine object c>')""#),
+    "the record holds the coroutine as monty shows it, with no address"
+  );
+  let second = Lived::new("coroutine", &[], false).expect("the replay opens the life");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  assert_eq!(second.root(), root);
+}
+
+#[test]
 fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift() {
   let word = "class A:\n  pass\na = await bash(f\"echo '{A()}'\")\nclose(8)";
   let (_yard, root, record) = lived_once("address", word);
