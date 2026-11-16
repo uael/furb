@@ -131,7 +131,7 @@ fn a_send_keeps_what_the_operator_saw_beside_the_cards_of_the_window() {
 }
 
 /// A window on the thread of a session that answered, open.
-fn threaded() -> (TestApp, Daemon) {
+pub(crate) fn threaded() -> (TestApp, Daemon) {
   let (app, mut daemon) = opened();
   let sessions = daemon.project("furb");
   let mut peer = daemon.peer();

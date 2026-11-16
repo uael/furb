@@ -1,5 +1,4 @@
 //! A row of text as its runs, and how a row fills its columns.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{mem, ops::Range};
 
@@ -32,10 +31,10 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
     }
     kept.push_str(one);
   }
-  let split = !text[kept.len()..].starts_with(' ');
+  let split = !text.get(kept.len()..).unwrap_or_default().starts_with(' ');
   let pad = kept.len() - kept.trim_start().len();
-  let kept = match kept[pad..].rfind(' ') {
-    Some(at) if split => &kept[..pad + at],
+  let kept = match kept.get(pad..).unwrap_or_default().rfind(' ') {
+    Some(at) if split => kept.get(..pad + at).unwrap_or(&kept),
     _ => kept.as_str(),
   };
   // A separator that the cut leaves at the end goes with the word after it.

@@ -1,6 +1,5 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::path::Path;
 
@@ -14,7 +13,7 @@ use crate::{
   line::{Line, edged, run, spread},
   model::{Key, Link, Model},
   picture,
-  tokens::{CALL, Loader, Role, WORKS, called, mixed},
+  tokens::{CALL, Loader, Role, WORKS, called, mixed, turn},
 };
 
 /// A row of the list.
@@ -49,8 +48,8 @@ impl Model {
       rows.push(Row::Key(Does::GoTo, "other projects and sessions"));
     }
     for part in [Part::NeedsYou, Part::Working, Part::Resting, Part::Resolved] {
-      let mut cards =
-        (0..self.client.settled.len()).filter(|at| self.client.settled[*at].0 == part).peekable();
+      let settled = self.client.settled.iter().enumerate();
+      let mut cards = settled.filter(|(_, one)| one.0 == part).map(|(at, _)| at).peekable();
       if cards.peek().is_none() {
         continue;
       }
@@ -59,7 +58,7 @@ impl Model {
       // the feed always show the same thread, and its card stands whole, with its session, as the
       // card of each other part: a resolved thread takes one line only while he does not read it.
       if part == Part::Resolved {
-        let open = |at: &usize| self.client.selected.as_ref() == Some(&self.client.settled[*at].1);
+        let open = |at: &usize| self.chosen(*at);
         let shown: Vec<usize> = cards.filter(|at| self.open || open(at)).collect();
         // A whole card brings the rows of its edges, as in each other part.
         rows.extend(shown.first().filter(|at| !open(at)).map(|_| Row::Blank));
@@ -121,13 +120,19 @@ impl Model {
   }
 
   fn chosen(&self, at: usize) -> bool {
-    self.client.selected.as_ref() == Some(&self.client.settled[at].1)
+    self.client.settled.get(at).is_some_and(|one| self.client.selected.as_ref() == Some(&one.1))
+  }
+
+  /// The hue of the thread of the card at a place of the list, or the accent when the list holds
+  /// no card there.
+  fn hue_at(&self, at: usize) -> Color {
+    self.client.settled.get(at).map_or(self.tokens.accent, |one| self.hue(&one.1))
   }
 
   /// The ground of a card: the selected card is lifted, and the text of the card under the
   /// pointer goes bright, with no other change.
   fn ground(&self, at: usize, pointed: Option<usize>) -> Ground {
-    let hue = || self.hue(&self.client.settled[at].1);
+    let hue = || self.hue_at(at);
     let pulse = self.pulse(at).map(|share| mixed(self.tokens.panel, hue(), share / 5));
     let bg = self.chosen(at).then_some(self.tokens.lifted).or(pulse);
     Ground { bg, hover: (pointed == Some(at)).then_some(self.tokens.hover) }
@@ -155,7 +160,7 @@ impl Model {
         format!(
           "{} Dialing {}",
           Loader::Model.frame(self.client.moved),
-          self.client.machines[at].name
+          self.client.machines.get(at).map_or("", |one| one.name.as_str())
         )
       }
       (0, None, 1) => "This computer".to_owned(),
@@ -205,7 +210,7 @@ impl Model {
       _ => return Vec::new(),
     };
     let ground = Style::new().fg(self.tokens.lifted);
-    let hue = self.hue(&self.client.settled[at].1);
+    let hue = self.hue_at(at);
     vec![
       run(bar, Style::new().fg(hue)),
       run(fill.repeat(self.card_width() + 2), ground),
@@ -215,7 +220,7 @@ impl Model {
 
   /// A line of a card between its two edges, with the bar in the hue of its thread.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
-    let hue = self.hue(&self.client.settled[at].1);
+    let hue = self.hue_at(at);
     let bar = match self.pulse(at) {
       Some(share) if !self.chosen(at) => mixed(self.tokens.panel, hue, share),
       _ => hue,
@@ -226,7 +231,7 @@ impl Model {
   /// How far the pulse of a card stands while it runs: a card that began to call its operator
   /// rises in the hue of its thread and settles back, unless he reads it.
   fn pulse(&self, at: usize) -> Option<u16> {
-    let since = self.client.called.get(&self.client.settled[at].1)?;
+    let since = self.client.called.get(&self.client.settled.get(at)?.1)?;
     let after = self.client.moved.saturating_sub(*since);
     // A pulse at its first instant, as on a still clock, shows nothing.
     (after < CALL && !self.chosen(at)).then(|| called(after)).filter(|share| *share > 0)
@@ -235,8 +240,8 @@ impl Model {
   /// The two lines of a card: its title and its state, then where it is and who works on it.
   fn card(&self, at: usize, ground: Ground) -> [Line; 2] {
     let t = &self.tokens;
-    let (_, key, card) = &self.client.settled[at];
-    let told = &self.client.machines[key.0];
+    let Some((_, key, card)) = self.client.settled.get(at) else { return [Vec::new(), Vec::new()] };
+    let Some(told) = self.client.machines.get(key.0) else { return [Vec::new(), Vec::new()] };
     let on = |style: Style| ground.on(style);
     // A session whose life runs has its mark and its title bright; one that rests in its record
     // has neither, so what runs reads at a glance down the list.
@@ -265,8 +270,13 @@ impl Model {
     let initials: Vec<String> =
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
-    let agents = (card.thread.agents > 0)
-      .then(|| format!("{}{}", Loader::Agent.frames()[0], card.thread.agents));
+    let agents = (card.thread.agents > 0).then(|| {
+      format!(
+        "{}{}",
+        Loader::Agent.frames().first().copied().unwrap_or_default(),
+        card.thread.agents
+      )
+    });
     let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
     let files = changes.map(|one| one.files.len()).filter(|count| *count > 0);
     let marks = [files.map(|count| format!("±{count}")), model.map(str::to_owned), agents, alone];
@@ -282,11 +292,11 @@ impl Model {
   /// only reads, in place of its mark and its age, before the operator opens it.
   fn resolved(&self, at: usize, ground: Ground) -> Line {
     let t = &self.tokens;
-    let card = &self.client.settled[at].2;
+    let Some((_, key, card)) = self.client.settled.get(at) else { return Vec::new() };
     let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
     let mark = if card.refused.is_some() { "  " } else { "✓ " };
-    let runs = self.live(&self.client.settled[at].1, card);
+    let runs = self.live(key, card);
     let look = if runs { Style::new().fg(t.live) } else { t.style(Role::Muted) };
     let left = vec![run(mark, on(look)), title];
     let age = match card.refused {
@@ -332,7 +342,9 @@ impl Model {
       Standing::Paused { .. } => ("‖", "Paused".into(), None, age.clone()),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
       // A new answer takes the small dot of an unread mail, apart from the dot of a live session.
-      Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
+      Standing::Resolved
+        if self.client.machines.get(key.0).is_some_and(|one| card.thread.unread(&one.login)) =>
+      {
         ("•", String::new(), Some(t.attention), since())
       }
       // A thread that works took its loader above.
@@ -343,7 +355,8 @@ impl Model {
       | Standing::Resolved => ("", String::new(), None, since()),
     };
     if !confirmed {
-      let heard = format!("as of {}", self.hour(self.client.machines[key.0].heard));
+      let heard = self.client.machines.get(key.0).map_or(0, |one| one.heard);
+      let heard = format!("as of {}", self.hour(heard));
       return vec![run([word, heard].join(" ").trim_start().to_owned(), muted)];
     }
     let style = color.map_or(muted, colored);
@@ -379,7 +392,9 @@ impl Model {
       return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
     }
     let projects = &self.tokens.projects;
-    let one = projects[hash(project) % projects.len()];
+    let Some(one) = turn(projects, hash(project)) else {
+      return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
+    };
     run(badge(project), Style::new().fg(one.letters).bg(one.ground).bold())
   }
 

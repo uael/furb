@@ -7,7 +7,6 @@
 //! A prompt that a word of one chain asked of another flows down its column from the track of
 //! the asker to the track of the chain that it asks, and its answer flows back, as the flow events
 //! of a profiler join two tracks.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{cmp::Ordering, ptr};
 
@@ -21,7 +20,7 @@ use crate::{
   model::Model,
   opens::QUIET,
   thread::{Click, Hot, Row, width},
-  tokens::{Loader, Role},
+  tokens::{Loader, Role, turn},
 };
 
 /// The columns before the track: the margin, the play button, and a blank.
@@ -43,7 +42,7 @@ impl Flows {
   /// The sign and the flow at a cell of the rows of the chains.
   fn at(&self, row: usize, column: usize) -> Option<(&'static str, &Flow)> {
     let cell = (column < self.room).then(|| self.cells.get(row * self.room + column)).flatten();
-    cell.copied().flatten().map(|(sign, at)| (sign, &self.all[at]))
+    cell.copied().flatten().and_then(|(sign, at)| Some((sign, self.all.get(at)?)))
   }
 }
 
@@ -282,12 +281,12 @@ impl Model {
     let key = self.client.thread.as_ref().map(|one| &one.thread.key);
     let hue = key.map(|key| self.hue(key));
     let ink = match hue {
-      _ if resting(chains.tracks[at].state) => t.muted,
+      _ if chains.tracks.get(at).is_none_or(|one| resting(one.state)) => t.muted,
       Some(hue) if holder == Some(at) => hue,
       _ => {
         let others: Vec<Color> = t.hues.into_iter().filter(|one| Some(*one) != hue).collect();
         let place = at - usize::from(holder.is_some_and(|one| one < at));
-        others[place % others.len()]
+        turn(&others, place).unwrap_or(t.muted)
       }
     };
     Style::new().fg(ink)
@@ -334,7 +333,8 @@ impl Model {
           let flow = flows.at(row, one);
           // A column reads by how much the chain did there: a thin line for a few acts, a heavy
           // one where it did much, so a track zoomed out shows where its work gathers.
-          let (sign, style) = match (began[one] > 0, acted[one], one == mark) {
+          let count = |cells: &[usize]| cells.get(one).copied().unwrap_or_default();
+          let (sign, style) = match (count(&began) > 0, count(&acted), one == mark) {
             _ if one == 0 && before => ("‹", ink),
             _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender, holder)),
             (true, ..) => ("◆", ink),
@@ -468,7 +468,7 @@ fn flowed(time: &Time, chains: &Chains, axis: &Axis) -> Flows {
 fn flow_says(time: &Time, flow: &Flow) -> String {
   let Some(chains) = time.chains.as_ref() else { return String::new() };
   let label = |at: usize| {
-    let track = &chains.tracks[at];
+    let Some(track) = chains.tracks.get(at) else { return String::new() };
     if track.label.is_empty() { track.chain.clone() } else { track.label.clone() }
   };
   let (sender, receiver, says) = (label(flow.sender), label(flow.receiver), &flow.says);

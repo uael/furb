@@ -2,7 +2,6 @@
 //! wrapped between words, a list with its marks, a link in the accent that the terminal follows,
 //! inline code on the raised ground, and a block of code as a block of code, with the colors of
 //! python.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::mem;
 
@@ -243,7 +242,7 @@ impl Prose<'_> {
         if bare && address.len() > "https://".len() {
           let linked = style.fg(self.tokens.accent).underline();
           self.words.push(run(address, linked).link(address.to_owned()));
-          let rest = &word[address.len()..];
+          let rest = word.get(address.len()..).unwrap_or_default();
           if !rest.is_empty() {
             self.words.push(run(rest, style));
           }

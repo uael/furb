@@ -1,7 +1,5 @@
 //! The window on an app: its widgets, and what each key, each move of the pointer, each timer and
 //! each frame of a machine changes in its model.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   env, fs, io, mem,
@@ -1464,8 +1462,11 @@ impl Window {
     let Some(rest) = self.screen.model.client.suggested().filter(|_| end) else { return false };
     // A word is the blanks before it and its letters, as the editor moves by words.
     let start = rest.len() - rest.trim_start().len();
-    let word_end = rest[start..].find(char::is_whitespace).map_or(rest.len(), |at| start + at);
-    let rest = if word { &rest[..word_end] } else { rest };
+    let word_end = rest
+      .get(start..)
+      .and_then(|one| one.find(char::is_whitespace))
+      .map_or(rest.len(), |at| start + at);
+    let rest = if word { rest.get(..word_end).unwrap_or(rest) } else { rest };
     area.insert(rest);
     true
   }
@@ -1624,11 +1625,11 @@ impl Window {
     true
   }
 
-  /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
-  /// file or the folder under it goes bright, a click on a folder opens the sub thread about it, or
-  /// turns the input to a message about it, a click on the numbers of a line opens the sub thread
-  /// about it, or starts a comment on it under the line, a click on its code does nothing, and the
-  /// wheel scrolls the diff.
+  /// The pointer while the review of the changes stands: a click on a file reads it, the name of
+  /// the file or the folder under it goes bright, a click on a folder opens the sub thread about
+  /// it, or turns the input to a message about it, a click on the numbers of a line opens the sub
+  /// thread about it, or starts a comment on it under the line, a click on its code does nothing,
+  /// and the wheel scrolls the diff.
   fn looked_at(&mut self, app: &App, event: MouseEvent) {
     let file = self.screen.model.review_at(event.x, event.y);
     // The diff stands under the two rows of the head, from the row where its box scrolled.
@@ -1759,8 +1760,8 @@ impl Window {
     self.older(verb);
   }
 
-  /// What a key does, which a click on its text does too. Any other key leaves what a first press of
-  /// a key named, and what the key before did not do.
+  /// What a key does, which a click on its text does too. Any other key leaves what a first press
+  /// of a key named, and what the key before did not do.
   fn act(&mut self, app: &App, does: Does) {
     let forgot = self.screen.model.pressed(does);
     self.asked(does);
@@ -1860,16 +1861,16 @@ impl Window {
     }
   }
 
-  /// The text of the input sent to its target, and the input empty. A backslash just before the caret
-  /// breaks the line in its place and sends nothing, as a terminal with no keys of Kitty tells no
-  /// Shift+Enter.
+  /// The text of the input sent to its target, and the input empty. A backslash just before the
+  /// caret breaks the line in its place and sends nothing, as a terminal with no keys of Kitty
+  /// tells no Shift+Enter.
   fn sent(&mut self, app: &App) {
     let text = self.area.text();
     let caret = self.caret();
     let chars: Vec<char> = text.chars().collect();
     if caret > 0 && chars.get(caret - 1) == Some(&'\\') {
       let broken: String =
-        chars[..caret - 1].iter().chain(['\n'].iter()).chain(&chars[caret..]).collect();
+        chars.iter().take(caret - 1).chain(['\n'].iter()).chain(chars.iter().skip(caret)).collect();
       self.area.set_text(&broken);
       self.area.set_cursor_offset(u32::try_from(caret).unwrap_or(u32::MAX));
       self.tell(app, |model| model.client.edited(broken, caret));
@@ -1907,8 +1908,8 @@ impl Window {
   }
 
   /// An escape: it forgets what a first press of another key named, goes back from a thread that
-  /// opens or that failed to open, closes the list that stands over the home, or arms the stop of the
-  /// work of the open thread, which the next escape makes.
+  /// opens or that failed to open, closes the list that stands over the home, or arms the stop of
+  /// the work of the open thread, which the next escape makes.
   fn escaped(&mut self, app: &App, forgot: bool) {
     if forgot {
       return self.tell(app, |_| ());
@@ -1930,8 +1931,9 @@ impl Window {
     }
   }
 
-  /// A control of the open thread that a key asks, as a stop, a resolve or a take back, asked of its
-  /// machine with what the window waits for. A machine that the window dials again takes nothing.
+  /// A control of the open thread that a key asks, as a stop, a resolve or a take back, asked of
+  /// its machine with what the window waits for. A machine that the window dials again takes
+  /// nothing.
   fn controlled(
     &mut self,
     app: &App,
@@ -1960,8 +1962,9 @@ impl Window {
         bytes.split('\n').map(Cells::width).sum::<usize>() + bytes.matches('\n').count()
       };
       let place = |span: Range<usize>| {
-        let start = u32::try_from(cells(&text[..span.start])).unwrap_or_default();
-        start..start + u32::try_from(cells(&text[span])).unwrap_or_default()
+        let start =
+          u32::try_from(cells(text.get(..span.start).unwrap_or_default())).unwrap_or_default();
+        start..start + u32::try_from(cells(text.get(span).unwrap_or_default())).unwrap_or_default()
       };
       for (span, _) in mentioned(text) {
         area.add_extmark(place(span), mark);
@@ -1993,11 +1996,11 @@ impl Window {
   }
 
   /// The pointer: it is on the list or on the left side, it clicks a row, and its wheel moves the
-  /// rows under it. A click on a card opens its thread, and a click on a thing of the left side does
-  /// what its key does.
+  /// rows under it. A click on a card opens its thread, and a click on a thing of the left side
+  /// does what its key does.
   fn mouse(&mut self, app: &App, event: MouseEvent) {
-    // The side keys of a mouse, which a terminal tells as the buttons 8 and 9, step back and forward
-    // as in a browser, wherever the pointer stands.
+    // The side keys of a mouse, which a terminal tells as the buttons 8 and 9, step back and
+    // forward as in a browser, wherever the pointer stands.
     if let MouseEventKind::Down(MouseButton::Other(side @ (8 | 9))) = event.kind {
       return self.act(app, if side == 8 { Does::Back } else { Does::Forward });
     }
@@ -2058,10 +2061,10 @@ impl Window {
 
   /// A key that the voice takes, whether the window took it: each space, and escape during a
   /// record, which drops it. A space that is a tap goes where a key goes, to the input or to a part
-  /// that takes it, as the bar of the time plays on it; a space that holds the bar records his voice
-  /// into the input wherever it shows, once the taps of the hold are undone, and a repeat holds the
-  /// record. A list part and the review stand over the input, so they take each space. Any other
-  /// key goes on.
+  /// that takes it, as the bar of the time plays on it; a space that holds the bar records his
+  /// voice into the input wherever it shows, once the taps of the hold are undone, and a repeat
+  /// holds the record. A list part and the review stand over the input, so they take each space.
+  /// Any other key goes on.
   fn voiced(&mut self, app: &App, key: &KeyEvent) -> Option<bool> {
     let recording = self.voice.record.is_some();
     if recording && key.code == KeyCode::Escape {
@@ -2083,8 +2086,8 @@ impl Window {
     }
     let heard = self.voice.space(app.now());
     Some(match heard {
-      // The repeat of a space that waits for its release: a hold, which the bar never hears. A first
-      // space starts a new run, so a tap that waits from a run before it is gone.
+      // The repeat of a space that waits for its release: a hold, which the bar never hears. A
+      // first space starts a new run, so a tap that waits from a run before it is gone.
       Space::Taps(false) if self.voice.waits.take().is_some() => true,
       Space::Taps(first) => {
         if first {
@@ -2165,9 +2168,9 @@ impl Window {
     }
     let text: Vec<char> = self.area.text().chars().collect();
     let caret = self.caret().min(text.len());
-    let typed = text[..caret].iter().rev().take(spaces).take_while(|one| **one == ' ').count();
-    let before = text[..caret - typed].iter().collect();
-    let after = text[caret..].iter().collect();
+    let typed = text.iter().take(caret).rev().take(spaces).take_while(|one| **one == ' ').count();
+    let before = text.iter().take(caret.saturating_sub(typed)).collect();
+    let after = text.iter().skip(caret).collect();
     self.voice.record = Some(Record { before, after, last: app.now(), stops: false });
     self.tell(app, |model| {
       model.listening = Some(Vec::new());
@@ -2309,8 +2312,8 @@ impl Window {
 
   /// The record dropped, with the input as it stood before it, and why when a fault ended it. The
   /// program stops the record, whose text then comes to no record. A fault with no record says
-  /// nothing: the program starts with the window, before he asks for it, and the next hold starts it
-  /// again and says why it fails then.
+  /// nothing: the program starts with the window, before he asks for it, and the next hold starts
+  /// it again and says why it fails then.
   fn dropped(&mut self, app: &App, why: Option<String>) {
     let Some(record) = self.voice.record.take() else { return };
     if !record.stops {

@@ -5,7 +5,6 @@
 //! which the window does only while the hand is away from the list, so no card moves under a
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::HashMap,
@@ -245,12 +244,19 @@ impl Model {
     }
   }
 
+  /// A change of what a machine of the list told, which a machine that left the list does not take.
+  fn told(&mut self, at: usize, change: impl FnOnce(&mut Told)) {
+    if let Some(told) = self.client.machines.get_mut(at) {
+      change(told);
+    }
+  }
+
   /// The connection to a machine ended, while the window dials it again: each request
   /// that waits for its answer there goes nowhere. Each message on its way there comes back to the
   /// input with each message after it, since the window cannot know whether the daemon took it,
   /// and each life of the machine opens again, with the page of the open thread, once it answers.
   fn lost(&mut self, at: usize) -> bool {
-    let name = self.client.machines[at].name.clone();
+    let name = self.client.machines.get(at).map(|one| one.name.clone()).unwrap_or_default();
     let gone: Vec<Asked> =
       self.client.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
     // A take back that the machine may not have done gives its text back all the same: the input
@@ -339,17 +345,18 @@ impl Model {
         (self.acts, self.fault) = (None, Some(why));
       }
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
-        self.client.machines[at].lives = lives;
+        self.told(at, |told| told.lives = lives);
       }
       (Asked::Projects, Ok(Frame::Reply { answer: Answer::Projects(projects), .. })) => {
-        self.client.machines[at].projects = projects;
+        self.told(at, |told| told.projects = projects);
       }
       (Asked::Models, Ok(Frame::Reply { answer: Answer::Models(models), .. })) => {
-        self.client.machines[at].models = Some(models);
+        self.told(at, |told| told.models = Some(models));
       }
       // A catalog that gave no models leaves the launcher with none, and says why once.
       (Asked::Models, Ok(Frame::Refused { why, .. })) => {
-        (self.client.machines[at].models, self.fault) = (Some(Vec::new()), Some(why));
+        self.told(at, |told| told.models = Some(Vec::new()));
+        self.fault = Some(why);
       }
       (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
         self.client.historied(&target, sent);
@@ -567,12 +574,12 @@ impl Model {
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {
-    card.needs(&self.client.machines[key.0].login)
+    self.client.machines.get(key.0).is_some_and(|one| card.needs(&one.login))
   }
 
   /// Whether the machine of a card told the card in this connection.
   pub(crate) fn confirmed(&self, key: &Key) -> bool {
-    self.client.machines[key.0].link == Link::Listed
+    self.client.machines.get(key.0).is_some_and(|one| one.link == Link::Listed)
   }
 
   /// A text with the home folder of the operator as `~`.
@@ -638,14 +645,14 @@ impl Model {
     let rows = self.rows();
     let pinned = rows.len().min(PINNED);
     let mut scrolled: Vec<Row> =
-      rows[pinned..].iter().skip(self.scroll).take(self.room()).copied().collect();
+      rows.iter().skip(pinned + self.scroll).take(self.room()).copied().collect();
     let boxed = self.boxed();
     if boxed > 0 {
       scrolled.resize(self.room(), Row::Blank);
       scrolled.push(Row::Blank);
       let changes = self.changes_rows().len();
       scrolled.extend((0..changes).map(Row::Changes));
-      scrolled.extend((0..boxed - 1 - changes).map(Row::Context));
+      scrolled.extend((0..boxed.saturating_sub(1 + changes)).map(Row::Context));
     }
     rows.into_iter().take(pinned).chain(scrolled)
   }
@@ -655,7 +662,9 @@ impl Model {
   fn reveal(&mut self) {
     let Some(key) = &self.client.selected else { return };
     let card = |row: &Row| match row {
-      Row::Card(at, _) | Row::Resolved(at) => self.client.settled[*at].1 == *key,
+      Row::Card(at, _) | Row::Resolved(at) => {
+        self.client.settled.get(*at).is_some_and(|one| one.1 == *key)
+      }
       _ => false,
     };
     let rows = self.rows();

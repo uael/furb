@@ -2,7 +2,6 @@
 //! a skill serves, under the dock of the agents and over the input, in the closed set of nodes of
 //! the protocol. A button takes a press, and an input takes the input of the window, whose next
 //! send goes to that node.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use crate::cells::Cells;
 use furb_client::View;
@@ -104,7 +103,10 @@ impl Model {
       // A share that is not known moves as a model that writes does, while its work runs.
       Shape::Progress { done: None } => {
         let (accent, muted) = (Style::new().fg(self.tokens.accent), self.tokens.style(Role::Muted));
-        let line = vec![run(Loader::Model.frames()[0], accent), run(" working", muted)];
+        let line = vec![
+          run(Loader::Model.frames().first().copied().unwrap_or_default(), accent),
+          run(" working", muted),
+        ];
         vec![Row { loaders: vec![(0, Loader::Model)], ..Row::of(line) }]
       }
       Shape::Progress { done } => vec![Row::of(self.progress(*done))],

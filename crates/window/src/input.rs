@@ -1,8 +1,6 @@
 //! The input as the window draws it: its rows and the line of the launcher under it, and what a
 //! key of the operator does to it. Where it sends and what it sends stand in the input of
 //! `furb-client`.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{mem, ops::Range, path::Path};
 
@@ -339,7 +337,7 @@ impl Model {
     if let Some((act, text)) = taken.find_map(|one| Some((one.act.clone()?, one.text.clone()))) {
       return Some(Back::Said(act, text));
     }
-    let login = &self.client.machines[opened.thread.key.0].login;
+    let login = self.client.machines.get(opened.thread.key.0).map_or("", |one| one.login.as_str());
     let his = |by: &Maker| match by {
       Maker::Operator => true,
       Maker::Member { operator: one } => one == login,
@@ -678,7 +676,7 @@ impl Model {
       .map(|at| {
         let level = (at + levels.len()).checked_sub(LEVELS).and_then(|at| levels.get(at));
         let step = usize::from(level.copied().unwrap_or_default()) * (BARS.len() - 1) / 100;
-        BARS[step.min(BARS.len() - 1)]
+        BARS.get(step).or(BARS.last()).copied().unwrap_or(' ')
       })
       .collect();
     let keys = format!("  let go to write · {} drop", self.key(Does::Close));
@@ -732,13 +730,13 @@ impl Model {
     // few words, then the turn to its mark and its key, then the effort.
     let right = |short| self.controls(short);
     // The target leaves room for the mark before it and the arrow of its picker after it.
-    let fits =
-      |right: &(Line, _)| room.saturating_sub(width(&right.0) + 2 + width(&left[..3]) + 2 + 2);
+    let head = width(left.get(..3).unwrap_or(&left));
+    let fits = |right: &(Line, _)| room.saturating_sub(width(&right.0) + 2 + head + 2 + 2);
     let (right, clicks) = [right(0), right(1), right(2)]
       .into_iter()
       .find(|one| fits(one) >= wanted.min(SESSION))
       .unwrap_or_else(|| right(2));
-    let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2 + 2);
+    let fits = room.saturating_sub(width(&right) + 2 + head + 2 + 2);
     // The mark and the accent of a new thread say what the words say, so a target too long for
     // its room drops its words before the name of its session.
     let short = |text: &str| match self.client.target() {
@@ -749,10 +747,9 @@ impl Model {
     left.extend(target.into_iter().chain([run(" ▾", raised.fg(color))]));
     let line = spread(left, right, room, raised);
     let at = columns(&line);
-    let mut hot = vec![
-      (at[0].start + BARRED..at[1].end + BARRED, Some(Click::Key(Does::Python))),
-      (at[3].start + BARRED..at[5].end + BARRED, Some(Click::Key(Does::Sessions))),
-    ];
+    let spans = [((0, 1), Does::Python), ((3, 5), Does::Sessions)];
+    let mut hot: Vec<Hot> =
+      spans.into_iter().filter_map(|(runs, does)| spanned(&at, runs, Click::Key(does))).collect();
     hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line, None);
     Row { hot, ..Row::of(line) }
@@ -781,7 +778,8 @@ impl Model {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
-    let machine = if at == 0 { "This computer" } else { &self.client.machines[at].name };
+    let name = self.client.machines.get(at).map_or("", |one| one.name.as_str());
+    let machine = if at == 0 { "This computer" } else { name };
     let project = self.folder_named(at, folder);
     // A session with no project has no badge to give way to, so its name stays, cut if it must.
     let alone = project == NO_PROJECT;
@@ -822,11 +820,9 @@ impl Model {
     ]);
     let line = spread(left, right, room, raised);
     let at = columns(&line);
-    let mut hot = vec![
-      (at[0].start + BARRED..at[1].end + BARRED, Some(Click::Key(Does::Python))),
-      (at[3].start + BARRED..at[4].end + BARRED, Some(Click::Key(Does::Machines))),
-      (at[6].start + BARRED..at[8].end + BARRED, Some(Click::Key(Does::Projects))),
-    ];
+    let spans = [((0, 1), Does::Python), ((3, 4), Does::Machines), ((6, 8), Does::Projects)];
+    let mut hot: Vec<Hot> =
+      spans.into_iter().filter_map(|(runs, does)| spanned(&at, runs, Click::Key(does))).collect();
     hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line, None);
     Row { hot, ..Row::of(line) }
@@ -1115,7 +1111,11 @@ impl Model {
     if card.thread.works() {
       let (line, loader) = self.working(card);
       let at = columns(&line);
-      let hot = vec![(at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop)))];
+      let hot = at
+        .get(1)
+        .map(|one| (one.start + 3..one.end, Some(Click::Key(Does::Stop))))
+        .into_iter()
+        .collect();
       return Some(Row {
         hot,
         loaders: vec![(2, loader), (4, Loader::Light(WORKS))],
@@ -1128,7 +1128,7 @@ impl Model {
     let resumes =
       if self.only_reads() { String::new() } else { format!(" · {key} or a message resumes it") };
     let line = vec![run("  ‖ Paused", Style::new().fg(color)), run(resumes, muted)];
-    let at = width(&line[..1]) + 3;
+    let at = width(line.get(..1).unwrap_or_default()) + 3;
     Some(Row { hot: vec![(at..at + key.width(), Some(Click::Key(Does::Pause)))], ..Row::of(line) })
   }
 
@@ -1174,7 +1174,8 @@ impl Model {
       Target::Thread(key) => key.0,
       Target::Session(at, _) | Target::New(at, _) => at,
     };
-    let name = if at == 0 { "This computer" } else { &self.client.machines[at].name };
+    let named = self.client.machines.get(at).map_or("", |one| one.name.as_str());
+    let name = if at == 0 { "This computer" } else { named };
     // A session on another machine, or with no project, runs in a folder of its own, not in the
     // folder of the window.
     let elsewhere = self
@@ -1245,13 +1246,15 @@ impl Model {
 /// The parts of a row of the box of the input that take a click: the runs at its end, by their
 /// columns in the line, each with its click. The box draws the line two columns in.
 fn clicked(at: &[Range<usize>], clicks: Vec<Option<Click>>) -> Vec<Hot> {
-  let first = at.len() - clicks.len();
+  let first = at.len().saturating_sub(clicks.len());
   let each = clicks.into_iter().enumerate();
-  each
-    .filter_map(|(n, click)| {
-      Some((at[first + n].start + BARRED..at[first + n].end + BARRED, Some(click?)))
-    })
-    .collect()
+  each.filter_map(|(n, click)| spanned(at, (first + n, first + n), click?)).collect()
+}
+
+/// The columns of a row of the box of the input from one run of its line to another, with its
+/// click; none when the line holds fewer runs. The box draws the line two columns in.
+fn spanned(at: &[Range<usize>], (first, last): (usize, usize), click: Click) -> Option<Hot> {
+  Some((at.get(first)?.start + BARRED..at.get(last)?.end + BARRED, Some(click)))
 }
 
 /// The name of a project, from its folder.
@@ -1263,7 +1266,7 @@ pub(crate) fn named(folder: &str) -> String {
 /// the review.
 fn branched(line: &Line) -> Option<Hot> {
   let at = line.iter().position(|one| one.content.contains(BRANCH))?;
-  let at = &columns(line)[at];
+  let at = columns(line).into_iter().nth(at)?;
   Some((at.start + " · ".width()..at.end, Some(Click::Key(Does::Changes))))
 }
 
@@ -1279,7 +1282,7 @@ fn tail(path: &str, room: usize) -> String {
   if path.width() <= room {
     return path.to_owned();
   }
-  let ends = path.match_indices(['/', '\\']).map(|(at, _)| &path[at..]);
+  let ends = path.match_indices(['/', '\\']).filter_map(|(at, _)| path.get(at..));
   let end = ends.into_iter().find(|end| end.width() < room);
   end.map_or_else(|| cut(path, room), |end| format!("…{end}"))
 }

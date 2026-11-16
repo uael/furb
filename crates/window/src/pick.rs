@@ -3,7 +3,6 @@
 //! of a terminal match them, the up and down arrows move the chosen row, enter takes it, and escape
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{borrow::Cow, cmp::Reverse, ops::Range};
 
@@ -25,7 +24,7 @@ use crate::{
   list::{NO_PROJECT, project},
   model::{Key, Model},
   thread::{Click, Row, hued, width},
-  tokens::{APART, BESIDE, OVER, PART, PARTS, Role},
+  tokens::{APART, BESIDE, OVER, PART, PARTS, Role, turn},
 };
 
 /// What a list part lists.
@@ -312,7 +311,7 @@ impl Model {
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
     let mut all: Vec<Option<Entry>> = all.into_iter().map(Some).collect();
     let taken = |one: Matched| {
-      let mut entry = all[one.at].take()?;
+      let mut entry = all.get_mut(one.at)?.take()?;
       let letters = entry.left.chars().count();
       entry.lit = one.lit.into_iter().filter(|at| *at < letters).collect();
       Some(entry)
@@ -706,7 +705,9 @@ impl Model {
     let Some(last) = model.efforts.len().checked_sub(1) else { return true };
     let taken = actor.strip_prefix(model.name.as_str()).and_then(|rest| rest.strip_prefix('/'));
     let now = model.efforts.iter().position(|one| Some(one.as_str()) == taken).unwrap_or_default();
-    let next = model.efforts[now.saturating_add_signed(by).min(last)].clone();
+    let Some(next) = model.efforts.get(now.saturating_add_signed(by).min(last)).cloned() else {
+      return true;
+    };
     if let Some(picker) = self.picker.as_mut() {
       picker.effort = Some((model.name.clone(), next));
     }
@@ -1020,8 +1021,8 @@ impl Model {
     };
     // The count counts the rows that take something, and the place of the chosen one among them.
     // The filter of a value is the value that he writes, which no count follows.
-    let takes: Vec<usize> =
-      (0..entries.len()).filter(|at| entries[*at].choice != Choice::None).collect();
+    let takes = entries.iter().enumerate().filter(|(_, one)| one.choice != Choice::None);
+    let takes: Vec<usize> = takes.map(|(at, _)| at).collect();
     let count = match takes.len() {
       _ if matches!(picker.of, Pick::Value(_)) => String::new(),
       0 => "nothing".to_owned(),
@@ -1100,10 +1101,10 @@ impl Model {
       ]);
       // A row that takes nothing takes no click, and the pointer does not light it.
       let clicked = at
-        .filter(|at| entries[*at].choice != Choice::None)
+        .filter(|at| entries.get(*at).is_some_and(|one| one.choice != Choice::None))
         .map(|at| (2..2 + room, Some(Click::Pick(at))));
       // The bar of the chosen row and the badge of a project keep their hues under the pointer.
-      let badge = at.is_some_and(|at| entries[at].project.is_some());
+      let badge = at.and_then(|at| entries.get(at)).is_some_and(|one| one.project.is_some());
       let keeps = Some(2..if badge { 5 } else { 3 });
       Row { hot: clicked.into_iter().collect(), keeps, ..Row::of(row) }
     };
@@ -1171,7 +1172,7 @@ impl Model {
       }
       let chosen = at == picker.at;
       let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style };
-      let hue = entry.hue.map_or(t.accent, |hue| t.hues[hue % t.hues.len()]);
+      let hue = entry.hue.and_then(|hue| turn(&t.hues, hue)).unwrap_or(t.accent);
       let bar =
         if chosen { run("▌", ground(Style::new().fg(hue))) } else { run(" ", Style::new()) };
       let badge = match &entry.project {

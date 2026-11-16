@@ -8,7 +8,6 @@
 //! A question that comes while he writes a message takes nothing: his text stays, and one row says
 //! that the question waits. Which question is open, and what its shape offers and takes, comes
 //! from the crate: the form only draws it and says his answer.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::collections::BTreeSet;
 
@@ -244,9 +243,12 @@ impl Model {
     let answer = |line: String| Verb::Answer { life: life.clone(), act: act.clone(), line };
     let words = self.client.draft.text.clone();
     let verb = match Offers::of(question.shape) {
-      Offers::Choices(all) if form.at < all.len() => answer(all[form.at].clone()),
+      Offers::Choices(all) if form.at < all.len() => {
+        answer(all.get(form.at).cloned().unwrap_or_default())
+      }
       Offers::Ticks(all) if form.at < all.len() => {
-        let ticked: Vec<&str> = form.ticked.iter().map(|at| all[*at].json.as_str()).collect();
+        let ticked: Vec<&str> =
+          form.ticked.iter().filter_map(|at| all.get(*at)).map(|one| one.json.as_str()).collect();
         answer(format!("[{}]", ticked.join(", ")))
       }
       Offers::Line => answer(words),

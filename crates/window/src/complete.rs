@@ -3,7 +3,6 @@
 //! and lists at most eight rows under a head that says what it lists and where the chosen row
 //! stands among the rows that match, the chosen one on the lifted ground. The completion itself
 //! stands in the client.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::cells::Cells;
 use opentui::style::Style;
@@ -101,7 +100,11 @@ impl Model {
     match offer.kind {
       Kind::File => {
         // The name of a file leads, so a file deep in folders reads by its name.
-        let split = offer.name.rfind('/').map_or(0, |at| offer.name[..=at].chars().count());
+        let split = offer
+          .name
+          .rfind('/')
+          .and_then(|at| offer.name.get(..=at))
+          .map_or(0, |head| head.chars().count());
         let name: String = offer.name.chars().skip(split).collect();
         let folder: String = offer.name.chars().take(split).collect();
         let named: Vec<usize> = letters.iter().filter_map(|at| at.checked_sub(split)).collect();
@@ -212,7 +215,9 @@ impl Model {
     let word = self.client.completion.as_ref().map(|one| one.word.clone()).unwrap_or_default();
     let query = word.trim_start_matches(['@', '"']);
     match query.rfind('/') {
-      Some(end) if query.starts_with(['/', '~', '.']) => query[..=end].to_owned(),
+      Some(end) if query.starts_with(['/', '~', '.']) => {
+        query.get(..=end).unwrap_or(query).to_owned()
+      }
       _ => folder.map_or_else(|| "this project".to_owned(), |one| named_or(&one)),
     }
   }

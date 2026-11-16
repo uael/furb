@@ -3,7 +3,6 @@
 //! branch and that file, and the changed files where the list stands, on its panel, the chosen one
 //! on the ground of a selected card. The diff of OpenTUI draws its line numbers, its grounds and
 //! the colors of its grammar. What the review holds stands in the client.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{iter, mem};
 
@@ -106,7 +105,7 @@ impl Model {
       };
       opened.thread.agents.iter().find(at)
     };
-    (0..sides[0].len()).map(about).collect()
+    (0..sides.first().map_or(0, Vec::len)).map(about).collect()
   }
 
   /// The sub thread that a row of the diff that the review reads is about, which a click opens.
@@ -180,7 +179,7 @@ impl Model {
         }
         Slot::File(at) => at,
       };
-      let one = &files[at];
+      let Some(one) = files.get(at) else { return Vec::new() };
       let ground = (at == chosen).then_some(t.lifted);
       let on = |style: Style| ground.map_or(style, |bg| style.bg(bg));
       let (mark, color) = match one.state {
@@ -232,7 +231,9 @@ impl Model {
       if used <= room {
         break;
       }
-      kept[drop] = false;
+      if let Some(one) = kept.get_mut(drop) {
+        *one = false;
+      }
     }
     let shown: Vec<&str> =
       all.iter().zip(&kept).filter(|one| *one.1).map(|one| one.0.as_str()).collect();

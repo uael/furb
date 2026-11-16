@@ -6,7 +6,6 @@
 //! The feed shows from a place: an exchange, and a count of rows from its first row. So a page
 //! of older exchanges, which comes above, moves no row that the operator reads, and a frame builds
 //! the rows of the exchanges that show and of no other.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, HashMap},
@@ -31,7 +30,7 @@ use crate::{
   list::hash,
   model::{Kept, Key, Model},
   opens::QUIET,
-  tokens::Loader,
+  tokens::{Loader, turn},
 };
 
 /// What a click on a row does: it opens or folds a part of the feed, it does what a key does, it
@@ -139,7 +138,7 @@ impl Row {
   /// The address of the link at a column of the row.
   fn link(&self, x: usize) -> Option<&str> {
     let at = columns(&self.line).iter().position(|one| one.contains(&x))?;
-    self.line[at].link.as_deref()
+    self.line.get(at)?.link.as_deref()
   }
 
   /// The row as it stands under the pointer: the runs that it shows there, with its text bright
@@ -864,7 +863,7 @@ impl Model {
     if self.client.card(&key).is_some() {
       return None;
     }
-    let told = &self.client.machines[key.0];
+    let told = self.client.machines.get(key.0)?;
     let session =
       told.cards.iter().find(|card| card.life == key.1).and_then(|card| card.session.clone());
     let thread = view::Card {
@@ -897,7 +896,7 @@ impl Model {
       self.client.thread.as_ref().filter(|one| one.thread.key == *key).and_then(|_| self.title())
     };
     let title = self.client.card(key).map(|card| card.thread.title.clone()).or_else(open);
-    self.tokens.hues[hued(&key.1, &title.unwrap_or_default()) % self.tokens.hues.len()]
+    turn(&self.tokens.hues, hued(&key.1, &title.unwrap_or_default())).unwrap_or(self.tokens.accent)
   }
 }
 

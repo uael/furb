@@ -3,8 +3,6 @@
 //! model on one row, what the answer said as markdown, and the messages of the operator that the
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{collections::HashMap, mem, path::Path, rc::Rc};
 
@@ -532,12 +530,14 @@ impl<'a> Feed<'a> {
       }
       held => {
         let name = || said(format!("{PICTURE}{}", named.name)).take(1);
-        rows.splice(0..1, name());
+        // A room of no row holds a box of no row, so each range keeps inside the rows.
+        rows.splice(0..rows.len().min(1), name());
         if let Some(Picture::Held(_)) = held {
-          let last = rows.len() - 1;
-          rows.splice(last.max(1).., name().take(last));
-          let source = named.uri.clone();
-          rows[0].picture = Some(Boxed { source, x, y: 0, wide, high });
+          let last = rows.len().saturating_sub(1);
+          rows.splice(last.max(1).min(rows.len()).., name().take(last));
+          if let Some(first) = rows.first_mut() {
+            first.picture = Some(Boxed { source: named.uri.clone(), x, y: 0, wide, high });
+          }
         }
       }
     }
@@ -910,7 +910,7 @@ impl<'a> Feed<'a> {
       }
       Mark::Runs { work: Work::Agent, .. } => shown
         .find(&format!("{PROMPT}("))
-        .map(|at| (code + shown[..at].width(), Loader::Light(PROMPT))),
+        .map(|at| (code + shown.get(..at).unwrap_or(&shown).width(), Loader::Light(PROMPT))),
       _ => None,
     };
     let wide = if let Loader::Number(number) = loader { number.to_string().len() } else { 1 };
@@ -1136,7 +1136,7 @@ impl<'a> Feed<'a> {
       // Open, the thought goes on from the row that said its start, so the click only adds rows.
       let whole = thought.text.split_whitespace().collect::<Vec<_>>().join(" ");
       let start = wrapped(&whole, first).swap_remove(0);
-      let rest = whole[start.len()..].trim_start();
+      let rest = whole.get(start.len()..).unwrap_or_default().trim_start();
       let rest = if rest.is_empty() { Vec::new() } else { wrapped(rest, room) };
       [vec![start], rest].concat()
     } else if thought.took.is_none() {
@@ -1153,11 +1153,12 @@ impl<'a> Feed<'a> {
       let t = &self.model.tokens;
       let chars: Vec<char> = first.chars().collect();
       let from = chars.len().saturating_sub(PEN);
-      let ink = chars[from..].iter().enumerate().map(|(at, one)| {
+      let ink = chars.iter().skip(from).enumerate().map(|(at, one)| {
         let share = u16::try_from((at + 1) * 100 / (PEN + 1)).unwrap_or(100);
         run(one.to_string(), style.fg(mixed(t.muted, t.text, share)))
       });
-      let said = [run(head.clone(), muted), run(chars[..from].iter().collect::<String>(), style)];
+      let said =
+        [run(head.clone(), muted), run(chars.iter().take(from).collect::<String>(), style)];
       said.into_iter().chain(ink).collect()
     } else {
       vec![run(head.clone(), muted), run(first, style)]
@@ -1180,7 +1181,8 @@ impl<'a> Feed<'a> {
   /// that says who resolved it, as a question says who closed it.
   fn said(&mut self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
-    let login = &self.model.client.machines[self.opened.thread.key.0].login;
+    let login =
+      self.model.client.machines.get(self.opened.thread.key.0).map_or("", |one| one.login.as_str());
     if let Saying::Resolved { by } = &said.kind {
       let muted = self.style(Role::Muted);
       let left = vec![run("  ✓ Resolved", muted)];
@@ -1368,7 +1370,7 @@ impl<'a> Feed<'a> {
 /// over the word after it while it works, as over each word of work; under the pointer its text
 /// goes bright while its state keeps the color that says it.
 fn titled(row: Row, x: usize, right: &Line, mark: Option<Loader>) -> Row {
-  let keeps = x..x + width(&right[..1]);
+  let keeps = x..x + width(right.get(..1).unwrap_or_default());
   let loaders = mark.map(|one| [(x, one), (x + 2, Loader::Light(WORKS))]).into_iter().flatten();
   Row { keeps: Some(keeps), loaders: loaders.collect(), ..row }
 }

@@ -1,6 +1,5 @@
 //! The home, at the left of the list while no thread is open: what waits for the operator, and
 //! what worked while no window was open.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{iter, path::Path};
 
@@ -131,7 +130,8 @@ impl Model {
     let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
     let mut rows = vec![self.said(&says, t.style(Role::Prose), &key)];
     let unread = self.client.settled.iter().filter(|(_, key, card)| {
-      !self.needs(key, card) && card.thread.unread(&self.client.machines[key.0].login)
+      !self.needs(key, card)
+        && self.client.machines.get(key.0).is_some_and(|one| card.thread.unread(&one.login))
     });
     let new = match unread.count() {
       0 => None,
@@ -153,7 +153,8 @@ impl Model {
       Target::New(at, folder) => (self.folder_named(at, &folder), at),
       _ => (self.project(), 0),
     };
-    let machine = if at == 0 { "this computer" } else { &self.client.machines[at].name };
+    let name = self.client.machines.get(at).map_or("", |one| one.name.as_str());
+    let machine = if at == 0 { "this computer" } else { name };
     let session = if project == NO_PROJECT {
       "a new session with no project".to_owned()
     } else {
@@ -214,8 +215,13 @@ impl Model {
       let works = self.unheld(key.0, card) && card.thread.works() && self.confirmed(key);
       if works && !lives.contains(&card.life.as_str()) {
         lives.push(&card.life);
-        let machine =
-          if key.0 > 0 { format!("@{}", self.client.machines[key.0].name) } else { String::new() };
+        let machine = self
+          .client
+          .machines
+          .get(key.0)
+          .filter(|_| key.0 > 0)
+          .map(|one| format!("@{}", one.name))
+          .unwrap_or_default();
         let left = format!("◌ {name} · {}{machine}", project(card));
         rows.push((left, format!("works since {}", self.hour(card.since))));
       }

@@ -3,7 +3,6 @@
 //! the values of a key that takes some values only. Its skills and extensions, as a list part too:
 //! enter opens the view of an extension, where he turns it on or off and reloads it, and adds the
 //! mention of a skill with no code to the draft.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::borrow::Cow;
 
@@ -35,7 +34,7 @@ impl Model {
     // The layers take the room of the widest, so the values and the layers each end in one column.
     let layers = read.iter().map(|one| layer(one).len()).max().unwrap_or_default();
     let row = |(place, one): (usize, &Setting)| {
-      let property = one.property.as_ref().or_else(|| under(&one.key[..1])?.property.as_ref());
+      let property = one.property.as_ref().or_else(|| under(one.key.get(..1)?)?.property.as_ref());
       let says = property.map(|one| format!("  {}", one.description));
       // Each kit names its keys, a name in an object of furb stands with furb, and a key that no
       // schema names stands apart.

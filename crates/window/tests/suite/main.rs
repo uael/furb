@@ -12,6 +12,7 @@ mod commands;
 mod context;
 mod copy;
 mod daemon;
+mod extremes;
 mod image;
 mod input;
 mod keys;
