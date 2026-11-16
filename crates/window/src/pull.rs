@@ -134,9 +134,10 @@ impl Model {
     pull.is_some_and(|one| one.failing == 0 && one.pending > 0) && !self.changes_rows().is_empty()
   }
 
-  /// The column of the list at a column of the window, past the padding of its panel.
+  /// The column of a row of the list at a column of the window: the panel stands one column wider
+  /// than the list, and that column is its padding.
   pub(crate) fn list_column(&self, x: u16) -> Option<usize> {
-    usize::from(x).checked_sub(usize::from(self.size.0.saturating_sub(self.list_width())) + 1)
+    usize::from(x).checked_sub(usize::from(self.size.0.saturating_sub(self.list_width())))
   }
 }
 
