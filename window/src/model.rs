@@ -26,6 +26,7 @@ use crate::{
   keys::{self, Does, System},
   link::Heard,
   list::Row,
+  names::Names,
   pick::Picker,
   tokens::{BESIDE, CALL, LIST, LISTS, MEASURE, Tokens},
 };
@@ -67,6 +68,8 @@ pub(crate) struct Model {
   pub(crate) fault: Option<String>,
   /// The colors of each text of python that the window drew.
   pub(crate) colors: Colors,
+  /// The names of each text of python that the window read.
+  pub(crate) names: Names,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
@@ -114,6 +117,7 @@ impl Model {
       tokens,
       fault: None,
       colors: Colors::new(),
+      names: Names::default(),
       armed: None,
       picker: None,
       word: None,
@@ -217,6 +221,9 @@ impl Model {
 
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
+    if asked.read_here() {
+      return self.client.answered(at, asked, heard.ok());
+    }
     match (asked, heard) {
       (Asked::Open, Ok(Frame::Reply { .. })) => self.client.answered_open(at, id),
       (Asked::Open, Ok(Frame::Refused { why, .. })) => {
@@ -224,9 +231,6 @@ impl Model {
       }
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Parts(key, read), heard) => self.client.parted(&key, read, replied(heard)),
-      (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
-      (Asked::Tracks(key), heard) => self.client.tracked(&key, heard.ok()),
-      (Asked::Queued(life, thread), heard) => self.client.followed(at, (life, thread), heard.ok()),
       (asked @ (Asked::Settings | Asked::Setting | Asked::Plays | Asked::SignIn), heard) => {
         self.client.configured(&asked, heard.ok());
       }

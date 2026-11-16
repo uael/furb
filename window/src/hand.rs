@@ -977,6 +977,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
+    Does::Forward => Model::forward,
     Does::Close => return escaped(app, window, forgot),
     Does::Stop | Does::Resolve | Does::Revert | Does::Pause => {
       return controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
@@ -1198,6 +1199,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   let (on, does, verb) = tell(app, window, |model| {
     let y = usize::from(event.y);
     model.pointer = Some((event.x, event.y));
+    model.pointed_name();
     let on = model.on_list(event.x);
     let (does, verb) = match (event.kind, on) {
       (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),

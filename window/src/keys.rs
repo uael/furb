@@ -47,6 +47,7 @@ pub(crate) enum Does {
   Tick,
   NextQuestion,
   Agent,
+  Forward,
   Take,
   TakeWord,
   Machines,
@@ -173,6 +174,12 @@ const THREAD: &[Bound] = &[
     "the next agent of the thread",
     Some("agent"),
     &[&[LEADER, plain(KeyCode::Down)]],
+  ),
+  bound(
+    Does::Forward,
+    "forward to the agent that you went back from",
+    Some("forward"),
+    &[&[LEADER, plain(KeyCode::Right)]],
   ),
 ];
 

@@ -464,6 +464,50 @@ fn the_pointer_on_a_line_that_awaits_an_agent_lights_the_row_of_that_agent() {
   assert!(app.wait_until(PATIENCE, || agent(&app) != white), "{}", app.text());
 }
 
+#[test]
+fn a_name_under_the_pointer_shows_what_it_holds_and_a_click_goes_where_it_was_bound() {
+  let message = format!("measure the open on three chains\n{DELEGATES}");
+  let (app, _daemon, _peer) = opened(&message, "README.md");
+  shows(&app, "└ await wait(600, chain)");
+  // The head of the block, where the model of the block stands at its right.
+  let head = |app: &TestApp| {
+    let frame = app.text();
+    let found = frame.lines().find(|one| one.contains("opus/high")).unwrap_or_default();
+    found.chars().take(LEFT).collect::<String>().trim().to_owned()
+  };
+  assert_eq!(head(&app), "opus/high");
+  // The pointer on a verb of the engine shows its call and the first sentence of its contract.
+  let (x, y) = place(&app.text(), "prompt(str, 'Run", 0);
+  app.hover(x + 1, y);
+  let verb = app.wait_until(PATIENCE, || head(&app).starts_with("prompt(shape, message=\"\""));
+  assert!(verb, "{}", app.text());
+  assert!(head(&app).ends_with("opus/high"), "{}", app.text());
+  // The pointer on a name of the module shows its type and its value, as its machine reads it.
+  let (x, y) = place(&app.text(), "bench)", 0);
+  app.hover(x + 1, y);
+  let value = app.wait_until(PATIENCE, || head(&app).starts_with("bench: "));
+  assert!(value, "{}", app.text());
+  // A click on it goes to the line that bound it, where the name takes the accent.
+  let bound = |app: &TestApp| {
+    let frame = app.render();
+    let (x, y) = place(&frame.text(), "1  bench = prompt(", 0);
+    frame.cells[usize::from(y) * usize::try_from(frame.width).unwrap() + usize::from(x) + 3].fg
+  };
+  let before = bound(&app);
+  app.click(x + 1, y);
+  assert!(app.wait_until(PATIENCE, || bound(&app) != before), "{}", app.text());
+  // A click on the call of `prompt` that made an agent goes to the chain of that agent, and the
+  // thread goes back, then forward again.
+  let (x, y) = place(&app.text(), "prompt(str, 'Run", 0);
+  app.click(x + 1, y);
+  shows(&app, " furb · agent · Run the bench of the replay ");
+  app.press("escape");
+  shows(&app, " Forward ");
+  app.press("ctrl+x");
+  app.press("right");
+  shows(&app, " furb · agent · Run the bench of the replay ");
+}
+
 /// The rows of the box of the context, from its head to the foot of the window, each cut to the
 /// columns of the box and trimmed.
 fn boxed(app: &TestApp) -> Vec<String> {

@@ -32,6 +32,12 @@ pub struct Opened {
   pub form: Option<Form>,
   /// The thread whose agent this thread is, which the operator opens again where he read it.
   pub from: Option<Box<Self>>,
+  /// The thread of an agent that the operator went back from, which he goes forward to again
+  /// until he opens another one.
+  pub ahead: Option<Box<Self>>,
+  /// The line that the operator went to from a name, by its number, and that name, which the line
+  /// binds and shows in the accent.
+  pub went: Option<(usize, String)>,
 }
 
 impl Opened {

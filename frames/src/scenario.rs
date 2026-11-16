@@ -728,10 +728,11 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       sessions: &[],
       // The claude command line of the tests answers its turns in the order that it reads them, so
       // the word starts the agent that takes a turn, waits until it took it, then starts the one
-      // that takes the next; the agent that reads the boot only thinks, for ever.
+      // that takes the next; the agent that reads the boot only thinks, for ever. The bench runs
+      // past the end of the walk, so the root awaits it at each step.
       words: &[
         "bench = prompt(str, 'Run the bench of the replay', on=chain('bench'))\nboot = prompt(str, 'Read the boot of the host\\nPONDER', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'Count the lines of README.md', on=chain('count'))\nawait wait(600, bench)",
-        "report = await bash('sleep 30; echo the bench ran')\nclose(report.stdout.content)",
+        "report = await bash('sleep 300; echo the bench ran')\nclose(report.stdout.content)",
         "close('README.md has 3 lines.')",
       ],
       pace: &[],
@@ -745,6 +746,16 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // The pointer on the line that awaits the bench lights the row of the bench, where it
         // stands under the line that made it.
         step("x-awaits", &[Act::Pointer { on: "await wait(600, bench)", button: 35 }], "wait(600"),
+        // The pointer on a verb shows its call and its contract on the head of the block, and on
+        // a name its type and its value; a click on the name goes to the line that bound it.
+        step("x-verb", &[Act::Pointer { on: "prompt(str, 'Run", button: 35 }], "prompt(shape"),
+        step("x-value", &[Act::Pointer { on: "bench)", button: 35 }], "bench: "),
+        step("x-went", &[Act::Pointer { on: "bench)", button: 0 }], "bench: "),
+        // A click on the call of `prompt` goes to the chain that runs it, and back and forward.
+        step("x-prompt", &[Act::Pointer { on: "prompt(str, 'Run", button: 0 }], "· agent · "),
+        step("x-back", &[Act::Key("Escape")], "Forward"),
+        step("x-forward", &[Act::Key("C-x"), Act::Key("Right")], "· agent · "),
+        step("x-home", &[Act::Key("Escape")], "Forward"),
         step("d", &[Act::Pointer { on: "└ report = await", button: 0 }], "· agent · "),
         step("c", &[Act::Key("Escape")], "demo · Measure"),
         // The chains of the life stand as a tree under the bar of the time: the agents that work,

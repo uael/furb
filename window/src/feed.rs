@@ -4,7 +4,7 @@
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
 
-use std::path::Path;
+use std::{cell::OnceCell, collections::HashMap, mem, path::Path};
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
@@ -22,9 +22,10 @@ use crate::{
   code::Gutter,
   input::{Armed, named},
   keys::Does,
-  line::{self, Line, capital, clipped, marked, run, sliced, spread, wrapped},
+  line::{self, Line, capital, clipped, marked, run, sliced, spread, styled, wrapped},
   list::project,
   model::Model,
+  names::{self, Named},
   picture, prose,
   question::closed,
   thread::{Click, Item, Items, Row, width},
@@ -45,13 +46,15 @@ pub(crate) struct Feed<'a> {
   pub(crate) model: &'a Model,
   pub(crate) opened: &'a Opened,
   wide: usize,
+  /// The numbers of the lines of the thread that bind each name, in their order, once a row asks.
+  bindings: OnceCell<HashMap<String, Vec<usize>>>,
 }
 
 impl Model {
   /// The rows of the open thread.
   pub(crate) fn feed(&self) -> Option<Feed<'_>> {
     let opened = self.client.thread.as_ref()?;
-    Some(Feed { model: self, opened, wide: self.wide() })
+    Some(Feed { model: self, opened, wide: self.wide(), bindings: OnceCell::new() })
   }
 }
 
@@ -237,7 +240,10 @@ impl Feed<'_> {
     let forks = (width(&left)..width(&left) + mark.width() - 3, branches > 0);
     left.extend([run(mark, muted), run(title, self.style(Role::Title))]);
     let (mark, button) = self.closer(card, branch);
-    let parts = self.present().into_iter().chain(mark).chain(button.clone().map(|one| one.0));
+    // The thread of an agent that the operator went back from stands ahead, beside the closer.
+    let ahead = self.opened.ahead.as_ref().map(|_| run(" Forward ", self.style(Role::Button)));
+    let parts = self.present().into_iter().chain(mark).chain(ahead.clone());
+    let parts = parts.chain(button.clone().map(|one| one.0));
     let apart = |(at, one)| [(at > 0).then(|| run(" ".repeat(APART), Style::new())), Some(one)];
     let right: Line = parts.enumerate().flat_map(apart).flatten().collect();
     // A button ends at the edge of the boxes, and a mark with no button after it at the column of
@@ -246,10 +252,13 @@ impl Feed<'_> {
     let line = spread(left, right, reach, Style::new());
     let end = width(&line);
     let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
+    let before = hot.as_ref().map_or(end, |one| one.0.start - APART);
+    let forward =
+      ahead.map(|one| (before - one.content.width()..before, Some(Click::Key(Does::Forward))));
     // The mark of the branches of a thread opens its last branch.
     let last = self.opened.thread.branches().last().map(|one| one.card.prompt.clone());
     let fork = last.filter(|_| forks.1).map(|prompt| (forks.0, Some(Click::Agent(prompt))));
-    Row { hot: hot.into_iter().chain(fork).collect(), ..Row::of(line) }
+    Row { hot: hot.into_iter().chain(forward).chain(fork).collect(), ..Row::of(line) }
   }
 
   /// The mark of how the thread of the head ended, and its button: back to a branch or to the
@@ -444,10 +453,12 @@ impl Feed<'_> {
   /// rows that rolls, or each line once the operator opened it, each with its number in the
   /// thread, close to the left of the box. The thought stands under it.
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
-    let head = vec![run(block.maker.shown(), self.style(Role::Muted))];
-    let mut head = spread(Vec::new(), head, Gutter::inside(self.inner()), Style::new());
+    let maker = vec![run(block.maker.shown(), self.style(Role::Muted))];
+    let mut head = spread(Vec::new(), maker.clone(), Gutter::inside(self.inner()), Style::new());
     head.insert(0, run(" ".repeat(PAD), Style::new()));
-    let mut rows = vec![Row::of(head)];
+    let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
+    let code = PAD + numbers.width + 2;
+    let mut rows = vec![Row { inspector: Some((code, maker)), ..Row::of(head) }];
     rows.extend(self.lines(message, block));
     if let Some(thought) = &block.thought {
       rows.push(Row::default());
@@ -472,6 +483,7 @@ impl Feed<'_> {
       .model
       .homed(&block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n"));
     let colored = self.model.colors.lines(&text, code);
+    let naming = self.model.names.of(&text);
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
@@ -497,7 +509,8 @@ impl Feed<'_> {
         }
         _ => colors.clone(),
       };
-      rows.extend(self.code(line, colors, numbers));
+      let names = naming.get(at).map_or(&[][..], Vec::as_slice);
+      rows.extend(self.code(line, (colors, names), numbers));
       rows.extend(self.writes(line, numbers, (&fold, open)));
       rows.extend(self.agents(Some((line, numbers))));
     }
@@ -516,7 +529,7 @@ impl Feed<'_> {
   /// stands under it, and the time that the command took at its right, from one second on. Why a
   /// line failed, or why its model is asked again, stands under it, or in its place when its model
   /// wrote none of it.
-  fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
+  fn code(&self, line: &Code, (colors, names): (Line, &[Named]), numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, Gutter::inside(self.inner()));
     let mark = self.mark(line);
@@ -569,7 +582,10 @@ impl Feed<'_> {
       .collect();
     if let Some(first) = rows.first_mut() {
       (first.loaders, first.pointed) = (loaders, pointed.filter(|_| !whole));
-      first.awaits.clone_from(&line.awaits);
+      (first.awaits, first.code) = (line.awaits.clone(), Some(line.number));
+      if !whole {
+        self.name(first, (line, names), gutter);
+      }
     }
     rows.extend(output.into_iter().flatten());
     let under = under
@@ -577,6 +593,89 @@ impl Feed<'_> {
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
     rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// The names of the code of the first row of a line, up to where the row cuts it, each with what a
+  /// click on it does: a call of `prompt` that made an agent opens the thread of that agent, as a
+  /// change to the chain that runs it, and a name that an earlier line of the thread binds goes to
+  /// that line. The terminal keeps the command key for itself, so the click needs none.
+  fn name(&self, row: &mut Row, (line, names): (&Code, &[Named]), gutter: usize) {
+    let code = PAD + gutter + 2;
+    let end = marked(&row.line).map_or(width(&row.line), |one| one.start);
+    let agents: Vec<&Agent> =
+      self.opened.thread.agents.iter().filter(|one| one.at == Some(line.number)).collect();
+    let mut prompts = 0;
+    for named in names.iter().filter(|one| code + one.at.end <= end) {
+      let at = code + named.at.start..code + named.at.end;
+      row.names.push((at.clone(), named.name.clone()));
+      let click = if named.name == PROMPT {
+        prompts += 1;
+        let agent = agents.get(prompts - 1).or(agents.last());
+        agent.map(|one| Click::Agent(one.card.prompt.clone()))
+      } else if named.binds {
+        None
+      } else {
+        self.bound(&named.name, line.number).map(|one| Click::Line(one, named.name.clone()))
+      };
+      // The name that the operator went to stands in the accent where its line binds it, and the
+      // runs of a name that takes a click split at its edges, so the pointer lights it alone.
+      let went = self
+        .opened
+        .went
+        .as_ref()
+        .is_some_and(|(at, name)| named.binds && *at == line.number && *name == named.name);
+      if went {
+        let accent = self.model.tokens.accent;
+        row.line = styled(mem::take(&mut row.line), &at, |one| one.fg(accent).bold());
+      }
+      if let Some(click) = click {
+        row.line = styled(mem::take(&mut row.line), &at, |one| one);
+        row.hot.insert(0, (at, Some(click)));
+      }
+    }
+  }
+
+  /// The last line of the thread before a line that binds a name.
+  fn bound(&self, name: &str, before: usize) -> Option<usize> {
+    let bindings = self.bindings.get_or_init(|| {
+      let mut bindings: HashMap<String, Vec<usize>> = HashMap::new();
+      let blocks = self.opened.thread.exchanges.values().filter_map(|one| one.block.as_ref());
+      for block in blocks {
+        let text = block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n");
+        let named = self.model.names.of(&self.model.homed(&text));
+        for (line, names) in block.lines.iter().zip(named.iter()) {
+          for one in names.iter().filter(|one| one.binds) {
+            bindings.entry(one.name.clone()).or_default().push(line.number);
+          }
+        }
+      }
+      bindings
+    });
+    bindings.get(name)?.iter().copied().filter(|one| *one < before).max()
+  }
+
+  /// The head of a block while the pointer is on a name of its code, from the column of the code:
+  /// what the contract says of a verb of the engine, or the type and the value of the name in the
+  /// module of the chain of the thread, as its machine reads it, beside what the head says at its
+  /// right.
+  pub(crate) fn inspector(&self, name: &str, (code, right): (usize, Line)) -> Line {
+    let (prose, muted) = (self.style(Role::Prose), self.style(Role::Muted));
+    let inspected = self.model.client.inspected.as_ref();
+    let told = inspected.filter(|one| one.name == name && one.key == self.opened.thread.key);
+    let said = match (names::verb(name), told.and_then(|one| one.told.as_ref())) {
+      (Some((call, said)), _) => vec![run(call, prose), run(format!("  {said}"), muted)],
+      (None, Some(Ok((kind, repr)))) => {
+        let repr = self.model.homed(repr).replace('\n', "\\n");
+        vec![run(name.to_owned(), prose), run(format!(": {kind} = "), muted), run(repr, prose)]
+      }
+      (None, Some(Err(why))) => vec![run(name.to_owned(), prose), run(format!("  {why}"), muted)],
+      (None, None) => vec![run(name.to_owned(), prose), run(" …", muted)],
+    };
+    let room = Gutter::inside(self.inner()).saturating_sub(code - PAD);
+    let fits = room.saturating_sub(width(&right) + 2);
+    let mut line = spread(clipped(said, fits, muted), right, room, Style::new());
+    line.insert(0, run(" ".repeat(code), Style::new()));
+    line
   }
 
   /// What a line shows in place of its code: the attempt that comes while its model is asked

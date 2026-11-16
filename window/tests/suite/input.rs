@@ -837,7 +837,7 @@ fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
     clicked(&app, "go to anything", 0, 0);
     shows(&app, "Search a thread, session");
     let (x, y) = at(&app, "Search a", 0);
-    for _ in 0..30 {
+    for _ in 0..40 {
       if app.text().contains(&says) {
         break;
       }

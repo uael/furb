@@ -25,7 +25,7 @@ use furb_client::{Anchor, Filled, Fold, Hold, Opened, Thread};
 
 use crate::{
   keys::Does,
-  line::Line,
+  line::{Line, styled},
   list::hash,
   model::{Key, Model},
   opens::QUIET,
@@ -42,6 +42,8 @@ pub(crate) enum Click {
   Pick(usize),
   Answer(usize),
   Agent(String),
+  /// The feed moved to the line of the thread that binds a name, by its number, and the name.
+  Line(usize, String),
   Context,
   /// The thread taken to a moment of its time, by its place among the moments.
   Time(usize),
@@ -83,7 +85,15 @@ pub(crate) struct Row {
   pub(crate) keeps: Option<Range<usize>>,
   pub(crate) loaders: Vec<(usize, Loader)>,
   pub(crate) pointed: Option<Line>,
+  /// The acts that the line of code of the row awaits, which the pointer on it links to.
   pub(crate) awaits: Vec<String>,
+  /// The number of the line of code that the row shows first.
+  pub(crate) code: Option<usize>,
+  /// The columns of each name of the code of the row, with the name.
+  pub(crate) names: Vec<(Range<usize>, String)>,
+  /// For the head of a block, the column of its code and what the head says at its right, beside
+  /// which it shows what the name under the pointer in the block holds, from that column.
+  pub(crate) inspector: Option<(usize, Line)>,
 }
 
 impl Row {
@@ -331,7 +341,7 @@ impl Model {
   pub(crate) fn open_agent(&mut self, prompt: String) {
     let Some(mut from) = self.client.thread.take() else { return };
     let key = (from.thread.key.0, from.thread.key.1.clone(), prompt);
-    (from.thread.asked, from.thread.again) = (HashMap::new(), true);
+    (from.thread.asked, from.thread.again, from.ahead) = (HashMap::new(), true, None);
     let thread = Thread { key, since: self.client.moved, ..Thread::default() };
     self.client.thread = Some(Opened { thread, from: Some(Box::new(from)), ..Opened::default() });
     (self.client.aim, self.armed) = (None, None);
@@ -366,7 +376,11 @@ impl Model {
       self.client.restore = Some(String::new());
       return true;
     }
-    if let Some(from) = self.client.thread.as_mut().and_then(|one| one.from.take()) {
+    if let Some(mut agent) = self.client.thread.take_if(|one| one.from.is_some())
+      && let Some(mut from) = agent.from.take()
+    {
+      (agent.thread.asked, agent.thread.again) = (HashMap::new(), true);
+      from.ahead = Some(Box::new(agent));
       (self.client.thread, self.client.aim) = (Some(*from), None);
       return true;
     }
@@ -375,6 +389,47 @@ impl Model {
       (self.client.thread, self.client.selected, self.client.aim) = (None, None, None);
     }
     leaves
+  }
+
+  /// Forward to the thread of the agent that the operator went back from, where he read it.
+  pub(crate) fn forward(&mut self) {
+    let Some(mut from) = self.client.thread.take_if(|one| one.ahead.is_some()) else {
+      self.client.notice = Some("No thread stands ahead: go back from an agent first.".to_owned());
+      return;
+    };
+    let Some(mut agent) = from.ahead.take() else { return };
+    (from.thread.asked, from.thread.again) = (HashMap::new(), true);
+    agent.from = Some(Box::new(from));
+    (self.client.thread, self.client.aim, self.armed) = (Some(*agent), None, None);
+  }
+
+  /// The feed moved to the line of the open thread that binds a name, which shows the name in the
+  /// accent: its block opens when the line stands out of the rows that roll, and the feed keeps its
+  /// place when the line shows.
+  pub(crate) fn go_to(&mut self, number: usize, name: String) {
+    let Some(opened) = self.client.thread.as_mut() else { return };
+    let mut exchanges = opened.thread.exchanges.iter();
+    let Some((at, exchange, block)) = exchanges.find_map(|(at, exchange)| {
+      let block = exchange.block.as_ref()?;
+      block.lines.iter().any(|one| one.number == number).then_some((*at, exchange, block))
+    }) else {
+      return;
+    };
+    let place = block.lines.iter().position(|one| one.number == number).unwrap_or_default();
+    let fold = Fold::Block(exchange.message.clone());
+    if !block.shown(opened.unfolded.contains(&fold)).contains(&place) {
+      opened.unfolded.insert(fold);
+    }
+    opened.went = Some((number, name));
+    if self.left_rows().iter().any(|one| one.code == Some(number)) {
+      return;
+    }
+    let Some(feed) = self.feed() else { return };
+    let row = feed.rows(Item::At(at)).iter().position(|one| one.code == Some(number));
+    let row = isize::try_from(row.unwrap_or_default()).unwrap_or_default() - 3;
+    if let Some(opened) = self.client.thread.as_mut() {
+      opened.top = Some(Anchor { at, row });
+    }
   }
 
   /// Why the open thread says that it went wrong: the daemon gave no page, or a fault ended its
@@ -506,6 +561,10 @@ impl Model {
         self.open_agent(prompt);
         None
       }
+      Click::Line(number, name) => {
+        self.go_to(number, name);
+        None
+      }
       Click::Context => {
         self.context_step();
         None
@@ -549,14 +608,31 @@ impl Model {
   /// The rows of the left side and the cell of each loader. The text of a thing under the pointer
   /// that takes a click goes bright, and a row that shows more under the pointer shows it. A line
   /// under the pointer that awaits agents lights the row of each, so the eye goes from the await to
-  /// what it waits for.
+  /// what it waits for, and a name under the pointer shows what it holds on the head of its block,
+  /// which covers no code.
   pub(crate) fn left(&self) -> Left {
     let mut rows = self.left_rows();
+    let named = self.pointed().and_then(|at| Self::named(&rows, at));
+    if let Some((_, y)) = self.pointed()
+      && let Some(name) = &named
+      && let Some(head) =
+        rows[..usize::from(y)].iter_mut().rev().find(|one| one.inspector.is_some())
+      && let Some(feed) = self.feed()
+    {
+      head.line = feed.inspector(name, head.inspector.take().unwrap_or_default());
+    }
     if let Some((x, y)) = self.pointed()
       && let Some(row) = rows.get_mut(usize::from(y))
     {
       let awaits = mem::take(&mut row.awaits);
       *row = mem::take(row).lit(usize::from(x), self.tokens.hover);
+      // A name that takes a click stands as a link while the pointer is on it, since the light of
+      // the text of the code is near the white of the pointer.
+      let link = row.hot.iter().find(|hot| hot.0.contains(&usize::from(x)) && hot.1.is_some());
+      if let Some(range) = link.map(|hot| hot.0.clone()).filter(|_| named.is_some()) {
+        row.line =
+          styled(mem::take(&mut row.line), &range, |one| one.fg(self.tokens.hover).underline());
+      }
       let awaited = |row: &Row| {
         let agent = row.hot.iter().find_map(|hot| match &hot.1 {
           Some(Click::Agent(prompt)) => Some((hot.0.start, prompt)),
@@ -578,6 +654,21 @@ impl Model {
     });
     let loaders = loaders.collect();
     Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders }
+  }
+
+  /// The name of the code at a place of the left side, among its rows.
+  fn named(rows: &[Row], (x, y): (u16, u16)) -> Option<String> {
+    let row = rows.get(usize::from(y))?;
+    row.names.iter().find(|one| one.0.contains(&usize::from(x))).map(|one| one.1.clone())
+  }
+
+  /// The name under the pointer, which the machine of the open thread reads, or none.
+  pub(crate) fn pointed_name(&mut self) {
+    let rows = self.left_rows();
+    let name = self.pointed().and_then(|at| Self::named(&rows, at));
+    let key = self.client.thread.as_ref().map(|one| one.thread.key.clone());
+    let pointed = key.as_ref().zip(name.as_deref());
+    self.client.inspect(pointed);
   }
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and

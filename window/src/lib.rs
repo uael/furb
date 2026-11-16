@@ -28,6 +28,7 @@ mod link;
 mod list;
 mod machine;
 mod model;
+mod names;
 mod opens;
 mod pick;
 mod picture;

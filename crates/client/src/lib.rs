@@ -12,6 +12,7 @@ mod context;
 mod follow;
 mod history;
 mod input;
+mod inspect;
 mod machine;
 mod matched;
 mod opens;
@@ -40,6 +41,7 @@ pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
 pub use history::{History, Walk};
 pub use input::{ASIDE, Draft, PICTURE, Pasted};
+pub use inspect::Inspection;
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
@@ -99,6 +101,8 @@ pub struct Client {
   pub settings: Option<Settings>,
   /// The sign-in of Codex, while it runs.
   pub signing: Option<SignIn>,
+  /// The name of the code of a thread that the pointer is on, and what its machine told of it.
+  pub inspected: Option<Inspection>,
   /// The thread whose follow-ups the client asks next, after a change of its queue: its machine,
   /// its life and its prompt.
   following: Option<(usize, String, String)>,

@@ -5,7 +5,7 @@
 //! message goes after the one before it, and a message that goes to the thread that the message
 //! before it made knows that thread when it goes.
 
-use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Role, Verb};
+use furb_wire::protocol::{Frame, Hello, Kind, PROTOCOL, Request, Role, Verb};
 use serde_json::Value;
 
 use crate::{
@@ -134,9 +134,30 @@ pub enum Asked {
   SignIn,
   /// Where the operator writes, which each other window of the life shows.
   Writes,
+  /// A name of the code of a thread that the pointer is on, by the thread and the name.
+  Inspect(Key, String),
+}
+
+impl Asked {
+  /// Whether the client alone reads the answer to the ask: the moments and the chains of the bar
+  /// of the time, the follow-ups of a thread, and a name of its code.
+  pub fn read_here(&self) -> bool {
+    matches!(self, Self::Moments(_) | Self::Tracks(_) | Self::Queued(..) | Self::Inspect(..))
+  }
 }
 
 impl Client {
+  /// What a machine answered to an ask whose answer the client alone reads.
+  pub fn answered(&mut self, at: usize, asked: Asked, heard: Option<Frame>) {
+    match asked {
+      Asked::Moments(key) => self.timed(&key, heard),
+      Asked::Tracks(key) => self.tracked(&key, heard),
+      Asked::Queued(life, thread) => self.followed(at, (life, thread), heard),
+      Asked::Inspect(key, name) => self.told_inspected((&key, &name), heard),
+      _ => {}
+    }
+  }
+
   /// A verb asked of a machine, as the request to send, under an id that no other request of the
   /// client took: none while the machine does not list its cards, since a machine that the client
   /// dials again takes no verb, which would go nowhere, and none for a verb that writes where the
@@ -153,7 +174,8 @@ impl Client {
 
   /// Each ask of a list that is due, with its machine and what it asks: a verb of a view, a
   /// control of a session, the changes of a folder, the turns of the box of the context, the
-  /// moments of the bar of the time of the open thread, the sign-in of Codex, and,
+  /// moments of the bar of the time of the open thread, the sign-in of Codex, the name that the
+  /// pointer is on, and,
   /// while the client lists everything that the operator can go to, the files and the skills of
   /// the target of the input.
   pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
@@ -165,6 +187,7 @@ impl Client {
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
     due.extend(self.sign_in_due());
+    due.extend(self.inspect_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {

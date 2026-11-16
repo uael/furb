@@ -147,6 +147,30 @@ fn kept(line: &Line, room: usize) -> (Line, usize) {
   (out, kept)
 }
 
+/// A line whose columns of a range take a style of their own, as a link under the pointer: the
+/// runs that the range cuts split at its edges.
+pub(crate) fn styled(line: Line, range: &Range<usize>, style: impl Fn(Style) -> Style) -> Line {
+  let mut out: Line = Vec::new();
+  let mut column = 0;
+  for one in line {
+    let mut part = (String::new(), None);
+    for char in one.content.chars() {
+      let inside = range.contains(&column);
+      if part.1.is_some_and(|was| was != inside) {
+        let (text, was) = mem::take(&mut part);
+        out.push(run(text, if was == Some(true) { style(one.style) } else { one.style }));
+      }
+      part.0.push(char);
+      part.1 = Some(inside);
+      column += char.width().unwrap_or(0);
+    }
+    if let (text, Some(inside)) = part {
+      out.push(run(text, if inside { style(one.style) } else { one.style }));
+    }
+  }
+  out
+}
+
 /// The column of the mark that says how many characters a cut line lost, as `clipped` writes it.
 pub(crate) fn marked(line: &Line) -> Option<Range<usize>> {
   let mut marks = columns(line).into_iter().zip(line);
