@@ -6,7 +6,9 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{cell::RefCell, io, path::PathBuf, time::Duration};
+#[cfg(test)]
+use std::cell::Cell;
+use std::{cell::RefCell, collections::HashMap, io, path::PathBuf, rc::Rc, time::Duration};
 
 use furb::view::{Part, age, homed, since};
 use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
@@ -21,6 +23,7 @@ use opentui::native::CapabilityFlags;
 use crate::{
   Options,
   code::Colors,
+  feed::Read,
   input::{Armed, Word},
   kept,
   keys::{self, Does, System},
@@ -80,12 +83,17 @@ pub(crate) struct Model {
   pub(crate) colors: Colors,
   /// The names of each text of python that the window read.
   pub(crate) names: Names,
+  /// The code of each block that the window read, by the message of its answer.
+  pub(crate) read: RefCell<HashMap<String, Rc<Read>>>,
   /// How many changes of what the left side shows the model heard: each change but a step of the
   /// clocks and a move of the pointer, which change no row of it but through the clock.
   pub(crate) changes: u64,
   /// The rows of the left side, with what they show: a layout costs the most of what the window
   /// does, and a step of the loaders or a move of the pointer takes them again.
   pub(crate) laid: RefCell<Option<Laid>>,
+  /// How many times the left side was laid out, which a test of speed counts.
+  #[cfg(test)]
+  pub(crate) layouts: Cell<u64>,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
@@ -137,8 +145,11 @@ impl Model {
       listening: None,
       colors: Colors::new(),
       names: Names::default(),
+      read: RefCell::default(),
       changes: 0,
       laid: RefCell::default(),
+      #[cfg(test)]
+      layouts: Cell::default(),
       armed: None,
       picker: None,
       word: None,

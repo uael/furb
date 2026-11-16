@@ -314,7 +314,11 @@ pub const ROLLS: usize = 7;
 impl Block {
   /// Whether the block takes more rows than roll, so it folds.
   pub fn rolls(&self) -> bool {
-    self.lines.iter().map(Line::rows).sum::<usize>() + usize::from(self.more) > ROLLS
+    let mut sums = self.lines.iter().scan(usize::from(self.more), |sum, line| {
+      *sum += line.rows();
+      Some(*sum)
+    });
+    sums.any(|sum| sum > ROLLS)
   }
 
   /// The lines of the block that show: each while it is open or while all fits, else those that

@@ -4,7 +4,7 @@
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
 
-use std::{cell::OnceCell, collections::HashMap, mem, path::Path};
+use std::{cell::OnceCell, collections::HashMap, mem, path::Path, rc::Rc};
 
 use crate::cells::Cells;
 use furb::view::{
@@ -48,16 +48,29 @@ pub(crate) struct Feed<'a> {
   pub(crate) model: &'a Model,
   pub(crate) opened: &'a Opened,
   wide: usize,
-  /// The numbers of the lines of the thread that bind each name, in their order, once a row asks.
-  bindings: OnceCell<HashMap<String, Vec<usize>>>,
+  /// The code of each block of the thread, once a row asks for the line that binds a name.
+  blocks: OnceCell<Vec<Rc<Read>>>,
 }
 
 impl Model {
   /// The rows of the open thread.
   pub(crate) fn feed(&self) -> Option<Feed<'_>> {
     let opened = self.client.thread.as_ref()?;
-    Some(Feed { model: self, opened, wide: self.wide(), bindings: OnceCell::new() })
+    Some(Feed { model: self, opened, wide: self.wide(), blocks: OnceCell::new() })
   }
+}
+
+/// How many blocks the window keeps the code of before it forgets them all.
+const READ: usize = 256;
+
+/// The code of a block as the window read it: its text, the look of its code, its colors and its
+/// names, and the numbers of its lines that bind each name, in their order.
+pub(crate) struct Read {
+  text: String,
+  style: Style,
+  colors: Rc<Vec<Line>>,
+  names: Rc<Vec<Vec<Named>>>,
+  binds: HashMap<String, Vec<usize>>,
 }
 
 impl Feed<'_> {
@@ -607,12 +620,8 @@ impl Feed<'_> {
     let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
     let gutter = numbers.width;
     let mut rows = Vec::new();
-    let code = self.style(Role::Prose).bg(t.raised);
-    let text = self
-      .model
-      .homed(&block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n"));
-    let colored = self.model.colors.lines(&text, code);
-    let naming = self.model.names.of(&text);
+    let read = self.read(message, block);
+    let (colored, naming) = (&read.colors, &read.names);
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
@@ -650,6 +659,35 @@ impl Feed<'_> {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
     rows
+  }
+
+  /// The colors and the names of the code of a block, which a layout reads again only once a line
+  /// of the block changed, so a layout of a long block costs a compare of its texts.
+  fn read(&self, message: &str, block: &Block) -> Rc<Read> {
+    let style = self.style(Role::Prose).bg(self.model.tokens.raised);
+    let texts = || block.lines.iter().map(|one| one.text.as_str());
+    if let Some(read) = self.model.read.borrow().get(message)
+      && read.style == style
+      && read.text.split('\n').eq(texts())
+    {
+      return Rc::clone(read);
+    }
+    let text = texts().collect::<Vec<_>>().join("\n");
+    let homed = self.model.homed(&text);
+    let (colors, names) = (self.model.colors.lines(&homed, style), self.model.names.of(&homed));
+    let mut binds: HashMap<String, Vec<usize>> = HashMap::new();
+    for (line, named) in block.lines.iter().zip(names.iter()) {
+      for one in named.iter().filter(|one| one.binds) {
+        binds.entry(one.name.clone()).or_default().push(line.number);
+      }
+    }
+    let read = Rc::new(Read { text, style, colors, names, binds });
+    let mut kept = self.model.read.borrow_mut();
+    if kept.len() >= READ {
+      kept.clear();
+    }
+    kept.insert(message.to_owned(), Rc::clone(&read));
+    read
   }
 
   /// One line of a block: its number in a gutter of a count of columns, or the mark of how it
@@ -768,21 +806,12 @@ impl Feed<'_> {
 
   /// The last line of the thread before a line that binds a name.
   fn bound(&self, name: &str, before: usize) -> Option<usize> {
-    let bindings = self.bindings.get_or_init(|| {
-      let mut bindings: HashMap<String, Vec<usize>> = HashMap::new();
-      let blocks = self.opened.thread.exchanges.values().filter_map(|one| one.block.as_ref());
-      for block in blocks {
-        let text = block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n");
-        let named = self.model.names.of(&self.model.homed(&text));
-        for (line, names) in block.lines.iter().zip(named.iter()) {
-          for one in names.iter().filter(|one| one.binds) {
-            bindings.entry(one.name.clone()).or_default().push(line.number);
-          }
-        }
-      }
-      bindings
+    let blocks = self.blocks.get_or_init(|| {
+      let exchanges = self.opened.thread.exchanges.values();
+      exchanges.filter_map(|one| Some(self.read(&one.message, one.block.as_ref()?))).collect()
     });
-    bindings.get(name)?.iter().copied().filter(|one| *one < before).max()
+    let binds = blocks.iter().filter_map(|one| one.binds.get(name));
+    binds.flatten().copied().filter(|one| *one < before).max()
   }
 
   /// The head of a block while the pointer is on a name of its code, from the column of the code:

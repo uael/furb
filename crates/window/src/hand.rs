@@ -129,7 +129,29 @@ type Shared = Rc<RefCell<Window>>;
 /// The window drawn on an app, with the cards that the window of before kept, and each machine
 /// dialed, where the window before stood when it gave its place to this one. Whether the window
 /// ended to give its place to a new build of its program, once the app ends.
-pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<Cell<bool>> {
+pub(crate) fn opened(app: &App, machines: Vec<Machine>, mut options: Options) -> Rc<Cell<bool>> {
+  let tailnet = options.tailnet.take();
+  let window = windowed(app, &machines, options);
+  let reloads = Rc::clone(&window.borrow().reloads);
+  let (known, reads) = (machines.iter().map(|one| one.name.clone()).collect(), machines[0].reads);
+  for machine in machines {
+    dialed(app, &window, machine);
+  }
+  if let Some(tailnet) = tailnet {
+    let on = Rc::clone(&window);
+    let looking = Looking { tailnet, known, reads };
+    link::looked(app, looking, Duration::ZERO, move |app, machine| {
+      let told = Told { name: machine.name.clone(), ..Told::default() };
+      tell(app, &on, |model| model.client.machines.push(told));
+      dialed(app, &on, machine);
+    });
+  }
+  reloads
+}
+
+/// The window drawn on an app, with the cards that the window of before kept for each machine, and
+/// where it stood when it gave its place to this one, before it dials a machine.
+fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
   cells::follow(app);
   let tokens = Tokens::on(app.palette().and_then(|palette| palette.background));
   app.set_theme(tokens.theme());
@@ -172,25 +194,11 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<
     voice: Voice::default(),
     listen: options.listen,
   };
-  let reloads = Rc::clone(&window.reloads);
   let window = Rc::new(RefCell::new(window));
   listened(app, &window, &area);
   // A window with no speech says why at the first hold, which tries to start it again.
   readied(app, &window).ok();
-  let (known, reads) = (machines.iter().map(|one| one.name.clone()).collect(), machines[0].reads);
-  for machine in machines {
-    dialed(app, &window, machine);
-  }
-  if let Some(tailnet) = options.tailnet {
-    let on = Rc::clone(&window);
-    let looking = Looking { tailnet, known, reads };
-    link::looked(app, looking, Duration::ZERO, move |app, machine| {
-      let told = Told { name: machine.name.clone(), ..Told::default() };
-      tell(app, &on, |model| model.client.machines.push(told));
-      dialed(app, &on, machine);
-    });
-  }
-  reloads
+  window
 }
 
 /// The daemon of a machine dialed, whose frames the window hears under the place of the machine in
@@ -585,12 +593,6 @@ fn steadily<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T)
 /// A change told as [`tell`] says, steady or not.
 fn told_as<T>(app: &App, window: &Shared, steady: bool, change: impl FnOnce(&mut Model) -> T) -> T {
   let given = told(app, window, steady, change);
-  // What the operator saw marks the card of his thread read at once, which the parts then show:
-  // a card of a login that only reads, which records no Seen, would else show the unread mark that
-  // the last cards of its machine gave it.
-  if pump(window) {
-    told(app, window, steady, |_| ());
-  }
   let back = window.borrow_mut().screen.model.client.restore.take();
   if let Some(text) = back {
     // The editor tells no change that the window makes, so the draft takes the text too.
@@ -610,12 +612,17 @@ fn told<T>(app: &App, window: &Shared, steady: bool, change: impl FnOnce(&mut Mo
   // The terminal tells what it speaks some time after the window opens, so each change reads it.
   let speaks = app.session().capabilities().map(|one| one.flags).unwrap_or_default();
   cells::follow(app);
-  let given = held.screen.tell(|model| {
+  let Window { screen, askers, .. } = &mut *held;
+  let given = screen.tell(|model| {
     (model.client.now, model.client.moved, model.speaks) = (now, moved, speaks);
     let given = change(model);
-    model.changes += u64::from(!steady);
     model.client.played();
     model.questioned();
+    // What the operator saw marks the card of his thread read at once, in the same layout: a card
+    // of a login that only reads, which records no Seen, would else show the unread mark that the
+    // last cards of its machine gave it.
+    let saw = pump(askers, model);
+    model.changes += u64::from(!steady || saw);
     given
   });
   match (held.screen.model.moves() && !held.still, held.moves) {
@@ -822,10 +829,7 @@ fn pictured(app: &App, window: &Shared, bytes: &[u8]) {
 /// queue of the input, what the operator saw of the open thread, each image that it shows, and the
 /// end of the word that the window ran, each with its id kept until its answer comes. Whether the
 /// operator saw the open thread, which marks its card read.
-fn pump(window: &Shared) -> bool {
-  let mut held = window.borrow_mut();
-  let Window { askers, screen, .. } = &mut *held;
-  let model = &mut screen.model;
+fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
   for (life, verb) in model.client.opens_due() {
     let id = ask(askers, model, life.0, verb);
     model.client.asked_open(&life, id);
@@ -1778,3 +1782,7 @@ fn pointed(model: &mut Model, event: MouseEvent) -> (bool, Option<Does>, Option<
   };
   (on, does, verb)
 }
+
+#[cfg(test)]
+#[path = "hand.test.rs"]
+mod test;

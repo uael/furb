@@ -178,11 +178,16 @@ impl Thread {
   /// Each agent of the thread that a rewind made, in order: a branch of the thread from one of its
   /// moments, whose thread is the second branch, the third, and so on.
   pub fn branches(&self) -> Vec<&Agent> {
-    let lines = self.exchanges.values().filter_map(|one| one.block.as_ref());
-    let lines = lines.flat_map(|block| &block.lines);
-    let words: Vec<usize> =
-      lines.filter(|line| rewinds(&line.text)).map(|line| line.number).collect();
-    self.agents.iter().filter(|one| one.at.is_some_and(|at| words.contains(&at))).collect()
+    // The lines of a block stand in the order of their numbers, so only the line of each agent is
+    // read.
+    let blocks = self.exchanges.values().filter_map(|one| one.block.as_ref());
+    let rewound = |at: usize| {
+      blocks.clone().any(|block| {
+        let found = block.lines.binary_search_by_key(&at, |line| line.number);
+        found.is_ok_and(|found| rewinds(&block.lines[found].text))
+      })
+    };
+    self.agents.iter().filter(|one| one.at.is_some_and(rewound)).collect()
   }
 
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the

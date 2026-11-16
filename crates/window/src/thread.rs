@@ -751,6 +751,8 @@ impl Model {
       return rows.clone();
     }
     let rows = self.laid_rows();
+    #[cfg(test)]
+    self.layouts.set(self.layouts.get() + 1);
     self.laid.replace(Some((stamp, rows.clone())));
     rows
   }
