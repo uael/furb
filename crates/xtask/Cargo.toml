@@ -42,6 +42,7 @@ ra-ap-rustc_lexer = "0.185.0"
 # The task tree: the real path of a tree, which Windows gives with no verbatim prefix that git and
 # a person cannot read.
 dunce = "1"
+furb-hack = { version = "0.1", path = "../hack" }
 
 # The task budget: the CPU time of the waited children of a run.
 [target.'cfg(unix)'.dependencies]

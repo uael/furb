@@ -23,6 +23,7 @@ doctest = false
 furb = { path = "../..", features = ["typescript"] }
 # napi writes the declarations of the package only for a crate that names its macros, which the crate furb runs.
 napi-derive = "3"
+furb-hack = { version = "0.1", path = "../hack" }
 
 [build-dependencies]
 napi-build = "2"

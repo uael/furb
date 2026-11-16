@@ -206,6 +206,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-hakari@0.9.39
       # A tag publishes the version that it names, and no other.
       - if: github.ref_type == 'tag'
         run: |
@@ -407,6 +410,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-hakari@0.9.39
       # crates.io takes no crate that stands on git. While a dependency of furb-wire, furb, furb-host or furb-cli stands on git, as monty
       # does until it stands on crates.io with what furb needs, the job publishes nothing there and says why.
       - id: git
@@ -424,7 +430,7 @@ jobs:
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
       # cargo publishes furb-wire, furb, furb-host and furb-cli in turn, each after the one before stands in the index. A run again after a failure skips each
-      # crate that crates.io holds at this version.
+      # crate that crates.io holds at this version. cargo hakari publishes each with no dependency on furb-hack, which crates.io never holds.
       - if: steps.git.outputs.ready == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
@@ -434,7 +440,7 @@ jobs:
             if curl -sf -A "furb release (github.com/uael/furb)" "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
               echo "crates.io holds $crate $version"
             else
-              cargo publish --locked -p "$crate"
+              cargo hakari publish -p "$crate" -- --locked
             fi
           done
 

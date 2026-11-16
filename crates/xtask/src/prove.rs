@@ -43,6 +43,10 @@ pub(crate) fn crates(root: &Path, work: Option<PathBuf>) -> Result<ExitCode, Fau
   versioned(&work.join("furb/Cargo.toml"), &manifest, &fork)?;
   fs::remove_file(work.join("furb/Cargo.lock"))
     .map_err(|source| Fault::Read { path: work.join("furb/Cargo.lock"), source })?;
+  // A crate of crates.io takes no dependency on furb-hack, which only the workspace holds, as
+  // `cargo hakari publish` drops it.
+  let mut unhacked = cargo(&target);
+  ran(unhacked.args(["hakari", "remove-deps", "--yes"]).current_dir(work.join("furb")))?;
   let mut patches = vec!["[patch.crates-io]".to_owned()];
   for one in &forked {
     unpacked(&work, &target.join(format!("package/{one}-{fork}.crate")), &mut patches)?;

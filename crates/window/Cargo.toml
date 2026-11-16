@@ -51,6 +51,7 @@ tree-sitter-python = "0.25"
 pulldown-cmark = { version = "0.13", default-features = false }
 # The home folder with no link in it, as the folder of a process reads, with no prefix of Windows.
 dunce = "1"
+furb-hack = { version = "0.1", path = "../hack" }
 
 [target.'cfg(windows)'.dependencies]
 # The flags of a process that outlives the console of the window.

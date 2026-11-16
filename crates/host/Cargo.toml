@@ -47,6 +47,7 @@ getrandom = "0.3"
 ignore = "0.4"
 # The data folder of the user on each system, where each session with no project stands.
 dirs = "6"
+furb-hack = { version = "0.1", path = "../hack" }
 
 [target.'cfg(unix)'.dependencies]
 # The login of a user, from the database of the users.

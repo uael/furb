@@ -196,6 +196,9 @@ napi-derive = { version = "3", optional = true }
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
+# The union of the features of each dependency over the workspace, which `cargo hakari` writes, so each set of
+# packages that a command selects builds this crate once.
+furb-hack = { version = "0.1", path = "crates/hack" }
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.

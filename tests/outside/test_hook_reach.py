@@ -143,8 +143,9 @@ def test_a_file_of_each_crate_with_tests_reaches_its_hook_and_its_crate() -> Non
   members = sorted(set(found) - set(workspace.get("exclude", [])))
   assert "crates/host" in members
   files = re.compile(hooks()["cargo-test"]["files"])
-  # The addon of N-API holds no test of its own: it gives the crate, whose files reach the hook.
-  for member in (one for one in members if one != "crates/typescript"):
+  # The addon of N-API and furb-hack hold no test of their own: the addon gives the crate, whose files reach the hook,
+  # and cargo hakari writes furb-hack from the manifests.
+  for member in (one for one in members if one not in ("crates/typescript", "crates/hack")):
     name = tomllib.loads((ROOT / member / "Cargo.toml").read_text(encoding="utf-8"))["package"]["name"]
     assert files.search(f"{member}/src/lib.rs"), member
     assert reach.crates([f"{member}/src/lib.rs"]) == [name], member

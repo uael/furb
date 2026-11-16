@@ -111,6 +111,16 @@ repos:
         language: system
         files: (\.rs|(^|/)Cargo\.toml)$
         pass_filenames: false
+      - id: hakari
+        name: furb-hack takes the features of each dependency over the workspace
+        # Each crate of the workspace depends on furb-hack, so each set of packages that a command selects builds furb
+        # once. cargo hakari writes it again after a change of a dependency.
+        entry: >-
+          sh -c 'cargo hakari generate --diff && cargo hakari manage-deps --dry-run
+          || { echo "furb-hack stands old: run cargo hakari generate && cargo hakari manage-deps --yes"; exit 1; }'
+        language: system
+        files: ((^|/)Cargo\.toml|^Cargo\.lock|^\.config/hakari\.toml)$
+        pass_filenames: false
       - id: paths
         name: the paths that the tools and the workflows name
         # It runs whatever the files, since a move of a file in a change that touches no script leaves the old path in

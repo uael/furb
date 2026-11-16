@@ -36,6 +36,7 @@ notify = "8"
 serde_json = { version = "1", features = ["raw_value"] }
 # The lines of the protocol on the socket of the daemon, to which `furb prompt` says a message of a life it holds.
 tokio-util = { version = "0.7", features = ["codec"] }
+furb-hack = { version = "0.1", path = "../hack" }
 
 [dev-dependencies]
 # The daemon of the kill matrix as a process, its windows on its socket, and the FIFO that its

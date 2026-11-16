@@ -193,6 +193,12 @@ fn warmed(main: &Path, path: &Path) -> Result<(), Fault> {
       break;
     }
   }
+  // The hooks and the gates check furb-hack with cargo hakari, which each tree finds installed.
+  if !ran(path, "cargo", &["hakari", "--version"])
+    && !ran(path, "cargo", &["install", "--locked", "cargo-hakari@0.9.39"])
+  {
+    println!("cargo-hakari did not install: run cargo install --locked cargo-hakari.");
+  }
   // The TypeScript package and the .venv build the crate in two folders of the target, so they
   // build at once. The .venv is the tree's own, made on the warm target, so its python imports
   // this tree.

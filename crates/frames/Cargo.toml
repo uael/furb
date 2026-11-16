@@ -38,3 +38,4 @@ thiserror = "2"
 unicode-segmentation = "1.13"
 # The walk of a scenario waits on the terminal, on its own clock.
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "fs", "sync", "net", "io-util"] }
+furb-hack = { version = "0.1", path = "../hack" }

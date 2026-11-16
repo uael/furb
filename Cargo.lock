@@ -1450,6 +1450,7 @@ dependencies = [
  "anstream",
  "base64 0.22.1",
  "bytes",
+ "furb-hack",
  "furb-wire",
  "futures",
  "getrandom 0.3.4",
@@ -1492,6 +1493,7 @@ version = "0.4.2"
 dependencies = [
  "clap",
  "furb",
+ "furb-hack",
  "furb-host",
  "furb-window",
  "futures",
@@ -1512,6 +1514,7 @@ version = "0.4.2"
 dependencies = [
  "base64 0.22.1",
  "emojis",
+ "furb-hack",
  "furb-wire",
  "imagesize",
  "jiff",
@@ -1527,6 +1530,7 @@ dependencies = [
  "clap",
  "fontdue",
  "furb",
+ "furb-hack",
  "furb-host",
  "furb-window",
  "gif",
@@ -1540,6 +1544,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "furb-hack"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "anstream",
+ "bitflags 2.13.2",
+ "clap",
+ "clap_builder",
+ "crc32fast",
+ "errno",
+ "fastrand",
+ "getrandom 0.4.3",
+ "hashbrown 0.17.1",
+ "indexmap 2.14.2",
+ "jiff",
+ "libc",
+ "linux-raw-sys",
+ "memchr",
+ "mio",
+ "nix",
+ "phf_shared 0.11.3",
+ "phf_shared 0.12.1",
+ "proc-macro2",
+ "quote",
+ "rand 0.9.5",
+ "regex-automata",
+ "rustix",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "simd-adler32",
+ "smallvec",
+ "syn 3.0.6",
+ "toml_datetime",
+ "toml_parser",
+ "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
+ "winnow",
+]
+
+[[package]]
 name = "furb-host"
 version = "0.4.2"
 dependencies = [
@@ -1548,6 +1593,7 @@ dependencies = [
  "dunce",
  "form_urlencoded",
  "furb",
+ "furb-hack",
  "furb-wire",
  "futures",
  "getrandom 0.3.4",
@@ -1573,6 +1619,7 @@ name = "furb-node"
 version = "0.4.2"
 dependencies = [
  "furb",
+ "furb-hack",
  "napi-build",
  "napi-derive",
 ]
@@ -1584,6 +1631,7 @@ dependencies = [
  "dunce",
  "furb",
  "furb-client",
+ "furb-hack",
  "furb-host",
  "futures",
  "insta",
@@ -1604,6 +1652,7 @@ dependencies = [
 name = "furb-wire"
 version = "0.4.2"
 dependencies = [
+ "furb-hack",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -6197,6 +6246,7 @@ dependencies = [
  "fancy-regex",
  "fastrand",
  "flate2",
+ "furb-hack",
  "nix",
  "notify",
  "pulldown-cmark",
