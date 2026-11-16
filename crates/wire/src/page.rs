@@ -134,9 +134,10 @@ pub struct Block {
 /// binding that it makes and a string of many lines as one line with its escapes, its mark, what
 /// the last command that it awaited wrote, what each act that it made came to but a chain, in
 /// the order it made them: one for each pass of a loop, the last of which is the value that it
-/// bound, what each write of a file that it made changed, in the same order, and the name of each
-/// act that the line awaits while it runs: the act that it made last, or each act that its wait
-/// names.
+/// bound, what each write of a file that it made changed, in the same order, the name of each act
+/// that the line awaits while it runs: the act that it made last, or each act that its wait names,
+/// and the text by which each value that its acts came to names an image, `![name](uri)`, as a
+/// read of an image file gives it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Line {
   pub number: usize,
@@ -150,6 +151,8 @@ pub struct Line {
   pub writes: Vec<Written>,
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub awaits: Vec<String>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub pictures: Vec<String>,
 }
 
 /// What a write of a file that a line made changed: the name of its act, the path of the file, the
@@ -319,14 +322,16 @@ impl Line {
       made: Vec::new(),
       writes: Vec::new(),
       awaits: Vec::new(),
+      pictures: Vec::new(),
     }
   }
 
   /// How many rows a line of a block that rolls takes: its own, those of what its command wrote,
-  /// and one for each file that it wrote, whose diff shows only in a block that stands open.
+  /// one for each file that it wrote, whose diff shows only in a block that stands open, and one
+  /// for each image that it gave, which draws only in a block that stands open.
   pub fn rows(&self) -> usize {
     let output = self.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0));
-    1 + output + self.writes.len()
+    1 + output + self.writes.len() + self.pictures.len()
   }
 }
 

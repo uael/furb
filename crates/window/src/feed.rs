@@ -430,7 +430,14 @@ impl Feed<'_> {
     [self.banded(hue, Vec::new(), Vec::new())]
       .into_iter()
       .chain(text)
-      .chain(pictures.iter().flat_map(|one| self.picture(hue, one)))
+      .chain(pictures.iter().flat_map(|one| {
+        let row = |line: Line| self.banded(hue, line, Vec::new());
+        [row(Vec::new())].into_iter().chain(self.picture(
+          one,
+          (2, self.wide.saturating_sub(6)),
+          row,
+        ))
+      }))
       .chain([self.banded(hue, Vec::new(), Vec::new()), Row::default()])
       .collect()
   }
@@ -444,40 +451,76 @@ impl Feed<'_> {
     Row::of(line)
   }
 
-  /// The box of an image that a message names, on its band under its text, which the image fills
-  /// once its machine gave it. Until then its first row names it, and an image that does not draw
-  /// takes one row, which says why.
-  fn picture(&self, hue: Color, named: &images::Named) -> Vec<Row> {
+  /// The box of an image that a text names, whose rows a row of a line makes, from a column and in
+  /// a room of columns, which the image fills once its machine gave it. Until then its first row
+  /// names it, and an image that does not draw takes one row, which says why.
+  fn picture(
+    &self,
+    named: &images::Named,
+    (x, room): (u16, usize),
+    row: impl Fn(Line) -> Row,
+  ) -> Vec<Row> {
     let (at, life, _) = &self.opened.thread.key;
     let held = self.model.client.pictures.get(&(*at, life.clone(), named.uri.clone()));
-    let room = self.wide.saturating_sub(6);
     let (wide, high) = picture::cells(held, room);
-    let blank = || self.banded(hue, Vec::new(), Vec::new());
-    let mut rows: Vec<Row> = (0..=high).map(|_| blank()).collect();
+    let mut rows: Vec<Row> = (0..high).map(|_| row(Vec::new())).collect();
+    // A message and a block stand on the same raised ground.
     let muted = self.style(Role::Muted).bg(self.model.tokens.raised);
-    let said = |text: String| {
-      let lines = wrapped(&text, room).into_iter();
-      lines.map(|line| self.banded(hue, vec![run(line, muted)], Vec::new())).collect::<Vec<_>>()
-    };
+    let said =
+      |text: String| wrapped(&text, room).into_iter().map(|line| row(vec![run(line, muted)]));
     match held {
       Some(Picture::Held(_)) => {
-        rows[1].picture = Some(Boxed { source: named.uri.clone(), x: 2, y: 0, wide, high });
+        let source = named.uri.clone();
+        rows[0].picture = Some(Boxed { source, x, y: 0, wide, high });
       }
       Some(Picture::Refused(why)) => {
         rows.extend(said(format!("{PICTURE}{} does not show: {why}", named.name)));
       }
       _ => {
-        rows.splice(1..2, said(format!("{PICTURE}{}", named.name)).into_iter().take(1));
+        rows.splice(0..1, said(format!("{PICTURE}{}", named.name)).take(1));
       }
     }
     rows
   }
 
-  /// The images that the messages of the open thread name, by its machine and its life.
+  /// Each image that a line of a block gave, under it at the column of its code: its box in a
+  /// block that shows each of its lines, and else a row that names it, as a file that the line
+  /// wrote stands.
+  fn pictures_of(&self, line: &Code, numbers: Gutter, open: bool) -> Vec<Row> {
+    let gutter = numbers.width;
+    let room = Gutter::inside(self.inner()).saturating_sub(gutter + 2);
+    let muted = self.style(Role::Muted);
+    let row = |part: Line| {
+      let lead = run(format!("{:gutter$}  ", ""), muted);
+      Row::of(self.boxed([vec![lead], part].concat(), self.model.tokens.raised))
+    };
+    let named = line.pictures.iter().flat_map(|text| images::references(text));
+    let x = u16::try_from(PAD + gutter + 2).unwrap_or(u16::MAX);
+    named
+      .flat_map(|one| {
+        if open {
+          self.picture(&one, (x, room), row)
+        } else {
+          vec![row(vec![run(format!("{PICTURE}{}", one.name), muted)])]
+        }
+      })
+      .collect()
+  }
+
+  /// The images that the open thread shows, by its machine and its life: those that its messages
+  /// name, and those that the lines of each block that shows each of its lines gave.
   pub(crate) fn pictures(&self) -> Vec<Shown> {
     let (at, life, _) = &self.opened.thread.key;
-    let pending = self.opened.thread.pending.iter().map(|one| one.text.as_str());
-    let texts = self.opened.thread.exchanges.values().map(|one| one.text.as_str()).chain(pending);
+    let thread = &self.opened.thread;
+    let pending = thread.pending.iter().map(|one| one.text.as_str());
+    let open = |one: &Exchange| self.opened.unfolded.contains(&Fold::Block(one.message.clone()));
+    let lines = thread
+      .exchanges
+      .values()
+      .filter_map(|one| one.block.as_ref().filter(|block| open(one) || !block.rolls()));
+    let gave = lines.flat_map(|block| block.lines.iter().flat_map(|line| &line.pictures));
+    let texts = thread.exchanges.values().map(|one| one.text.as_str()).chain(pending);
+    let texts = texts.chain(gave.map(String::as_str));
     texts.flat_map(images::references).map(|one| (*at, life.clone(), one.uri)).collect()
   }
 
@@ -575,6 +618,7 @@ impl Feed<'_> {
       let names = naming.get(at).map_or(&[][..], Vec::as_slice);
       rows.extend(self.code(line, (colors, names), numbers));
       rows.extend(self.writes(line, numbers, (&fold, open)));
+      rows.extend(self.pictures_of(line, numbers, open || !block.rolls()));
       rows.extend(self.agents(Some((line, numbers))));
     }
     if follow > 0 {

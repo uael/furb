@@ -114,6 +114,14 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
 /// The block elements, by which a terminal with no protocol of images draws the pixels of one.
 const PIXELS: RangeInclusive<char> = '\u{2580}'..='\u{259f}';
 
+/// The fewest cells of block elements in a row of an image.
+const IMAGE: usize = 4;
+
+/// Whether a cell holds pixels of an image.
+fn pixels(cell: &Cell) -> bool {
+  cell.glyph.chars().next().is_some_and(|one| PIXELS.contains(&one))
+}
+
 /// Each color of a glyph or of a ground that no token gives, once, at its first cell, with how
 /// many cells take it. A color one step from a token is that token, rounded by a blend. A cell of
 /// a block element is pixels of an image, as a terminal with no protocol of images draws one,
@@ -124,11 +132,7 @@ fn colors(cells: &[Vec<Cell>], palette: &[Rgb]) -> Vec<Finding> {
   };
   let mut seen: BTreeMap<(Rgb, &str), (usize, usize, usize)> = BTreeMap::new();
   for (row, line) in cells.iter().enumerate() {
-    for (col, cell) in line
-      .iter()
-      .enumerate()
-      .filter(|(_, cell)| !cell.glyph.chars().next().is_some_and(|one| PIXELS.contains(&one)))
-    {
+    for (col, cell) in line.iter().enumerate().filter(|(_, cell)| !pixels(cell)) {
       let glyph = (!cell.glyph.trim().is_empty()).then_some(cell.fg);
       for (color, role) in [(glyph, "glyph"), (Some(cell.bg), "ground")] {
         let Some(color) = color.filter(|color| !near(*color)) else { continue };
@@ -287,10 +291,12 @@ fn insets(cells: &[Vec<Cell>], one: &Boxed) -> Option<[usize; 4]> {
 /// the base. Each slot of such rows starts in one column or ends in one column, else it is a
 /// finding, but a slot that follows the slot before it with no blank in each row. Two slots split
 /// where the look changes, or at a blank that a glyph of another look follows. A bar is the border
-/// of a part, and no slot.
+/// of a part, and no slot. A row of the pixels of an image repeats no part: a row of `IMAGE` cells
+/// of block elements or more, as the edge of a card of two holds fewer.
 fn slots(cells: &[Vec<Cell>]) -> Vec<Finding> {
   let mut parts: BTreeMap<Vec<Look>, Rows> = BTreeMap::new();
-  for (row, line) in cells.iter().enumerate() {
+  let image = |line: &&Vec<Cell>| line.iter().filter(|cell| pixels(cell)).count() >= IMAGE;
+  for (row, line) in cells.iter().enumerate().filter(|(_, line)| !image(line)) {
     let pieces = pieces(line);
     if pieces.len() >= 2 {
       let looks = pieces.iter().map(|piece| piece.0).collect();

@@ -9,6 +9,7 @@ use crate::{
   cards::shows,
   daemon::{ANSWERS, PATIENCE, WORKS},
   input::{sent, started, told},
+  thread::clicked,
 };
 
 /// The bytes of a png that names its type and holds nothing else.
@@ -97,4 +98,24 @@ fn an_image_that_a_message_names_twice_draws_twice() {
   };
   let twice = app.wait_until(PATIENCE, || drawn(&app.text()) == 14);
   assert!(twice, "{}", app.text());
+}
+
+#[test]
+fn an_image_that_a_word_reads_draws_under_the_line_that_read_it() {
+  let (app, daemon, _) = started();
+  let shot = include_bytes!("../../../frames/src/shot.png");
+  fs::write(daemon.file("furb-try").join("shot.png"), shot).unwrap();
+  sent(&app, &format!("look {ANSWERS}"));
+  shows(&app, "Resolved 1");
+  clicked(&app, " Python ", 0, 1);
+  shows(&app, "┃ >>> A word of Python to run");
+  sent(&app, "shot = read('shot.png')");
+  // The image draws at the column of the code, under its line, in 7 rows.
+  let under = |frame: &str| {
+    let rows = frame.lines().skip_while(|row| !row.contains("shot = read('shot.png')")).skip(1);
+    let at = |row: &&str| row.chars().nth(7).is_some_and(|one| ('▀'..='▟').contains(&one));
+    rows.take_while(at).count()
+  };
+  let drawn = app.wait_until(PATIENCE, || under(&app.text()) == 7);
+  assert!(drawn, "{}", app.text());
 }

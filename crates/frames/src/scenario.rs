@@ -554,6 +554,13 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // The image goes to the new session before the message that names it, and the model
         // sees it.
         step("b", &[Act::Type("what is in it?"), Act::Key("Enter")], "an image, reply 1"),
+        // A word that reads the image shows it under its line.
+        step(
+          "c",
+          &[Act::Key("C-x"), Act::Key("y"), Act::Type("shot = read('shot.png')")],
+          "shot = read('shot.png')",
+        ),
+        step("d", &[Act::Key("Enter")], " 2  shot = read('shot.png')"),
       ],
     }),
   },

@@ -2817,9 +2817,10 @@ class Line(TypedDict):
   binding that it makes and a string of many lines as one line with its escapes, its mark, what
   the last command that it awaited wrote, what each act that it made came to but a chain, in
   the order it made them: one for each pass of a loop, the last of which is the value that it
-  bound, what each write of a file that it made changed, in the same order, and the name of each
-  act that the line awaits while it runs: the act that it made last, or each act that its wait
-  names.
+  bound, what each write of a file that it made changed, in the same order, the name of each act
+  that the line awaits while it runs: the act that it made last, or each act that its wait names,
+  and the text by which each value that its acts came to names an image, `![name](uri)`, as a
+  read of an image file gives it.
   """
 
   number: int
@@ -2829,6 +2830,7 @@ class Line(TypedDict):
   made: NotRequired[list[Made]]
   writes: NotRequired[list[Written]]
   awaits: NotRequired[list[str]]
+  pictures: NotRequired[list[str]]
 
 
 class Question(TypedDict):
@@ -3266,4 +3268,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 71
+PROTOCOL = 72

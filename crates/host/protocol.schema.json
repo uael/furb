@@ -5022,6 +5022,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -5029,7 +5035,7 @@
         "text",
         "mark"
       ],
-      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, what\nthe last command that it awaited wrote, what each act that it made came to but a chain, in\nthe order it made them: one for each pass of a loop, the last of which is the value that it\nbound, what each write of a file that it made changed, in the same order, and the name of each\nact that the line awaits while it runs: the act that it made last, or each act that its wait\nnames."
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, what\nthe last command that it awaited wrote, what each act that it made came to but a chain, in\nthe order it made them: one for each pass of a loop, the last of which is the value that it\nbound, what each write of a file that it made changed, in the same order, the name of each act\nthat the line awaits while it runs: the act that it made last, or each act that its wait names,\nand the text by which each value that its acts came to names an image, `![name](uri)`, as a\nread of an image file gives it."
     },
     "Mark": {
       "oneOf": [
@@ -6377,5 +6383,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 71
+  "x-protocol": 72
 }

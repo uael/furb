@@ -1672,9 +1672,10 @@ export interface Block {
  * binding that it makes and a string of many lines as one line with its escapes, its mark, what
  * the last command that it awaited wrote, what each act that it made came to but a chain, in
  * the order it made them: one for each pass of a loop, the last of which is the value that it
- * bound, what each write of a file that it made changed, in the same order, and the name of each
- * act that the line awaits while it runs: the act that it made last, or each act that its wait
- * names.
+ * bound, what each write of a file that it made changed, in the same order, the name of each act
+ * that the line awaits while it runs: the act that it made last, or each act that its wait names,
+ * and the text by which each value that its acts came to names an image, `![name](uri)`, as a
+ * read of an image file gives it.
  */
 export interface Line {
   number: number;
@@ -1684,6 +1685,7 @@ export interface Line {
   made?: Made[];
   writes?: Written[];
   awaits?: string[];
+  pictures?: string[];
 }
 /**
  * A call of a model that failed for a cause that passes, so its provider asks the model again:
@@ -1823,4 +1825,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 71;
+export const PROTOCOL = 72;

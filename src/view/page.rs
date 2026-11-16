@@ -23,7 +23,7 @@ use furb_wire::{
   state::{State, working},
 };
 
-use crate::value::literal;
+use crate::{value::literal, world::images};
 
 use super::{
   fold::followed,
@@ -488,6 +488,10 @@ impl<'a> Reader<'a> {
       // A chain is where an act runs, not what the line came to.
       if act.kind != Kind::Chain {
         lines[at].made.push(outcome(act));
+      }
+      if let Phase::Done(value) = &act.phase {
+        let named = images::references(&literal(value)).into_iter().map(|one| one.text);
+        lines[at].pictures.extend(named);
       }
       if let Some(output) = self.output(act) {
         lines[at].output = Some(match lines[at].output.take() {
