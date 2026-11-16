@@ -55,7 +55,7 @@ use crate::{
 /// the build that reads an image of before to another meaning with no fault of the parse, as a
 /// field that keeps its name and its type and holds another thing, raises it, and the test of the
 /// image of the corpus then asks for its image again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// What an image names, by which a reader checks it before it trusts a byte of its body.
 #[derive(Serialize, Deserialize, PartialEq, Eq)]

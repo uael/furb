@@ -3,6 +3,8 @@
 //! the acts as they stood at a moment. Each event of an act carries its meaning, and the layout of
 //! each window stays its own.
 
+use std::collections::BTreeMap;
+
 mod cards;
 mod desk;
 mod fold;
@@ -33,3 +35,9 @@ pub use threads::{
   open, order_threads, root_of, thread_of,
 };
 pub use time::{as_of, moments_of};
+
+/// The line of the word that made each act while a word stood on the stack, counted from 1, by the
+/// name of the act. The sandbox finds it as each act is made, at each open of the record too, so it
+/// is a function of the record, which keeps no line: [`crate::Engine::lines`] gives it, and
+/// [`Streamed`] holds it for a page.
+pub type Lines = BTreeMap<String, u32>;

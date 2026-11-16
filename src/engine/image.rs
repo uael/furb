@@ -45,6 +45,9 @@ pub(crate) struct Half {
   ears: Vec<(String, Value)>,
   pub(crate) stood: Object,
   pub(crate) systems: Systems,
+  /// The line of the word that made each act, which the session alone does not hold.
+  #[serde(default)]
+  lines: Vec<(String, u32)>,
 }
 
 impl Engine {
@@ -83,6 +86,7 @@ impl Engine {
       ears,
       stood,
       systems: self.systems.clone(),
+      lines: self.sand.lines().to_vec(),
     };
     Ok(Some((half, self.sand.image()?)))
   }
@@ -94,10 +98,11 @@ impl Engine {
   /// [`Half::names`] gives, since the session steps each of them and no other.
   pub(crate) fn imaged<N: Into<String>>(
     half: Half,
-    sand: Sand,
+    mut sand: Sand,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Self, Fault> {
     let (mut handed, _) = Handed::of(ears)?;
+    sand.lined(half.lines);
     for (name, part) in half.ears {
       if let Some(ear) = handed.ears.get_mut(&name) {
         ear.imaged(part);

@@ -26,6 +26,7 @@ use furb_wire::{
 use crate::{value::literal, world::images};
 
 use super::{
+  Lines,
   fold::followed,
   held::Held,
   ladder::lives,
@@ -108,9 +109,10 @@ fn shown_line(line: &str) -> String {
 /// thought for a rung and the retry of its call that waits, the millisecond of the epoch at which
 /// each act that lives began, at which each prompt began and ended, so an agent that ended says
 /// how long it took, at which each command began and ended, at which a stop ended each rung that it
-/// ended, and the end of what each command that runs wrote, which its exit gives once it ended. The
-/// record holds none of the rest: the turn of a reply keeps its thought sealed, and a fact tells no
-/// time, so a host keeps it in the image of the life, once [`Held::shown`] let go of each thought
+/// ended, the end of what each command that runs wrote, which its exit gives once it ended, and
+/// the line of the word that made each act, which the engine finds as it runs the word. The record
+/// holds none of the rest: the turn of a reply keeps its thought sealed, and a fact tells no time,
+/// so a host keeps it in the image of the life, once [`Held::shown`] let go of each thought
 /// that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
@@ -120,6 +122,9 @@ pub struct Streamed {
   ended: HashMap<String, u64>,
   #[serde(default)]
   outs: HashMap<String, [Kept; 2]>,
+  /// The line of the word that made each act, as the engine gave it.
+  #[serde(default)]
+  lines: Lines,
 }
 
 /// What a model wrote for a rung: its text until the rung has its word, its thought, the
@@ -137,6 +142,15 @@ struct Wrote {
 }
 
 impl Streamed {
+  /// Takes the line of each act that the engine gave since the last call, as
+  /// [`crate::Engine::lines`] gives them in the order of the acts: the lines of a life only grow,
+  /// so the count that it holds is where the new ones start.
+  pub fn lined(&mut self, made: &[(String, u32)]) {
+    for (name, line) in made.get(self.lines.len()..).unwrap_or_default() {
+      self.lines.insert(name.clone(), *line);
+    }
+  }
+
   /// What a model added to the text and to the thought of a rung, at a millisecond of the epoch.
   pub fn wrote(&mut self, rung: &str, [text, thinking]: [&str; 2], now: u64) {
     let wrote =
@@ -257,8 +271,8 @@ impl Held {
   /// rungs that answer them, and each act that a rung made. A prompt that is no thread has none.
   pub(super) fn thread_moments(&self, thread: &str) -> Vec<u64> {
     let streams = Streamed::default();
-    let Some(Told { prompts, rungs, .. }) = (Reader { held: self, streams: &streams }).told(thread)
-    else {
+    let reader = Reader { held: self, streams: &streams };
+    let Some(Told { prompts, rungs, .. }) = reader.told(thread) else {
       return Vec::new();
     };
     let made = rungs.iter().flat_map(|rung| self.made_by(&rung.id));
@@ -328,9 +342,7 @@ impl<'a> Reader<'a> {
 
   /// The number in the thread of the line of the word of a rung that made an act.
   fn made_at(self, rung: &Act, before: usize, made: &Act) -> Option<usize> {
-    let word = rung.word.as_ref()?;
-    let acts: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
-    let source = placed(word, &acts)[acts.iter().position(|act| act.id == made.id)?]?;
+    let source = self.source(made)?;
     let lines = self.lines(rung, before);
     at_line(&lines, before, source).map(|at| lines[at].number)
   }
@@ -495,9 +507,11 @@ impl<'a> Reader<'a> {
   /// it, each with what the last command that it awaited wrote. While its model writes the word,
   /// the lines that came ran and the line that comes runs.
   fn lines(self, rung: &Act, before: usize) -> Vec<Line> {
-    let Some(word) = &rung.word else { return self.writing(rung, before) };
-    let acts: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
-    let made: Vec<(&Act, Option<usize>)> = acts.iter().copied().zip(placed(word, &acts)).collect();
+    if rung.word.is_none() {
+      return self.writing(rung, before);
+    }
+    let acts = self.held.made_by(&rung.id).filter(|act| waits(act));
+    let made: Vec<(&Act, Option<usize>)> = acts.map(|act| (act, self.source(act))).collect();
     let mut lines = self.marked(rung, before, &made);
     for (act, place) in &made {
       let Some(at) = place.and_then(|source| at_line(&lines, before, source)) else { continue };
@@ -526,6 +540,11 @@ impl<'a> Reader<'a> {
       }
     }
     lines
+  }
+
+  /// The line of the word that made an act, counted from 0, as the sandbox saw it made.
+  fn source(self, act: &Act) -> Option<usize> {
+    usize::try_from(*self.streams.lines.get(&act.id)?).ok()?.checked_sub(1)
   }
 
   /// The lines of the word of a rung, each with the mark of how it stands, from the acts that the
@@ -828,64 +847,6 @@ fn line_of(why: &str) -> Option<usize> {
     let number = why[at + mark.len()..].split(|one: char| !one.is_ascii_digit()).next()?;
     starts.then(|| number.parse().ok()).flatten()
   })
-}
-
-/// The line of a word that made each act, in order: each act takes the first call of its kind by
-/// name that no act took, from the line of the act before it on, since a call in the arguments of
-/// another, as the chain of a prompt, makes its act first. An act whose kind no later line calls
-/// takes the line of the act of its kind before it, as a loop makes many acts from one line, and
-/// the first of its kind takes none. An act right after one of a comprehension that calls its
-/// kind takes that line too when no act of the word ended between the two, as a comprehension
-/// makes its acts one after the other with no await.
-fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
-  let lines: Vec<&str> =
-    word.split('\n').map(|line| line.split('#').next().unwrap_or_default()).collect();
-  let mut slots: Vec<(usize, &str)> = Vec::new();
-  for (at, code) in lines.iter().enumerate() {
-    for (start, _) in code.match_indices('(') {
-      let name = code[..start].rsplit(|one: char| !(one.is_alphanumeric() || one == '_')).next();
-      slots.extend(name.filter(|name| !name.is_empty()).map(|name| (at, name)));
-    }
-  }
-  let mut taken = vec![false; slots.len()];
-  let mut from = 0;
-  let mut before: Option<usize> = None;
-  let mut previous: Option<&Act> = None;
-  let mut last: HashMap<&str, usize> = HashMap::new();
-  made
-    .iter()
-    .map(|act| {
-      let kind = act.kind.as_str();
-      let calls = |line: usize| slots.contains(&(line, kind));
-      // No act of the word ended since the act before it, so the word awaited nothing between.
-      let since = previous.map_or(act.began, |one: &Act| one.began);
-      let awaited =
-        made.iter().any(|one| one.ended.is_some_and(|end| since < end && end <= act.began));
-      let held = before.filter(|line| !awaited && comprehends(lines[*line]) && calls(*line));
-      let found = (from..slots.len()).find(|at| !taken[*at] && slots[*at].1 == kind);
-      let line = match (held, found) {
-        (Some(line), _) => line,
-        (None, Some(found)) => {
-          taken[found] = true;
-          slots[found].0
-        }
-        (None, None) => {
-          (before, previous) = (last.get(kind).copied(), Some(*act));
-          return before;
-        }
-      };
-      from = slots.iter().position(|slot| slot.0 == line).unwrap_or(from);
-      last.insert(kind, line);
-      before = Some(line);
-      previous = Some(*act);
-      Some(line)
-    })
-    .collect()
-}
-
-/// Whether a line of a word holds a comprehension, which makes as many acts as it has items.
-fn comprehends(code: &str) -> bool {
-  !code.trim_start().starts_with("for ") && code.contains(" for ") && code.contains(" in ")
 }
 
 /// What a line awaits while an act that it made is open: each act that its wait names, else that

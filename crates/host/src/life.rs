@@ -1335,6 +1335,7 @@ async fn driven(
 ) -> (Option<Fault>, Vec<Replier>) {
   let (mut gone, mut asked) = (false, Vec::new());
   let mut imaging = Imaging::default();
+  life.kept.streams.lined(engine.lines());
   // A life that opened on no image may owe one before anything wakes it.
   owed_image(&mut engine, life, record, &mut imaging);
   loop {
@@ -1380,6 +1381,7 @@ async fn driven(
     drained(&mut engine, life);
     let runs = life.kept.held.commands();
     life.commands.send_if_modified(|was| mem::replace(was, runs) != runs);
+    life.kept.streams.lined(engine.lines());
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
       drop(engine);
@@ -1396,6 +1398,7 @@ async fn driven(
 /// life keeps once the log took each event that the ears told, and once the image that it wrote as
 /// it went landed.
 async fn ended(engine: Engine, life: &mut Life, mut imaging: Imaging) -> Option<Fault> {
+  life.kept.streams.lined(engine.lines());
   if imaging.writes()
     && let Err(no) = imaging.written().await
   {

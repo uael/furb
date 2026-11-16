@@ -11,7 +11,9 @@
 //! the definitions of each word, its plain values by name, the names that it lost, and the acts
 //! that the carry cut, each word that ran on it among them, which no later life runs again; and
 //! `acts`, each act that a value names, the last stand and the last clock, with its value and its
-//! words, or, for an open prompt, with its shape, its message, its actor and the ear that held it.
+//! words, or, for an open prompt, with its shape, its message, its actor and the ear that held it;
+//! and `lines`, the line of the word that made each act that a word made, which the host adds,
+//! since only the sandbox of the engine that the carry leaves saw those words run.
 //! `gathered` of the checkpointer that the next fact made names gathers it, so each later build
 //! carries a record the same, and `seed` of the checkpointer of the next engine reads it, so the
 //! checkpointer is the one home of its shape, and this file holds the entry and the places where a
@@ -71,6 +73,11 @@ pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Faul
   if !next.systems.0.is_empty() {
     fields.push((Object::string("systems"), next.systems.object()));
   }
+  // The next engine runs none of the words before the carry, so it takes the line of each act
+  // that they made from here.
+  let lines =
+    engine.lines().iter().map(|(name, line)| (Object::string(name), Object::int(i64::from(*line))));
+  fields.push((Object::string("lines"), Object::dict(lines)));
   let fact =
     [CHECKPOINT, ROOT, "store"].map(Object::string).into_iter().chain([Object::dict(fields)]);
   // The carry crosses to the next engine as plain data, in the form that a record keeps, so the

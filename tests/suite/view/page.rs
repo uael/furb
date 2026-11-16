@@ -38,6 +38,16 @@ fn thread() -> Vec<Value> {
   ]
 }
 
+/// The line of the word that made each act, counted from 1, as the engine gives it.
+fn lines(made: &[(&str, u32)]) -> Vec<(String, u32)> {
+  made.iter().map(|(act, line)| ((*act).to_owned(), *line)).collect()
+}
+
+/// The lines of [`thread`]: its command on the second line of the word of the second message.
+fn threaded() -> Vec<(String, u32)> {
+  lines(&[("bash1", 2)])
+}
+
 fn texts(block: &Block) -> Vec<(usize, &str, &Mark)> {
   block.lines.iter().map(|line| (line.number, line.text.as_str(), &line.mark)).collect()
 }
@@ -45,6 +55,7 @@ fn texts(block: &Block) -> Vec<(usize, &str, &Mark)> {
 #[test]
 fn a_page_gives_each_message_with_its_block_numbered_through_the_thread_and_what_it_said() {
   let mut streams = Streamed::default();
+  streams.lined(&threaded());
   let held = held(thread(), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
   assert_eq!(page.above, 0);
@@ -194,6 +205,7 @@ fn a_word_that_an_operator_ran_on_a_thread_is_a_message_of_his_as_code_on_that_t
 #[test]
 fn a_fault_whose_reason_names_no_line_marks_the_line_of_the_act_that_failed() {
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("prompt2", 1)]));
   let word = "side = await prompt(Literal['right', 'left'], 'Where?', to=OPERATOR)\nclose(side)";
   let refusal: Value = serde_json::from_str(&declined("the top")).unwrap();
   let facts = vec![
@@ -488,6 +500,7 @@ fn a_question_holds_its_shape_and_once_closed_who_closed_it_and_what_it_came_to(
 #[test]
 fn each_line_that_asks_a_question_that_waits_carries_the_mark_of_a_question() {
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("prompt2", 1), ("prompt3", 2)]));
   let word =
     "one = prompt(bool, 'A?', to=OPERATOR)\ntwo = prompt(str, 'B?', to=OPERATOR)\nclose(await one)";
   let facts = vec![
@@ -632,12 +645,18 @@ fn looped(more: impl IntoIterator<Item = Value>) -> Vec<Value> {
   facts
 }
 
+/// The lines of [`looped`]: each command on the line in the loop that makes it.
+fn looping() -> Vec<(String, u32)> {
+  lines(&[("bash1", 2), ("bash2", 2)])
+}
+
 #[test]
 fn a_word_with_no_act_open_runs_the_line_after_its_last_act_and_its_first_line_before_any() {
   let mut facts = thread();
   // The command of the second word is done, and its word runs on.
   facts.push(json!(["done", "bash1", "chain1", {"is": "Exit", "code": 0}]));
   let mut streams = Streamed::default();
+  streams.lined(&looping());
   let ran = held(facts.clone(), &mut streams);
   let page = ran.page(&streams, "prompt1", Reach { before: None, limit: 10 });
   let block = page.exchanges[1].block.as_ref().unwrap();
@@ -657,6 +676,7 @@ fn a_word_with_no_act_open_runs_the_line_after_its_last_act_and_its_first_line_b
 #[test]
 fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
   let mut streams = Streamed::default();
+  streams.lined(&looping());
   let held = held(looped([]), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
@@ -674,6 +694,7 @@ fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
 #[test]
 fn a_line_says_what_each_act_that_it_made_came_to_one_for_each_pass_of_a_loop() {
   let mut streams = Streamed::default();
+  streams.lined(&looping());
   let done = json!(["done", "bash2", "chain1", {"is": "Bash", "code": 0, "out": "b"}]);
   let held = held(looped([done]), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
@@ -703,6 +724,7 @@ fn the_chain_that_a_line_makes_for_its_prompt_is_no_outcome_of_the_line() {
     json!(["done", "prompt2", "chain2", "x"]),
   ];
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("chain2", 1), ("prompt2", 1)]));
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
@@ -712,6 +734,7 @@ fn the_chain_that_a_line_makes_for_its_prompt_is_no_outcome_of_the_line() {
 #[test]
 fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_failed() {
   let mut streams = Streamed::default();
+  streams.lined(&looping());
   let fault = json!({"is": "RuntimeError", "args": ["the deadline 3 passed"]});
   let facts = looped([
     json!(["done", "bash2", "chain1", fault]),
@@ -730,6 +753,7 @@ fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_
 fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command_with_its_reason() {
   // The reason of the refusal names no line, and the command is done with its exit, no fault.
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("bash1", 1)]));
   let word = "await bash('exit 3')\nclose('done')";
   let fault = json!({"is": "Refused", "args": ["bash1 exited 3"]});
   let exit = json!({"is": "Exit", "code": 3});
@@ -858,6 +882,7 @@ fn a_stop_marks_the_line_of_the_command_that_it_cut() {
     facts.push(json!(["done", act, "chain1", stop]));
   }
   let mut streams = Streamed::default();
+  streams.lined(&threaded());
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
@@ -879,6 +904,7 @@ fn a_stop_that_cut_no_act_marks_the_line_where_the_word_stood() {
     facts.push(json!(["done", act, "chain1", stop]));
   }
   let mut streams = Streamed::default();
+  streams.lined(&threaded());
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
@@ -898,6 +924,7 @@ fn a_stop_that_cut_no_act_marks_the_line_where_the_word_stood() {
 fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_ended() {
   let output = |facts: &[Value]| {
     let mut streams = Streamed::default();
+    streams.lined(&threaded());
     let held = held(facts.to_vec(), &mut streams);
     for fact in facts {
       streams.out(fact);
@@ -934,6 +961,7 @@ fn a_line_that_awaited_two_commands_carries_what_each_wrote_and_the_time_of_the_
   facts.push(json!(["done", "bash1", "bash", exit("a\n")]));
   facts.push(json!(["done", "bash2", "bash", exit("b\n")]));
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("bash1", 1), ("bash2", 1)]));
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
@@ -1018,63 +1046,6 @@ fn a_retry_says_its_attempt_and_the_time_left_never_more_than_its_wait() {
 }
 
 #[test]
-fn an_act_made_inside_a_call_on_its_line_marks_that_line_and_not_a_later_one() {
-  // Each prompt names its chain in its arguments, so the word makes the chain before the prompt
-  // of the same line.
-  let word = "bench = prompt(str, 'a', on=chain('bench'))\nboot = prompt(str, 'b', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'c', on=chain('count'))\nawait wait(600, bench)";
-  let facts = vec![
-    json!(["chain", "chain1", "operator", "", "root", ""]),
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "measure", ""]),
-    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
-    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
-    json!(["chain", "chain2", "rung1", "", "bench", ""]),
-    json!(["prompt", "prompt2", "rung1", "chain2", "str", "a", ""]),
-    json!(["chain", "chain3", "rung1", "", "boot", ""]),
-    json!(["prompt", "prompt3", "rung1", "chain3", "str", "b", ""]),
-    json!(["wait", "wait1", "rung1", "chain1", 5.0, "prompt2"]),
-  ];
-  let mut streams = Streamed::default();
-  let held = held(facts, &mut streams);
-  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
-  let block = page.exchanges[0].block.as_ref().unwrap();
-  let runs: Vec<usize> = block
-    .lines
-    .iter()
-    .filter(|line| matches!(line.mark, Mark::Runs { .. }))
-    .map(|line| line.number)
-    .collect();
-  assert_eq!(runs, [3]);
-}
-
-#[test]
-fn each_act_of_a_comprehension_marks_its_line_and_a_later_call_its_own() {
-  let word = "rs = [prompt(str, p, on=chain(p)) for p in ['a', 'b']]\nfound = [await r for r in rs]\nlast = await prompt(str, 'c', on=chain('c'))";
-  let facts = vec![
-    json!(["chain", "chain1", "operator", "", "root", ""]),
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "review", ""]),
-    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
-    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
-    json!(["chain", "chain2", "rung1", "", "a", ""]),
-    json!(["prompt", "prompt2", "rung1", "chain2", "str", "a", ""]),
-    json!(["chain", "chain3", "rung1", "", "b", ""]),
-    json!(["prompt", "prompt3", "rung1", "chain3", "str", "b", ""]),
-    json!(["done", "prompt2", "chain2", "x"]),
-    json!(["done", "prompt3", "chain3", "y"]),
-    json!(["chain", "chain4", "rung1", "", "c", ""]),
-    json!(["prompt", "prompt4", "rung1", "chain4", "str", "c", ""]),
-  ];
-  let mut streams = Streamed::default();
-  let held = held(facts, &mut streams);
-  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
-  let block = page.exchanges[0].block.as_ref().unwrap();
-  let made: Vec<usize> = block.lines.iter().map(|line| line.made.len()).collect();
-  // A chain is no outcome of its line: two prompts on the first line, one on the last.
-  assert_eq!(made, [2, 0, 1]);
-  let at: Vec<Option<usize>> = page.agents.iter().map(|agent| agent.at).collect();
-  assert_eq!(at, [Some(1), Some(1), Some(3)]);
-}
-
-#[test]
 fn a_thread_shows_at_each_moment_of_its_acts_what_it_was_just_after_it() {
   let mut streams = Streamed::default();
   let held = held(thread(), &mut streams);
@@ -1120,6 +1091,7 @@ fn a_line_that_wrote_a_file_says_what_it_changed_against_the_text_that_the_life_
     json!(["done", "write2", "files", text("/w/b.py", "one\n")]),
   ];
   let mut streams = Streamed::default();
+  streams.lined(&lines(&[("read1", 1), ("write1", 2), ("write2", 3)]));
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();

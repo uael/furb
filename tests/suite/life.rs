@@ -42,7 +42,8 @@ use furb::{
   engine::OPERATOR,
   image,
   value::{Fault, entry},
-  verbs, world,
+  verbs,
+  world,
 };
 
 #[test]
@@ -1205,6 +1206,43 @@ fn a_later_life_on_a_record_that_crossed_boots_on_the_carry_and_the_last_segment
     "the module of each chain and its open prompt go on, with what the tail added, and a command that no value names \
      keeps its outcome"
   );
+}
+
+#[test]
+fn each_act_that_a_word_made_stands_on_its_line_in_its_life_across_a_crossing_and_in_a_later_open()
+{
+  let at = yard("lines");
+  let word = "import asyncio\nmade = []\nasync def two():\n  b = bash('true')\n  made.append(b)\n  await b\n\
+              for i in range(3):\n  made.append(bash('true'))\nmade += [bash('true') for i in range(2)]\n\
+              await asyncio.gather(two(), two())\nside = chain('side')\nmade += [side, prompt(str, 'go', on=side)]\n\
+              close([str(one) for one in made])";
+  let lines_of = |engine: &Engine, made: &[String]| -> Vec<Option<u32>> {
+    made
+      .iter()
+      .map(|one| engine.lines().iter().find(|made| made.0 == *one).map(|made| made.1))
+      .collect()
+  };
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let made: Vec<String> = closed(&mut first, word)
+    .as_ref()
+    .items()
+    .unwrap()
+    .into_iter()
+    .map(|one| one.as_str().unwrap().to_owned())
+    .collect();
+  let lines = lines_of(&first, &made);
+  let placed = [8, 8, 8, 9, 9, 4, 4, 11, 12].map(Some);
+  assert_eq!(
+    lines, placed,
+    "each pass of a loop, each item of a comprehension, a task and a prompt"
+  );
+  drop(first);
+  crossing(&at);
+  let second = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(lines_of(&second, &made), placed, "the carry gives the lines of the words before it");
+  drop(second);
+  let later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(lines_of(&later, &made), placed, "a later open finds each line again");
 }
 
 #[test]

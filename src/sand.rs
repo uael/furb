@@ -25,6 +25,12 @@ use monty_types::{
 use crate::value::{Fault, Object};
 use std::{cell::Cell, time::Instant};
 
+/// The file of the code that `exec` runs from a text, where the opening defines the engine.
+const EXEC: &str = "<string>";
+
+/// The function of the engine that makes each act and returns it.
+const MADE: &str = "act";
+
 /// How many allocations the collector of cycles lets pass between two of its runs. Monty runs it after 100000
 /// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
 /// is most of the heap.
@@ -116,6 +122,10 @@ pub(crate) struct Sand {
   /// The bound of a turn that the session holds, which a round trip brings to the bound that
   /// holds now: [`turn`] while `bounded`, and none else.
   applied: Duration,
+  /// The line of the word that made each act while a word stood on the stack, by the name of the
+  /// act, in the order the acts were made: a function of the record, since each open runs each
+  /// word again, and none of a fact.
+  lines: Vec<(String, u32)>,
 }
 
 impl Sand {
@@ -127,12 +137,32 @@ impl Sand {
       .max_recursion_depth(depth());
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: turn() }
+    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: turn(), lines: Vec::new() }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0, bounded: true, applied: turn() }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: turn(), lines: Vec::new() }
+  }
+
+  /// Watches each return of `act` of the engine, which the opening defined, so the sandbox keeps
+  /// the line of the word that made each act: monty gives the host each value that it returns,
+  /// with the frames that stand at its call, and the caller takes that value as if no one watched.
+  pub(crate) fn watch(&mut self) {
+    if let State::Idle(repl) = &mut self.state {
+      repl.watch(EXEC, MADE);
+    }
+  }
+
+  /// The line of the word that made each act, in the order the acts were made.
+  pub(crate) fn lines(&self) -> &[(String, u32)] {
+    &self.lines
+  }
+
+  /// Takes the lines that an earlier life of the record kept, as an image or a carry holds them,
+  /// before each line of this one.
+  pub(crate) fn lined(&mut self, lines: Vec<(String, u32)>) {
+    self.lines.splice(..0, lines);
   }
 
   /// How many runs the session began.
@@ -158,7 +188,9 @@ impl Sand {
       return Err(Fault::refused("the image holds no session between two runs"));
     };
     repl.tracker_mut().set_max_turn_duration(turn());
-    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: turn() })
+    // An image of a build before the watch holds none, and a second watch changes nothing.
+    repl.watch(EXEC, MADE);
+    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: turn(), lines: Vec::new() })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -278,6 +310,12 @@ impl Sand {
           self.state = State::Answering(Box::new(call));
           return result.map_err(|error| fault(&error));
         }
+        ReplProgress::FunctionCall(call)
+          if call.object_id.is_none() && call.function_name == MADE =>
+        {
+          self.made(&call);
+          self.limited(call).resume(Object::none(), PrintWriter::Disabled)
+        }
         ReplProgress::FunctionCall(call) => {
           let args: Vec<Object> = call.args.args().map(|one| one.to_owned()).collect();
           let (on, name) = (call.object_id, call.function_name.clone());
@@ -318,6 +356,20 @@ impl Sand {
           PrintWriter::Disabled,
         ),
       };
+    }
+  }
+
+  /// The act that `act` returned, kept with the line of the word that made it: the innermost frame
+  /// of a word at the call, which the Kernel compiles under the name of its rung. An act that no
+  /// word made, as one that a host made by a verb, has no such frame and no line.
+  fn made(&mut self, call: &ReplFunctionCall) {
+    let named = call.args.args().next().and_then(|one| one.as_str().map(str::to_owned));
+    let worded = |name: &str| name.strip_prefix("rung").is_some_and(|n| n.parse::<u64>().is_ok());
+    let stack = call.stack();
+    let line =
+      stack.iter().rev().find(|frame| worded(&frame.filename)).map(|frame| frame.start.line);
+    if let (Some(name), Some(line)) = (named, line) {
+      self.lines.push((name, line));
     }
   }
 

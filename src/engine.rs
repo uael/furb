@@ -127,8 +127,17 @@ fn seeded(
     return Ok((record, 0));
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
-  let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
-  CHECKPOINT_SCHEMA.opens("checkpoint", schema)?;
+  let field =
+    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|one| one.1);
+  CHECKPOINT_SCHEMA.opens("checkpoint", field("schema"))?;
+  let lines = field("lines").and_then(|one| one.pairs()).unwrap_or_default().into_iter();
+  sand.lined(
+    lines
+      .filter_map(|(name, line)| {
+        Some((name.as_str()?.to_owned(), u32::try_from(line.as_int()?).ok()?))
+      })
+      .collect(),
+  );
   let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
@@ -692,6 +701,7 @@ impl Engine {
     sand.bound(false);
     let opened =
       sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
+    sand.watch();
     let mut outside = Outside::new(given, &opened)?;
     let Opened { kernel, lasting, parking, park, .. } = outside.opened.clone();
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
@@ -829,6 +839,12 @@ impl Engine {
   /// The root chain of the life, which is the first act of any record.
   pub fn root(&self) -> &str {
     &self.root
+  }
+
+  /// The line of the word that made each act while a word stood on the stack, counted from 1, in
+  /// the order the acts were made, as [`Lines`](crate::view::Lines) says.
+  pub fn lines(&self) -> &[(String, u32)] {
+    self.sand.lines()
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,
