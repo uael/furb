@@ -37,6 +37,11 @@ pub(crate) enum Error {
   Said(String, String),
   #[error("the step {step} waited for {until:?}, and the screen shows:\n{screen}")]
   Step { step: String, until: String, screen: String },
+  #[error(
+    "the step {step} waits for {until:?}, which the screen held before its input, so the wait \
+     would pass before the window drew what the input asked"
+  )]
+  Early { step: String, until: String },
   #[error("{} holds no {program}: run `cargo build -p furb-window -p furb-cli` first", folder.display())]
   Missing { folder: PathBuf, program: &'static str },
   #[error("no scenario is named {0:?}")]

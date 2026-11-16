@@ -574,13 +574,23 @@ impl Rig {
     step: &Step,
     marks: &mut Vec<(SystemTime, What)>,
   ) -> Result<String, Error> {
+    // A wait passes on the screen that the input before it made, so the screen just before that
+    // input must not hold its text: else the wait passes before the window drew what the input
+    // asked, as on a window that a load slows.
+    let mut before = None;
     for act in step.acts {
       if let Some(read) = act.read() {
+        if before.is_none() {
+          before = Some(tmux.screen().await?);
+        }
         marks.push((SystemTime::now(), What::Input(read)));
       }
-      tmux.act(act).await?;
+      match act {
+        Act::Until(text) => tmux.waits(step.name, text, before.take()).await?,
+        _ => tmux.act(act).await?,
+      }
     }
-    tmux.shows(step.name, step.until).await?;
+    tmux.waits(step.name, step.until, before).await?;
     let settled = Instant::now();
     let mut quiet = Instant::now();
     let mut length = self.written();
@@ -685,6 +695,18 @@ impl Tmux {
     Ok(String::from_utf8_lossy(&done.stdout).into_owned())
   }
 
+  /// The screen once it shows a text that the screen before the input of the wait did not hold;
+  /// no text is no wait.
+  async fn waits(&self, step: &str, text: &str, before: Option<String>) -> Result<(), Error> {
+    if text.is_empty() {
+      return Ok(());
+    }
+    if before.is_some_and(|screen| screen.contains(text)) {
+      return Err(Error::Early { step: step.to_owned(), until: text.to_owned() });
+    }
+    self.shows(step, text).await
+  }
+
   /// The screen once it shows a text, which a step waits for.
   async fn shows(&self, step: &str, text: &str) -> Result<(), Error> {
     let waited = Instant::now();
@@ -727,9 +749,9 @@ impl Tmux {
         let both = if *button < 32 { format!("{press}\x1b[<{button};{col};{row}m") } else { press };
         self.run(&["send-keys", "-t", "w", "-l", &both]).await.map(drop)
       }
-      Act::Until(text) => self.shows("until", text).await,
-      // Another window says it before the step, and no key of this window.
-      Act::Said(_) => Ok(()),
+      // A wait runs in its step, which knows the screen before the input of the wait; another
+      // window says its message before the step, and no key of this window.
+      Act::Until(_) | Act::Said(_) => Ok(()),
     }
   }
 

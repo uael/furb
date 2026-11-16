@@ -10,10 +10,13 @@ use serde_json::{Value, json};
 use crate::{frames, put, read, said, yard};
 
 /// The program in place of the window: it says the text that the first step of a walk waits for
-/// after half a second, then shows each key that it reads, as the terminal echoes it, and says the
-/// mark of a long paste at its first line, as the window folds it.
-const WINDOW: &str = "#!/bin/sh\nstty -isig\nsleep 0.5\nprintf 'Ask for a change\\n'\nexec sed -u \
-  's/Read the boot, then the seed[.]$/≡ paste-1 · 12 lines/'\n";
+/// after half a second, then shows each key that it reads, as the terminal echoes it, and at the
+/// first line of the first long paste clears the screen and says its mark, as the window folds it:
+/// the last line of that paste, which no Enter ended, then stands on the screen only once the next
+/// paste shows it, as the walk waits for it.
+const WINDOW: &str = "#!/bin/sh\nstty -isig\nsleep 0.5\nprintf 'Ask for a change\\n'\nexec awk '!f && \
+  /Read the boot, then the seed[.]$/ { sub(/Read the boot, then the seed[.]$/, \
+  \"\\033[2J\\033[H≡ paste-1 · 12 lines\"); f = 1 } { print; fflush() }'\n";
 /// The program in place of furb: its daemon says that it listens, then ends.
 const FURB: &str = "#!/bin/sh\necho listening\nsleep 1\n";
 

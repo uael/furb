@@ -87,7 +87,8 @@ impl Act {
 }
 
 /// A step: its name, which names its frame, what it does, and a text that its screen shows once it
-/// is done.
+/// is done and that the screen before its input did not show, or none for a step that changes no
+/// text, which waits only for the silence of the window.
 #[derive(Debug)]
 pub(crate) struct Step {
   pub(crate) name: &'static str,
@@ -146,6 +147,9 @@ pub(crate) fn named(word: &str) -> Option<&'static Scenario> {
 
 /// A turn of the wheel down over the filter of an open list part.
 const WHEEL_DOWN: Act = Act::Pointer { on: "Search a", button: 65 };
+
+/// A page of the feed back.
+const PAGE_UP: Act = Act::Key("PageUp");
 
 const fn step(name: &'static str, acts: &'static [Act], until: &'static str) -> Step {
   Step { name, acts, until }
@@ -265,7 +269,7 @@ pub(crate) const README: Walk = Walk {
       &[Act::Type("Add a count to each item, and a report of the total."), Act::Key("Enter")],
       "report.py sums them",
     ),
-    step("o", &[Act::Key("C-n")], ""),
+    step("o", &[Act::Key("C-n")], "Ask in a new thread"),
     step(
       "a",
       &[Act::Type("Review the change, and make the tests pass."), Act::Key("Enter")],
@@ -288,7 +292,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       far: None,
       steps: &[
         step("a", &[], READY),
-        step("b", &[Act::Key("C-x"), Act::Key("?")], "each key"),
+        step("b", &[Act::Key("C-x"), Act::Key("?")], "Search a key"),
         // Go to names the project of the folder, where no session stands yet.
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "no session yet"),
       ],
@@ -311,7 +315,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       far: None,
       steps: &[
         step("a", &[Act::Key("C-o")], "6 sessions"),
-        step("b", &[Act::Type("seed")], "Measure the seed"),
+        step("b", &[Act::Type("seed")], "▌DE Measure the seed"),
         step("c", &[Act::Key("Enter")], "reply 1"),
       ],
     }),
@@ -331,7 +335,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Key("C-n"), Act::Type("Place the list of cards."), Act::Key("Enter")],
           "Where does the list",
         ),
-        step("c", &[Act::Key("C-x"), Act::Key("j")], "Run the bench."),
+        step("c", &[Act::Key("C-x"), Act::Key("j")], "● demo · Run the bench."),
         step("x-leave", &[Act::Key("C-d"), Act::Key("C-d")], "Leave the window"),
       ],
     }),
@@ -395,18 +399,21 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           ],
           "Answer 15 of the long thread.",
         ),
-        step("b", &[Act::Key("PageUp")], "Message"),
+        step("b", &[Act::Key("PageUp")], "↓ Jump to latest"),
         step(
           "c",
-          &[Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp")],
-          "Message 1 of",
+          // A short window needs more pages than a tall one to reach the first message, and the
+          // card of the thread names that message too, so the step waits for its answer.
+          &[PAGE_UP; 8],
+          "close('Answer 1 of",
         ),
         // The bar of the time, whose track marks each message: the thread steps back moment by
         // moment, a click on the track takes it to a moment, a play steps it on, which the clocks
         // that stand still hold, and an escape goes back to now.
-        step("x-time", &[Act::Key("End"), Act::Key("C-x"), Act::Key("b")], " now"),
-        // The pointer on a diamond of the track shows the message said at that moment.
-        step("x-hover", &[Act::Pointer { on: "◆", button: 35 }], "◆"),
+        step("x-time", &[Act::Key("End"), Act::Key("C-x"), Act::Key("b")], "⎋ now"),
+        // The pointer on a diamond of the track shows the message said at that moment, under the
+        // head that names the thread by the same message.
+        step("x-hover", &[Act::Pointer { on: "◆", button: 35 }], "     Message 1 of"),
         step(
           "x-back",
           &[Act::Key("Left"), Act::Key("Left"), Act::Key("Left"), Act::Key("Left")],
@@ -426,7 +433,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[
             Act::Key("C-x"),
             Act::Key("b"),
-            Act::Until(" now"),
+            Act::Until("⎋ now"),
             Act::Key("Left"),
             Act::Type("Go on from here."),
             Act::Key("Enter"),
@@ -441,7 +448,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // answered, a text finds the root in grey, and enter opens its thread.
         step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "no chain works now"),
         step("x-find", &[Act::Type("ro")], "find ro"),
-        step("x-chain", &[Act::Key("Enter")], "Answer 15 of"),
+        // The thread of the root is the one in sight, so only the list of the chains goes.
+        step("x-chain", &[Act::Key("Enter")], ""),
         // A question aside goes as his word on the thread, which a fork of its chain answers.
         step(
           "x-aside",
@@ -509,9 +517,12 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step(
           "c",
           &[Act::Key("BSpace"), Act::Key("BSpace"), Act::Type("comp"), Act::Key("Tab")],
-          "/compaction",
+          // The list of the completion names `/compaction` too: its row of hints gives its place
+          // back to the folder once the tab took the word.
+          "This computer · ~/demo",
         ),
-        step("d", &[Act::Key("C-c"), Act::Type("Where")], "does this run?"),
+        // The rest of the line that the history offers is the message that the feed shows.
+        step("d", &[Act::Key("C-c"), Act::Type("Where")], ""),
         // A colon at the start of a word finds an emoji by its short code, and a tab writes it.
         step("x-emoji", &[Act::Key("C-c"), Act::Type("Shipped :tada")], "Emoji"),
         step("x-emoji-take", &[Act::Key("Tab")], "Shipped 🎉"),
@@ -537,7 +548,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step("a", &[Act::Type("look at @")], "Files of demo"),
-        step("b", &[Act::Type("json_b")], "json_backend.py"),
+        step("b", &[Act::Type("json_b")], "1 / 1"),
         step("c", &[Act::Key("Tab")], "backends/json_backend.py"),
         step("d", &[Act::Type("what does it store?"), Act::Key("Enter")], "reply 2"),
         // The file that he named comes first when a mention names no letter yet.
@@ -589,7 +600,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         ),
         step("b", &[Act::Key("Enter")], " 2  answer = 41 + 1"),
         step("c", &[Act::Type("raise ValueError('no')"), Act::Key("Enter")], "✗  raise ValueError"),
-        step("d", &[Act::Key("Escape")], "⏎ run · "),
+        // Escape on an empty word keeps the mode of Python, so nothing on the screen changes.
+        step("d", &[Act::Key("Escape")], ""),
       ],
     }),
   },
@@ -635,7 +647,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // close.
         step("c", &[], "✓ Resolved"),
         // A click on the line of the thought opens it whole, under the block.
-        step("d", &[Act::Pointer { on: "thought ·", button: 0 }], "checkpoint"),
+        step("d", &[Act::Pointer { on: "thought ·", button: 0 }], "for the slow part"),
       ],
     }),
   },
@@ -692,12 +704,15 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-diff", &[Act::Pointer { on: "models.py  +2", button: 0 }], "+     self.count = 0"),
         // A revert writes back what the life knew before the answer, as a word of his.
         step("x-revert", &[Act::Pointer { on: "↶ Revert", button: 0 }], "models.py  +1 −2"),
-        // A click on a line of the diff makes the next message about that line.
+        // A click on a line of the diff makes the next message about that line. The feed shows
+        // the same line in the code of the word, so the walk waits for the head of the review
+        // first: else, while a loaded window draws the review late, it waits on the feed.
         step(
           "x-anchor",
           &[
             Act::Key("C-x"),
             Act::Key("g"),
+            Act::Until("main · src/inventory/report.py"),
             Act::Until("return sum(one.count"),
             Act::Pointer { on: "return sum(one.count", button: 0 },
           ],
@@ -721,7 +736,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // The review marks its line, and a click on that line opens it again.
         step(
           "x-mark",
-          &[Act::Key("C-x"), Act::Key("g"), Act::Until("return sum(one.count")],
+          &[Act::Key("C-x"), Act::Key("g"), Act::Until("main · src/inventory/report.py")],
           "return sum(one.count",
         ),
         step(
@@ -778,7 +793,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Place the list of cards."), Act::Key("Enter")],
           "Where does the list",
         ),
-        step("c", &[Act::Key("Enter")], "right"),
+        step("c", &[Act::Key("Enter")], "right · you"),
       ],
     }),
   },
@@ -823,12 +838,14 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         ),
         // The pointer on the line that awaits the bench lights the row of the bench, where it
         // stands under the line that made it.
-        step("x-awaits", &[Act::Pointer { on: "await wait(600, bench)", button: 35 }], "wait(600"),
+        // A light changes no text.
+        step("x-awaits", &[Act::Pointer { on: "await wait(600, bench)", button: 35 }], ""),
         // The pointer on a verb shows its call and its contract on the head of the block, and on
         // a name its type and its value; a click on the name goes to the line that bound it.
         step("x-verb", &[Act::Pointer { on: "prompt(str, 'Run", button: 35 }], "prompt(shape"),
         step("x-value", &[Act::Pointer { on: "bench)", button: 35 }], "bench: "),
-        step("x-went", &[Act::Pointer { on: "bench)", button: 0 }], "bench: "),
+        // The line that bound it stands in sight already, so no text changes.
+        step("x-went", &[Act::Pointer { on: "bench)", button: 0 }], ""),
         // A click on the call of `prompt` goes to the chain that runs it, and back and forward.
         step("x-prompt", &[Act::Pointer { on: "prompt(str, 'Run", button: 0 }], "· agent · "),
         step("x-back", &[Act::Key("Escape")], "Forward"),
@@ -863,7 +880,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-top", &[Act::Pointer { on: "3%", button: 0 }], "Engine"),
         // A click on the bar shows the cache, and the key of the context steps the box to fold.
         step("e", &[Act::Pointer { on: "━━━━", button: 0 }], "From the cache"),
-        step("f", &[Act::Key("C-x"), Act::Key("c")], "3%"),
+        step("f", &[Act::Key("C-x"), Act::Key("c")], "Context ▸"),
       ],
     }),
   },
@@ -885,7 +902,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("c", &[Act::Key("Enter")], "Codex is connected"),
         // A model of Codex taken in the list that stays open, for the new session, which its first
         // message starts. No message goes.
-        step("d", &[Act::Type("gpt"), Act::Key("Enter")], "gpt-5.5"),
+        step("d", &[Act::Type("gpt"), Act::Key("Enter")], "with gpt-5.5"),
         // The arrows change the effort of the chosen model in the list, which takes it with its
         // row: the left one lowers it.
         step("e", &[Act::Key("C-x"), Act::Key("m"), Act::Key("Left")], "in use         medium"),
@@ -912,7 +929,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step(
           "c",
           &[Act::Key("Escape"), Act::Key("C-x"), Act::Key(","), Act::Type("naming")],
-          "naming.actor",
+          // The list stands as the step before left it.
+          "",
         ),
         // A key of text takes the value that he writes, in the layer of its scope.
         step("d", &[Act::Type(".actor"), Act::Key("Enter")], "a string"),
@@ -935,7 +953,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           ],
           "not an integer",
         ),
-        step("f", &[Act::Key("Enter")], "takes an integer"),
+        step("f", &[Act::Key("Enter")], "\"32768x\" is not"),
       ],
     }),
   },
@@ -948,9 +966,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       reads: false,
       far: None,
       steps: &[
-        step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
+        step("a", &[Act::Key("C-x"), Act::Key("?")], "Search a key"),
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a thread"),
-        step("d", &[WHEEL_DOWN; 40], "The model of the input"),
+        // The wheel takes the choice to the last key, where a tall window shows each key already.
+        step("d", &[WHEEL_DOWN; 40], "▌The extensions, on or off"),
         step("e", &[Act::Pointer { on: "The model of the input", button: 0 }], "Search a model"),
       ],
     }),
@@ -1020,9 +1039,11 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Place the list of cards."), Act::Key("Enter")],
           "Where does the list",
         ),
-        step("a", &[Act::Pointer { on: "Resolve", button: 35 }], "Resolve"),
+        // A light changes no text.
+        step("a", &[Act::Pointer { on: "Resolve", button: 35 }], ""),
         step("b", &[Act::Pointer { on: "Resolve", button: 0 }], "✓ Resolved"),
-        step("c", &[Act::Pointer { on: "opus/high", button: 64 }], "Place the list"),
+        // The thread stands whole in sight, so the wheel changes no text.
+        step("c", &[Act::Pointer { on: "opus/high", button: 64 }], ""),
       ],
     }),
   },
