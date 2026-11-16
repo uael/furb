@@ -2,7 +2,17 @@
 //! passes the same laws: the macro `conformance` holds them, on the function that opens the store
 //! and on the name of its record.
 
-use std::{fs, path::Path};
+use std::{
+  env, fs,
+  path::Path,
+  process::{Command, Stdio},
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
+  thread,
+  time::{Duration, Instant},
+};
 
 use sha2::{Digest as _, Sha256};
 
@@ -543,4 +553,122 @@ fn digest(texts: &[&str]) -> String {
     hash.update([0]);
   }
   format!("{:x}", hash.finalize())
+}
+
+#[test]
+fn a_store_says_the_file_that_it_could_not_use_before_the_text_of_the_system() {
+  let at = Yard::new(format!("furb-world-unusable-{}", process::id()));
+  fs::write(at.join("sessions"), "").unwrap();
+  let path = at.join("sessions").join("record.jsonl");
+  let refused = store(&path).err().unwrap().to_string();
+  // The rest is the text of the system, which differs on each system.
+  let said = format!("Refused: Could not use {}: ", path.with_extension("jsonl.lock").display());
+  assert!(refused.starts_with(&said), "{refused}");
+}
+
+#[test]
+fn one_store_at_a_time_holds_a_record_and_a_read_with_no_lease_reads_it_all_the_same() {
+  let at = Yard::new(format!("furb-world-lease-{}", process::id()));
+  let path = at.join("record.jsonl");
+  let (record, ear) = store(&path).unwrap();
+  assert!(record.is_empty());
+  let refused = store(&path).err().unwrap();
+  assert_eq!(refused.to_string(), format!("Refused: Another process owns {}.", path.display()));
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\n").unwrap();
+  assert_eq!(kept(&path).unwrap().len(), 1);
+  drop(ear);
+  let (record, _ear) = store(&path).unwrap();
+  assert_eq!(record.len(), 1);
+}
+
+#[test]
+fn the_store_reads_past_a_torn_last_line_and_a_whole_one_that_no_keep_mends_and_refuses_a_damaged_line()
+ {
+  let at = Yard::new(format!("furb-world-mend-{}", process::id()));
+  let path = at.join("record.jsonl");
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\n[\"partial\"").unwrap();
+  let (record, ear) = store(&path).unwrap();
+  drop(ear);
+  assert_eq!(record.len(), 1);
+  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]\n[\"partial\"");
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null]]").unwrap();
+  let (record, ear) = store(&path).unwrap();
+  drop(ear);
+  assert_eq!(record.len(), 1);
+  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]");
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\nbroken\n").unwrap();
+  let refused = store(&path).err().unwrap();
+  let at = "[[\"done\",\"x\",\"world\",null]]\n".len();
+  assert_eq!(
+    refused.to_string(),
+    format!("Refused: Invalid record entry at byte {at} in {}.", path.display())
+  );
+  // An entry is one fact, so an entry that holds a fact and an answer is no entry.
+  fs::write(&path, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],[[],\"/w\",\"m/low\"]]\n")
+    .unwrap();
+  assert_eq!(
+    store(&path).err().unwrap().to_string(),
+    format!("Refused: Invalid record entry at byte 0 in {}.", path.display())
+  );
+  fs::write(&path, "[\"torn\"").unwrap();
+  assert!(kept(&path).unwrap().is_empty());
+  assert_eq!(fs::read_to_string(&path).unwrap(), "[\"torn\"");
+}
+
+#[test]
+fn two_holders_never_own_the_record_at_once_while_programs_start_and_the_record_moves_away() {
+  let at = Yard::new(format!("furb-world-race-{}", process::id()));
+  let path = at.join("record.jsonl");
+  // Programs start all the while, from other threads of this process, since that is when macOS can
+  // give for a renamed path the file that a rename moved away.
+  let over = Arc::new(AtomicBool::new(false));
+  let starters: Vec<_> = (0..4)
+    .map(|_| {
+      let over = Arc::clone(&over);
+      thread::spawn(move || {
+        let program = env::current_exe().unwrap();
+        while !over.load(Ordering::Relaxed) {
+          drop(
+            Command::new(&program)
+              .arg("--help")
+              .stdout(Stdio::piped())
+              .stderr(Stdio::piped())
+              .output(),
+          );
+        }
+      })
+    })
+    .collect();
+  // Each holder makes a file that one alone can make while it owns the record, and two move the
+  // record away before they let it go, each to a name of its own, as the delete of a session does,
+  // which leaves the lock file.
+  let holders: Vec<_> = (0..8)
+    .map(|n| {
+      let (path, at) = (path.clone(), at.to_path_buf());
+      thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut taken = 0;
+        while taken < 50 {
+          assert!(Instant::now() < deadline, "holder {n} took the lease {taken} times");
+          let Ok((_, ear)) = store(&path) else { continue };
+          let owner = at.join("owner");
+          fs::OpenOptions::new().write(true).create_new(true).open(&owner).expect("one owner");
+          taken += 1;
+          fs::remove_file(&owner).unwrap();
+          if n < 2 {
+            fs::rename(&path, at.join(format!("moved.{n}.{taken}"))).unwrap();
+          }
+          drop(ear);
+        }
+      })
+    })
+    .collect();
+  let held = holders.into_iter().map(thread::JoinHandle::join).collect::<Vec<_>>();
+  over.store(true, Ordering::Relaxed);
+  for one in starters {
+    one.join().unwrap();
+  }
+  for one in held {
+    one.unwrap();
+  }
 }

@@ -240,6 +240,22 @@ fn a_command_that_writes_a_line_at_a_time_says_what_comes_within_a_tenth_of_a_se
 }
 
 #[test]
+fn a_stream_is_read_whole_in_utf8_and_a_character_cut_at_a_read_waits_for_the_next() {
+  let mut lived = Lived::new("utf8", &[], true).unwrap();
+  let root = lived.root();
+  // A heart split by a pause across two reads, a byte that no utf-8 holds, and a heart cut at the
+  // end of the stream.
+  let line = "printf 'a\\342\\231'; sleep 0.2; printf '\\245 x\\377y \\342\\231'";
+  let act = lived.engine.bash(line, verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
+  let id = act.id().to_owned();
+  let exit: Exit = block_on(act).unwrap();
+  assert_eq!(exit.stdout.content, "a\u{2665} x\u{fffd}y \u{fffd}");
+  let outs = outs(&mut lived, &root, &id);
+  assert_eq!(outs.first().map(String::as_str), Some("a"), "the cut heart waits for the next read");
+  assert_eq!(outs.concat(), exit.stdout.content);
+}
+
+#[test]
 fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
   let mut lived = Lived::new("unread", &[], true).unwrap();
   let root = lived.root();

@@ -189,7 +189,7 @@ pub(super) async fn read(
 /// The text of the bytes held that is whole in utf-8, which leaves them: a character cut at the end
 /// of a read waits for the next, unless the stream is over, and a byte that no utf-8 holds reads as
 /// the character that replaces it.
-pub(in crate::world) fn whole(held: &mut Vec<u8>, over: bool) -> String {
+fn whole(held: &mut Vec<u8>, over: bool) -> String {
   let mut text = String::new();
   loop {
     match str::from_utf8(held) {

@@ -33,8 +33,6 @@ use tokio::{
 };
 use unsync::spsc;
 
-#[cfg(test)]
-pub(super) use self::kept::whole;
 pub use self::shell::{program, shell};
 use self::{
   kept::{HEAD, Kept, Stream, TAIL, Unread, read},

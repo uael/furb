@@ -194,3 +194,22 @@ fn a_path_of_the_sh_of_git_names_a_drive_and_the_scratch_directory_on_windows_al
     fs::remove_file(&real).expect("the file of the test goes");
   }
 }
+
+#[test]
+fn a_path_resolves_against_its_directory_with_every_dot_read_and_an_absolute_path_stands_as_it_is()
+{
+  let at = yard("resolved");
+  fs::create_dir(at.join("w")).expect("the folder of the chain");
+  let mut engine = life(&at, None);
+  closed(&mut engine, &format!("cd({})\nclose(0)", quoted(&at.join("w"))))
+    .expect("the chain moves");
+  let written = |engine: &mut Engine, path: &str| {
+    text(engine, &format!("write(Text({path}, 'x'))")).expect("a write").0
+  };
+  let shown = |path: &Path| path.display().to_string();
+  assert_eq!(written(&mut engine, "'a/../b/./c'"), shown(&at.join("w").join("b").join("c")));
+  assert_eq!(written(&mut engine, "'../x'"), shown(&at.join("x")));
+  let elsewhere = at.join("elsewhere");
+  assert_eq!(written(&mut engine, &quoted(&elsewhere)), shown(&elsewhere));
+  assert_eq!(fs::read_to_string(at.join("w").join("b").join("c")).expect("the file"), "x");
+}

@@ -175,7 +175,3 @@ pub fn browse(address: &str) -> io::Result<()> {
   command.arg(address).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
   command.spawn().map(drop)
 }
-
-#[cfg(test)]
-#[path = "world.test.rs"]
-mod test;
