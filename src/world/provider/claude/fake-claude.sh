@@ -15,8 +15,9 @@
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
 # any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
-# it, each turn costs the dollars that it holds, and when the file usage stands beside it, each request says the
-# usage that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or unset. It writes the
+# it, each turn costs the dollars that it holds, when the file usage stands beside it, each request says the
+# usage that it holds, and when the file thought stands beside it, a line that holds THINK thinks the text that it
+# holds, which no quote and no backslash may hold. It writes the MAX_THINKING_TOKENS of each process beside it too, or unset. It writes the
 # CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
 # configdir.N, or unset. When the file limited.TOKEN stands beside it, each turn of a process whose token is TOKEN gets
 # a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
@@ -168,11 +169,13 @@ while IFS= read -r line; do
   at=0
   case $line in
     *THINK*)
+      thought=hmm
+      if [ -f "$here/thought" ]; then thought=$(cat "$here/thought"); fi
       say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}'
+      say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"$thought\"}}"
       say '{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}'
       say '{"type":"content_block_stop","index":0}'
-      settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
+      settle "{\"type\":\"thinking\",\"thinking\":\"$thought\",\"signature\":\"sig\"}"
       at=1 ;;
     # A line that holds DEEP gets a long signed thought in parts, a signed thought whose display the
     # API omitted, with no text, as the real command line gives one, then a thought that the API

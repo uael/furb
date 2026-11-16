@@ -163,7 +163,7 @@ fn a_model_that_thinks_shows_its_thought_on_one_row_and_the_line_that_it_writes(
 
   // The thought takes a click: it lights under the pointer, and opens whole.
   clicked(&app, "I read the stages", 0, 0);
-  shows(&app, "Then the seed");
+  shows(&app, "so the open shows where its time goes. Then the");
 }
 
 #[test]

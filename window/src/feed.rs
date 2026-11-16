@@ -898,33 +898,44 @@ impl Feed<'_> {
   /// The thought of a model as one muted row through its whole life: its last words while it
   /// streams, then its first sentence and its time. A click opens it whole, or folds it.
   fn thought(&self, message: &str, thought: &Thought) -> Vec<Row> {
-    let style = self.style(Role::Muted).italic();
+    let (muted, style) = (self.style(Role::Muted), self.style(Role::Muted).italic());
     let fold = Fold::Thought(message.to_owned());
     let room = self.wide.saturating_sub(4);
-    if self.opened.unfolded.contains(&fold) {
-      let lines = wrapped(&thought.text.split_whitespace().collect::<Vec<_>>().join(" "), room);
-      let row = |line: &String| {
-        Row::clicked(vec![run(format!("  {line}"), style)], Click::Fold(fold.clone()))
-      };
-      return lines.iter().map(row).collect();
-    }
     // The word says what the row is, and the time stands at the right, in the column of the time of
     // a line that runs: it counts while the model thinks, and stays as the time that it took.
-    let muted = self.style(Role::Muted);
-    let (word, text, seconds) = match thought.took {
-      // The last words keep room for the word before them and a time of eight columns after.
-      None => {
-        let words = tail(&thought.text, room.saturating_sub(" thinks · ".len() + 2 + 8));
-        (THINKS, words, self.model.since(thought.began))
-      }
-      Some(took) => ("thought", thought.first().to_owned(), Some(took).filter(|one| *one > 0)),
+    let (word, seconds) = match thought.took {
+      None => (THINKS, self.model.since(thought.began)),
+      Some(took) => ("thought", Some(took).filter(|one| *one > 0)),
     };
-    let time = seconds.map(|seconds| run(timer(seconds), muted));
-    let said = vec![run(format!("  {word} · "), muted), run(text, style)];
-    let line = spread(said, time.into_iter().collect(), room + 2, Style::new());
+    let head = format!("  {word} · ");
+    let time = seconds.map(timer);
+    // The text stands in one column after the word, and its first row leaves room for the time.
+    let (room, gap) = (room + 2 - head.width(), " ".repeat(head.width()));
+    let first = room.saturating_sub(time.as_ref().map_or(0, |time| time.width() + 2));
+    let mut lines = if self.opened.unfolded.contains(&fold) {
+      // Open, the thought goes on from the row that said its start, so the click only adds rows.
+      let whole = thought.text.split_whitespace().collect::<Vec<_>>().join(" ");
+      let start = wrapped(&whole, first).swap_remove(0);
+      let rest = whole[start.len()..].trim_start();
+      let rest = if rest.is_empty() { Vec::new() } else { wrapped(rest, room) };
+      [vec![start], rest].concat()
+    } else if thought.took.is_none() {
+      // The time of a thought that runs grows, so its row keeps the room of a time of eight columns.
+      vec![tail(&thought.text, room.saturating_sub(10))]
+    } else {
+      vec![thought.first().to_owned()]
+    };
+    let said = vec![run(head.clone(), muted), run(lines.remove(0), style)];
+    let time = time.map(|time| run(time, muted));
+    let line = spread(said, time.into_iter().collect(), head.width() + room, Style::new());
     // While the model thinks, the light passes over the word that says so.
     let light = thought.took.is_none().then_some((2, Loader::Light(THINKS)));
-    vec![Row { loaders: light.into_iter().collect(), ..Row::clicked(line, Click::Fold(fold)) }]
+    let head =
+      Row { loaders: light.into_iter().collect(), ..Row::clicked(line, Click::Fold(fold.clone())) };
+    let rest = lines.iter().map(|line| {
+      Row::clicked(vec![run(format!("{gap}{line}"), style)], Click::Fold(fold.clone()))
+    });
+    [head].into_iter().chain(rest).collect()
   }
 
   /// What an answer said, as markdown from the column of the text. A question is one line with its

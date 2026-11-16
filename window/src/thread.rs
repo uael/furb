@@ -629,6 +629,7 @@ impl Model {
       && let Some(row) = rows.get_mut(usize::from(y))
     {
       let awaits = mem::take(&mut row.awaits);
+      let fold = row.click(usize::from(x)).filter(|click| matches!(click, Click::Fold(_)));
       *row = mem::take(row).lit(usize::from(x), self.tokens.hover);
       // A name that takes a click stands as a link while the pointer is on it, since the light of
       // the text of the code is near the white of the pointer.
@@ -644,8 +645,13 @@ impl Model {
         });
         agent.filter(|(_, prompt)| awaits.contains(prompt)).map(|(x, _)| x)
       };
-      for row in &mut rows {
-        if let Some(x) = awaited(row) {
+      // A fold that stands on many rows lights whole, as one thing that takes a click.
+      let folded = |row: &Row| {
+        let hot = row.hot.iter().find(|hot| fold.is_some() && hot.1 == fold);
+        hot.map(|hot| hot.0.start)
+      };
+      for (at, row) in rows.iter_mut().enumerate() {
+        if let Some(x) = awaited(row).or_else(|| folded(row).filter(|_| at != usize::from(y))) {
           *row = mem::take(row).lit(x, self.tokens.hover);
         }
       }

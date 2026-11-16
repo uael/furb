@@ -59,6 +59,10 @@ done | "$here/answers" "$@"
 /// The usage of each request of a capture: 31,840 tokens read, 24,600 of them from the cache.
 const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_input_tokens":24600,"cache_creation_input_tokens":5900}"#;
 
+/// The thought of a model that a walk asks to think, as a real model thinks before it answers: long
+/// enough that its line shows its first sentence and a click opens it on more than one row.
+const THOUGHT: &str = "The open reads the record, then boots the engine and replays each word since the last checkpoint. A sleep of two seconds stands in for the slow part, so I time it with a command first, then say where the time goes: the seed, which each open reads again.";
+
 /// The browser of a capture, which opens a page of the stand-in of `OpenAI` as a person who signs
 /// in there, and no other page.
 const BROWSER: &str = r#"#!/bin/sh
@@ -225,6 +229,7 @@ impl Rig {
     // Each request reads as much as a turn of a real life does, most of it from the cache, and
     // costs what the price of the model makes of it, so the box of the context shows real counts.
     write(root.join("fake/usage"), USAGE)?;
+    write(root.join("fake/thought"), THOUGHT)?;
     write(root.join("fake/cost"), "0.11")?;
     // The sessions of the walk take the first turns, with the replies of the claude command line.
     for (n, word) in walk.words.iter().enumerate() {
