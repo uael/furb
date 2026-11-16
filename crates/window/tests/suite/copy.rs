@@ -20,7 +20,10 @@ fn copy_with_no_terminal_says_that_nothing_was_copied_and_on_a_thread_that_said_
   let mut peer = daemon.peer();
   let life = peer.opened(&sessions.join("copy.jsonl"), true);
   peer.said(&life, &format!("how long does an open take {ANSWERS}"));
-  peer.said(&life, "say nothing");
+  // The thread that says nothing stands in a session of its own: the model of a test reads its
+  // whole chain, so on the chain of the first it would answer as the first asks.
+  let quiet = peer.opened(&sessions.join("quiet.jsonl"), true);
+  peer.said(&quiet, "say nothing");
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "how long does an"));
   shows(&app, "The open takes");
