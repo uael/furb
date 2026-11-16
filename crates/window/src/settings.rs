@@ -97,16 +97,25 @@ impl Model {
   }
 
   /// The row of the setting whose value he writes: its key, what it does and what it takes, and
-  /// the value that wins for it now with the layer that gives it.
+  /// at its right the value that he writes as it would stand, as he writes it, else in the hue of a
+  /// fault that its key does not take it, so he reads the refusal before he sends it.
   pub(crate) fn value(&self, place: usize) -> Vec<Entry> {
     let Some(one) = self.client.setting(place) else { return Vec::new() };
     let property = one.property.as_ref();
     let takes = property.map_or_else(|| "any value of JSON".to_owned(), Property::wanted);
     let says = property.map_or_else(String::new, |one| format!("{} ", one.description));
+    let written =
+      self.picker.as_ref().and_then(|one| self.client.setting_value(place, &one.filter));
+    let fits = written.filter(|value| property.is_none_or(|one| one.takes(value)));
+    let (right, tone) = match fits {
+      Some(value) => (stands(&Setting { value, ..one.clone() }, 0), None),
+      None => (format!("not {takes}"), Some(self.tokens.danger)),
+    };
     vec![Entry {
       left: one.key.join("."),
       says: format!("  {says}It takes {takes}."),
-      right: stands(one, 0),
+      right,
+      tone,
       choice: Choice::Value(place),
       ..Entry::default()
     }]

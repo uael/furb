@@ -911,9 +911,12 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"     user"),
         // The arrows show the group of the keys of furb, which a tab names beside each kit.
         step("x-group", &[Act::Key("Left")], "max_thinking_tokens"),
-        // A value that the property of its key does not take is refused, with what it takes.
+        // The chosen key says what it does whole, wrapped, where each other says one row of it.
+        step("x-whole", &[Act::Key("Down"), Act::Key("Down")], "makes it again from the writes"),
+        // A value that the property of its key does not take says so as he writes it, before he
+        // sends it, and the machine refuses it, with what it takes.
         step(
-          "f",
+          "x-check",
           &[
             Act::Key("Escape"),
             Act::Key("C-x"),
@@ -921,10 +924,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
             Act::Type("thinking"),
             Act::Key("Enter"),
             Act::Type("x"),
-            Act::Key("Enter"),
           ],
-          "takes an integer",
+          "not an integer",
         ),
+        step("f", &[Act::Key("Enter")], "takes an integer"),
       ],
     }),
   },

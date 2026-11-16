@@ -119,11 +119,19 @@ impl Client {
   /// a text that is no JSON. The machine refuses a value that the property of its key does not
   /// take, and the client says why.
   pub fn write_setting(&mut self, at: usize, text: &str) {
-    let Some(setting) = self.setting(at) else { return };
+    if let Some(value) = self.setting_value(at, text) {
+      self.change_setting(at, value);
+    }
+  }
+
+  /// The value that a text writes for a setting: JSON, but a text for a key that takes a text, and
+  /// a text that is no JSON as it stands.
+  pub fn setting_value(&self, at: usize, text: &str) -> Option<Value> {
+    let setting = self.setting(at)?;
     let text = text.trim();
     let string = setting.property.as_ref().is_some_and(|one| one.kind == Kind::String);
     let value = serde_json::from_str(text).ok().filter(|_| !string);
-    self.change_setting(at, value.unwrap_or_else(|| Value::String(text.to_owned())));
+    Some(value.unwrap_or_else(|| Value::String(text.to_owned())))
   }
 
   /// The text that the value of a setting is written as: a text as it stands, any other value as
