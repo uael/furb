@@ -29,6 +29,8 @@ use std::{
   process::Stdio,
 };
 
+mod uv;
+
 use furb_wire::{
   error::ProtocolError,
   event::Event as Told,
@@ -43,7 +45,7 @@ use tokio::{
   time::{Duration, timeout},
 };
 
-use super::{Group, Shape, config::Layers, interrupted, skills::Kit, spawn};
+use super::{Group, Shape, Unborn, config::Layers, interrupted, skills::Kit, spawn};
 use crate::{
   ear::{Co, Ear, Next, ear, runtime, say},
   engine::ROOT,
@@ -53,6 +55,7 @@ use crate::{
   wire::{outward, parsed},
   world::skills::kit,
 };
+use uv::uv;
 
 /// The variable of the environment of a process that gives the name of its kit.
 const SKILL: &str = "FURB_SKILL";
@@ -227,47 +230,21 @@ impl Kits {
     let program = kit.as_ref().map(|one| one.program.clone()).unwrap_or_default();
     let (stdin, lines) = mpsc::unbounded_channel();
     let (stop, stopped) = oneshot::channel();
-    let ran = self.spawned(name, &program).map(|(mut child, group)| {
-      runtime().spawn(written(child.stdin.take(), lines));
-      ran(name.clone(), program.clone(), child, group)
-    });
-    let work = ran.unwrap_or_else(|no| {
-      let why = format!("The process {} of the kit {name} did not start: {no}", program.display());
-      stream::once(async move { Worked::Ended(String::new(), why) }).boxed_local()
-    });
-    let named = name.clone();
-    co.work(work.take_until(stopped).map(move |worked| match worked {
-      Worked::Ended(_, why) => Worked::Ended(named.clone(), why),
-      line @ Worked::Line(..) => line,
-    }));
-    Running { stdin, waiting: Some(Vec::new()), _stop: stop }
-  }
-
-  /// The process of a kit, in the folder of its program, with the variables that name its kit and
-  /// its life, and its stdin and its stdout, which carry the frames.
-  fn spawned(&self, name: &str, program: &Path) -> Result<(Child, Group), super::Unborn> {
-    let runner = match program.extension().and_then(OsStr::to_str) {
-      Some(one) if SCRIPTS.contains(&one) => Some(PathBuf::from("bun")),
-      Some("py") => Some(python()),
-      _ => None,
-    };
-    let mut command = match runner {
-      Some(runner) => {
-        let mut command = Command::new(runner);
-        command.arg(program);
-        command
+    let (life, name) = (self.life.clone(), name.clone());
+    let work = stream::once(async move {
+      match spawned(&life, &name, &program).await {
+        Ok((mut child, group)) => {
+          runtime().spawn(written(child.stdin.take(), lines));
+          ran(name, program, child, group)
+        }
+        Err(no) => {
+          let why = format!("The process {} of the kit {name} {no}", program.display());
+          stream::once(async move { Worked::Ended(name, why) }).boxed_local()
+        }
       }
-      None => Command::new(program),
-    };
-    command
-      .current_dir(program.parent().unwrap_or(Path::new(".")))
-      .env(LIFE, &self.life)
-      .env(SKILL, name)
-      .stdin(Stdio::piped())
-      .stdout(Stdio::piped())
-      .stderr(Stdio::piped())
-      .kill_on_drop(true);
-    spawn(&mut command)
+    });
+    co.work(work.flatten().take_until(stopped));
+    Running { stdin, waiting: Some(Vec::new()), _stop: stop }
   }
 
   /// One line that the process of a kit wrote, answered as a verb of the protocol.
@@ -406,6 +383,51 @@ fn attached(line: &str) -> bool {
   serde_json::from_str::<Value>(line).is_ok_and(|one| one["verb"] == json!("attach"))
 }
 
+/// The process of a kit, in the folder of its program, with the variables that name its kit and
+/// its life, and its stdin and its stdout, which carry the frames: a module of Python whose header
+/// names what it needs, as PEP 723 says, runs on [`uv`], which makes that environment; another
+/// module of Python on [`python`]; a module of TypeScript or of JavaScript on bun; any other
+/// program as it stands.
+async fn spawned(life: &str, name: &str, program: &Path) -> Result<(Child, Group), Unstarted> {
+  let runner: Option<(PathBuf, &[&str])> = match program.extension().and_then(OsStr::to_str) {
+    Some(one) if SCRIPTS.contains(&one) => Some((PathBuf::from("bun"), &[])),
+    Some("py") if headed(program) => Some((uv().await?, &["run", "--quiet", "--script"])),
+    Some("py") => Some((python(), &[])),
+    _ => None,
+  };
+  let mut command = match runner {
+    Some((runner, before)) => {
+      let mut command = Command::new(runner);
+      command.args(before).arg(program);
+      command
+    }
+    None => Command::new(program),
+  };
+  command
+    .current_dir(program.parent().unwrap_or(Path::new(".")))
+    .env(LIFE, life)
+    .env(SKILL, name)
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .kill_on_drop(true);
+  Ok(spawn(&mut command)?)
+}
+
+/// Why the process of a kit did not start, which follows its name.
+#[derive(Debug, thiserror::Error)]
+enum Unstarted {
+  #[error("did not start: {0}")]
+  Uv(#[from] uv::Error),
+  #[error(transparent)]
+  Unborn(#[from] Unborn),
+}
+
+/// Whether a module of Python holds a header of PEP 723, which opens on this line.
+fn headed(program: &Path) -> bool {
+  fs::read_to_string(program).is_ok_and(|text| text.lines().any(|line| line == "# /// script"))
+}
+
 /// Each line for the stdin of a process, written in order until the process or the ear goes.
 async fn written(input: Option<ChildStdin>, mut lines: mpsc::UnboundedReceiver<String>) {
   let Some(mut input) = input else { return };
@@ -473,19 +495,19 @@ async fn tail(stderr: Option<ChildStderr>) -> VecDeque<String> {
   lines
 }
 
-/// The Python that runs a module of a kit: the one that [`PYTHON`] names, which the door of Python
-/// names as its own; else the one beside the program of this process, which the environment that
-/// installed furb holds, so the module imports `furb.skill`; else the one on PATH.
+/// The Python that runs a module of a kit with no header: the one that [`PYTHON`] names, which the
+/// door of Python names as its own; else the one beside the program of this process, which the
+/// environment that installed furb holds, so the module imports `furb.skill`; else the one on PATH.
 fn python() -> PathBuf {
   let name = if cfg!(windows) { "python.exe" } else { "python3" };
-  let beside = || {
-    env::current_exe()
-      .and_then(fs::canonicalize)
-      .ok()
-      .and_then(|program| Some(program.parent()?.join(name)).filter(|one| one.is_file()))
-  };
   let named = env::var_os(PYTHON).filter(|one| !one.is_empty()).map(PathBuf::from);
-  named.or_else(beside).unwrap_or_else(|| PathBuf::from(name))
+  named.or_else(|| beside(name)).unwrap_or_else(|| PathBuf::from(name))
+}
+
+/// The program of a name in the folder of the program of this process.
+fn beside(name: &str) -> Option<PathBuf> {
+  let program = env::current_exe().and_then(fs::canonicalize).ok()?;
+  Some(program.parent()?.join(name)).filter(|one| one.is_file())
 }
 
 #[cfg(test)]

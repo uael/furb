@@ -410,7 +410,7 @@ fn officials(places: &Places) -> Vec<Skill> {
     .iter()
     .map(|(manifest, word, ..)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
-      one.file = copy(&one.name, &one.file, &one.word, places);
+      one.file = copy(&one.name, &[(&one.file, &one.word)], places);
       one
     })
     .collect()
@@ -443,6 +443,14 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
 /// extension.
 const PROCESSES: [(&str, &str); 1] = [("mcp", include_str!("../.agents/skills/mcp/process.py"))];
 
+/// The client of the protocol of a kit in Python, which the crate writes beside the copy of the
+/// process of an official extension in Python, so that process imports the `furb.skill` of the
+/// build that hosts it, whatever environment runs it.
+pub(crate) const SDK: [(&str, &str); 2] = [
+  ("furb/skill.py", include_str!("furb/skill.py")),
+  ("furb/protocol.py", include_str!("furb/protocol.py")),
+];
+
 /// The name of each official extension, in the order a life runs them, and whether it plays by
 /// default.
 fn names() -> Vec<(String, bool)> {
@@ -459,18 +467,24 @@ fn names() -> Vec<(String, bool)> {
 /// source, since the source imports from `furb.engine`, and a word of a chain imports nothing of
 /// furb. The digest is the start of the sha256 of the word, so each word has a file of its own: a
 /// life of another build that shares the config directory writes its word beside this one, and
-/// never over the file that the setup of this life reads.
-pub(crate) fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
-  let held = &digest(text)[..COPY_DIGEST];
-  let copied = places.config.join("words").join(name).join(held).join(file);
-  if fs::read_to_string(&copied).ok().as_deref() != Some(text)
-    && copied
-      .parent()
-      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&copied, text).is_err())
-  {
-    return String::new();
+/// never over the file that the setup of this life reads. The files after the first stand in the
+/// same folder, by their paths in it, and the digest covers each of their texts too, in order.
+pub(crate) fn copy(name: &str, files: &[(&str, &str)], places: &Places) -> String {
+  let summed = files.iter().fold(Sha256::new(), |sum, (_, text)| sum.chain_update(text));
+  let held = &format!("{:x}", summed.finalize())[..COPY_DIGEST];
+  let folder = places.config.join("words").join(name).join(held);
+  let written = |(file, text): &(&str, &str)| {
+    let copied = folder.join(file);
+    fs::read_to_string(&copied).ok().as_deref() == Some(*text)
+      || copied.parent().is_some_and(|one| fs::create_dir_all(one).is_ok())
+        && fs::write(&copied, text).is_ok()
+  };
+  match files.first() {
+    Some((file, _)) if files.iter().all(written) => {
+      files::tilded(&folder.join(file), places.home.as_deref())
+    }
+    _ => String::new(),
   }
-  files::tilded(&copied, places.home.as_deref())
 }
 
 /// The hex digits of the sha256 of a word that name the folder of its copy.
@@ -490,7 +504,7 @@ pub fn load(name: &str, root: &Path, places: &Places) -> Result<Skill, Fault> {
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
   let mut one = manifested(&text, read).map_err(refused)?;
-  one.file = copy(&one.name, &one.file, &one.word, places);
+  one.file = copy(&one.name, &[(&one.file, &one.word)], places);
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {

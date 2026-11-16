@@ -23,10 +23,6 @@ dependencies = [
     "furb-cli==0.4.2", # x-release-please-version
 ]
 
-[project.optional-dependencies]
-# The World part of the kit mcp, `.agents/skills/mcp/process.py`, speaks to the servers through the official SDK.
-mcp = ["mcp>=2.3.0"]
-
 [project.urls]
 Source = "https://github.com/uael/furb"
 Issues = "https://github.com/uael/furb/issues"

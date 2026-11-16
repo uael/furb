@@ -18,7 +18,7 @@ use crate::{
   engine::ROOT,
   fact::Fact,
   skill::{
-    ACTS, CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, Skill, WORD, copy,
+    ACTS, CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, SDK, Skill, WORD, copy,
     enabled, frontmatter, imports_furb, load, manifested, manifests, rooted, shipped, turned_on,
     word,
   },
@@ -91,7 +91,7 @@ impl Found {
   fn loaded(&self, places: &Places) -> Result<Skill, Fault> {
     let read = |file: &str| filed(self, file, "").map(|got| got.content).map_err(|no| no.message());
     let mut one = manifested(&self.manifest, read).map_err(Fault::refused)?;
-    one.file = copy(&one.name, &one.file, &one.word, places);
+    one.file = copy(&one.name, &[(&one.file, &one.word)], places);
     Ok(one)
   }
 
@@ -440,7 +440,9 @@ pub(crate) fn kit(name: &str, program: Option<&str>, here: &Path, places: &Place
     Place::Folder(folder) => programmed(folder, &one.manifest)?,
     Place::Shipped(files) => {
       let text = files.iter().find(|two| two.0 == file)?.1;
-      let copied = copy(name, &file, text, places);
+      let python = Path::new(&file).extension().is_some_and(|one| one == "py");
+      let sdk = if python { &SDK[..] } else { &[] };
+      let copied = copy(name, &[[(file.as_str(), text)].as_slice(), sdk].concat(), places);
       (!copied.is_empty()).then(|| files::placed(Path::new(""), &copied).ok()).flatten()?
     }
   };

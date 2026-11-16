@@ -172,7 +172,9 @@ class Place:
 
 
 @pytest.fixture
-def place(tmp_path: Path) -> Iterator[Place]:
+def place(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Place]:
+  # The kit runs as on a fresh install: on uv, from the header of its module, and on no Python that the door names.
+  monkeypatch.delenv("FURB_PYTHON", raising=False)
   one = Place(tmp_path)
   yield one
   if hasattr(one, "ears"):

@@ -1,5 +1,9 @@
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["mcp>=2.3.0"]
+# ///
 """The World part of the kit mcp: the process that holds the servers of the Model Context Protocol of a life and
-answers each act of the kit, on the official SDK, `mcp`, which the extra `furb[mcp]` installs.
+answers each act of the kit, on the official SDK, `mcp`, which uv installs from the header above, as PEP 723 says.
 
 The configs define the servers in three scopes: the user scope, `mcp.json` of the config folder of the user; the
 project scope, `.mcp.json` of the project, in the form of Claude Code; and the local scope, `.furb/mcp.json` of the
@@ -48,23 +52,20 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mappin
 from pathlib import Path
 from typing import IO, NoReturn
 
-from furb.skill import Fact, Skill
+import anyio
+import httpx2
+from mcp import types
+from mcp.client import Client, ClientRequestContext, IncomingMessage, Transport
+from mcp.client.auth import OAuthClientProvider
+from mcp.client.sse import sse_client
+from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.exceptions import MCPError
+from mcp.shared.message import SessionMessage
+from pydantic import BaseModel
 
-try:
-  import anyio
-  import httpx2
-  from mcp import types
-  from mcp.client import Client, ClientRequestContext, IncomingMessage, Transport
-  from mcp.client.auth import OAuthClientProvider
-  from mcp.client.sse import sse_client
-  from mcp.client.stdio import StdioServerParameters, stdio_client
-  from mcp.client.streamable_http import streamable_http_client
-  from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-  from mcp.shared.exceptions import MCPError
-  from mcp.shared.message import SessionMessage
-  from pydantic import BaseModel
-except ImportError:
-  sys.exit("The kit mcp needs the package mcp, which the extra furb[mcp] installs: pip install 'furb[mcp]'")
+from furb.skill import Fact, Skill
 
 KINDS = ("mcp_servers", "mcp_call", "mcp_read", "mcp_prompt", "mcp_control")
 CHANGED = "mcp_changed"

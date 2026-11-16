@@ -454,11 +454,6 @@ dependencies = [
     { name = "furb-monty" },
 ]
 
-[package.optional-dependencies]
-mcp = [
-    { name = "mcp" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "datamodel-code-generator" },
@@ -478,9 +473,7 @@ dev = [
 requires-dist = [
     { name = "furb-cli", editable = "cli" },
     { name = "furb-monty", editable = "bind/python" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3.0" },
 ]
-provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [
