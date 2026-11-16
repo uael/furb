@@ -168,7 +168,12 @@ const THREAD: &[Bound] = &[
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
   bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
   bound(Does::Rewind, "back in the time of the thread, and to now", Some("rewind"), &[&led('b')]),
-  bound(Does::Chains, "the chains of the life on the time", Some("chains"), &[&led('t')]),
+  bound(
+    Does::Chains,
+    "the chains of the life on the time",
+    Some("chains"),
+    &[&led('t'), &[ctrl('b')]],
+  ),
   bound(
     Does::Aside,
     "ask aside, in a fork that the thread does not keep",

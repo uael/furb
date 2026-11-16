@@ -8,8 +8,8 @@ use furb_window::open;
 use opentui::testing::TestApp;
 
 use crate::{
-  cards::{app, options, shows},
-  daemon::{Daemon, PATIENCE},
+  cards::{app, options, row, shows},
+  daemon::{ANSWERS, Daemon, PATIENCE},
 };
 
 /// A window on one machine with one project and no thread yet, once its models came.
@@ -32,26 +32,43 @@ fn f1_shows_each_key_and_the_list_names_it_beside_the_leader() {
   shows(&app, "⌃X ? or F1");
 }
 
+/// A window on the thread of a session that answered, open.
+fn threaded() -> (TestApp, Daemon) {
+  let (app, mut daemon) = opened();
+  let sessions = daemon.project("furb");
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("keys.jsonl"), true);
+  peer.said(&life, &format!("how long does an open take {ANSWERS}"));
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "The open takes");
+  (app, daemon)
+}
+
 /// The frame that a key of the old window gives is the frame that its twin after the leader gives:
-/// the leader and its letter, then the same again to undo it, then the bytes of the old key.
-fn twin(app: &TestApp, letter: &str, undo: &str, bytes: &[u8]) {
+/// the bytes of the old key change the frame, up to a text that shows once the change came whole,
+/// then keys undo it and the twin does it again.
+fn twin(app: &TestApp, bytes: &[u8], whole: &str, again: &[&str]) {
   let before = app.text();
-  app.press("ctrl+x");
-  app.press(letter);
-  assert!(app.wait_until(PATIENCE, || app.text() != before), "{}", app.text());
-  let led = app.text();
-  if undo == letter {
-    app.press("ctrl+x");
-  }
-  app.press(undo);
-  assert!(app.wait_until(PATIENCE, || app.text() == before), "{}", app.text());
   app.feed(bytes);
-  let same = app.wait_until(PATIENCE, || app.text() == led);
-  assert!(same, "the old key did not do what its twin does:\n{}\n{led}", app.text());
+  let changed = app.wait_until(PATIENCE, || app.text() != before && app.text().contains(whole));
+  assert!(changed, "{}", app.text());
+  let old = app.text();
+  for key in again {
+    app.press(key);
+  }
+  let same = app.wait_until(PATIENCE, || app.text() == old);
+  assert!(same, "the twin did not do what the old key does:\n{}\n{old}", app.text());
 }
 
 #[test]
 fn ctrl_backslash_shows_or_hides_the_list_as_the_leader_and_l_do() {
   let (app, _daemon) = opened();
-  twin(&app, "l", "l", b"\x1c");
+  twin(&app, b"\x1c", "", &["ctrl+x", "l", "ctrl+x", "l"]);
+}
+
+#[test]
+fn ctrl_b_shows_the_chains_of_the_life_as_the_leader_and_t_do() {
+  let (app, _daemon) = threaded();
+  // The chains come from the machine after the bar shows.
+  twin(&app, b"\x02", "no chain works now", &["ctrl+x", "t", "ctrl+x", "t"]);
 }
