@@ -25,7 +25,11 @@ pub(crate) trait Cells {
 
 impl Cells for str {
   fn width(&self) -> usize {
-    if printable(self) { self.len() } else { characters(self).map(|(_, wide)| wide).sum() }
+    if printable(self) {
+      self.len()
+    } else {
+      MEASURE.with_borrow_mut(|measure| measure.width(self))
+    }
   }
 }
 
@@ -45,6 +49,7 @@ pub(crate) fn follow(app: &App) {
     if measure.method != method {
       measure.method = method;
       measure.known.clear();
+      measure.widths.clear();
     }
   });
 }
@@ -63,16 +68,35 @@ fn of(character: &str) -> usize {
   MEASURE.with_borrow_mut(|measure| measure.of(character))
 }
 
-/// The context of the renderer, the method that it measures by, and the cells of each character
-/// that it measured, which a change of the method forgets.
+/// How many texts the measure keeps the cells of before it forgets them all.
+const WIDTHS: usize = 4096;
+
+/// The context of the renderer, the method that it measures by, the cells of each character that
+/// it measured and of each text, which a change of the method forgets. A layout measures the same
+/// rows again at each change, so a text that it measured once costs a lookup, not a split into
+/// characters.
 #[derive(Default)]
 struct Measure {
   context: Option<Context>,
   method: WidthMethod,
   known: HashMap<String, usize>,
+  widths: HashMap<String, usize>,
 }
 
 impl Measure {
+  fn width(&mut self, text: &str) -> usize {
+    if let Some(known) = self.widths.get(text) {
+      return *known;
+    }
+    let cells =
+      text.graphemes(true).map(|one| if printable(one) { one.len() } else { self.of(one) }).sum();
+    if self.widths.len() >= WIDTHS {
+      self.widths.clear();
+    }
+    self.widths.insert(text.to_owned(), cells);
+    cells
+  }
+
   fn of(&mut self, character: &str) -> usize {
     if let Some(known) = self.known.get(character) {
       return *known;

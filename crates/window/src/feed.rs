@@ -65,10 +65,10 @@ impl Model {
 /// How many blocks the window keeps the code of before it forgets them all.
 const READ: usize = 256;
 
-/// The code of a block as the window read it: its text, the look of its code, its colors and its
-/// names, and the numbers of its lines that bind each name, in their order.
+/// The code of a block as the window read it: the text of each line, the look of its code, its
+/// colors and its names, and the numbers of its lines that bind each name, in their order.
 pub(crate) struct Read {
-  text: String,
+  lines: Vec<String>,
   style: Style,
   colors: Rc<Vec<Line>>,
   names: Rc<Vec<Vec<Named>>>,
@@ -671,11 +671,13 @@ impl Feed<'_> {
     let texts = || block.lines.iter().map(|one| one.text.as_str());
     if let Some(read) = self.model.read.borrow().get(message)
       && read.style == style
-      && read.text.split('\n').eq(texts())
+      && read.lines.len() == block.lines.len()
+      && read.lines.iter().map(String::as_str).eq(texts())
     {
       return Rc::clone(read);
     }
-    let text = texts().collect::<Vec<_>>().join("\n");
+    let lines: Vec<String> = texts().map(str::to_owned).collect();
+    let text = lines.join("\n");
     let homed = self.model.homed(&text);
     let (colors, names) = (self.model.colors.lines(&homed, style), self.model.names.of(&homed));
     let mut binds: HashMap<String, Vec<usize>> = HashMap::new();
@@ -684,7 +686,7 @@ impl Feed<'_> {
         binds.entry(one.name.clone()).or_default().push(line.number);
       }
     }
-    let read = Rc::new(Read { text, style, colors, names, binds });
+    let read = Rc::new(Read { lines, style, colors, names, binds });
     let mut kept = self.model.read.borrow_mut();
     if kept.len() >= READ {
       kept.clear();

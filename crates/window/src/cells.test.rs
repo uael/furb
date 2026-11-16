@@ -17,6 +17,7 @@ fn measuring(method: WidthMethod) {
   MEASURE.with_borrow_mut(|measure| {
     measure.method = method;
     measure.known.clear();
+    measure.widths.clear();
   });
 }
 
