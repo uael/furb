@@ -66,11 +66,20 @@ impl Model {
         (true, false, true) => ("On need", "off · on at the next session"),
         (true, false, false) => ("On need", "off"),
       };
+      // An extension that plays reads bright, and one that changes at the next session takes the
+      // accent, as the model in use does in Models, so the eye finds what plays and what changes.
+      let tone = match (one.plays, one.on) {
+        _ if one.turned_by.is_null() => None,
+        (true, true) => Some(self.tokens.text),
+        (true, false) | (false, true) => Some(self.tokens.accent),
+        (false, false) => None,
+      };
       Entry {
         part: Cow::Borrowed(part),
         left: one.name.clone(),
         says: format!("  {}", one.description),
         right: format!("{stands}  {:<froms$}", one.from),
+        tone,
         choice: Choice::Skill(place),
         ..Entry::default()
       }
