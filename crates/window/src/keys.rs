@@ -142,12 +142,7 @@ const fn bound(
 /// The keys that go from one place of the window to another. A key with `alt` has a twin after the
 /// leader, since `alt` needs a setting of the terminal on macOS.
 const GO: &[Bound] = &[
-  bound(
-    Does::GoTo,
-    "go to anything, or run a command",
-    Some("go"),
-    &[&[ctrl('p')], &[cmd('p')]],
-  ),
+  bound(Does::GoTo, "go to anything, or run a command", Some("go"), &[&[ctrl('p')], &[cmd('p')]]),
   bound(Does::Keys, "each key", Some("keys"), &[&led('?'), &[plain(KeyCode::F(1))]]),
   bound(
     Does::Reload,

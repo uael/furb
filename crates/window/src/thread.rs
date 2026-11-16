@@ -604,7 +604,8 @@ impl Model {
     let now = items.shown(feed.opened.top, room, |item| self.part_rows(&feed, item));
     let moved = now.top.map(|top| Place { at: top.at, row: top.row + by });
     let then = items.shown(moved, room, |item| self.part_rows(&feed, item));
-    let near = then.top.is_none_or(|top| items.above(top, room, |item| self.part_rows(&feed, item)) < room);
+    let near =
+      then.top.is_none_or(|top| items.above(top, room, |item| self.part_rows(&feed, item)) < room);
     let opened = self.client.thread.as_mut()?;
     opened.top = then.top.filter(|_| !then.end);
     let older = opened.thread.asked.values().any(Option::is_some);

@@ -14,6 +14,7 @@ use std::{
     Arc,
     atomic::{AtomicUsize, Ordering},
   },
+  time::Duration,
 };
 
 use furb::{
@@ -26,6 +27,7 @@ use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use tokio::time::timeout;
 
 use crate::life::{Logged, birth, done, facts_of, kept, made, place, rung, until};
 
@@ -223,6 +225,30 @@ async fn a_life_that_opens_from_its_image_takes_again_each_act_in_flight() {
   ended(life).await;
   assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait keeps its one deadline");
   assert_eq!(recorded(&at, "started", &w).len(), 2, "each life took the wait one time");
+}
+
+/// A life that opens from an image that holds a command in flight runs no command: its process
+/// went with the life before, so the handover that waits for the commands of the life ends.
+#[tokio::test]
+async fn a_life_on_an_image_with_a_command_in_flight_runs_no_command_once_it_closed_it() {
+  let at = place("image-command");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("b = bash('sleep 600')")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let b = act_of(&life, "b").await;
+  while !facts_of(&log).iter().any(|fact| fact[0] == "started" && fact[1] == b.as_str()) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  assert!(!life.commands().is_empty(), "the first life runs its command");
+  ended(life).await;
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  until(&mut events, done(&b)).await;
+  let settled = timeout(Duration::from_secs(10), life.settled(&life.commands())).await;
+  assert!(settled.is_ok(), "a command that no process runs holds no handover");
+  assert!(life.commands().is_empty());
+  ended(life).await;
 }
 
 #[tokio::test]

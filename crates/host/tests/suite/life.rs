@@ -929,6 +929,32 @@ pub(crate) fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
   facts.collect()
 }
 
+/// A life born on a carry runs no command of the life before the crossing, whose end cut its
+/// process: the handover that waits for the commands of the life ends, as each later one does.
+#[tokio::test]
+async fn a_life_born_on_a_carry_runs_no_command_that_the_life_before_the_crossing_ran() {
+  let at = place("carry-command");
+  let Ok(life) = Life::spawn(kept(&at)) else { panic!("the life has no thread") };
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("b = bash('sleep 600')")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let started =
+    |log: &[Logged]| facts_of(log).iter().any(|fact| fact[0] == "started" && fact[2] == "bash");
+  while !started(&log) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  assert!(!life.commands().is_empty(), "the first life runs its command");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  while events.next().await.is_some() {}
+  crossed(kept(&at)).await;
+  let Ok(life) = Life::spawn(kept(&at)) else { panic!("the life has no thread") };
+  let stands = life.send(Command::Standing).await;
+  assert!(stands.is_ok(), "the life opens across the crossing: {stands:?}");
+  let settled = time::timeout(Duration::from_secs(10), life.settled(&life.commands())).await;
+  assert!(settled.is_ok(), "a command that no process runs holds no handover");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
 /// The record of a life that ended, as if another build had made its last segment: its last fact
 /// made of this build names the engine of this build with a line of comment more, so the next life
 /// that keeps it crosses there and each later open carries the life across that place. The image

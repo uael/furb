@@ -1661,6 +1661,51 @@ async fn a_handover_that_a_life_asked_waits_for_no_command_of_that_life() {
 }
 
 #[tokio::test]
+async fn a_handover_goes_on_without_a_life_whose_thread_stands_still() {
+  let at = place();
+  // The model of this life holds the thread of the life still for longer than the test, as a call
+  // that never returns would.
+  let answer = Answered(Arc::new(move |_, _| {
+    thread::sleep(Duration::from_secs(30));
+    let turn = Object::tuple([
+      Object::string("assistant"),
+      Object::string("close(None)"),
+      Object::none(),
+      Object::none(),
+    ]);
+    Box::pin(async move { Ok(turn) })
+  }));
+  let local = Local::new(at.join("sock"));
+  let listener = local.listen().await.unwrap();
+  let settings = |opening: Opening| Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall: PAST,
+    tailnet: None,
+    door: None,
+    data: Some(at.join("data")),
+  };
+  let held = settings(Opening { answer: Some(answer), ..opening(&at) });
+  let served = local.clone();
+  let old = tokio::spawn(async move { run(&served, listener, held).await });
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let word = "r = bash('sleep 600')\nh = prompt(str, 'Hang.')".to_owned();
+  let verb = Verb::Run { life: life.clone(), word, on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Act(act), .. } if act.kind == view::Kind::Reply);
+  window.until(asked).await;
+  let next = local.clone();
+  let fresh = settings(opening(&at));
+  let mut new = tokio::spawn(async move { upgrade(&next, fresh, None).await });
+  let ended = timeout(Duration::from_secs(15), old).await;
+  assert!(matches!(ended, Ok(Ok(Ok(())))), "the handover goes on without the life: {ended:?}");
+  listening(&local, &mut new).await;
+}
+
+#[tokio::test]
 async fn a_program_that_asks_the_handover_while_one_waits_takes_its_place_and_the_first_ends() {
   let at = place();
   let (local, old) = started(&at, SHORT).await;

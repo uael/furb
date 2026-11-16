@@ -1391,7 +1391,10 @@ const WHOLE: usize = 1000;
 /// control, and a tab as a space.
 fn plain(line: &str) -> String {
   let line = line.rsplit('\r').find(|part| !part.is_empty()).unwrap_or_default();
-  line.chars().filter_map(|one| if one == '\t' { Some(' ') } else { (!one.is_control()).then_some(one) }).collect()
+  line
+    .chars()
+    .filter_map(|one| if one == '\t' { Some(' ') } else { (!one.is_control()).then_some(one) })
+    .collect()
 }
 
 impl Model {
@@ -1400,12 +1403,17 @@ impl Model {
   pub(crate) fn whole_output(&mut self) {
     let thread = self.client.thread.as_ref().map(|one| &one.thread);
     let blocks = thread.into_iter().flat_map(|one| one.exchanges.values().rev());
-    let lines = blocks.filter_map(|one| one.block.as_ref()).flat_map(|block| block.lines.iter().rev());
-    let cut = |line: &&Code| line.output.as_ref().is_some_and(|one| one.more > 0 && !one.acts.is_empty());
+    let lines =
+      blocks.filter_map(|one| one.block.as_ref()).flat_map(|block| block.lines.iter().rev());
+    let cut =
+      |line: &&Code| line.output.as_ref().is_some_and(|one| one.more > 0 && !one.acts.is_empty());
     let last = lines.filter(cut).map(|line| line.number).next();
     match (last, self.client.thread.as_mut()) {
       (Some(number), Some(opened)) => opened.fold(Fold::Output(number)),
-      _ => self.client.notice = Some("No command of this thread wrote more than its last lines.".to_owned()),
+      _ => {
+        self.client.notice =
+          Some("No command of this thread wrote more than its last lines.".to_owned())
+      }
     }
   }
 }

@@ -16,7 +16,7 @@
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
   fs::File,
-  future::poll_fn,
+  future::{self, poll_fn},
   hash::{DefaultHasher, Hash, Hasher},
   io::{BufRead, BufReader},
   iter, mem,
@@ -58,8 +58,8 @@ use tokio::{
     mpsc::{self, UnboundedReceiver, UnboundedSender},
     oneshot, watch,
   },
-  task::{LocalSet, spawn_blocking},
-  time::{Instant, sleep_until},
+  task::{LocalSet, spawn_blocking, spawn_local},
+  time::{Instant, sleep, sleep_until},
 };
 
 use crate::{
@@ -515,7 +515,12 @@ pub struct LifeHandle {
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
   commands: watch::Receiver<BTreeSet<String>>,
+  beat: watch::Receiver<Instant>,
 }
+
+/// How often the thread of a life marks that its loop turns: a thread that a call holds still marks
+/// nothing, which [`LifeHandle::still`] reads.
+const BEAT: Duration = Duration::from_millis(250);
 
 impl Life {
   /// A life opened on a thread of its own, on the ears of the host and then on the ears of the
@@ -535,13 +540,20 @@ impl Life {
     let (opened, opens) = Told::new();
     let (carded, cards) = watch::channel(None);
     let (running, commands) = watch::channel(BTreeSet::new());
-    let told =
-      Tells { readers: told, name: named, opens: opened, cards: carded, commands: running };
+    let (beating, beat) = watch::channel(Instant::now());
+    let told = Tells {
+      readers: told,
+      name: named,
+      opens: opened,
+      cards: carded,
+      commands: running,
+      beat: beating,
+    };
     thread::Builder::new()
       .name("furb-life".to_owned())
       .spawn(move || lived(opening, lease, received, told))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name, opens, cards, commands })
+    Ok(LifeHandle { inbox, readers, name, opens, cards, commands, beat })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -1099,6 +1111,7 @@ struct Tells {
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
   commands: watch::Sender<BTreeSet<String>>,
+  beat: watch::Sender<Instant>,
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
@@ -1109,7 +1122,15 @@ async fn run(
   mut received: UnboundedReceiver<Message>,
   tells: Tells,
 ) {
-  let Tells { readers, name, opens, cards, commands } = tells;
+  let Tells { readers, name, opens, cards, commands, beat } = tells;
+  // The loop of the thread marks each of its turns, so a host knows a life whose thread a call
+  // holds still.
+  spawn_local(async move {
+    loop {
+      beat.send_replace(Instant::now());
+      sleep(BEAT).await;
+    }
+  });
   let record = opening.record.clone().filter(|_| opening.keeps());
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
@@ -1811,6 +1832,23 @@ impl LifeHandle {
     let mut commands = self.commands.clone();
     // A life that ended runs no command.
     commands.wait_for(|runs| runs.is_disjoint(of)).await.ok();
+  }
+
+  /// Once the thread of the life stood still for `bound`, as a call that never returns holds it:
+  /// such a life answers nothing, writes no image and ends no command, so a handover goes on
+  /// without it, and the process that ends takes the thread with it. Never for a life whose thread
+  /// ended.
+  pub async fn still(&self, bound: Duration) {
+    loop {
+      if self.beat.has_changed().is_err() {
+        return future::pending().await;
+      }
+      let last = *self.beat.borrow();
+      if last.elapsed() >= bound {
+        return;
+      }
+      sleep_until(last + bound).await;
+    }
   }
 
   /// The name of the session of the life, as its facts fold it: the one that the operator said last

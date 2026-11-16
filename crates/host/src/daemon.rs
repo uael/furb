@@ -1818,13 +1818,20 @@ impl Lives {
     let lives: Vec<(String, LifeHandle, BTreeSet<String>)> =
       runs.filter(|(_, _, commands)| !commands.is_empty()).collect();
     let (log, asks) = (self.settings.opening.log.clone(), self.asks.clone());
+    let still = self.settings.stall;
     tokio::spawn(async move {
       if !lives.is_empty() {
         let records: Vec<&str> = lives.iter().map(|(record, ..)| record.as_str()).collect();
         let waits = records.join(", ");
         report(log.as_ref(), &format_args!("the handover waits for each command of: {waits}"));
       }
-      future::join_all(lives.iter().map(|(_, life, commands)| life.settled(commands))).await;
+      let settled = lives.iter().map(|(record, life, commands)| async {
+        tokio::select! {
+          () = life.settled(commands) => {}
+          () = life.still(still) => stood(log.as_ref(), record, still),
+        }
+      });
+      future::join_all(settled).await;
       if let Some(asks) = asks.upgrade() {
         asks.send(Asked::Settled(round)).ok();
       }
@@ -1850,8 +1857,8 @@ impl Lives {
       }
       lives.push((life, held.handle));
     }
-    let log = self.settings.opening.log.clone();
-    tokio::spawn(gave(lives, log, self.leave, Leaving { handed, asker, reply }));
+    let (log, still) = (self.settings.opening.log.clone(), self.settings.stall);
+    tokio::spawn(gave(lives, (log, still), self.leave, Leaving { handed, asker, reply }));
   }
 }
 
@@ -1913,6 +1920,18 @@ fn living<'a>(
     Some(Held { handle, stage: Stage::Living(holders), .. }) => Ok((handle, holders)),
     _ => Err(ProtocolError::Closed { life: life.to_owned() }),
   }
+}
+
+/// The report of a life whose thread stood still for the bound of a stall while the handover
+/// waited for it, which goes on without it: the end of this process takes that thread with it.
+fn stood(log: Option<&Log>, record: &str, still: Duration) {
+  let seconds = still.as_secs();
+  report(
+    log,
+    &format_args!(
+      "the thread of the life of {record} stood still for {seconds} s, so the handover goes on without it"
+    ),
+  );
 }
 
 /// The moment when a life with no holder ends, or never.
@@ -2076,16 +2095,28 @@ async fn due(opens: Option<&mut Heard>) {
 /// the listener, or refused when the listener is gone. The log says which lives it waits for.
 async fn gave(
   lives: Vec<(String, LifeHandle)>,
-  log: Option<Log>,
+  (log, still): (Option<Log>, Duration),
   leave: oneshot::Sender<Leaving>,
-  leaving: Leaving,
+  mut leaving: Leaving,
 ) {
   if !lives.is_empty() {
     let records: Vec<&str> = lives.iter().map(|(record, _)| record.as_str()).collect();
     let waits = records.join(", ");
     report(log.as_ref(), &format_args!("the handover waits for each life to end: {waits}"));
   }
-  future::join_all(lives.iter().map(|(_, life)| end(life))).await;
+  let ended = lives.iter().map(|(record, life)| async {
+    tokio::select! {
+      () = end(life) => None,
+      () = life.still(still) => Some(record.clone()),
+    }
+  });
+  let stuck: Vec<String> = future::join_all(ended).await.into_iter().flatten().collect();
+  for record in &stuck {
+    stood(log.as_ref(), record, still);
+  }
+  // A life whose thread stands still holds its record until this process ends, so the next
+  // daemon opens it by its record when a window asks for it, and not at once.
+  leaving.handed.retain(|one| !stuck.contains(&one.life));
   if let Err(Leaving { reply, .. }) = leave.send(leaving) {
     reply.send(Err(ProtocolError::Stopped)).ok();
   }
