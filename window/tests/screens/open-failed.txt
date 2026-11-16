@@ -25,6 +25,6 @@
 ┃
 ┃ and the replay
 ┃
-┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb                           ⎋ back

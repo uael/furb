@@ -36,9 +36,13 @@ impl Model {
     let inner = usize::from(self.list_width()) - 3;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
     let Some(context) = &opened.thread.context else {
-      // The box keeps its rows before the first answer, so nothing moves when it comes.
+      // The box keeps its rows before the first answer, so nothing moves when it comes. Before
+      // the first page of a thread that he did not start it says nothing: its chain may have
+      // answered, which the page tells.
       let free = [Kind { name: "Free", tokens: 1, color: t.border }];
-      let head = row(inner, vec![run("Context", prose)], vec![run("No answer yet", muted)]);
+      let known = opened.thread.above.is_some() || opened.thread.started;
+      let said = known.then(|| run("No answer yet", muted));
+      let head = row(inner, vec![run("Context", prose)], said.into_iter().collect());
       return vec![head, bar(inner, &free, 1), Vec::new()];
     };
     let open = opened.unfolded.contains(&Fold::Context);
