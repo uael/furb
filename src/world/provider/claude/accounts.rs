@@ -219,7 +219,3 @@ pub enum Token {
   #[error("The account {name} has no token: its token variable {var} is empty or not set")]
   EmptyEnv { name: String, var: String },
 }
-
-#[cfg(test)]
-#[path = "accounts.test.rs"]
-mod test;

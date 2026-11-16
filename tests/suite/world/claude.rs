@@ -11,7 +11,7 @@
 use std::{
   env, fs,
   os::unix::fs::PermissionsExt,
-  process::Command,
+  process::{self, Command},
   slice, thread,
   time::{Duration, SystemTime},
 };
@@ -30,8 +30,10 @@ use serde_json::{Value, json};
 use tokio::time;
 
 use crate::{
+  child::{child, here, ran},
   claude::{Yard, after, gone},
   drive::{on_reactor, pause},
+  yard::Yard as Base,
 };
 use furb::world::claude::{Account, Claude, Completion, Source, Switch, refresh};
 
@@ -1242,4 +1244,105 @@ fn a_missing_token_and_every_account_signed_out_are_failures_of_their_own_with_t
     no.to_string(),
     "RequestError: Every account of the claude command line is signed out. Sign one in, then run /reload."
   );
+}
+
+#[test]
+fn spread_counts_no_account_when_a_switch_names_the_next_one() {
+  let yard = Yard::new("accounts-look");
+  let claude = yard.claude_as(listed(&yard, &["a", "b", "c"]), Switch::Spread);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its usage limit");
+  asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b"], "the turn runs on the account that it named");
+}
+
+/// The variable that the command line of a test takes its token from.
+const VARIABLE: &str = "FURB_TEST_TOKEN";
+
+#[test]
+fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_credential() {
+  if child().is_none() {
+    let at = Base::new(format!("furb-claude-credentials-{}", process::id()));
+    let vars = [
+      ("CLAUDE_CODE_OAUTH_TOKEN", "tok-env"),
+      ("ANTHROPIC_API_KEY", "key-env"),
+      ("CLAUDE_CONFIG_DIR", "dir-env"),
+      (VARIABLE, "  tok-var "),
+    ];
+    return ran(here!(), &at, &vars);
+  }
+  let yard = Yard::new("credentials");
+  // A command line that says the key of the environment that it runs with, then runs the fake.
+  let keyed = yard.at.join("keyed");
+  let script = "#!/bin/sh\nprintf '%s' \"${ANTHROPIC_API_KEY-unset}\" > \"$0.$$\"\n\
+                exec \"$(dirname \"$0\")/claude\" \"$@\"\n";
+  fs::write(&keyed, script).unwrap();
+  fs::set_permissions(&keyed, fs::Permissions::from_mode(0o755)).unwrap();
+  let file = yard.at.join("token");
+  fs::write(&file, "  tok-file \n").unwrap();
+  let dir = yard.at.join("dir");
+  let sources = [
+    Some(Source::TokenFile(file)),
+    Some(Source::TokenEnv(VARIABLE.to_owned())),
+    Some(Source::ConfigDir(dir.clone())),
+    None,
+  ];
+  for (n, source) in sources.into_iter().enumerate() {
+    let accounts = source.map(|source| Account { name: "a".to_owned(), source });
+    let claude = Claude::with_accounts(
+      Some(keyed.clone()),
+      Vec::new(),
+      accounts.into_iter().collect(),
+      Switch::Failover,
+      None,
+    );
+    asked(
+      &claude.completion_model("sonnet"),
+      &[user("first")],
+      json!({"session": format!("s{n}")}),
+    )
+    .unwrap();
+  }
+  let keys: Vec<String> = yard
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("keyed.{pid}"))).unwrap())
+    .collect();
+  assert_eq!(yard.tokens(), ["tok-file", "tok-var", "unset", "tok-env"]);
+  assert_eq!(
+    keys,
+    ["unset", "unset", "unset", "key-env"],
+    "no account leaves the environment as it is"
+  );
+  let dirs: Vec<String> = yard
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("configdir.{pid}"))).unwrap())
+    .collect();
+  assert_eq!(dirs, ["dir-env", "dir-env", &dir.display().to_string(), "dir-env"]);
+}
+
+#[test]
+fn an_account_with_no_token_fails_its_turn_with_why_and_starts_no_process() {
+  let yard = Yard::new("accounts-why");
+  let (missing, empty) = (yard.at.join("missing"), yard.at.join("empty"));
+  fs::write(&empty, "\n").unwrap();
+  let why = |source: Source| {
+    let accounts = vec![Account { name: "a".to_owned(), source }];
+    let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+    asked(&model, &[user("first")], json!({"session": "chain"})).unwrap_err().to_string()
+  };
+  let unread = why(Source::TokenFile(missing.clone()));
+  let said =
+    format!("The account a has no token: its token file {} cannot be read: ", missing.display());
+  assert!(unread.contains(&said), "{unread}");
+  let said = format!("The account a has no token: its token file {} is empty", empty.display());
+  assert!(why(Source::TokenFile(empty)).contains(&said));
+  let said =
+    "The account a has no token: its token variable FURB_NO_SUCH_TOKEN is empty or not set";
+  assert!(why(Source::TokenEnv("FURB_NO_SUCH_TOKEN".to_owned())).contains(said));
+  assert!(yard.pids().is_empty(), "no process starts with no token");
 }
