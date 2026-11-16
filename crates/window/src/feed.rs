@@ -210,12 +210,12 @@ impl Feed<'_> {
     rows
   }
 
-  /// The head of the thread, which never scrolls: its project, its session or its title, and the
-  /// button that resolves it, once the daemon made the thread and gave its page. A thread that
-  /// ended shows how, and while the input sends elsewhere its button turns the input to it, since a
-  /// reply opens it again. A resolve
-  /// of a thread that works waits for a confirm on the button, which says that it stops the work.
-  /// The thread of an agent says that it is one, and the button of a thread that the operator
+  /// The head of the thread, which never scrolls: its project and its title, since the window is
+  /// thread first and the card and Go to name the session, and the button that resolves it, once
+  /// the daemon made the thread and gave its page. A thread that ended shows how, and while the
+  /// input sends elsewhere its button turns the input to it, since a reply opens it again. A
+  /// resolve of a thread that works waits for a confirm on the button, which says that it stops the
+  /// work. The thread of an agent says that it is one, and the button of a thread that the operator
   /// opened from another, an agent or a thread of a chain, goes back to that one.
   pub(crate) fn head(&self) -> Row {
     let t = &self.model.tokens;
@@ -223,20 +223,16 @@ impl Feed<'_> {
     let untold = self.model.untold();
     let card = self.model.client.card(&root.thread.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
-    let session = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let muted = self.style(Role::Muted);
     let title = self.model.title().unwrap_or_default();
     let (branch, branches) = self.branch();
     let sub = self.opened.sub().and_then(|one| one.anchor.clone()).or_else(|| self.made_sub());
-    let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
-      (Some(_), _, Some(at)) => (format!("⑂ {} · ", at + 2), title),
-      (Some(_), _, None) if let Some(one) = &sub => (format!("◆ {} · ", shown_at(one)), title),
-      (Some(_), Some(_), None) => ("agent · ".to_owned(), title),
-      (Some(_), None, None) => (String::new(), title),
-      (None, ..) if branches > 0 => {
-        (format!("⑂ 1 of {} · ", branches + 1), session.unwrap_or(title))
-      }
-      (None, ..) => (String::new(), session.unwrap_or(title)),
+    let mark = match (&self.opened.from, self.opened.agent(), branch) {
+      (Some(_), _, Some(at)) => format!("⑂ {} · ", at + 2),
+      (Some(_), _, None) if let Some(one) = &sub => format!("◆ {} · ", shown_at(one)),
+      (Some(_), Some(_), None) => "agent · ".to_owned(),
+      (None, ..) if branches > 0 => format!("⑂ 1 of {} · ", branches + 1),
+      _ => String::new(),
     };
     // The head marks a session whose life runs as its card does, in the column of the bars of the
     // messages, so its project stands over their text.

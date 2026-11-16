@@ -30,10 +30,11 @@ fn rename_names_the_session_as_a_word_of_his_on_its_root_and_the_window_shows_th
   shows(&app, "/rename");
   app.type_text("Taxes");
   app.press("enter");
-  // The row of hints says the command that ran, and the head of the thread and its card the name.
+  // The row of hints says the command that ran, and the card the name. The head of the thread
+  // names its thread, since the window is thread first.
   shows(&app, "✓ /rename Taxes");
   let named = shows(&app, "FU furb · Taxes");
-  assert!(named.starts_with("● furb · Taxes"), "{named}");
+  assert!(named.starts_with("● furb · sort the receipts of the year"), "{named}");
 }
 
 #[test]

@@ -538,11 +538,11 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // A colon at the start of a word finds an emoji by its short code, and a tab writes it.
         step("x-emoji", &[Act::Key("C-c"), Act::Type("Shipped :tada")], "Emoji"),
         step("x-emoji-take", &[Act::Key("Tab")], "Shipped 🎉"),
-        // The command rename names the session, which the head and the card then show.
+        // The command rename names the session, which the row of hints says it ran.
         step(
           "x-rename",
           &[Act::Key("C-c"), Act::Type("/rename Taxes"), Act::Key("Enter")],
-          "demo · Taxes",
+          "✓ /rename Taxes",
         ),
         // The command cd moves the chain of the thread, as a word of his that the thread shows.
         step("x-cd", &[Act::Type("/cd .. "), Act::Key("Enter")], "cd(\"..\")"),
