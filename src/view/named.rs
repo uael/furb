@@ -98,9 +98,3 @@ pub fn said(word: &str) -> Option<String> {
   let inner = word.strip_prefix(WORD.0)?.strip_suffix(WORD.1)?;
   serde_json::from_str::<String>(inner).ok()
 }
-
-/// The word that names a session with a name, as the operator says it in the tests of the crate.
-#[cfg(test)]
-pub fn word(name: &str) -> String {
-  format!("{}{}{}", WORD.0, Value::String(name.to_owned()), WORD.1)
-}

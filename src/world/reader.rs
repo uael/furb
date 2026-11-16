@@ -524,23 +524,6 @@ fn text(fact: &Fact, at: usize) -> String {
   fact.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
-/// The facts that a record kept, with the facts that the engine said and the record does not keep.
-#[cfg(test)]
-fn told(kept: &[Object]) -> Vec<Object> {
-  let facts: Vec<Fact> = kept.iter().filter_map(|one| Fact::owned(plain(one.as_ref()))).collect();
-  let mut makers = Makers::default();
-  for one in &facts {
-    makers.hear(one);
-  }
-  let mut out = Vec::new();
-  let mut take = |one| out.push(one);
-  let mut life = Reader::new(makers.ended(), &mut take);
-  for fact in facts {
-    life.hear(fact);
-  }
-  out
-}
-
 /// The label of a chain from the message of its first prompt: its first line that says something, in at most 80
 /// characters.
 fn titled(message: &str) -> String {
@@ -869,7 +852,3 @@ impl Reader<'_> {
     self.rungs.retain(|_, rung| rung != id);
   }
 }
-
-#[cfg(test)]
-#[path = "reader.test.rs"]
-mod tests;

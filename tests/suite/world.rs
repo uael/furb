@@ -10,5 +10,6 @@ mod kits;
 mod offered;
 mod operator;
 mod provider;
+mod reader;
 mod schema;
 mod store;

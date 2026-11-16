@@ -4,7 +4,7 @@
 mod cards;
 mod fold;
 mod ladder;
-mod named;
+pub(super) mod named;
 mod page;
 mod quote;
 mod threads;

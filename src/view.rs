@@ -25,8 +25,6 @@ pub use furb_wire::{
   reason, restate, share, since, size, timer, tokens, working, wrote,
 };
 pub use held::Held;
-#[cfg(test)]
-pub use named::word;
 pub use named::{NAME, Named, said};
 pub use page::Streamed;
 pub use quote::{Quote, Writing, quotes, writing};
