@@ -641,6 +641,25 @@ fn stashed(app: &App, window: &Shared, does: Does) {
   tell(app, window, |model| model.fault = fault);
 }
 
+/// What the open thread said last, copied to the clipboard of the system or of the terminal, with
+/// a notice that says whether it went.
+fn copied(app: &App, window: &Shared) {
+  let said = window
+    .borrow()
+    .screen
+    .model
+    .client
+    .thread
+    .as_ref()
+    .and_then(|one| one.thread.last_said().map(str::to_owned));
+  let notice = match said {
+    None => "Nothing to copy yet.",
+    Some(text) if app.copy_to_clipboard(&text) => "Copied what the thread said last.",
+    Some(_) => "This terminal takes no copy.",
+  };
+  tell(app, window, |model| model.client.notice = Some(notice.to_owned()));
+}
+
 /// The image of the clipboard put in the input, else its text, as a paste puts it. A clipboard
 /// with neither says so.
 fn clipboard(app: &App, window: &Shared) {
@@ -1180,6 +1199,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
     Does::Unstash => return stashed(app, window, does),
     Does::Picture => return clipboard(app, window),
+    Does::Copy => return copied(app, window),
     Does::Empty => {
       return controlled(app, window, |model| {
         model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))

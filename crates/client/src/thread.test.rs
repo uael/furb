@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use furb_wire::{Block, Exchange, Line, Maker, Mark, Page, Work};
+use furb_wire::{Block, Exchange, Line, Maker, Mark, Page, Said, Saying, Work};
 
 use super::Thread;
 
@@ -35,4 +35,22 @@ fn a_line_ends_when_its_work_ends_and_not_when_it_waits_to_run() {
   thread.took(page(Mark::Runs { work: Work::Command, began: None }), now);
   thread.took(page(Mark::Ran), later);
   assert_eq!(thread.ended.get(&1), Some(&later));
+}
+
+#[test]
+fn what_a_thread_said_last_is_its_last_answer_or_notice_and_never_a_question() {
+  let said =
+    |act: &str, kind: Saying, text: &str| Said { act: act.to_owned(), kind, text: text.to_owned() };
+  let mut first = page(Mark::Ran);
+  first.exchanges[0].said = vec![said("close1", Saying::Answer, "The first answer.")];
+  let mut second = first.exchanges[0].clone();
+  second.at = 1;
+  second.said = vec![
+    said("prompt2", Saying::Notice, "A notice."),
+    said("prompt3", Saying::Question { shape: "str".to_owned(), answered: None }, "Which one?"),
+  ];
+  first.exchanges.push(second);
+  let mut thread = Thread::default();
+  thread.took(first, Duration::ZERO);
+  assert_eq!(thread.last_said(), Some("A notice."));
 }

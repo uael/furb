@@ -8,7 +8,7 @@ use std::{
 };
 
 use furb_wire::{
-  Agent, Context, Exchange, Mark, OPERATOR, Page, Standing, card,
+  Agent, Context, Exchange, Mark, OPERATOR, Page, Saying, Standing, card,
   protocol::{Card, Verb},
 };
 
@@ -163,6 +163,14 @@ pub struct Pending {
 }
 
 impl Thread {
+  /// What the thread said to the operator last, an answer or a notice, as the model wrote it,
+  /// among what the client holds of it.
+  pub fn last_said(&self) -> Option<&str> {
+    let said = self.exchanges.values().rev().flat_map(|one| one.said.iter().rev());
+    let mut told = said.filter(|one| matches!(one.kind, Saying::Answer | Saying::Notice));
+    told.find(|one| !one.text.trim().is_empty()).map(|one| one.text.as_str())
+  }
+
   /// Each agent of the thread that a rewind made, in order: a branch of the thread from one of its
   /// moments, whose thread is the second branch, the third, and so on.
   pub fn branches(&self) -> Vec<&Agent> {

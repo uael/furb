@@ -9,6 +9,7 @@ mod yard;
 
 mod cards;
 mod context;
+mod copy;
 mod daemon;
 mod image;
 mod input;
