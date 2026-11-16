@@ -9,7 +9,6 @@
 //! each call with a [`Host`], and while it answers, it may call into the sandbox again through the same [`Sand`], to
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
-#![expect(clippy::unreachable, reason = "debt: an unreachable that a type could hold")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -289,6 +288,10 @@ impl Sand {
 
   /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
   /// changed.
+  #[expect(
+    clippy::unreachable,
+    reason = "monty sets the bound of a turn on a progress alone, so the call goes in one and comes back out"
+  )]
   fn limited(&mut self, call: ReplFunctionCall) -> ReplFunctionCall {
     let Some(limit) = self.changed() else { return call };
     let mut progress = ReplProgress::FunctionCall(call);

@@ -7,7 +7,6 @@
 //! record is made again by running its words: a life whose host turns the
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
@@ -475,14 +474,15 @@ impl Opening {
       Self { inspecting: Some(true), keeps: Some(false), record: None, ..self.clone() };
     let waited = inspects.prepared(&Progress::default(), Taken::Parts, None)?.waited;
     for at in left {
-      let entries: Vec<Object> =
-        carry.into_iter().chain(record[from..at].iter().cloned()).collect();
+      let missing = || Fault::refused(format!("the record holds no crossing at {at}"));
+      let segment = record.get(from..at).ok_or_else(missing)?;
+      let entries: Vec<Object> = carry.into_iter().chain(segment.iter().cloned()).collect();
       let ears = inspects.eared(waited.clone(), Some(&entries), checkpoint::stood(&entries))?;
       let mut engine = Engine::boot(entries, ears)?;
       if let Some(no) = engine.raised() {
         return Err(no.clone());
       }
-      carry = Some(checkpoint::carried(&mut engine, &record[at])?);
+      carry = Some(checkpoint::carried(&mut engine, record.get(at).ok_or_else(missing)?)?);
       from = at;
     }
     if let (Some(path), Some(carry)) = (path, &carry) {

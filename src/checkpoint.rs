@@ -28,7 +28,6 @@
 //! tip, so no segment replays. It is a cache, as the image is: its key names each entry up to that
 //! crossing and the texts of the build, a reader takes none that does not agree, and the open then
 //! replays those segments again, to the same carry.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{fs, path::Path, slice};
 
@@ -170,7 +169,7 @@ fn system(made: &Object) -> Result<String, Fault> {
 /// `systems` of its data says. With no carry, each chain reads
 /// the engine that the life runs.
 pub(crate) fn systems(record: &[Object]) -> Systems {
-  let data = last(record).and_then(|at| fact(&record[at])?.word(0).map(|one| one.to_owned()));
+  let data = last(record).and_then(|at| fact(record.get(at)?)?.word(0).map(|one| one.to_owned()));
   let held = data.as_ref().and_then(|data| field(&data.as_ref(), "systems")?.items());
   let read = |one: ObjectRef<'_>| {
     let [text, chains] = one.items()?[..] else { return None };
@@ -272,15 +271,14 @@ pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
   let kept: Kept = serde_json::from_slice(&fs::read(world::beside(path, ".carry")).ok()?).ok()?;
   let agrees = kept.version == KEPT
     && kept.engine == world::engine()
-    && kept.at < record.len()
-    && digest(&record[..=kept.at]).is_some_and(|one| one == kept.entries);
+    && record.get(..=kept.at).and_then(digest).is_some_and(|one| one == kept.entries);
   agrees.then_some((kept.at, kept.carry))
 }
 
 /// The carry at the crossing at `at` of the entries of the record at a path, kept beside it. A
 /// cache that does not land costs the next open a replay, and nothing else.
 pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
-  let Some(entries) = digest(&record[..=at]) else { return };
+  let Some(entries) = record.get(..=at).and_then(digest) else { return };
   let kept = Kept { version: KEPT, engine: world::engine(), at, entries, carry };
   if let Ok(bytes) = serde_json::to_vec(&kept) {
     fs::write(world::beside(path, ".carry"), bytes).ok();
@@ -331,5 +329,5 @@ pub fn stood(record: &[Object]) -> bool {
 /// The entries that the last engine of the entries that a life boots on made: those after the
 /// carry, or all of them when they hold none.
 pub fn segment(record: &[Object]) -> &[Object] {
-  &record[last(record).map_or(0, |at| at + 1)..]
+  last(record).and_then(|at| record.get(at + 1..)).unwrap_or(record)
 }

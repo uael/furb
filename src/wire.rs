@@ -3,7 +3,6 @@
 //!
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::{
   Fault, Object, ObjectRef, Text,
@@ -179,7 +178,8 @@ impl Reader<'_> {
     while matches!(self.byte(), b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
       self.at += 1;
     }
-    let raw = &self.text[start..self.at];
+    // Each byte of a number is ASCII, so the range ends on a character.
+    let raw = self.text.get(start..self.at).unwrap_or_default();
     if !raw.contains(['.', 'e', 'E']) {
       return Ok(graph.push(MontyNode::Int(safe(raw.parse().ok())?)));
     }

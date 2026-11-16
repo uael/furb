@@ -37,7 +37,6 @@
 //! the operator, and takes no prompt; and the commands, the time and the web call none.
 //! The extensions and memory do no work, so they call each verb while they hear, where the life
 //! answers it in their place.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   any::Any,
@@ -670,15 +669,17 @@ impl Ear for Coroutine {
       held.filter_map(|one| one.as_str().map(str::to_owned)).collect()
     };
     let imaged = &mut self.imaged;
-    imaged.resumed.extend(names(&part["resumed"]));
-    let flight = part["flight"].take();
+    // An image comes from the disk, so a part that is not a map holds nothing.
+    let mut take = |key: &str| part.get_mut(key).map(Value::take).unwrap_or_default();
+    imaged.resumed.extend(names(&take("resumed")));
+    let flight = take("flight");
     let flight = serde_json::from_value::<Vec<Object>>(flight).unwrap_or_default();
     for fact in flight.into_iter().filter_map(Fact::owned) {
       imaged.resumed.insert(fact.about().to_owned());
       imaged.started.push(fact.about().to_owned());
       imaged.asked.insert(fact.about().to_owned(), fact);
     }
-    let kept = part["kept"].take();
+    let kept = take("kept");
     if !kept.is_null() {
       self.tell(Event::Given(kept));
     }

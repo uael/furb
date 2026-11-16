@@ -33,7 +33,6 @@
 //! them. The life that opens from the image says them again, as a boot says a record again, so a
 //! crash costs its tail alone. A fact that names an engine after the image is a birth of its own,
 //! which no life of the image went on to: the image agrees no more.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fmt::Display,
@@ -325,7 +324,7 @@ impl<W> Summed<W> {
 impl<W: Write> Write for Summed<W> {
   fn write(&mut self, part: &[u8]) -> io::Result<usize> {
     let passed = self.to.write(part)?;
-    self.digest.update(&part[..passed]);
+    self.digest.update(part.get(..passed).unwrap_or(part));
     self.bytes += passed;
     Ok(passed)
   }

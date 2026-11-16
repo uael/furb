@@ -18,7 +18,6 @@
 //! of a class of the engine comes in as the name of its class and its fields, and it is made in the sandbox. A map
 //! that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
 //! of a word or of a host as a mark.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: a method that the build makes takes its words by value and only borrows them"
@@ -172,7 +171,8 @@ fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result
     let fact = held.first().and_then(ObjectRef::items);
     let fact = fact.ok_or_else(|| Fault::refused("a record holds a fact first in each entry"))?;
     let fact = Object::tuple(fact.into_iter().map(|one| one.to_owned()));
-    entries.push(Object::tuple(iter::once(fact).chain(held[1..].iter().map(ObjectRef::to_owned))));
+    let rest = held.iter().skip(1).map(ObjectRef::to_owned);
+    entries.push(Object::tuple(iter::once(fact).chain(rest)));
   }
   Ok(Object::list(entries))
 }
@@ -726,7 +726,7 @@ impl Engine {
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       outside.crossing.recorded = true;
-      let entries = recorded(sand, outside, &record[born..]);
+      let entries = recorded(sand, outside, record.get(born..).unwrap_or_default());
       outside.crossing.recorded = false;
       let mut given = vec![("kernel".to_owned(), kernel)];
       for name in names {

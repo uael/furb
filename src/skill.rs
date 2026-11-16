@@ -24,14 +24,12 @@
 //! each chain where the
 //! extension plays, and the definitions alone of a new word of an extension that the life runs,
 //! which reloads it.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use std::{
   env, fs,
   io::ErrorKind,
+  ops::Range,
   path::{Path, PathBuf},
 };
 
@@ -417,6 +415,10 @@ pub fn official() -> Vec<Skill> {
 
 /// The official extensions, each with the [`copy`] of its word in the config directory of these
 /// places.
+#[expect(
+  clippy::expect_used,
+  reason = "the crate carries the manifest of each official extension, which its tests read whole"
+)]
 fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";
   OFFICIAL
@@ -487,7 +489,8 @@ fn names() -> Vec<(String, bool)> {
 /// same folder, by their paths in it, and the digest covers each of their texts too, in order.
 pub(crate) fn copy(name: &str, files: &[(&str, &str)], places: &Places) -> String {
   let summed = files.iter().fold(Sha256::new(), |sum, (_, text)| sum.chain_update(text));
-  let held = &format!("{:x}", summed.finalize())[..COPY_DIGEST];
+  let digest = format!("{:x}", summed.finalize());
+  let held = digest.get(..COPY_DIGEST).unwrap_or(&digest);
   let folder = places.config.join("words").join(name).join(held);
   let written = |(file, text): &(&str, &str)| {
     let copied = folder.join(file);
@@ -611,7 +614,8 @@ pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Skill>, Vec<St
       None if worded => copied,
       None => {
         let one = official.iter().find(|one| one.name == name).cloned();
-        out.0.push(one.expect("an official extension"));
+        // A name with no folder is an official one, which `official` holds.
+        out.0.extend(one);
         continue;
       }
     };
@@ -656,8 +660,8 @@ pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault
         named.push((name.clone(), None, false));
         named.len() - 1
       });
-      let one = &mut named[at];
       let theirs = at >= official.len();
+      let Some(one) = named.get_mut(at) else { continue };
       match form {
         Value::Bool(true) if theirs && one.1.is_none() => {
           return Err(refused(format!("No config gives the folder of the skill {name}")));
@@ -800,7 +804,7 @@ fn shaped(word: &str, state: bool) -> String {
     _ => false,
   };
   let held = |id: &str, annotation: &str, value: &Expr, whole: &str| {
-    let value = &word[value.range()];
+    let value = word.get(range(value.range())).unwrap_or_default();
     if value.starts_with("globals().setdefault(") {
       whole.to_owned()
     } else {
@@ -812,7 +816,7 @@ fn shaped(word: &str, state: bool) -> String {
     .body
     .iter()
     .filter_map(|one| {
-      let whole = &word[one.range()];
+      let whole = word.get(range(one.range())).unwrap_or_default();
       if defines(one) {
         return Some(whole.to_owned());
       }
@@ -823,7 +827,8 @@ fn shaped(word: &str, state: bool) -> String {
         },
         Stmt::AnnAssign(two) if state => match (&*two.target, &two.value) {
           (Expr::Name(name), Some(value)) => {
-            let annotation = format!(": {}", &word[two.annotation.range()]);
+            let annotation = word.get(range(two.annotation.range())).unwrap_or_default();
+            let annotation = format!(": {annotation}");
             Some(held(name.id.as_str(), &annotation, value, whole))
           }
           _ => None,
@@ -940,9 +945,10 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               return Ok(());
             }
             chains.push((a.about().to_owned(), had.unwrap_or_default()));
-            let born = chains.len() - 1;
-            for one in enabled.iter() {
-              play(&mut co, one, &mut chains[born]).await?;
+            if let Some(born) = chains.last_mut() {
+              for one in enabled.iter() {
+                play(&mut co, one, born).await?;
+              }
             }
             return Ok(());
           }
@@ -1004,8 +1010,8 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           }
           ENABLE if teach.is_some() => {
             if let Some(one) = Skill::of(&a) {
-              match enabled.iter().position(|two| two.name == one.name) {
-                Some(at) => enabled[at] = one,
+              match enabled.iter_mut().find(|two| two.name == one.name) {
+                Some(two) => *two = one,
                 None => enabled.push(one),
               }
             }
@@ -1098,7 +1104,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
         }
         let again = a.by() == JOURNAL;
         for one in new {
-          let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
+          let Some(two) = enabled.iter_mut().find(|two| two.name == one.name) else {
             for chain in chains.iter_mut() {
               let word = worded(&one, chain);
               if !again {
@@ -1108,7 +1114,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
             enabled.push(one);
             continue;
           };
-          if enabled[at].word != one.word && !again {
+          if two.word != one.word && !again {
             let word = reloads(&one.word);
             for (chain, had) in chains.iter() {
               if had.contains(&one.name) {
@@ -1116,7 +1122,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               }
             }
           }
-          enabled[at] = one;
+          *two = one;
         }
         Ok(())
       }
@@ -1181,6 +1187,11 @@ async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
 /// on a chain that
 /// has the extension already, and nothing on a chain other than the root that lacks an extension of
 /// the root alone.
+/// The bytes of a text that a part of its parse stands on.
+fn range(part: impl Ranged) -> Range<usize> {
+  usize::from(part.start())..usize::from(part.end())
+}
+
 async fn play(co: &mut Co, one: &Skill, chain: &mut (String, Vec<String>)) -> Result<(), Fault> {
   let word = worded(one, chain);
   ring(co, &chain.0, &word).await

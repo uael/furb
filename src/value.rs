@@ -10,7 +10,6 @@
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -103,11 +102,10 @@ pub fn repr(text: &str) -> String {
 
 /// Bytes as the lowercase digits of base sixteen.
 pub(crate) fn hex(bytes: &[u8]) -> String {
-  const DIGITS: &[u8; 16] = b"0123456789abcdef";
   bytes
     .iter()
-    .flat_map(|one| [DIGITS[usize::from(one >> 4)], DIGITS[usize::from(one & 15)]])
-    .map(char::from)
+    .flat_map(|one| [one >> 4, one & 15])
+    .filter_map(|digit| char::from_digit(u32::from(digit), 16))
     .collect()
 }
 
@@ -319,18 +317,20 @@ pub(crate) const REPEATED: &str = "<repeated too often>";
 /// host over the value is bounded by its depth and by its size in the sandbox.
 pub(crate) fn carried(value: Object) -> Object {
   let (graph, root) = unstable::graph_parts(&value);
-  let (mut height, mut size) = (vec![0usize; graph.len()], vec![0usize; graph.len()]);
+  let (mut height, mut size) = (Vec::with_capacity(graph.len()), Vec::with_capacity(graph.len()));
   // The arena holds each part after the parts it holds, so one pass gives each part its height and its size.
-  for (at, node) in graph.nodes().iter().enumerate() {
+  for node in graph.nodes() {
     let (mut high, mut many) = (0usize, 1usize);
     node.for_each_child(|one| {
-      high = high.max(height[one.index()] + 1);
-      many = many.saturating_add(size[one.index()]);
+      high = high.max(height.get(one.index()).map_or(0, |held: &usize| held.saturating_add(1)));
+      many = many.saturating_add(size.get(one.index()).copied().unwrap_or_default());
     });
-    (height[at], size[at]) = (high, many);
+    height.push(high);
+    size.push(many);
   }
   let limit = graph.len().saturating_mul(REPEATS);
-  if height[root.index()] < DEEPEST && size[root.index()] <= limit {
+  let (high, many) = (height.get(root.index()), size.get(root.index()));
+  if high.is_some_and(|high| *high < DEEPEST) && many.is_some_and(|many| *many <= limit) {
     return value;
   }
   let (mut cut, mut left) = (MontyGraph::new(), limit);
