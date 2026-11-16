@@ -11,6 +11,7 @@ use std::{
   collections::{BTreeMap, HashMap},
   mem,
   ops::Range,
+  time::Duration,
 };
 
 use crate::cells::Cells;
@@ -729,25 +730,39 @@ impl Model {
     row.names.iter().find(|one| one.0.contains(&usize::from(x))).map(|one| one.1.clone())
   }
 
-  /// The name under the pointer, which the machine of the open thread reads, or none. A move that
-  /// changes nothing else keeps the rows that it read for its draw.
-  pub(crate) fn pointed_name(&mut self, moved: bool) {
+  /// The name under the pointer, which the machine of the open thread reads, or none.
+  pub(crate) fn pointed_name(&mut self) {
     let rows = self.left_rows();
     let name = self.pointed().and_then(|at| Self::named(&rows, at));
     let key = self.client.thread.as_ref().map(|one| one.thread.key.clone());
     let pointed = key.as_ref().zip(name.as_deref());
     self.client.inspect(pointed);
-    if moved {
-      self.moved_rows.replace(Some(rows));
-    }
   }
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
   /// the dock; then the input.
   pub(crate) fn left_rows(&self) -> Vec<Row> {
-    if let Some(rows) = self.moved_rows.take() {
-      return rows;
+    // The bar of the time says what the pointer is on, so its rows show the place of the pointer.
+    let bar = self.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some());
+    let stamp = (self.changes, self.clock(), self.pointed().filter(|_| bar));
+    if let Some((at, rows)) = &*self.laid.borrow()
+      && *at == stamp
+    {
+      return rows.clone();
     }
+    let rows = self.laid_rows();
+    self.laid.replace(Some((stamp, rows.clone())));
+    rows
+  }
+
+  /// The clock that the rows of the left side show: the second of each timer, or the moment
+  /// itself while they change with each moment, as [`Model::steps`] says.
+  fn clock(&self) -> Duration {
+    if self.steps() { self.client.moved } else { Duration::from_secs(self.second()) }
+  }
+
+  /// Each row of the left side, laid out again.
+  fn laid_rows(&self) -> Vec<Row> {
     let mut rows = match self.feed() {
       None => self.home(),
       Some(feed) => {

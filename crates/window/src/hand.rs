@@ -573,12 +573,23 @@ fn placed(app: &App, stage: &View, screen: &mut Screen<Model>, area: &Textarea) 
 /// A change of the model at this moment of the two clocks, which each part then shows. The loaders
 /// move on one timer, which runs only while a mark moves.
 fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
-  let given = told(app, window, change);
+  told_as(app, window, false, change)
+}
+
+/// A change that moves only the clocks or the pointer, told as [`tell`] tells each change: the rows
+/// of the left side change only through the clock, so the window lays them out again only for it.
+fn steadily<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
+  told_as(app, window, true, change)
+}
+
+/// A change told as [`tell`] says, steady or not.
+fn told_as<T>(app: &App, window: &Shared, steady: bool, change: impl FnOnce(&mut Model) -> T) -> T {
+  let given = told(app, window, steady, change);
   // What the operator saw marks the card of his thread read at once, which the parts then show:
   // a card of a login that only reads, which records no Seen, would else show the unread mark that
   // the last cards of its machine gave it.
   if pump(window) {
-    told(app, window, |_| ());
+    told(app, window, steady, |_| ());
   }
   let back = window.borrow_mut().screen.model.client.restore.take();
   if let Some(text) = back {
@@ -591,7 +602,7 @@ fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
 }
 
 /// A change of the model, which each part then shows, and the timer of the loaders.
-fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
+fn told<T>(app: &App, window: &Shared, steady: bool, change: impl FnOnce(&mut Model) -> T) -> T {
   let mut held = window.borrow_mut();
   let moved =
     if held.still { Duration::ZERO } else { app.now().saturating_duration_since(held.born) };
@@ -602,6 +613,7 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   let given = held.screen.tell(|model| {
     (model.client.now, model.client.moved, model.speaks) = (now, moved, speaks);
     let given = change(model);
+    model.changes += u64::from(!steady);
     model.client.played();
     model.questioned();
     given
@@ -628,7 +640,7 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
 /// is set.
 fn tick(app: &App, window: &Shared) {
   window.borrow_mut().moves = None;
-  tell(app, window, |_| ());
+  steadily(app, window, |_| ());
 }
 
 /// What a machine told. A card shows its new state at once, and the list settles when the hand is
@@ -1515,32 +1527,12 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     }
     return;
   }
-  let (on, does, verb) = tell(app, window, |model| {
-    let y = usize::from(event.y);
-    model.pointer = Some((event.x, event.y));
-    model.pointed_name(event.kind == MouseEventKind::Moved);
-    let on = model.on_list(event.x);
-    let (does, verb) = match (event.kind, on) {
-      (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
-      (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
-      (MouseEventKind::Drag(MouseButton::Left), false) => {
-        model.dragged_left(event.x, y);
-        (None, None)
-      }
-      (MouseEventKind::ScrollUp, true) => {
-        model.scrolled(-isize::from(WHEEL));
-        (None, None)
-      }
-      (MouseEventKind::ScrollDown, true) => {
-        model.scrolled(isize::from(WHEEL));
-        (None, None)
-      }
-      (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-isize::from(WHEEL))),
-      (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(isize::from(WHEEL))),
-      _ => (None, None),
-    };
-    (on, does, verb)
-  });
+  let change = |model: &mut Model| pointed(model, event);
+  let (on, does, verb) = if event.kind == MouseEventKind::Moved {
+    steadily(app, window, change)
+  } else {
+    tell(app, window, change)
+  };
   older(window, verb);
   if on {
     window.borrow_mut().touched = Some(app.now());
@@ -1756,4 +1748,33 @@ fn dropped(app: &App, window: &Shared, why: Option<String>) {
       model.client.notice = why;
     }
   });
+}
+
+/// The pointer at a place of the window, and what it does there: whether it stands on the list,
+/// what a click does, and the verb that a scroll of the feed asks.
+fn pointed(model: &mut Model, event: MouseEvent) -> (bool, Option<Does>, Option<Verb>) {
+  let y = usize::from(event.y);
+  model.pointer = Some((event.x, event.y));
+  model.pointed_name();
+  let on = model.on_list(event.x);
+  let (does, verb) = match (event.kind, on) {
+    (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
+    (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
+    (MouseEventKind::Drag(MouseButton::Left), false) => {
+      model.dragged_left(event.x, y);
+      (None, None)
+    }
+    (MouseEventKind::ScrollUp, true) => {
+      model.scrolled(-isize::from(WHEEL));
+      (None, None)
+    }
+    (MouseEventKind::ScrollDown, true) => {
+      model.scrolled(isize::from(WHEEL));
+      (None, None)
+    }
+    (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-isize::from(WHEEL))),
+    (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(isize::from(WHEEL))),
+    _ => (None, None),
+  };
+  (on, does, verb)
 }

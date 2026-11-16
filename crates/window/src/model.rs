@@ -35,6 +35,10 @@ use crate::{
 /// The rows at the top of the list that never scroll.
 const PINNED: usize = 2;
 
+/// The rows of the left side, with the count of changes, the clock and the place of the pointer
+/// that they show.
+pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
+
 pub(crate) struct Model {
   /// What each machine told, and the cards of all of them in the order of the list.
   pub(crate) client: Client,
@@ -76,9 +80,12 @@ pub(crate) struct Model {
   pub(crate) colors: Colors,
   /// The names of each text of python that the window read.
   pub(crate) names: Names,
-  /// The rows of the left side that a move of the pointer read, which the draw of that move takes:
-  /// a move changes no row, and the rows cost the most of what the window does.
-  pub(crate) moved_rows: RefCell<Option<Vec<thread::Row>>>,
+  /// How many changes of what the left side shows the model heard: each change but a step of the
+  /// clocks and a move of the pointer, which change no row of it but through the clock.
+  pub(crate) changes: u64,
+  /// The rows of the left side, with what they show: a layout costs the most of what the window
+  /// does, and a step of the loaders or a move of the pointer takes them again.
+  pub(crate) laid: RefCell<Option<Laid>>,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
@@ -130,7 +137,8 @@ impl Model {
       listening: None,
       colors: Colors::new(),
       names: Names::default(),
-      moved_rows: RefCell::default(),
+      changes: 0,
+      laid: RefCell::default(),
       armed: None,
       picker: None,
       word: None,
@@ -485,22 +493,22 @@ impl Model {
         && self.confirmed(&one.1)
         && self.client.fault_of(one.1.0, &one.1.1).is_none()
     };
-    let opens = self.client.holds.values().any(Hold::runs);
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
-    let plays = self.client.plays();
+    pulses || self.steps() || self.client.settled.iter().any(works)
+  }
+
+  /// Whether the rows of the left side change with each moment, past the cells of its loaders: a
+  /// machine is slow to answer, a life opens, the bar of the time plays or reads, or a line that
+  /// ended settles into its grey.
+  pub(crate) fn steps(&self) -> bool {
+    let opens = self.client.holds.values().any(Hold::runs);
     let thread = self.client.thread.as_ref().map(|one| &one.thread);
     let reads = thread.and_then(|one| one.time.as_ref()).is_some_and(Time::reads);
     let settles = thread.is_some_and(|one| {
       one.ended.values().any(|at| self.client.moved.saturating_sub(*at) < self.settles)
     });
-    self.slow && !self.known()
-      || opens
-      || pulses
-      || plays
-      || reads
-      || settles
-      || self.client.settled.iter().any(works)
+    self.slow && !self.known() || opens || self.client.plays() || reads || settles
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {
