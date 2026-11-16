@@ -24,7 +24,6 @@
 //! A question that the reader says names its maker, as the engine names it, and each other fact
 //! that it says is said by [`READER`].
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -333,29 +332,19 @@ fn told_body(
 ) -> Result<Named, Fault> {
   let made = |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", body.display()));
   let file = io::BufWriter::new(fs::File::create(body).map_err(made)?);
-  let sink = RefCell::new((file, Named::default(), None));
-  let write = |fact: &serde_json::Value| {
-    let (file, named, broken) = &mut *sink.borrow_mut();
-    named.hear(fact, true);
-    if broken.is_none()
-      && let Err(no) = writeln!(file, "{fact}")
-    {
-      *broken = Some(no);
-    }
-  };
-  let mut out = |fact: Object| write(&outward(fact.as_ref()));
-  let mut life = Reader::new(makers.ended(), &mut out);
+  let sink = Sink { file, named: Named::default(), broken: None };
+  let mut life = Reader::new(makers.ended(), sink);
   let (mut n, mut unread) = (0, None);
   each_but_checkpoints(path, &mut |taken, at| {
     match taken {
-      Taken::Entry(entry) => kept(&entry).into_iter().for_each(|fact| life.hear(fact)),
+      Taken::Entry(entry) => kept(&entry).iter().for_each(|fact| life.hear(fact)),
       // A checkpoint is told as it stands, which the reader hears nothing of. Its text goes to
       // JSON once, in place of a value of the sandbox and its JSON again.
       Taken::Fact(text) => {
         life.flush();
         let fact = serde_json::from_str(&text).map_err(|no| Fault::refused(no.to_string()));
         match fact.and_then(unmarked) {
-          Ok(fact) => write(&fact),
+          Ok(fact) => life.sink.told(&fact),
           Err(no) => _ = unread.get_or_insert(no),
         }
       }
@@ -370,7 +359,7 @@ fn told_body(
       path.display()
     )));
   }
-  let (mut file, named, broken) = sink.into_inner();
+  let Sink { mut file, named, broken } = life.sink;
   broken.map_or(Ok(()), Err).and_then(|()| file.flush()).map_err(made)?;
   Ok(named)
 }
@@ -584,11 +573,30 @@ impl Makers {
   }
 }
 
-impl<'a> Reader<'a> {
-  /// The reader that tells each fact to out, with what it knows of the chains that the record does not hold.
-  fn new(known: Known, out: &'a mut dyn FnMut(Object)) -> Self {
-    Reader {
-      out,
+/// The file of what the record tells, and the name that it tells, which hears each fact told, and
+/// the first fault of a write: a fault stops the lines of the file but not the read.
+struct Sink {
+  file: io::BufWriter<fs::File>,
+  named: Named,
+  broken: Option<io::Error>,
+}
+
+impl Sink {
+  fn told(&mut self, fact: &serde_json::Value) {
+    self.named.hear(fact, true);
+    if self.broken.is_none()
+      && let Err(no) = writeln!(self.file, "{fact}")
+    {
+      self.broken = Some(no);
+    }
+  }
+}
+
+impl Reader {
+  /// The reader that tells each fact to its sink, with what it knows of the chains that the record does not hold.
+  fn new(known: Known, sink: Sink) -> Self {
+    Self {
+      sink,
       stage: Vec::new(),
       makers: known.makers,
       homes: known.homes,
@@ -617,8 +625,8 @@ struct Open {
 }
 
 /// What the reader knows of the facts that it heard, and where it says the facts that it tells.
-struct Reader<'a> {
-  out: &'a mut dyn FnMut(Object),
+struct Reader {
+  sink: Sink,
   /// The facts that the reader said and did not tell yet.
   stage: Vec<Object>,
   /// The chain of each rung that a kept act on a chain names as its maker, which is the chain that the rung ran on.
@@ -649,9 +657,8 @@ struct Reader<'a> {
   asks_kept: bool,
 }
 
-impl Reader<'_> {
-  fn hear(&mut self, owned: Fact) {
-    let fact = &owned;
+impl Reader {
+  fn hear(&mut self, fact: &Fact) {
     let (kind, about, by) = (fact.kind(), fact.about(), fact.by());
     if fact.question() {
       self.asked(fact);
@@ -700,14 +707,14 @@ impl Reader<'_> {
       }
       _ => {}
     }
-    (self.out)(owned.0);
+    self.told(&fact.0);
     self.flush();
   }
 
   /// Say that the record kept its entry n there, counted from 1, as the log says it.
   fn kept(&mut self, n: usize) {
     self.flush();
-    (self.out)(Object::list([
+    self.told(&Object::list([
       Object::string(KEEP),
       Object::string(""),
       Object::int(i64::try_from(n).unwrap_or(i64::MAX)),
@@ -717,8 +724,13 @@ impl Reader<'_> {
   /// Tell the facts that the reader said, in order.
   fn flush(&mut self) {
     for one in self.stage.drain(..) {
-      (self.out)(one);
+      self.sink.told(&outward(one.as_ref()));
     }
+  }
+
+  /// Tell one fact, in the form of the file.
+  fn told(&mut self, fact: &Object) {
+    self.sink.told(&outward(fact.as_ref()));
   }
 
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.

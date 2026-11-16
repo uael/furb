@@ -15,8 +15,7 @@ fn answered(nth: usize) {
 }
 
 use std::{
-  cell::RefCell,
-  rc::Rc,
+  sync::mpsc,
   task::Waker,
   time::{Duration, Instant},
 };
@@ -332,14 +331,14 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
     .unwrap()
     .id()
     .to_owned();
-  let told = Rc::new(RefCell::new(Vec::new()));
-  let held = Rc::clone(&told);
-  engine.watch(&id, move |value| held.borrow_mut().push(value.py_repr())).unwrap();
+  let (tell, told) = mpsc::channel();
+  engine.watch(&id, move |value| tell.send(value.py_repr()).unwrap()).unwrap();
   let before = engine.sand.fed();
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 0, "a drive where no ear says anything feeds nothing");
   gate.send(()).unwrap();
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
-  assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
+  let told: Vec<String> = told.try_iter().collect();
+  assert_eq!(told, ["None"], "whoever watches the wait is told in that feed");
 }
