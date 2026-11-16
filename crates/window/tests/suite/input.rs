@@ -468,11 +468,11 @@ fn a_word_of_python_shows_in_its_thread_as_his_code_and_a_line_that_raised_says_
   clicked(&app, " Python ", 0, 1);
   shows(&app, "┃ >>> A word of Python to run");
   // The word is a box of his code in the thread, on the bar of his messages, line by line.
-  sent(&app, "await wait(1, __name__)\nanswer = 41 + 1");
+  sent(&app, "await wait(60, __name__)\nanswer = 41 + 1");
   let ran = shows(&app, "  answer = 41 + 1");
   let his =
     |frame: &str, code: &str| frame.lines().any(|one| one.starts_with('┃') && one.contains(code));
-  assert!(his(&ran, "await wait(1, __name__)") && his(&ran, "answer = 41 + 1"), "{ran}");
+  assert!(his(&ran, "await wait(60, __name__)") && his(&ran, "answer = 41 + 1"), "{ran}");
   screen("input-word-ran", &app);
   // A line that raised shows its cross in the place of its number, and why under it.
   sent(&app, "raise ValueError('no')");
