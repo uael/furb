@@ -11,6 +11,7 @@ use furb::world::config::{Layer, Property, Setting};
 use serde_json::Value;
 
 use crate::{
+  line::cut,
   model::Model,
   pick::{Choice, Entry},
 };
@@ -60,8 +61,14 @@ impl Model {
     let Some(read) = settings.played.as_ref() else {
       return vec![Entry { left: "Reading the extensions…".to_owned(), ..Entry::default() }];
     };
-    // Where each comes from takes the room of the widest, so how each plays ends in one column.
-    let froms = read.iter().map(|one| one.from.width()).max().unwrap_or_default();
+    // Where each comes from: furb, or the folder that holds its folder of skills, as `~/.claude`,
+    // since the row names the skill already. It takes the room of the widest up to `FROM`, so how
+    // each plays ends in one column and a long folder never takes the room of the name.
+    let from = |one: &Skill| {
+      let tail = format!("/skills/{}", one.name);
+      cut(one.from.strip_suffix(&tail).unwrap_or(&one.from), FROM)
+    };
+    let froms = read.iter().map(|one| from(one).width()).max().unwrap_or_default();
     let row = |(place, one): (usize, &Skill)| {
       let (part, stands) = match (!one.turned_by.is_null(), one.plays, one.on) {
         (false, ..) => ("Skills", "read on need"),
@@ -83,7 +90,7 @@ impl Model {
         part: Cow::Borrowed(part),
         left: one.name.clone(),
         says: format!("  {}", one.description),
-        right: format!("{stands}  {:<froms$}", one.from),
+        right: format!("{stands}  {:<froms$}", from(one)),
         tone,
         choice: Choice::Skill(place),
         ..Entry::default()
@@ -140,6 +147,9 @@ fn stands(one: &Setting, layers: usize) -> String {
 }
 
 /// The layer that gives the value of a setting.
+/// The most columns of where a skill comes from in its row.
+const FROM: usize = 12;
+
 const fn layer(one: &Setting) -> &'static str {
   match one.layer {
     Some(Layer::User) => "user",
