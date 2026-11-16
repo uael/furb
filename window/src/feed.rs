@@ -932,7 +932,22 @@ impl Feed<'_> {
     } else {
       vec![thought.first().to_owned()]
     };
-    let said = vec![run(head.clone(), muted), run(lines.remove(0), style)];
+    let first = lines.remove(0);
+    let said = if thought.took.is_none() {
+      // While the model thinks, its last words stand brighter toward the end, where it writes, as
+      // the tail of the light that passes over the word before them.
+      let t = &self.model.tokens;
+      let chars: Vec<char> = first.chars().collect();
+      let from = chars.len().saturating_sub(PEN);
+      let ink = chars[from..].iter().enumerate().map(|(at, one)| {
+        let share = u16::try_from((at + 1) * 100 / (PEN + 1)).unwrap_or(100);
+        run(one.to_string(), style.fg(mixed(t.muted, t.text, share)))
+      });
+      let said = [run(head.clone(), muted), run(chars[..from].iter().collect::<String>(), style)];
+      said.into_iter().chain(ink).collect()
+    } else {
+      vec![run(head.clone(), muted), run(first, style)]
+    };
     let time = time.map(|time| run(time, muted));
     let line = spread(said, time.into_iter().collect(), head.width() + room, Style::new());
     // While the model thinks, the light passes over the word that says so.
@@ -1158,6 +1173,9 @@ fn tail(text: &str, room: usize) -> String {
   }
   format!("…{}", flat.chars().skip(skip + 1).collect::<String>())
 }
+
+/// How many letters at the end of a thought that runs stand brighter, where its model writes.
+const PEN: usize = 6;
 
 /// The loader of what a line that runs waits for: a model that writes, a command, or an agent.
 fn loader(work: Work) -> Loader {

@@ -797,6 +797,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-home", &[Act::Key("Escape")], "Forward"),
         step("d", &[Act::Pointer { on: "└ report = await", button: 0 }], "· agent · "),
         step("c", &[Act::Key("Escape")], "demo · Measure"),
+        // The agent that only thinks opens on its thought, whose last words stand brighter.
+        step("x-thinks", &[Act::Pointer { on: "└ thinks", button: 0 }], "· agent · "),
+        step("x-root", &[Act::Key("Escape")], "demo · Measure"),
         // The chains of the life stand as a tree under the bar of the time: the agents that work,
         // in color, under the root that made them, and the one that rests is found by a text.
         step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "type to find a chain"),
