@@ -143,6 +143,19 @@ impl Quiet {
   /// act of a message that ends, leave the watch.
   fn act(&mut self, act: &Act) {
     let done = matches!(act.phase, Phase::Done(_));
+    // An act that asked the operator ends: each act that waited on it stops waiting now, so the
+    // bound of its chain runs from now, and not from the last change of that chain before the
+    // answer.
+    if done && self.asks(act) {
+      let now = Instant::now();
+      let waited: Vec<String> =
+        self.acts.iter().filter(|one| waited_on(one, act)).map(|one| one.chain.clone()).collect();
+      for name in waited {
+        if let Some(chain) = self.chains.get_mut(&name) {
+          chain.last = now;
+        }
+      }
+    }
     if matches!(
       act.kind,
       Kind::Run | Kind::Reply | Kind::Bash | Kind::Wait | Kind::Rung | Kind::Prompt
@@ -309,6 +322,20 @@ impl Look<'_> {
     self.asking.contains(one.id.as_str())
       || retells.is_some_and(|id| self.asking.contains(id))
       || rung.is_some_and(|id| self.asked_by.contains(id))
+  }
+}
+
+/// Whether an act waited on an act that asks the operator, as [`Look::waits`] reads it: a rung that
+/// retells it, or the rung that made a prompt and the run of its word.
+fn waited_on(one: &Act, asked: &Act) -> bool {
+  let made = asked.kind == Kind::Prompt;
+  match one.kind {
+    Kind::Rung => {
+      one.words.get(1).and_then(Value::as_str) == Some(asked.id.as_str())
+        || made && one.id == asked.by
+    }
+    Kind::Run => made && one.words.first().and_then(Value::as_str) == Some(asked.by.as_str()),
+    _ => false,
   }
 }
 

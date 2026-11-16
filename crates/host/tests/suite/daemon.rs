@@ -2494,8 +2494,10 @@ async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_
   let stopped = stopped.expect("the paused rung is told");
   let act = q[1].as_str().unwrap().to_owned();
   let said = Verb::Answer { life: life.clone(), act, line: "a".to_owned() };
-  assert_eq!(window.ask(said).await, Ok(Answer::Done));
+  // The bound runs from the fact of the answer, which the daemon says before its reply reaches the
+  // window, so the clock of the test starts before the ask.
   let answered = Instant::now();
+  assert_eq!(window.ask(said).await, Ok(Answer::Done));
   let Frame::Stalled { acts, .. } = window.until(stall).await else { unreachable!() };
   assert!(answered.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
   assert!(acts.iter().any(|one| one.kind == "run" && one.chain == "chain1"), "{acts:?}");
