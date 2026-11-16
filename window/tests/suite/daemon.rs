@@ -40,8 +40,9 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::yard::Yard;
 
-/// How long a test waits for a daemon, which a loaded machine cannot pass.
-pub(crate) const PATIENCE: Duration = Duration::from_secs(60);
+/// How long a test waits for a daemon, which a loaded machine cannot pass. It stays under the 60 s
+/// after which the runner ends a test, so a wait that fails prints its frame.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(30);
 
 /// A daemon in a folder of one test, which goes with it. The runtime of the app of the test serves
 /// it, so it ends with that app.
