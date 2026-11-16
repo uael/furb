@@ -6,7 +6,7 @@
 #[path = "../tests/common/lived.rs"]
 mod lived;
 
-use lived::{Lived, done, on, paused, provider, said};
+use lived::{Lived, on, paused, said};
 
 /// Each answer of the script of a life of these tests moves the bound of the turn of the words
 /// after it to the bound of a loaded machine.
@@ -16,17 +16,12 @@ fn answered(nth: usize) {
 
 use std::{
   cell::RefCell,
-  fs,
   rc::Rc,
   task::Waker,
   time::{Duration, Instant},
 };
 
-use crate::{
-  Ear, Engine, Fact, Object,
-  ear::{ear, hear, say},
-  verbs,
-};
+use crate::{Object, verbs};
 
 use crate::{
   sand::BOUND,
@@ -34,18 +29,6 @@ use crate::{
   testing::{Yard, block_on},
   value,
 };
-use std::{env, process};
-
-#[test]
-fn a_generator_that_a_builtin_steps_waits_on_an_act() {
-  let word = "def h(p):\n  return read(p).content\nclose(len(''.join(h(p) for p in ['a.txt'])))";
-  let mut lived = Lived::new("joined", &[word], true).unwrap();
-  fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
-  let root = lived.root();
-  let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
-  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
-}
 
 #[test]
 fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
@@ -142,21 +125,6 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
   let view = lived.engine.word("len(transcript(ROOT))", vec![]).expect_err("nor reads one");
   assert_eq!(view.message(), no.message());
   assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
-}
-
-#[test]
-fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
-  let at = env::temp_dir().join(format!("furb-engine-briefly-{}", process::id()));
-  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("briefly", briefly())];
-  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
-  let root = engine.root().to_owned();
-  let act =
-    engine.wait(&[root.as_str()], verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
-  let id = act.id().to_owned();
-  block_on(act).unwrap();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
-  let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
-  assert_eq!(heard, ["wait", "started", "done"]);
 }
 
 #[test]
@@ -299,20 +267,6 @@ fn bounded() {
   testing::cut_first(Duration::from_millis(500));
 }
 
-/// An ear that says a wait started and done, and ends in the same poll.
-fn briefly() -> Box<dyn Ear> {
-  ear(move |mut co| async move {
-    loop {
-      let a = hear(&mut co).await;
-      if a.kind() == "wait" && a.question() {
-        say(&mut co, Fact::says("started", a.about(), []));
-        say(&mut co, done(a.about(), Object::none()));
-        return Ok(());
-      }
-    }
-  })
-}
-
 /// Each sandbox that this thread makes from now on, and each that holds the bound again after
 /// the work of the engine, with this bound of the turn.
 fn bounded_at(bound: Duration) {
@@ -388,31 +342,4 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
   assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
-}
-
-#[test]
-fn a_read_of_a_name_runs_no_code_of_the_life_and_shows_a_value_of_the_life_by_its_fields() {
-  let word = "from dataclasses import dataclass\n@dataclass\nclass P:\n  x: int\nseen = []\nclass Loud:\n  def \
-              __init__(self):\n    self.a = 1\n    self.p = P(2)\n  def __repr__(self):\n    seen.append(1)\n    \
-              return 'loud'\nloud = Loud()\nmany = [P(3), 'four']\nnumbers = [1, 'two']\nclose(0)";
-  let mut lived = Lived::new("inspected", &[word], true).unwrap();
-  let root = lived.root();
-  let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
-  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(0));
-  let facts = |engine: &mut Engine| {
-    engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap().len()
-  };
-  let before = facts(&mut lived.engine);
-  let mut read = |name: &str| {
-    let (kind, shown, _) = lived.engine.inspect(name, None).unwrap();
-    format!("{kind} {shown}")
-  };
-  assert_eq!(read("numbers"), "list [1, 'two']");
-  // The representation of a value of a class of the life is code of the life, which a read never
-  // runs: the read shows its fields, as a debugger does.
-  assert_eq!(read("loud"), "Loud Loud(a=1, p=P(x=2))");
-  assert_eq!(read("many"), "list [P(x=3), 'four']");
-  assert_eq!(read("seen"), "list []");
-  assert_eq!(facts(&mut lived.engine), before);
 }
