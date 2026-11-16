@@ -62,7 +62,8 @@ serde_json = "1"
 thiserror = "2"
 
 [dev-dependencies]
-# The captures of the screens, each a snapshot in tests/screens.
-insta = "1.48"
+# The captures of the screens, each a snapshot in tests/screens. Its colors would take a feature of windows-sys
+# that the crate furb does not, and so build furb and each crate under it a second time for the tests on Windows.
+insta = { version = "1.48", default-features = false }
 # The list of the projects of the daemon of a test.
 serde_json = "1"
