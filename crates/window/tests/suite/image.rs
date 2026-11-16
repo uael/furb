@@ -130,9 +130,11 @@ fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
   sent(&app, &format!("second {ANSWERS}"));
   app.paste("shot.png");
   sent(&app, &format!(" {ANSWERS}"));
-  // The wheel takes the feed on until the image draws whole, then back until its box crosses the
-  // foot of the feed, where the image cannot draw a part of itself: its first row names it there.
-  // Then on until its box crosses the head of the feed, where its last row names it.
+  // The block of the third answer, whose lines follow the four of the two before it.
+  shows(&app, "6  close('The open takes");
+  // The wheel takes the feed back until the image draws whole, then on back until its box crosses
+  // the foot of the feed, where the image cannot draw a part of itself: its first row names it
+  // there. Then down until its box crosses the head of the feed, where its last row names it.
   let drawn = |frame: &str| {
     frame.lines().any(|row| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one)))
   };
@@ -147,7 +149,7 @@ fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
     });
     assert!(reached, "{}", app.text());
   };
-  turned(true, &drawn);
+  turned(false, &drawn);
   turned(false, &named);
   turned(true, &drawn);
   turned(true, &named);
