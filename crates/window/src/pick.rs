@@ -484,8 +484,9 @@ impl Model {
   /// column of the keys, then what it does, as the home names a key. A command runs from it.
   fn each_key(&self) -> Vec<Entry> {
     // The column of the keys is as wide as the widest of them on this system, where a key in words
-    // takes far more columns than its signs, and two columns part it from what the key does.
-    let joined = |forms: Vec<String>| forms.join(" or ");
+    // takes far more columns than its signs, and two columns part it from what the key does. A key
+    // shows its first two forms: a third, as a key of the old window, works as well.
+    let joined = |forms: Vec<String>| forms.into_iter().take(2).collect::<Vec<_>>().join(" or ");
     let column =
       keys::each(self.system, self.supers()).map(|(_, _, forms)| joined(forms).width()).max();
     let column = column.unwrap_or_default() + 2;

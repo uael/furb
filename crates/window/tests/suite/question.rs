@@ -254,3 +254,22 @@ fn a_letter_after_the_leader_is_a_key_of_the_window_and_no_letter_of_the_answer(
   app.press("?");
   shows(&app, "Search a key");
 }
+
+#[test]
+fn a_digit_answers_its_row_of_a_choice() {
+  let (app, _daemon, _peer) = asked(&format!("where does the list stand\n{CHOOSES}"));
+  app.advance(HOLD);
+  app.type_text("2");
+  shows(&app, "left · you");
+}
+
+#[test]
+fn shift_and_tab_go_to_the_question_before() {
+  let (app, _daemon, _peer) = asked(&format!("what does the head say\n{TWICE}"));
+  shows(&app, "1 of 2");
+  app.press("shift+tab");
+  let frame = shows(&app, "┃ What does the head say?");
+  assert!(frame.contains("2 of 2"), "{frame}");
+  app.press("shift+tab");
+  shows(&app, "┃ Does the head count the questions?");
+}

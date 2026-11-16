@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb
 
@@ -22,9 +23,9 @@ source: crates/window/tests/suite/screens.rs
   Nothing needs   ↘           jump to the latest
   ● 1 session r   ⇞           a page up
                   ⇟           a page down
-  ⌃P          g   ⎋ ⎋         stop the work of the thread
-  ⌃X ?        e   ⌃X R        resolve the thread
-                  ⌃X D        revert the files that the last answer wrote
+  ⌃P          g   ⌥[ or ⌃X [  the message before in the thread
+  ⌃X ?        e   ⌥] or ⌃X ]  the next message in the thread
+                  ⎋ ⎋         stop the work of the thread
   ┃
   ┃ Ask for a c  ↑↓ move · ⏎ run · ⎋ close
   ┃

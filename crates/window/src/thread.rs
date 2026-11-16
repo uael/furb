@@ -590,6 +590,29 @@ impl Model {
     (near && before && !older).then(|| opened.thread.page(first))
   }
 
+  /// The feed moved to the start of the message at its top, or of the one before it once it stands
+  /// there, or to the start of the next message, and to its end after the last. The verb of an
+  /// older page once the top nears the first message that the window holds.
+  pub(crate) fn step_message(&mut self, back: bool) -> Option<Verb> {
+    let room = self.feed_room();
+    let feed = self.feed()?;
+    let top = feed.items().shown(feed.opened.top, room, |item| feed.rows(item)).top?;
+    let held = &feed.opened.thread.exchanges;
+    let to = match back {
+      true if top.row > 0 => Some(top.at),
+      true => held.range(..top.at).next_back().map(|one| *one.0),
+      false => held.range(top.at + 1..).next().map(|one| *one.0),
+    };
+    let Some(at) = to else {
+      if !back {
+        self.jump();
+      }
+      return None;
+    };
+    self.client.thread.as_mut()?.top = Some(Place { at, row: 0 });
+    self.scroll_feed(0)
+  }
+
   /// The feed at its end, which it follows from now on.
   pub(crate) fn jump(&mut self) {
     if let Some(opened) = self.client.thread.as_mut() {

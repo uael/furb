@@ -48,6 +48,9 @@ pub(crate) enum Does {
   Lean,
   Tick,
   NextQuestion,
+  PreviousQuestion,
+  MessageBefore,
+  MessageAfter,
   Agent,
   Back,
   Forward,
@@ -164,6 +167,18 @@ const THREAD: &[Bound] = &[
   bound(Does::PageUp, "a page up", None, &[&[plain(KeyCode::PageUp)]]),
   bound(Does::PageDown, "a page down", None, &[&[plain(KeyCode::PageDown)]]),
   bound(
+    Does::MessageBefore,
+    "the message before in the thread",
+    None,
+    &[&[alt(KeyCode::Char('['))], &led('[')],
+  ),
+  bound(
+    Does::MessageAfter,
+    "the next message in the thread",
+    None,
+    &[&[alt(KeyCode::Char(']'))], &led(']')],
+  ),
+  bound(
     Does::Stop,
     "stop the work of the thread",
     Some("stop"),
@@ -229,7 +244,12 @@ const INPUT: &[Bound] = &[
   bound(Does::Machines, "the machine of a new session", Some("machine"), &[&led('h')]),
   bound(Does::Projects, "the project of a new session", Some("project"), &[&led('p')]),
   bound(Does::History, "search what you sent here", Some("history"), &[&[ctrl('r')]]),
-  bound(Does::Model, "the model of the input", Some("model"), &[&led('m')]),
+  bound(
+    Does::Model,
+    "the model of the input",
+    Some("model"),
+    &[&[alt(KeyCode::Char('m'))], &led('m')],
+  ),
   bound(Does::Effort, "the efforts of the model", Some("effort"), &[&led('e')]),
   bound(Does::Changes, "the changes of the project and their diff", Some("changes"), &[&led('g')]),
   bound(Does::Settings, "the settings of the session", Some("config"), &[&led(',')]),
@@ -244,7 +264,7 @@ const INPUT: &[Bound] = &[
     Does::TakeWord,
     "take one word of the grey rest",
     None,
-    &[&[alt(KeyCode::Right)], &led('w')],
+    &[&[alt(KeyCode::Right)], &led('w'), &[alt(KeyCode::Char('f'))]],
   ),
 ];
 
@@ -262,6 +282,12 @@ const FORM: &[Bound] = &[
   ),
   bound(Does::Tick, "tick a choice of a question", None, &[&[plain(KeyCode::Char(' '))]]),
   bound(Does::NextQuestion, "the next question of the thread", None, &[&[plain(KeyCode::Tab)]]),
+  bound(
+    Does::PreviousQuestion,
+    "the question before of the thread",
+    None,
+    &[&[plain(KeyCode::BackTab)]],
+  ),
 ];
 
 /// Each group of keys, with its name, in the order of the table.
@@ -279,11 +305,12 @@ fn keys() -> impl Iterator<Item = &'static Bound> {
 }
 
 impl Stroke {
-  /// Whether a key is the stroke. Shift changes the letter of a character, so it counts only on a
-  /// key that types none: Shift+Enter, which the keys of Kitty tell, is no Enter and breaks a line.
+  /// Whether a key is the stroke. Shift changes the letter of a character and Tab into its
+  /// back tab, so it counts only on another key: Shift+Enter, which the keys of Kitty tell, is no
+  /// Enter and breaks a line.
   fn matches(self, key: &KeyEvent) -> bool {
     let held = |one| key.modifiers.contains(one);
-    let typed = matches!(self.code, KeyCode::Char(_));
+    let typed = matches!(self.code, KeyCode::Char(_) | KeyCode::BackTab);
     key.code == self.code
       && (typed || !held(Modifiers::SHIFT))
       && held(Modifiers::CTRL) == self.ctrl
@@ -303,6 +330,8 @@ impl Stroke {
       (KeyCode::Left, _) => "←".to_owned(),
       (KeyCode::Right, _) => "→".to_owned(),
       (KeyCode::Escape, true) => "⎋".to_owned(),
+      (KeyCode::BackTab, true) => "⇧⇥".to_owned(),
+      (KeyCode::BackTab, false) => "Shift+Tab".to_owned(),
       (KeyCode::Enter, true) => "⏎".to_owned(),
       (KeyCode::PageUp, true) => "⇞".to_owned(),
       (KeyCode::PageDown, true) => "⇟".to_owned(),

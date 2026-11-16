@@ -142,14 +142,17 @@ impl Model {
   /// key that empties the input empties it, then refuses the question. A letter writes his own
   /// words on their row, or a line, and does nothing on a row of a value. Each other key of the
   /// window does its thing.
-  pub(crate) fn keyed(&mut self, does: Option<Does>, typed: bool) -> Keyed {
+  pub(crate) fn keyed(&mut self, does: Option<Does>, typed: bool, digit: Option<usize>) -> Keyed {
     let Some((form, question)) = self.form() else { return Keyed::Passed };
     let offers = Offers::of(question.shape);
     let (values, at) = (offers.values(), form.at);
     let (own, ticks) = (at == values, matches!(offers, Offers::Ticks(_)));
     let writes = own || values == 0;
     let mine = typed
-      || matches!(does, Some(Does::Send | Does::Empty | Does::NextQuestion | Does::Tick))
+      || matches!(
+        does,
+        Some(Does::Send | Does::Empty | Does::NextQuestion | Does::PreviousQuestion | Does::Tick)
+      )
       || (values > 0 && matches!(does, Some(Does::Up | Does::Down)));
     if mine && self.client.moved.saturating_sub(form.since) < self.hold {
       return Keyed::Taken;
@@ -160,15 +163,31 @@ impl Model {
       Some(Does::Send) => says(self.answer()),
       Some(Does::Empty) if !self.client.draft.text.is_empty() => Keyed::Empties,
       Some(Does::Empty) => says(self.refuse()),
-      Some(Does::NextQuestion) => match self.next_question() {
-        Some(act) => {
+      // A digit takes its row of a choice, or ticks its row of values, as he reads its number.
+      _ if let Some(row) = digit.filter(|one| !own && (1..=values.min(9)).contains(one)) => {
+        if ticks {
           self.formed(|form| {
-            *form = Form { act, at: 0, ticked: BTreeSet::new(), why: None, ..*form }
-          });
-          Keyed::Empties
+            form.at = row - 1;
+            if !form.ticked.remove(&(row - 1)) {
+              form.ticked.insert(row - 1);
+            }
+          })
+        } else {
+          self.formed(|form| form.at = row - 1);
+          says(self.answer())
         }
-        None => Keyed::Taken,
-      },
+      }
+      Some(does @ (Does::NextQuestion | Does::PreviousQuestion)) => {
+        match self.other_question(does == Does::PreviousQuestion) {
+          Some(act) => {
+            self.formed(|form| {
+              *form = Form { act, at: 0, ticked: BTreeSet::new(), why: None, ..*form }
+            });
+            Keyed::Empties
+          }
+          None => Keyed::Taken,
+        }
+      }
       Some(Does::Up | Does::Down) if values > 0 => {
         let at = if does == Some(Does::Up) { at.saturating_sub(1) } else { (at + 1).min(values) };
         self.formed(|form| form.at = at)
@@ -191,12 +210,14 @@ impl Model {
     Keyed::Taken
   }
 
-  /// The question after the one of the form, from the first again after the last.
-  fn next_question(&self) -> Option<String> {
+  /// The question after the one of the form, from the first again after the last, or the one
+  /// before it, from the last again before the first.
+  fn other_question(&self, back: bool) -> Option<String> {
     let (form, _) = self.form()?;
     let questions = self.questions();
     let at = questions.iter().position(|one| one.act == form.act)?;
-    let next = questions.get((at + 1) % questions.len())?;
+    let step = if back { questions.len() - 1 } else { 1 };
+    let next = questions.get((at + step) % questions.len())?;
     (next.act != form.act).then(|| next.act.to_owned())
   }
 
@@ -367,7 +388,11 @@ impl Model {
     }
     said.push(format!("{} answer", key(Does::Send)));
     if self.questions().len() > 1 {
-      said.push(format!("{} next", key(Does::NextQuestion)));
+      said.push(format!(
+        "{} next · {} before",
+        key(Does::NextQuestion),
+        key(Does::PreviousQuestion)
+      ));
     }
     Some(vec![run(format!("  {}", said.join(" · ")), muted)])
   }

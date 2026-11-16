@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   ● furb · which keys does the form take           Resolve     All projects ▾        This computer
   ┃
@@ -22,9 +23,9 @@ source: crates/window/tests/suite/screens.rs
      End                 jump to the latest
      PgUp                a page up
      PgDn                a page down
+     Alt+[ or Ctrl+X [   the message before in the…
+     Alt+] or Ctrl+X ]   the next message in the…
      Esc Esc             stop the work of the thread
-     Ctrl+X R            resolve the thread
-     Ctrl+X D            revert the files that the…
 
     ↑↓ move · Enter run · Esc close
 

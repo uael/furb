@@ -993,7 +993,9 @@ fn keyed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   // A letter after the leader is a key of the window, and no letter of a text.
   let typed =
     !led && key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
-  if answered(app, window, does, typed) || reached(app, window, does, typed) {
+  let digit = key.text().and_then(|one| one.to_digit(10)).filter(|_| typed);
+  let digit = digit.and_then(|one| usize::try_from(one).ok());
+  if answered(app, window, (does, typed), digit) || reached(app, window, does, typed) {
     return true;
   }
   match does {
@@ -1001,7 +1003,9 @@ fn keyed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     // The grey rest, which the editor hears as a move when none shows.
     Some(Does::Take | Does::TakeWord) => took(window, does == Some(Does::TakeWord)),
     // The keys of a form, which the editor hears when no form takes them.
-    Some(Does::Up | Does::Down | Does::Lean | Does::Tick | Does::NextQuestion) => false,
+    Some(
+      Does::Up | Does::Down | Does::Lean | Does::Tick | Does::NextQuestion | Does::PreviousQuestion,
+    ) => false,
     Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
     Some(does) => {
       act(app, window, does);
@@ -1259,12 +1263,17 @@ fn completed(app: &App, window: &Shared, place: Option<usize>) -> bool {
 
 /// A key or a click while a form of a question shows: whether the form took it. An answer goes to
 /// its machine, and waits there for its answer.
-fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool {
+fn answered(
+  app: &App,
+  window: &Shared,
+  (does, typed): (Option<Does>, bool),
+  digit: Option<usize>,
+) -> bool {
   // A key with no form tells the model nothing, so it draws no part again.
   if window.borrow().screen.model.form().is_none() {
     return false;
   }
-  match tell(app, window, |model| model.keyed(does, typed)) {
+  match tell(app, window, |model| model.keyed(does, typed, digit)) {
     Keyed::Passed => false,
     Keyed::Taken => true,
     Keyed::Empties => {
@@ -1354,6 +1363,10 @@ fn act(app: &App, window: &Shared, does: Does) {
     }),
     Does::Leave => left(app, window),
     Does::PageUp | Does::PageDown => paged(app, window, does == Does::PageUp),
+    Does::MessageBefore | Does::MessageAfter => {
+      let verb = tell(app, window, |model| model.step_message(does == Does::MessageBefore));
+      older(window, verb);
+    }
     // The keys of a form, of a list part and of the input, which the key that heard them did, and
     // the keys that open a list part, which the start of this function took.
     _ => {}
@@ -1610,7 +1623,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     window.borrow_mut().touched = Some(app.now());
   }
   if let Some(does) = does
-    && !answered(app, window, Some(does), false)
+    && !answered(app, window, (Some(does), false), None)
   {
     act(app, window, does);
   }
