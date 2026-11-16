@@ -723,7 +723,7 @@ impl PyEngine {
   fn said(
     &mut self,
     name: &str,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
     hands: Hands,
   ) -> Result<Object, Fault> {
@@ -812,7 +812,7 @@ impl PyEngine {
   ) -> Result<Value, Fault> {
     let mut hands = Hands::default();
     let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
-    self.said(name, args, kwargs, hands).map(Value::of)
+    self.said(name, &args, kwargs, hands).map(Value::of)
   }
 
   /// A function of the checkpointer of the engine, `seed` or `gathered`, said by its name with
@@ -824,7 +824,7 @@ impl PyEngine {
     self
       .call(|engine| {
         engine.hand(hands);
-        engine.checkpointed(name, args)
+        engine.checkpointed(name, &args)
       })
       .map(Value::of)
   }
@@ -859,7 +859,7 @@ impl PyEngine {
     self
       .call(|engine| {
         engine.hand(hands);
-        engine.made(n, args, kwargs)
+        engine.made(n, &args, kwargs)
       })
       .map(Value::of)
   }
@@ -905,7 +905,7 @@ impl PyEngine {
     let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
     self.call(|engine| {
       engine.hand(hands);
-      engine.keyed(key, kind, args, kwargs)
+      engine.keyed(key, kind, &args, kwargs)
     })
   }
 

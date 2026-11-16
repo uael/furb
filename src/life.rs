@@ -856,7 +856,7 @@ impl Opening {
     // Each later life that works stands the root once after the state that it opens at, as a boot
     // does. A life that inspects keeps no fact, so it stands at the tip of the record as it is.
     if self.works() {
-      engine.verb("stand", vec![Object::string(ROOT)], vec![])?;
+      engine.verb("stand", &[Object::string(ROOT)], vec![])?;
       engine.flight()?;
     }
     engine.pump(Waker::noop())?;

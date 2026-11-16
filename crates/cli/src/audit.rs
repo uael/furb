@@ -123,7 +123,7 @@ fn checked(
       }
       if kind == "run" {
         let rung = word(fact, 4);
-        let ran = engine.verb("get", vec![Object::string(&about)], vec![])?;
+        let ran = engine.verb("get", &[Object::string(&about)], vec![])?;
         let ran =
           entry(&ran.as_ref(), 5).and_then(|one| one.as_str().map(|one| hex(one.as_bytes())));
         words.push(json!({"rung": rung, "record": hex(word(fact, 5).as_bytes()), "run": ran}));
@@ -145,7 +145,7 @@ fn hashed_of(
   about: &str,
   depth: usize,
 ) -> Result<String, CliError> {
-  let made = engine.verb(view, vec![Object::string(about)], vec![])?;
+  let made = engine.verb(view, &[Object::string(about)], vec![])?;
   let line = (0..depth).fold(made, |held, _| Object::list(vec![held]));
   let kept = (0..depth).fold(wire::record(line.as_ref()), |mut held, _| {
     held.get_mut(0).map(Value::take).unwrap_or_default()

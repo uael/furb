@@ -499,9 +499,9 @@ pub(crate) fn methods(verbs: &[Verb]) -> String {
       let held = one.kind.held("one");
       out!(out, "    if let Some(one) = with.{0} {{ kwargs.push(({0:?}, {held})); }}", one.name);
     }
-    out!(out, "    let got = self.verb({:?}, args, kwargs)?;", verb.name);
+    out!(out, "    let got = self.verb({:?}, &args, kwargs)?;", verb.name);
     let answered =
-      if let Answer::Act(_) = verb.answer { "self.awaited(got)" } else { "Plain::plain(got)" };
+      if let Answer::Act(_) = verb.answer { "self.awaited(&got)" } else { "Plain::plain(got)" };
     out!(out, "    {answered}\n  }}\n");
   }
   out.push_str("}\n");
@@ -538,7 +538,13 @@ pub(crate) fn structs(verbs: &[Verb]) -> String {
        engine.",
       verb.name
     );
-    out!(out, "#[derive(Debug, Clone, Default)]\npub struct {with} {{");
+    // A struct of numbers and booleans alone is copied, as each of its fields is.
+    let copy = verb
+      .optional
+      .iter()
+      .all(|one| matches!(one.kind, Fielded::Int | Fielded::Float | Fielded::Bool));
+    let copy = if copy { "Copy, " } else { "" };
+    out!(out, "#[derive(Debug, Clone, {copy}Default)]\npub struct {with} {{");
     for one in &verb.optional {
       out!(out, "  pub {}: {},", one.name, one.kind.field());
     }
@@ -758,6 +764,6 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
     "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, \
      one?.handed(&mut hands)))).collect();"
   );
-  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, args, kwargs, hands)?;", verb.name);
+  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, &args, kwargs, hands)?;", verb.name);
   out!(out, "    Ok({made})\n  }}\n");
 }

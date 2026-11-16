@@ -19,10 +19,6 @@
 //! that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
 //! of a word or of a host as a mark.
 #![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: a method that the build makes takes its words by value and only borrows them"
-)]
-#![expect(
   clippy::unreadable_literal,
   reason = "debt: a constant that the build makes is a long literal with no separator"
 )]
@@ -415,10 +411,10 @@ impl Outside {
     &mut self,
     sand: &mut Sand,
     name: &str,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let (args, kwargs) = self.inwards(sand, &args, kwargs)?;
+    let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = self.named_call(sand, name, args, kwargs)?;
     self.outward(sand, &got)
   }
@@ -432,11 +428,11 @@ impl Outside {
     &mut self,
     sand: &mut Sand,
     n: i64,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     let made = self.held(n)?;
-    let (args, kwargs) = self.inwards(sand, &args, kwargs)?;
+    let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = sand.call(self, &made, args, kwargs)?;
     self.outward(sand, &got)
   }
@@ -489,13 +485,13 @@ impl Outside {
           Fault::refused("a callable the engine made is called back by its number")
         })?;
         let words = args.get(1).and_then(|one| one.as_ref().items()).unwrap_or_default();
-        let words = words.into_iter().map(|one| one.to_owned()).collect();
+        let words: Vec<Object> = words.into_iter().map(|one| one.to_owned()).collect();
         let pairs = args.get(2).and_then(|one| one.as_ref().pairs()).unwrap_or_default();
         let named =
           pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
-        self.called_back(sand, n, words, named)
+        self.called_back(sand, n, &words, named)
       }
-      _ => self.verb(sand, &verb, args, kwargs),
+      _ => self.verb(sand, &verb, &args, kwargs),
     }
   }
 
@@ -865,7 +861,7 @@ impl Engine {
     let mut lineage = vec![chain.to_owned()];
     loop {
       let last = lineage.last().map(|one| Object::string(one.as_str()));
-      let act = self.verb("get", last.into_iter().collect(), vec![])?;
+      let act = self.verb("get", last.as_slice(), vec![])?;
       let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
       match source.filter(|one| !one.is_empty()) {
         Some(source) => lineage.push(source),
@@ -927,7 +923,7 @@ impl Engine {
   pub fn verb(
     &mut self,
     name: &str,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.verb(sand, name, args, kwargs))
@@ -935,15 +931,15 @@ impl Engine {
 
   /// A function of the checkpointer of the engine, `seed` or `gathered`, by its name, said with
   /// these words, and what it gave.
-  pub fn checkpointed(&mut self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
-    self.run(|sand, outside| outside.checkpointed(sand, name, &args, None))
+  pub fn checkpointed(&mut self, name: &str, args: &[Object]) -> Result<Object, Fault> {
+    self.run(|sand, outside| outside.checkpointed(sand, name, args, None))
   }
 
   /// The carry of the life to the texts of a fact made, as `gathered` of the checkpointer that the
   /// fact names gives it, with these words.
-  pub(crate) fn gathered_for(&mut self, made: &str, args: Vec<Object>) -> Result<Object, Fault> {
+  pub(crate) fn gathered_for(&mut self, made: &str, args: &[Object]) -> Result<Object, Fault> {
     let made = order::carrier(made);
-    self.run(|sand, outside| outside.checkpointed(sand, "gathered", &args, Some(made)))
+    self.run(|sand, outside| outside.checkpointed(sand, "gathered", args, Some(made)))
   }
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how
@@ -961,7 +957,7 @@ impl Engine {
   pub fn made(
     &mut self,
     n: i64,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.called_back(sand, n, args, kwargs))
@@ -1104,7 +1100,7 @@ impl Engine {
     let opened = Arc::clone(&self.outside.opened);
     self
       .run(|sand, outside| sand.call(outside, &opened.unpark, vec![Object::string(id)], vec![]))?;
-    self.verb("wake", vec![Object::string(id)], vec![]).map(|_| ())
+    self.verb("wake", &[Object::string(id)], vec![]).map(|_| ())
   }
 
   /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client. A
@@ -1120,7 +1116,7 @@ impl Engine {
     &mut self,
     key: &str,
     kind: &str,
-    args: Vec<Object>,
+    args: &[Object],
     mut kwargs: Vec<(&str, Object)>,
   ) -> Result<String, Fault> {
     let named = kwargs.iter().find(|(name, _)| *name == "on");
@@ -1198,7 +1194,7 @@ impl Engine {
   }
 
   /// One act a verb made, to await.
-  fn awaited<T>(&mut self, got: Object) -> Result<Act<'_, T>, Fault> {
+  fn awaited<T>(&mut self, got: &Object) -> Result<Act<'_, T>, Fault> {
     let id = got
       .as_ref()
       .as_str()

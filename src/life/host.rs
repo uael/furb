@@ -394,11 +394,8 @@ impl Life {
     }
     let mut plan = Vec::new();
     for (whose, word) in words {
-      let under = self.engine.verb(
-        "under",
-        vec![Object::string(&whose), Object::string(&thread.id)],
-        vec![],
-      )?;
+      let under =
+        self.engine.verb("under", &[Object::string(&whose), Object::string(&thread.id)], vec![])?;
       if under.py_repr() == "True" {
         plan.push(word);
       }

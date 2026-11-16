@@ -123,7 +123,7 @@ fn a_command_whose_stdin_is_neither_a_text_nor_none_has_a_stdin_that_is_empty_an
       ("timeout", Object::float(5.0)),
       ("on", Object::string(&root)),
     ];
-    let id = lived.engine.verb("bash", vec![Object::string("cat; echo end")], kwargs).unwrap();
+    let id = lived.engine.verb("bash", &[Object::string("cat; echo end")], kwargs).unwrap();
     let id = id.as_ref().as_str().expect("the name of the command").to_owned();
     let exit =
       Exit::of(lived.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
@@ -1029,14 +1029,14 @@ fn a_key_of_the_client_makes_its_act_once_across_a_crash_and_a_retry() {
   let (root, id, _yard) = {
     let mut first = Lived::new("keyed", &[], true).unwrap();
     let root = first.root();
-    let id = first.engine.keyed("k1", "rung", vec![], word()).unwrap();
+    let id = first.engine.keyed("k1", "rung", &[], word()).unwrap();
     assert_eq!(
-      first.engine.keyed("k1", "rung", vec![], word()).unwrap(),
+      first.engine.keyed("k1", "rung", &[], word()).unwrap(),
       id,
       "a retry in the same life"
     );
     assert_ne!(
-      first.engine.keyed("k2", "rung", vec![], word()).unwrap(),
+      first.engine.keyed("k2", "rung", &[], word()).unwrap(),
       id,
       "another key makes another act"
     );
@@ -1047,15 +1047,15 @@ fn a_key_of_the_client_makes_its_act_once_across_a_crash_and_a_retry() {
   let mut second = Lived::new("keyed", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert_eq!(
-    second.engine.keyed("k1", "rung", vec![], word()).unwrap(),
+    second.engine.keyed("k1", "rung", &[], word()).unwrap(),
     id,
     "a retry in a later life"
   );
-  let made = second.engine.keyed("k3", "rung", vec![], word()).unwrap();
+  let made = second.engine.keyed("k3", "rung", &[], word()).unwrap();
   assert_eq!(made, "rung3", "the key that the crash left with no act makes its act");
   drop(second);
   let mut third = Lived::new("keyed", &[], false).unwrap();
-  assert_eq!(third.engine.keyed("k3", "rung", vec![], word()).unwrap(), made);
+  assert_eq!(third.engine.keyed("k3", "rung", &[], word()).unwrap(), made);
   let facts =
     third.engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
   let rungs = facts.iter().filter(|one| one.kind() == "rung" && one.by() == "operator").count();
@@ -1760,7 +1760,7 @@ fn probe(engine: &mut Engine, root: &str) -> Result<Object, Fault> {
   // The ear makes the act, since a later life makes again what an ear made through the ear.
   let operator = engine.site(Some("probe")).unwrap_or_else(|no| panic!("{no}"));
   let made =
-    engine.verb("act", vec![Object::string("probe"), Object::string(root), Object::none()], vec![]);
+    engine.verb("act", &[Object::string("probe"), Object::string(root), Object::none()], vec![]);
   engine.site(Some(&operator)).unwrap_or_else(|no| panic!("{no}"));
   let name =
     made.unwrap_or_else(|no| panic!("{no}")).as_ref().as_str().unwrap_or_default().to_owned();

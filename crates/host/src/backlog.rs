@@ -87,7 +87,7 @@ impl Backlog {
       if self.paused.contains(&chain) || engine.outcome(&chain)?.is_some() {
         continue;
       }
-      let paused = engine.verb("paused", vec![Object::string(&chain)], vec![])?;
+      let paused = engine.verb("paused", &[Object::string(&chain)], vec![])?;
       if outward(paused.as_ref()).as_bool() == Some(true) {
         continue;
       }

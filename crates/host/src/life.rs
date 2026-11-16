@@ -1765,11 +1765,11 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
       Reply::Values(facts.iter().map(|one| outward(one.object().as_ref())).collect())
     }
     Command::Program { on: chain } => {
-      Reply::Value(outward(engine.verb("program", vec![], named(chain))?.as_ref()))
+      Reply::Value(outward(engine.verb("program", &[], named(chain))?.as_ref()))
     }
     Command::Standing => Reply::Value(outward(engine.standing()?.as_ref())),
     Command::Filled { id } => {
-      Reply::Value(outward(engine.verb("filled", vec![Object::string(id)], vec![])?.as_ref()))
+      Reply::Value(outward(engine.verb("filled", &[Object::string(id)], vec![])?.as_ref()))
     }
     Command::Inspect { name, on: chain } => {
       let (kind, repr, value) = engine.inspect(&name, Some(&on(chain)))?;

@@ -427,7 +427,7 @@ impl JsEngine {
     let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
     let made = |engine: &mut Engine| {
       engine.hand(hands);
-      engine.made(n, args, kwargs)
+      engine.made(n, &args, kwargs)
     };
     self.held.call(made).map(Value::of)
   }
@@ -494,7 +494,7 @@ impl JsEngine {
     let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
     let id = self.held.call(|engine| {
       engine.hand(hands);
-      engine.keyed(&key, &kind, args, kwargs)
+      engine.keyed(&key, &kind, &args, kwargs)
     })?;
     Ok(JsAct { held: Rc::clone(&self.held), id })
   }
@@ -538,7 +538,7 @@ impl JsEngine {
   ) -> napi::Result<Object> {
     self.held.call(|engine| {
       engine.hand(hands);
-      engine.verb(name, args, kwargs)
+      engine.verb(name, &args, kwargs)
     })
   }
 

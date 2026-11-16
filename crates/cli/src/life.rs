@@ -123,7 +123,7 @@ impl Life {
 
 /// Whether the engine reads a pause over an act.
 fn paused(engine: &mut Engine, id: &str) -> Result<bool, CliError> {
-  let paused = engine.verb("paused", vec![Object::string(id)], vec![])?;
+  let paused = engine.verb("paused", &[Object::string(id)], vec![])?;
   Ok(outward(paused.as_ref()) == serde_json::Value::Bool(true))
 }
 

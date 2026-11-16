@@ -65,7 +65,7 @@ pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Faul
   let floor = engine.taken().clone();
   // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
   let (_, _, by) = world::texts(slice::from_ref(next))?;
-  let data = engine.unbounded(|engine| engine.gathered_for(&by, vec![define, floor]))?;
+  let data = engine.unbounded(|engine| engine.gathered_for(&by, &[define, floor]))?;
   let mut next = Next::of(engine.running(), next)?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),

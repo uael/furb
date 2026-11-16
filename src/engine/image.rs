@@ -68,7 +68,7 @@ impl Engine {
     }
     let parts = handed.ears.iter().map(|(name, ear)| Some((name.clone(), ear.image()?)));
     let Some(ears) = parts.collect::<Option<Vec<_>>>() else { return Ok(None) };
-    let stood = self.verb("standing", vec![], vec![])?;
+    let stood = self.verb("standing", &[], vec![])?;
     let (hosted, crossing) = (&self.outside.hosted, &self.outside.crossing);
     let half = Half {
       made: self.made.clone(),
