@@ -64,17 +64,23 @@ impl Model {
   }
 
   /// The column at the left of the diff: a mark on each row of a line that a sub thread of the
-  /// open thread is about, in the accent while it lives and muted once it rests.
+  /// open thread is about, in the accent while it lives and muted once it rests, and a `+` in the
+  /// accent on the row whose numbers the pointer is on, as GitHub shows where a click comments.
   fn review_marks(&self, path: &str, diff: &str, split: bool) -> Vec<Line> {
     let t = &self.tokens;
-    let mark = |sub: Option<&Agent>| match sub {
+    let pointed = self
+      .pointer
+      .filter(|(x, _)| !self.on_side(*x) && self.on_numbers(*x, diff, split))
+      .and_then(|(_, y)| Some(usize::from(y.checked_sub(2)?) + self.review_top));
+    let mark = |(row, sub): (usize, Option<&Agent>)| match sub {
       Some(agent) => {
         let hue = if rests(agent) { t.muted } else { t.accent };
         vec![run("◆", Style::new().fg(hue))]
       }
+      None if pointed == Some(row) => vec![run("+", Style::new().fg(t.accent).bold())],
       None => vec![run(" ", Style::new())],
     };
-    self.subs(path, diff, split).into_iter().map(mark).collect()
+    self.subs(path, diff, split).into_iter().enumerate().map(mark).collect()
   }
 
   /// The sub thread of the open thread that each row of the diff of a file is about, on either
@@ -206,19 +212,30 @@ impl Model {
     rows
   }
 
-  /// The foot, as the row of hints: the keys of the review.
+  /// The foot, as the row of hints: the keys of the review, each that its room holds, the close
+  /// and the comment first, so a narrow window cuts no hint in its middle.
   fn review_foot(&self) -> Line {
-    let foot = format!(
-      "  {}{} file · {} {} change · {}{} scroll · {} close · a click on a number comments",
-      self.key(Does::Up),
-      self.key(Does::Down),
-      PREVIOUS,
-      NEXT,
-      self.key(Does::PageUp),
-      self.key(Does::PageDown),
-      self.key(Does::Close),
-    );
-    vec![run(foot, self.tokens.style(Role::Muted))]
+    let all = [
+      format!("{}{} file", self.key(Does::Up), self.key(Does::Down)),
+      format!("{PREVIOUS} {NEXT} change"),
+      format!("{}{} scroll", self.key(Does::PageUp), self.key(Does::PageDown)),
+      format!("{} close", self.key(Does::Close)),
+      "click a number to comment".to_owned(),
+    ];
+    let room = self.diff_width().saturating_sub(2);
+    let mut kept = vec![true; all.len()];
+    // The scroll goes first, then the change, then the file, as each has another way.
+    for drop in [2, 1, 0] {
+      let used: usize =
+        all.iter().zip(&kept).filter(|one| *one.1).map(|one| one.0.width() + 3).sum();
+      if used <= room {
+        break;
+      }
+      kept[drop] = false;
+    }
+    let shown: Vec<&str> =
+      all.iter().zip(&kept).filter(|one| *one.1).map(|one| one.0.as_str()).collect();
+    vec![run(format!("  {}", shown.join(" · ")), self.tokens.style(Role::Muted))]
   }
 
   /// The comment that he writes on a line of the file that the review reads: the row of the diff
@@ -266,13 +283,18 @@ impl Model {
   /// Whether a column of the window stands on the numbers of a line of the diff, or on the column
   /// of the marks before them: the numbers of each side in the split view.
   pub(crate) fn gutter_at(&self, x: u16) -> bool {
-    let Some(shown) = self.reviewing() else { return false };
+    self.reviewing().is_some_and(|shown| self.on_numbers(x, &shown.diff, shown.split))
+  }
+
+  /// Whether a column of the window stands on the numbers of a line of a diff, or on the column
+  /// of the marks before them.
+  fn on_numbers(&self, x: u16, diff: &str, split: bool) -> bool {
     let Some(column) = usize::from(x).checked_sub(1) else { return false };
     // The numbers stand with one cell before them and the sign after them, as `splits` counts.
-    let numbers = shown.diff.lines().count().to_string().len() + 3;
+    let numbers = diff.lines().count().to_string().len() + 3;
     let Some(at) = column.checked_sub(usize::from(MARKS)) else { return true };
     let half = self.diff_width() / 2;
-    at < numbers || shown.split && (half..half + numbers).contains(&at)
+    at < numbers || split && (half..half + numbers).contains(&at)
   }
 
   /// The lines that a change adds and removes, each in its color, and none of a count of zero.

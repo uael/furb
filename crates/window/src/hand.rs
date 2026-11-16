@@ -1302,6 +1302,7 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
   let row = event.y.checked_sub(2).map(|y| whole(f64::from(y) + scrolled));
   tell(app, window, |model| {
     model.pointer = Some((event.x, event.y));
+    model.review_top = whole(scrolled);
     let down = matches!(event.kind, MouseEventKind::Down(MouseButton::Left));
     if let (Some(file), true) = (file, down)
       && let Some(review) = model.client.review.as_mut()
@@ -1337,6 +1338,8 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
     _ => return,
   };
   window.borrow().scroll.scroll_by(0.0, by);
+  let top = whole(window.borrow().scroll.scroll_position().1);
+  tell(app, window, |model| model.review_top = top);
 }
 
 /// A place of a box that scrolls, in whole rows.

@@ -121,6 +121,8 @@ pub(crate) struct Model {
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
+  /// How many rows of the diff of the review stand above its first row that shows.
+  pub(crate) review_top: usize,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
   /// What the choices of sessions act on, while the list part shows them or a leave waits.
@@ -180,6 +182,7 @@ impl Model {
       layouts: Cell::default(),
       armed: None,
       picker: None,
+      review_top: 0,
       word: None,
       acts: None,
     }
