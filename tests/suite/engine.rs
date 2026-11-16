@@ -45,6 +45,11 @@ use rig_core::{
   streaming::StreamFinal,
   test_utils::{MockCompletionModel, MockStreamEvent},
 };
+#[cfg(unix)]
+use rustix::{
+  io::Errno,
+  process::{Pid, test_kill_process},
+};
 
 use furb::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
@@ -253,6 +258,34 @@ fn a_stream_is_read_whole_in_utf8_and_a_character_cut_at_a_read_waits_for_the_ne
   let outs = outs(&mut lived, &root, &id);
   assert_eq!(outs.first().map(String::as_str), Some("a"), "the cut heart waits for the next read");
   assert_eq!(outs.concat(), exit.stdout.content);
+}
+
+#[test]
+#[cfg(unix)]
+fn the_processes_that_a_cancelled_command_started_end_with_it() {
+  let mut lived = Lived::new("group", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { on: on(&root), ..Default::default() };
+  let id = lived.engine.bash("sleep 60 & echo $!; wait", with).unwrap().id().to_owned();
+  let door = || verbs::Read { on: on(&root), ..Default::default() };
+  let waker = waker();
+  let said = loop {
+    let said = lived.engine.read(&format!("{id}/stdout"), door()).unwrap().content;
+    if said.ends_with('\n') {
+      break said;
+    }
+    lived.engine.pump(&waker).unwrap();
+    thread::park_timeout(Duration::from_millis(20));
+  };
+  let pid = Pid::from_raw(said.trim().parse().unwrap()).unwrap();
+  assert_eq!(test_kill_process(pid), Ok(()), "the process that the command started runs");
+  lived.engine.cancel(&id, verbs::Cancel::default()).unwrap();
+  let ended = (0..500).any(|_| {
+    lived.engine.pump(&waker).unwrap();
+    thread::park_timeout(Duration::from_millis(20));
+    test_kill_process(pid) == Err(Errno::SRCH)
+  });
+  assert!(ended, "the process that the command started outlives it");
 }
 
 #[test]

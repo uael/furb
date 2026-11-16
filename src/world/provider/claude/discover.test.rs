@@ -1,3 +1,8 @@
+//! The cache of the discovery of the models, where no door reaches it: a discovery ages by hours
+//! (`LASTS`, `RETRY`) of a clock that each door reads from the machine, which no test can wait, and
+//! the race of the stores needs a store with no sync to the disk. The suite proves a discovery
+//! through the models of the command line.
+
 use std::{
   env, fs,
   path::Path,
