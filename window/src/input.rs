@@ -659,7 +659,9 @@ impl Model {
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
     let machine = if at == 0 { "This computer" } else { &self.client.machines[at].name };
     let project = self.folder_named(at, folder);
-    let badge = self.badge(&project);
+    // A session with no project has no badge to give way to, so its name stays, cut if it must.
+    let alone = project == NO_PROJECT;
+    let badge = if alone { run("", raised) } else { self.badge(&project) };
     let gap = || run(" ".repeat(APART), raised);
     let mut left: Line = switch.into();
     let fixed = width(&left) + APART + 2 + APART + badge.content.width() + 2;
@@ -681,6 +683,7 @@ impl Model {
     let machine = cut(machine, spare.saturating_sub(kept));
     // A name cut to less than a few letters says nothing that the badge does not.
     let name = match spare.saturating_sub(machine.width()) {
+      rest if alone => cut(&project, rest.max(SHORTEST)),
       rest if rest > SHORTEST => format!(" {}", cut(&project, rest - 1)),
       _ => String::new(),
     };

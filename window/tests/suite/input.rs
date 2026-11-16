@@ -1057,10 +1057,11 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   app.type_text("no project");
   app.press("enter");
   // The launcher and the home say where the new session runs before it starts. The models of the
-  // machine come at any moment and take their room in the launcher, where the name of the project
-  // then gives way to its badge, so the frame to read is the one after them.
+  // machine come at any moment and take their room in the launcher, where the name of a session
+  // with no project stays, since it has no badge to give way to, and the machine takes a few letters,
+  // so the frame to read is the one after them.
   shows(&app, "opus  high");
-  let frame = shows(&app, "This computer ▾   ·· ▾");
+  let frame = shows(&app, "This… ▾   No project ▾");
   assert!(frame.contains("It runs in a new session with no project on this"), "{frame}");
   sent(&app, &format!("plan the week {ANSWERS}"));
   // The head of the thread names no project, and the input runs in the folder of the session.
