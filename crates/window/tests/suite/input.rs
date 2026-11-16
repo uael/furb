@@ -1134,9 +1134,11 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   let frame = shows(&app, "This… ▾   No project ▾");
   assert!(frame.contains("It runs in a new session with no project on this"), "{frame}");
   sent(&app, &format!("plan the week {ANSWERS}"));
-  // The head of the thread names no project, and the input runs in the folder of the session.
-  let frame = shows(&app, "No project · plan the week");
-  assert!(frame.contains("Two stages hold most"), "{frame}");
+  // The head of the thread names no project, and the input runs in the folder of the session, once
+  // the answer came.
+  let both =
+    |frame: &str| frame.contains("No project · plan the week") && frame.contains("Two stages");
+  assert!(app.wait_until(PATIENCE, || both(&app.text())), "{}", app.text());
   // The record stands in a folder of its own, in the folder of the sessions with no project, and
   // none in the project of the window.
   let alone = daemon.file("data").join("sessions");
