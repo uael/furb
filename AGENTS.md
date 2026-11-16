@@ -150,7 +150,8 @@ API of its own:
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
   the library runs no Zig, as a tree of `cargo xtask tree new` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
-  capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. `FURB_CELLS=<folder>`
+  capture of a frame as text, a snapshot of insta, and `INSTA_UPDATE=always cargo test -p furb-window` draws each
+  capture again. `FURB_CELLS=<folder>`
   writes the cells of each capture there as JSON, with the colors of the frame.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
 - `frames/` is `furb-frames`, the fifth package of the workspace: the frames of the window, in the one format that a

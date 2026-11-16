@@ -1,7 +1,8 @@
-//! The captures of the window: a frame as text, in a file of `tests/screens` that git holds.
-//! `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. `FURB_CELLS=<folder>` also
-//! writes the cells of each capture there as JSON, which a rasterizer of cells draws as an image
-//! with the colors of the frame.
+//! The captures of the window: a frame as text, in a snapshot of insta in `tests/screens` that git
+//! holds. `INSTA_UPDATE=always cargo test -p furb-window` draws each capture again, and a run with
+//! no such setting writes a frame that differs beside its capture as `.snap.new`.
+//! `FURB_CELLS=<folder>` also writes the cells of each capture there as JSON, which a rasterizer of
+//! cells draws as an image with the colors of the frame.
 
 #![cfg(test)]
 
@@ -16,24 +17,22 @@ use serde_json::json;
 
 use crate::daemon::PATIENCE;
 
-/// The frame of an app held against its capture, or written as its capture when `FURB_DRAW` is
-/// set. A capture holds no blank row after the last row that shows something, as the hooks keep a
-/// file. A test runs in the folder of its package.
+/// The frame of an app held against its capture. A capture holds no blank row after the last row
+/// that shows something, as the hooks keep a file. A test runs in the folder of its package.
 pub(crate) fn screen(name: &str, app: &TestApp) {
   if let Some(folder) = env::var_os("FURB_CELLS") {
     fs::write(Path::new(&folder).join(name).with_extension("json"), cells(&app.render())).unwrap();
   }
-  let capture = Path::new("tests/screens").join(name).with_extension("txt");
   // A capture holds the frame where the window settles, drawn and compared the same way: a frame
   // that only passes by, before an answer that the test does not wait for, never matches it.
   let frame = still(app);
-  if env::var_os("FURB_DRAW").is_some() {
-    fs::write(&capture, frame).unwrap();
-    return;
-  }
-  let kept = fs::read_to_string(&capture).unwrap_or_default();
-  let how = "`FURB_DRAW=1 cargo test -p furb-window` draws it again";
-  assert_eq!(frame, kept, "the frame is not the capture {}: {how}", capture.display());
+  insta::with_settings!({
+    snapshot_path => "../screens",
+    prepend_module_to_snapshot => false,
+    omit_expression => true,
+  }, {
+    insta::assert_snapshot!(name, frame);
+  });
 }
 
 /// The frame of an app once it stays the same over many polls of a wait, between which a daemon

@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+● furb-try · fix the build (the model…         ✓ Resolved      All projects ▾        This computer
+    1  open = boot + seed
+                                                               Resolved 1 ▸
+  See the trace.
+                                                              ▐ ✓ fix the build (the model…   now ▌
+┃
+┃ say what moved (the model answers)
+┃
+                                                opus/high
+    3  found = 2
+    4  close('The open takes **329 s**. Two stages h…+251
+
+  The open takes 329 s. Two stages hold most of it: 181 s
+  to send each entry to the ears of the host, and 104 s in
+  the boot.
+
+  • seed reads each chain once
+  • the image skips the boot
+
+                                                   python
+    1  open = boot + seed
+
+  See the trace.
+
+┃
+┃ fix the build (the model answers)
+┃
+┃  Message  Python    → fix the… ▾      opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb-try                      ⌃P find

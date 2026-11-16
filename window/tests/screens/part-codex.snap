@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+  furb                                                         furb-try ▾            This computer
+
+                                                                No thread yet in this project.
+
+    Models                                                      ⌃P  other projects and sessions
+    ▌Search a model                                5 / 6
+
+    Claude
+     opus    1M context · images · in use           high
+     sonnet  1M context · images                    high
+     haiku   200k context · images                  high
+     fable   1M context · images                    high
+
+    Codex
+    ▌Open the sign-in page again  sign in there
+     Cancel the sign-in  keep the models as they are
+
+    ↑↓ move · ⏎ open the page · ⎋ close
+
+  with opus at high effort.
+
+  ⌃P          go to anything, or run a command
+  ⌃X ?        each key
+
+┃
+┃ Ask for a change, a review or an answer
+┃
+┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
+┃
+  ~/furb-try                                      ⌃P find

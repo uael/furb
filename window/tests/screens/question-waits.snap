@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+● furb · how long does an open take                Resolve     All projects ▾        This computer
+  to send each entry to the ears of the host, and 104 s in
+  the boot.                                                    Resting 1
+                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  • seed reads each chain once                                ▐ ● how long does an open…  ◆ Input ▌
+  • the image skips the boot                                  ▐   FU furb                    opus ▌
+                                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+                                                   python
+    1  open = boot + seed
+
+  See the trace.
+
+┃
+┃ and the side
+┃ (the model asks a choice)
+┃
+                                                opus/high
+    ◆  side = await prompt(Literal['right', 'left'], …+51
+    4  close(side)
+    …
+
+  ◆ Where does the list of cards stand?
+
+  ◆ A question waits. It shows when the input is empty.
+┃
+┃ the bar is too wide
+┃
+┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                  ⌃P find

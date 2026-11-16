@@ -28,3 +28,7 @@ node_modules/
 # The memory of a folder on this machine alone, which the memory extension reads after its AGENTS.md.
 AGENTS.local.md
 CLAUDE.local.md
+
+# A frame of the window that differs from its capture, which insta writes beside it for a review.
+*.snap.new
+*.pending-snap

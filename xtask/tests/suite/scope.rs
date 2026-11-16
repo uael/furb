@@ -51,7 +51,7 @@ fn a_change_to_the_tests_of_python_alone_runs_the_suite_on_each_system_and_the_b
 
 #[test]
 fn a_change_to_the_window_alone_runs_the_crate_on_each_system_and_the_other_jobs_on_linux() {
-  let got = of(&["scope"], &["window/src/model.rs", "window/tests/screens/start.txt"]);
+  let got = of(&["scope"], &["window/src/model.rs", "window/tests/screens/start.snap"]);
   assert_eq!(got, answer([LINUX, LINUX, EVERY, EVERY], true));
 }
 

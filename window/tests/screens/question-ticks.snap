@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+● furb · which keys does the form take             Resolve     All projects ▾        This computer
+┃
+┃ which keys does the form take                                Needs you 1
+┃ (the model asks ticks)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ ● which keys does the…    ◆ Input ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    ◆  keys = await prompt(list[Literal['up', 'down',…+56     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    2  close(' '.join(keys))
+    …
+
+
+
+
+
+
+
+
+
+┃
+┃ ◆ opus/high asks
+┃ Which keys does the form take?
+┃
+┃   [x] up
+┃   [ ] down
+┃ › [x] tab
+┃   type another answer
+┃
+┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse

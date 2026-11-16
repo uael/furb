@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+● furb · where does the list stand             ✓ Resolved      All projects ▾        This computer
+┃
+┃ where does the list stand                                    Resolved 1 ▸
+┃ (the model asks a choice)
+┃                                                             ▐ ✓ where does the list stand   now ▌
+                                                opus/high
+    1  side = await prompt(Literal['right', 'left'], …+51
+    2  close(side)
+
+  ◆ Where does the list of cards stand?        left · you
+
+  left
+
+
+
+
+
+
+
+
+
+
+
+
+┃
+┃ A reply opens this thread again
+┃
+┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                  ⌃P find

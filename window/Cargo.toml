@@ -62,5 +62,7 @@ serde_json = "1"
 thiserror = "2"
 
 [dev-dependencies]
+# The captures of the screens, each a snapshot in tests/screens.
+insta = "1.48"
 # The list of the projects of the daemon of a test.
 serde_json = "1"

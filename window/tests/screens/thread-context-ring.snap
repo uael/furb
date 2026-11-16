@@ -1,0 +1,33 @@
+---
+source: tests/suite/screens.rs
+---
+● furb · read the trace of the open                               ✓ Resolved
+┃
+┃ read the trace of the open
+┃ (the model reads much)
+┃
+                                                                   opus/high
+    1  close('The trace holds the open of each chain.')
+
+  The trace holds the open of each chain.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃
+┃ A reply opens this thread again
+┃
+┃  Message  Python    → read the… ▾     opus  high   + New thread ⌃N   ○ 12%
+┃
+  This computer · ~/src/furb-try                                     ⌃P find

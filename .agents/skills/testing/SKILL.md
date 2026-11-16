@@ -27,7 +27,7 @@ Each gate runs locally. `uv run` builds the crate again after a change of it, as
 | The crate, `src/*.rs` | `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and again with `--features typescript`, then `uv run pytest -q` |
 | A door | The gates of the crate, then `uv run pytest -q test/outside` for python, and `bun run build && bun run check && bun run test` for TypeScript |
 | The command line, `cli/` | `cargo test -p furb-cli`, which runs `furb` as a process on a claude command line that answers from a script |
-| The window, `window/` | `cargo test -p furb-window` and `cargo clippy -p furb-window --all-targets -- -D warnings`; after a change that a screen shows, `FURB_DRAW=1 cargo test -p furb-window` and read each capture in `window/tests/screens` |
+| The window, `window/` | `cargo test -p furb-window` and `cargo clippy -p furb-window --all-targets -- -D warnings`; after a change that a screen shows, `INSTA_UPDATE=always cargo test -p furb-window` and read each capture in `window/tests/screens` |
 | The contract of a value that crosses a door | The gates of both doors, since each door gives the same host API |
 | The workflow, or a script of `script/` or `xtask/python/` | `git diff --check` and `cargo xtask paths`, then read the run of the workflow on the pull request |
 | The documents alone | Their links and their format, `cargo xtask links` for a README of a package, and `git diff --check`; no test of the runtime |

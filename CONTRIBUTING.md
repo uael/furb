@@ -202,14 +202,15 @@ take the time of real ones, so the GIF plays at the speed of the window. Run it 
 | `window/src/kit.rs` | The views that the kits of the life of the open thread serve, under its dock: each tree in the closed set of nodes of the protocol, a button that takes a press, and an input that the input of the window fills. `furb-client` mounts each view and sends what he does to its skill. |
 | `window/src/hand.rs` | The widgets, and what each key, each move of the pointer, each timer and each frame of a machine changes in the model. |
 | `window/src/reload.rs` | The window gives its place to a new build of itself: it watches its program, and once a build replaced it, it writes where it stands beside its cards and starts the new program in its place, which opens on the same thread, at the same place of the feed, with the same draft. So `cargo build -p furb-window` reaches a window that runs at once. |
-| `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon whose model answers from a script, and each capture of a frame as text. `FURB_DRAW=1 cargo test -p furb-window` draws each capture again, and `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with their colors. |
+| `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon whose model answers from a script, and each capture of a frame as text, a snapshot of insta. `INSTA_UPDATE=always cargo test -p furb-window` draws each capture again, and `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with their colors. |
 
 On Linux and on macOS the program holds the library. On Windows it loads `opentui.dll`: `cargo run` and `cargo test`
 find it in `target/opentui`, and a program that you start by hand needs a copy of it beside itself.
 
 A screen must read clearly at first sight. After a change that a screen shows, run
-`FURB_DRAW=1 cargo test -p furb-window`, which writes each capture of a frame as text in `window/tests/screens`, and
-read each capture that changed.
+`INSTA_UPDATE=always cargo test -p furb-window`, which writes each capture of a frame as text in
+`window/tests/screens`, and read each capture that changed. A run with no setting writes a frame that differs beside its
+capture as a `.snap.new` file, which git ignores.
 
 `cargo build -p furb-cli -p furb-window -p furb-frames`, then `target/debug/furb-frames capture`, captures the real
 window in tmux at three sizes and writes the recording, the key frames, the probes and the compare of each scenario
