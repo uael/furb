@@ -20,7 +20,7 @@ use furb_host::protocol::Model as Offered;
 use crate::{
   input::named,
   keys::{self, Bound, Does},
-  line::{Line, capital, run, spread, wrapped},
+  line::{Line, balanced, capital, run, spread, wrapped},
   list::{NO_PROJECT, project},
   model::{Key, Model},
   thread::{Click, Row, hued},
@@ -1102,7 +1102,7 @@ fn described(says: &str, room: usize, whole: bool) -> Vec<String> {
   if says.is_empty() {
     Vec::new()
   } else if whole || says.width() <= room {
-    wrapped(says, room)
+    balanced(says, room)
   } else {
     let first = wrapped(says, room.saturating_sub(1)).swap_remove(0);
     vec![format!("{first}…")]

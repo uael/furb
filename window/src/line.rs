@@ -85,6 +85,14 @@ pub(crate) fn wrapped(text: &str, room: usize) -> Vec<String> {
   lines
 }
 
+/// A text wrapped to a count of columns at most, on as few rows as [`wrapped`] gives and each as
+/// near the others as it can, so no word stands alone on its last row.
+pub(crate) fn balanced(text: &str, room: usize) -> Vec<String> {
+  let rows = wrapped(text, room).len();
+  let least = (1..=room).rev().take_while(|one| wrapped(text, *one).len() == rows).last();
+  wrapped(text, least.unwrap_or(room))
+}
+
 /// A word as parts of a count of columns at most, each of one character at least.
 fn broken(word: &str, room: usize) -> Vec<String> {
   let mut parts = vec![String::new()];
