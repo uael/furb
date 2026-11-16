@@ -250,7 +250,8 @@ fn choice(text: &str) -> Option<(Object, &str)> {
 /// list, a dict and a tuple are a line of JSON, whose every number is exact and whose every item has the shape of its
 /// place: a tuple has the length of its shape, and a dict has keys of text. A tuple comes as the mark of a tuple, since
 /// a host that reads the value reads a list for it. A Literal is one of its values, which the
-/// line less the spaces around it names as python shows it, or, for a string, as its text. A union is the first of its
+/// line less the spaces around it names as python shows it, or, for a string, as its text, and it ends with an entry
+/// of the operator: words that name none of its values are his own answer, as a string. A union is the first of its
 /// shapes that reads the line, and None for a line with no word when the union holds None.
 pub fn answered(shape: &str, line: &str) -> Result<Object, Fault> {
   let held = Shape::parse(shape)
@@ -276,7 +277,8 @@ fn read(shape: &Shape, name: &str, line: &str) -> Result<Object, Fault> {
     Shape::Choice(values) => {
       let names = |one: &&Object| one.py_repr() == text || one.as_ref().as_str() == Some(text);
       let none = || Fault::refused(format!("{line:?} is none of {name}"));
-      values.iter().find(names).cloned().ok_or_else(none)
+      let own = || (!text.is_empty()).then(|| Object::string(text)).ok_or_else(none);
+      values.iter().find(names).cloned().map_or_else(own, Ok)
     }
     Shape::List(_) | Shape::Dict(_) | Shape::Tuple(_) => {
       let raw: &RawValue = serde_json::from_str(text).map_err(|why| cause(&why))?;
@@ -307,7 +309,8 @@ fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
     Shape::Float if number => text.parse().map(Object::float).map_err(|why| cause(&why)),
     Shape::Choice(values) => {
       let one = written(raw)?;
-      if values.iter().any(|value| value.py_repr() == one.py_repr()) { Ok(one) } else { Err(no()) }
+      let own = one.as_ref().as_str().is_some_and(|text| !text.trim().is_empty());
+      if own || values.iter().any(|value| value.py_repr() == one.py_repr()) { Ok(one) } else { Err(no()) }
     }
     Shape::List(None) | Shape::Dict(None) if matches!(first, Some(b'[' | b'{')) => {
       let one = written(raw)?;

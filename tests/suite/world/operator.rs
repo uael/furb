@@ -37,7 +37,7 @@ fn a_list_and_a_dict_are_json_whose_every_number_is_exact() {
 }
 
 #[test]
-fn a_literal_is_one_of_its_values_which_a_line_names_as_python_shows_it_or_as_its_text() {
+fn a_literal_is_one_of_its_values_which_a_line_names_as_python_shows_it_or_his_own_words() {
   let shape = r#"Literal['a', "it's", 'b\n', 3, True, None]"#;
   assert!(answers(shape) && answers("int") && !answers("set") && !answers("Option"));
   assert_eq!(read(shape, " a "), "'a'");
@@ -48,8 +48,8 @@ fn a_literal_is_one_of_its_values_which_a_line_names_as_python_shows_it_or_as_it
     (read(shape, "3"), read(shape, "True"), read(shape, "None")),
     ("3".into(), "True".into(), "None".into())
   );
-  assert_eq!(read(shape, "c"), format!("Refused: \"c\" is none of {shape}"));
-  assert_eq!(read(shape, "1"), format!("Refused: \"1\" is none of {shape}"));
+  assert_eq!((read(shape, " c "), read(shape, "1")), ("'c'".into(), "'1'".into()));
+  assert_eq!(read(shape, "  "), format!("Refused: \"  \" is none of {shape}"));
   for shape in ["Literal[]", "Literal[1.5]", "Literal[b'a']", "Literal['a'] | set", "Literal['a"] {
     assert!(!answers(shape), "{shape}");
     assert_eq!(read(shape, "a"), format!("Refused: the operator answers no {shape}"));

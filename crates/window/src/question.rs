@@ -16,6 +16,7 @@ use furb::view::{
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::Style;
+use serde_json::Value;
 
 use furb_client::{Asked, Form, HOLD};
 
@@ -163,6 +164,9 @@ impl Model {
       Some(Does::Send) => says(self.answer()),
       Some(Does::Empty) if !self.client.draft.text.is_empty() => Keyed::Empties,
       Some(Does::Empty) => says(self.refuse()),
+      // Escape refuses the question as the key that empties does, and only on an empty form.
+      Some(Does::Close) if !self.client.draft.text.is_empty() => Keyed::Empties,
+      Some(Does::Close) => says(self.refuse()),
       // A digit takes its row of a choice, or ticks its row of values, as he reads its number.
       _ if let Some(row) = digit.filter(|one| !own && (1..=values.min(9)).contains(one)) => {
         if ticks {
@@ -233,7 +237,8 @@ impl Model {
   }
 
   /// The answer of the form, which waits for no other: the value of the row chosen, each value
-  /// ticked as a list, his own words, which close a choice as a refusal that its model reads, or
+  /// ticked as a list, his own words on the last row, which answer a Literal as its last entry and
+  /// join the values that he ticked, and close a yes or no as a refusal that its model reads, or
   /// the line that he wrote.
   fn answer(&self) -> Option<(usize, Verb)> {
     let (form, question) = self.form().filter(|_| !self.answering())?;
@@ -249,7 +254,15 @@ impl Model {
       }
       Offers::Line => answer(words),
       _ if words.trim().is_empty() => return None,
-      _ => Verb::Close { life, act, value: declined(&words) },
+      Offers::Choices(_) if question.shape.trim() == "bool" => {
+        Verb::Close { life, act, value: declined(&words) }
+      }
+      Offers::Choices(_) => answer(words.trim().to_owned()),
+      Offers::Ticks(all) => {
+        let ticked = form.ticked.iter().map(|at| all[*at].json.clone());
+        let own = Value::String(words.trim().to_owned()).to_string();
+        answer(format!("[{}]", ticked.chain([own]).collect::<Vec<_>>().join(", ")))
+      }
     };
     Some((at, verb))
   }
@@ -356,7 +369,7 @@ impl Model {
       })
       .collect();
     let own = offers.values();
-    let words = if form.at == own { String::new() } else { "type another answer".to_owned() };
+    let words = if form.at == own { String::new() } else { "type your own answer".to_owned() };
     lines.push((vec![mark(own), run(words, muted)], None));
     lines
   }
@@ -386,7 +399,7 @@ impl Model {
     if matches!(offers, Offers::Ticks(_)) && form.at < offers.values() {
       said.push(format!("{} tick", key(Does::Tick)));
     }
-    said.push(format!("{} answer", key(Does::Send)));
+    said.push(format!("{} answer · {} refuse", key(Does::Send), key(Does::Close)));
     if self.questions().len() > 1 {
       said.push(format!(
         "{} next · {} before",
