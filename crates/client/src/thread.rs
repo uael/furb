@@ -143,6 +143,8 @@ pub struct Thread {
   pub again: bool,
   /// The context of the chain of the thread at its last answer.
   pub context: Option<Context>,
+  /// The folder of the chain of the thread, where its next word runs.
+  pub folder: Option<String>,
   /// The kinds of what an answer of the chain read, once the client parted its turns.
   pub parts: Option<Parts>,
   /// The bar of its time, while the operator holds it.
@@ -197,7 +199,8 @@ impl Thread {
       time.heard(&page.exchanges);
     }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
-    (self.agents, self.context, self.sub) = (page.agents, page.context, page.sub);
+    (self.agents, self.context, self.sub, self.folder) =
+      (page.agents, page.context, page.sub, page.folder);
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
     let ended = marked(&self.exchanges, |mark| *mark == Mark::Ran);

@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · Debug stuck TUI…    ✗ Failed      All projects ▾       studio offline
 ┃

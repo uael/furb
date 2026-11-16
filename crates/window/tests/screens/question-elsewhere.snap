@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · how long does an open take            ✓ Resolved      All projects ▾        This computer
 ┃
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try          ◆ 1 other thread asks   ⌃P find
+  This computer · ~/furb  ◆ 1 other thread asks   ⌃P find

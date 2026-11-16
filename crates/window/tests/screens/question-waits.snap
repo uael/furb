@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · how long does an open take                Resolve     All projects ▾        This computer
   to send each entry to the ears of the host, and 104 s in
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                  ⌃P find
+  This computer · ~/furb                          ⌃P find

@@ -322,7 +322,7 @@ impl Client {
   /// hold it, as for a session with no project.
   pub fn cwd(&self, at: usize, life: &str) -> Option<String> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
-    let held = || Path::new(life).ancestors().nth(3).map(|one| one.display().to_string());
+    let held = || checkout(life).map(|one| one.display().to_string());
     // A life that the client opened before its machine told its card runs where it was opened.
     let opened = || self.holds.get(&(at, life.to_owned())).and_then(|hold| hold.cwd.clone());
     match cards.iter().find(|card| card.life == life) {
@@ -376,7 +376,7 @@ impl Client {
     let slug = if slug.is_empty() { "session".to_owned() } else { slug };
     let lives =
       told.lives.iter().map(|one| &one.life).chain(told.cards.iter().map(|one| &one.life));
-    let taken: Vec<&Path> = lives.filter_map(|one| Path::new(one).ancestors().nth(3)).collect();
+    let taken: Vec<&Path> = lives.filter_map(|one| checkout(one)).collect();
     let free = |name: &str| !taken.contains(&root.join(name).as_path());
     // One of as many names as the folders taken, and one more, is free.
     let name = (1..=taken.len() + 1)
@@ -389,4 +389,11 @@ impl Client {
   pub fn second(&self) -> u64 {
     self.now / 1000
   }
+}
+
+/// The checkout whose `.furb/sessions` holds a record, from the one name of the record: with no
+/// link and no short name in it, as the World writes its paths, where a project stands as the list
+/// of the machine names it.
+pub fn checkout(life: &str) -> Option<&Path> {
+  Path::new(life).ancestors().nth(3)
 }

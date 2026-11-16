@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         furb-try ▾            This computer
 
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 ┃
 ┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
 ┃
-  ~/src/furb-try                                  ⌃P find
+  ~/furb-try                                      ⌃P find

@@ -2,11 +2,7 @@
 
 #![cfg(test)]
 
-use std::{
-  fs,
-  path::{Path, PathBuf},
-  time::Duration,
-};
+use std::{fs, path::Path, time::Duration};
 
 use furb_host::protocol::Verb;
 use furb_window::{Options, System, open};
@@ -29,13 +25,15 @@ pub(crate) fn app() -> TestApp {
   TestApp::new(100, 30)
 }
 
-/// The options of a window of a test. The system of the client is macOS, so a capture shows the
-/// same keys on each runner.
+/// The options of a window of a test, beside the file that it keeps: the folder of that file is
+/// its home, with no link in it as the World writes a path, so a folder shows the same from `~` on
+/// each system and in each run. The system of the client is macOS, so a capture shows the same keys
+/// on each runner.
 pub(crate) fn options(kept: &Path) -> Options {
-  let folder = PathBuf::from("/home/ada/src/furb-try");
+  let home = kept.parent().map(|one| dunce::canonicalize(one).unwrap_or_else(|_| one.to_owned()));
   Options {
-    folder,
-    home: Some(PathBuf::from("/home/ada")),
+    folder: home.clone().unwrap_or_default().join("furb-try"),
+    home,
     kept: kept.to_owned(),
     zone: TimeZone::UTC,
     clock: || CLOCK * 1000,

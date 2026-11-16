@@ -11,7 +11,7 @@ use furb::view::{
   Standing, Thought, Work, homed, lines, operator, timer,
 };
 use furb::world::images;
-use furb_client::{Anchor, Fold, Opened, PICTURE, Picture, Shown, Target, rests};
+use furb_client::{Anchor, Fold, Opened, PICTURE, Picture, Shown, Target, checkout, rests};
 use furb_host::{
   FollowUp,
   protocol::{Card, Present},
@@ -939,12 +939,9 @@ impl Feed<'_> {
     let pad = |lead: &str| run(format!("{:gutter$}  {lead}", ""), muted);
     let key = &self.opened.thread.key;
     // The World writes a path under the home of the user of its machine from `~`, so the folder
-    // takes that home too, which may not be the home of the window. The folder is the checkout
-    // whose sessions hold the record, from the one name of the record, with no link and no short
-    // name in it as the World writes its paths, where the project of a card stands as its list
-    // names it, as `/var` for `/private/var` or a short name on Windows.
+    // takes that home too, which may not be the home of the window.
     let home = self.model.client.machines.get(key.0).and_then(|one| one.home.as_deref());
-    let checkout = Path::new(&key.1).ancestors().nth(3).map(|one| one.display().to_string());
+    let checkout = checkout(&key.1).map(|one| one.display().to_string());
     let folder = checkout.map(|one| home.map_or_else(|| one.clone(), |home| homed(&one, home)));
     let mut rows = Vec::new();
     for one in &line.writes {

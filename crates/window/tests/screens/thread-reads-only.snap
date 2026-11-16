@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · where does the time of a…     ◉ rex   ✓ Resolved      All projects ▾        This computer
 ┃
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 
                                                                Context               No answer yet
   Read only · you watch this session                           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                  ⌃P find
+  This computer · ~/furb                          ⌃P find

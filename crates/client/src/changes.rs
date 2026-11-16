@@ -6,7 +6,7 @@
 
 use furb_wire::protocol::{Answer, Changed, Changes, Frame, Verb};
 
-use crate::{Asked, Client, Target};
+use crate::{Asked, Client, Key, Target};
 
 /// The changes of a folder as its machine last gave them, and whether a life of its project told a
 /// change since, so the client asks them again.
@@ -32,12 +32,16 @@ impl Client {
     self.machines.get(at)?.changes.get(folder).map(|one| &one.changes)
   }
 
-  /// The folder of the target of the input, whose branch the launcher names: the project of the
-  /// session of a thread, or the folder of a new session.
+  /// The folder of the target of the input, whose branch the launcher names: the folder of the
+  /// chain of the open thread, where its next word runs, else the project of the session of a
+  /// thread, or the folder of a new session.
   pub fn target_folder(&self) -> Option<(usize, String)> {
     let at = self.target().machine();
+    let opened = |key: &Key| self.thread.as_ref().filter(|one| one.thread.key == *key);
     let folder = match self.target() {
-      Target::Thread(key) => self.cwd(at, &key.1),
+      Target::Thread(key) => {
+        opened(&key).and_then(|one| one.thread.folder.clone()).or_else(|| self.cwd(at, &key.1))
+      }
       Target::Session(_, life) => self.cwd(at, &life),
       Target::New(_, folder) => Some(folder),
     };

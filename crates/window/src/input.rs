@@ -992,8 +992,8 @@ impl Model {
         (stands.line, stands.loaders)
       }
       (None, None) if let Some(python) = python => (python, vec![]),
-      // The launcher of a new session names its machine, so the row says the folder alone.
-      (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), vec![]),
+      // The place, which takes the room that the right of the row leaves, below.
+      (None, None) => (Vec::new(), vec![]),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
@@ -1001,9 +1001,7 @@ impl Model {
     let room = wide.saturating_sub(kept + width(&key) + 2);
     let others = self.others_ask(room);
     let right: Line = others.iter().chain(&key).cloned().collect();
-    // A place that does not fit says its folder alone, which tells more than the machine.
-    let fits = width(&left) + 2 + width(&right) <= wide;
-    let left = if place && !fits { self.place(false) } else { left };
+    let left = if place { self.place(wide.saturating_sub(2 + width(&right))) } else { left };
     let line = spread(left, right.clone(), wide, Style::new());
     hot.extend(branched(&line).filter(|_| place));
     let (end, start) = (width(&line), width(&line) - width(&right));
@@ -1064,9 +1062,13 @@ impl Model {
     (vec![run(working, Style::new().fg(t.accent)), run(stop, t.style(Role::Muted))], loader)
   }
 
-  /// Where the input runs: the machine and the folder, or the folder alone, and the branch of its
-  /// checkout with the count of the files that differ from its last commit.
-  fn place(&self, machine: bool) -> Line {
+  /// Where the input runs in a room of columns: the machine and the folder, or the folder alone,
+  /// and the branch of its checkout with the count of the files that differ from its last commit.
+  /// On a thread the folder is that of its chain, where the next word runs, which a cd of his or
+  /// of a model moves. A place that does not fit says its folder alone, which tells more than the
+  /// machine, and a folder that still does not fit keeps its end, which names it, as `…/docs`.
+  /// The launcher of a new session names its machine, so the row says the folder alone.
+  fn place(&self, room: usize) -> Line {
     let muted = self.tokens.style(Role::Muted);
     if let Some(filled) = &self.client.filled {
       let skill = self.client.views.iter().find(|one| one.viewer == filled.viewer);
@@ -1085,13 +1087,21 @@ impl Model {
       .target_folder()
       .filter(|(at, one)| *at != 0 || self.folder_named(*at, one) == NO_PROJECT);
     let folder = elsewhere.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
-    let folder = self.folder_shown(at, &folder);
-    let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
+    // On a thread, the next word runs in the folder of its chain, which a cd moves.
+    let opened =
+      self.client.thread.as_ref().filter(|_| matches!(self.client.target(), Target::Thread(_)));
+    let folder = opened.and_then(|one| one.thread.folder.clone()).unwrap_or(folder);
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;
       let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));
       Some(format!(" · {BRANCH}{}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
     });
+    let folder = self.folder_shown(at, &folder);
+    let room = room.saturating_sub(2 + branch.as_deref().map_or(0, UnicodeWidthStr::width));
+    let new = matches!(self.client.target(), Target::New(..));
+    let machine = !new && name.width() + 3 + folder.width() <= room;
+    let folder = tail(&folder, room);
+    let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
     let mut line = vec![run(text, muted)];
     line.extend(branch.map(|one| run(one, muted)));
     line
@@ -1158,4 +1168,15 @@ fn branched(line: &Line) -> Option<Hot> {
 fn leveled(actor: &str) -> (String, Option<String>) {
   let (name, effort) = actor.rsplit_once('/').map_or((actor, None), |(one, two)| (one, Some(two)));
   (name.to_owned(), effort.map(str::to_owned))
+}
+
+/// A path in a room of columns: whole when it fits, else its end after `…` from a separator,
+/// which names its last folders, else its start, cut as a text is.
+fn tail(path: &str, room: usize) -> String {
+  if path.width() <= room {
+    return path.to_owned();
+  }
+  let ends = path.match_indices(['/', '\\']).map(|(at, _)| &path[at..]);
+  let end = ends.into_iter().find(|end| end.width() < room);
+  end.map_or_else(|| cut(path, room), |end| format!("…{end}"))
 }

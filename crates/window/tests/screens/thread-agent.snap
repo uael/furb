@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · agent · Run the bench of the replay          Back     All projects ▾        This computer
 ┃
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 ┃
 ┃  Message  Python    → Run the… ▾      opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                   ⎋ back
+  This computer · ~/furb-try                       ⎋ back

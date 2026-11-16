@@ -85,10 +85,10 @@ impl Read {
       let moved = page.above != told.above
         || page.agents != told.agents
         || page.context != told.context
-        || page.sub != told.sub;
+        || page.sub != told.sub
+        || page.folder != told.folder;
       if !changed.is_empty() || moved {
-        let (agents, context, sub) = (page.agents.clone(), page.context.clone(), page.sub.clone());
-        let page = Page { exchanges: changed, above: page.above, agents, context, sub };
+        let page = Page { exchanges: changed, ..page.clone() };
         let frame = Frame::Thread { life: self.life.clone(), thread: self.thread.clone(), page };
         if self.outbox.send(frame).is_err() {
           return;

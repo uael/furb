@@ -3028,6 +3028,11 @@ class Page(TypedDict):
   agents: list[Agent]
   context: NotRequired[Context | None]
   sub: NotRequired[Agent | None]
+  folder: NotRequired[str | None]
+  """
+    The folder of the chain of the thread, where its next word runs: the last that a cd of the
+    chain came to, a cd of its setup first.
+    """
 
 
 class Frame8(TypedDict):
@@ -3269,4 +3274,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 72
+PROTOCOL = 73

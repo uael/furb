@@ -322,7 +322,8 @@ impl<'a> Reader<'a> {
     };
     agents.extend(self.held.on_chain(&prompts[0].chain).filter(sub).map(|act| self.agent(act)));
     let sub = anchor_of(prompts[0]).map(|_| Box::new(self.agent(prompts[0])));
-    Page { exchanges, above: start, agents, context: self.context(&prompts[0].chain), sub }
+    let (context, folder) = (self.context(&prompts[0].chain), self.folder(&prompts[0].chain));
+    Page { exchanges, above: start, agents, context, sub, folder }
   }
 
   /// The number in the thread of the line of the word of a rung that made an act.
@@ -339,6 +340,15 @@ impl<'a> Reader<'a> {
     let spend = self.held.act(chain)?.spend.as_ref()?;
     let window = spend.actor.as_deref().and_then(|actor| self.held.window(actor));
     Some(Context { read: spend.read?, window, dollars: spend.dollars })
+  }
+
+  /// The folder of a chain: where the last cd of the chain came to.
+  fn folder(self, chain: &str) -> Option<String> {
+    let came = |act: &Act| match (&act.kind, &act.phase) {
+      (Kind::Other(kind), Phase::Done(Value::String(path))) if kind == "cd" => Some(path.clone()),
+      _ => None,
+    };
+    self.held.on_chain(chain).filter_map(came).last()
   }
 
   /// A thread, its prompt, as a page reads it: none for a prompt that is no thread.

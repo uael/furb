@@ -61,4 +61,6 @@ fn cd_moves_the_chain_of_the_thread_as_a_word_of_his_and_one_with_no_folder_says
   app.press("enter");
   let moved = shows(&app, "2  cd(\"docs\")");
   assert!(!moved.contains("/cd docs"), "{moved}");
+  // The foot names where the next word runs: the folder that the chain came to.
+  shows(&app, "/furb/docs");
 }

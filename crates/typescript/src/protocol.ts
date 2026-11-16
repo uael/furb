@@ -1635,6 +1635,11 @@ export interface Page {
   agents: Agent[];
   context?: Context | null;
   sub?: Agent | null;
+  /**
+   * The folder of the chain of the thread, where its next word runs: the last that a cd of the
+   * chain came to, a cd of its setup first.
+   */
+  folder?: string | null;
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -1826,4 +1831,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 72;
+export const PROTOCOL = 73;

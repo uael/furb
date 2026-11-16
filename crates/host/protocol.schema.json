@@ -4882,6 +4882,13 @@
               "type": "null"
             }
           ]
+        },
+        "folder": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The folder of the chain of the thread, where its next word runs: the last that a cd of the\nchain came to, a cd of its setup first."
         }
       },
       "required": [
@@ -6383,5 +6390,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 72
+  "x-protocol": 73
 }

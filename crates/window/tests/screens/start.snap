@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         All projects ▾       studio offline
 
@@ -30,4 +30,4 @@ source: tests/suite/screens.rs
 ┃                                                                 Ground the…        ‖ Paused 11h
 ┃  Message  Python    This… ▾   FT furb-try ▾  opus  high         FU furb                    opus
 ┃
-  ~/src/furb-try                                  ⌃P find      Resolved 1 ▸
+  ~/furb-try                                      ⌃P find      Resolved 1 ▸

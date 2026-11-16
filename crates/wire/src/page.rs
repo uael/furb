@@ -27,6 +27,10 @@ pub struct Page {
   pub context: Option<Context>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub sub: Option<Box<Agent>>,
+  /// The folder of the chain of the thread, where its next word runs: the last that a cd of the
+  /// chain came to, a cd of its setup first.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub folder: Option<String>,
 }
 
 /// The context of a chain at its last answer: what that answer read, the window that the roster of
