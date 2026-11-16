@@ -55,7 +55,8 @@ func serve() async throws {
   let folder = try await model(in: URL(fileURLWithPath: CommandLine.arguments[1]))
   told(["loading": "prepare"])
   let config = WhisperKitConfig(
-    modelFolder: folder.path, verbose: false, logLevel: .none, prewarm: true, load: true, download: false)
+    modelFolder: folder.path, verbose: false, logLevel: .none, prewarm: true, load: true,
+    download: false)
   let kit = try await WhisperKit(config)
   let microphone = try Microphone()
   told(["ready": true])

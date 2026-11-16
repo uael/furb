@@ -188,11 +188,14 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   if CARRIED.is_empty() {
     return Ok(None);
   }
-  // The size names the build of the program, so a new build writes a new file.
-  let path = folder.join(format!("listen-{}", CARRIED.len()));
+  // The size names the build of the program, so a new build writes a new file, in a folder of its
+  // own under the one name `listen`: the system keeps the model that it prepared for the Neural
+  // Engine by the name of the program, and a new name prepared it again for minutes.
+  let build = folder.join(format!("speech-{}", CARRIED.len()));
+  let path = build.join("listen");
   if !path.is_file() {
-    fs::create_dir_all(folder)?;
-    let written = folder.join(format!("listen-{}.part", process::id()));
+    fs::create_dir_all(&build)?;
+    let written = build.join(format!("listen.{}.part", process::id()));
     fs::write(&written, CARRIED)?;
     #[cfg(unix)]
     {
