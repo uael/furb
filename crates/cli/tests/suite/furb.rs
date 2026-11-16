@@ -223,7 +223,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "furb-kit": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "debug(t\"{k=}\")\nclose(k + 1)"]), ""), "4\n");
@@ -417,7 +417,7 @@ fn a_command_that_runs_past_the_bound_is_killed_and_gives_nothing() {
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "furb-kit": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {

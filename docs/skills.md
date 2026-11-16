@@ -16,7 +16,7 @@ caches of the chain stays valid.
 ## The official extensions
 
 Ten extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
-by default, as their manifests say, and `ouroboros`, `web`, `mcp`, `grant` and `todo` play on need, as the rule below
+by default, as their manifests say, and `furb-kit`, `web`, `mcp`, `grant` and `todo` play on need, as the rule below
 says.
 
 ### Which skill plays on which chain
@@ -90,14 +90,16 @@ reads it.
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
   config that turns `naming` off, as `{"skills": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
-- **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
+- **`furb-kit`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
   and turns it on, so every later chain runs it. `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
   file and says the fact `enable` with the word, so each chain of this session, and of each later life on its record,
   plays it. `view="name"` names in that fact the value of the root that holds the tree of the view of the kit, a node
   of the protocol as a dict: the daemon serves it to each window that mounts the view of the kit, and again each time
   that the value changes. How to extend furb stands in one home, the text of its
-  [`SKILL.md`](../.agents/skills/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
-  furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
+  [`SKILL.md`](../.agents/skills/furb-kit/SKILL.md), which a model reads with `skill("furb-kit")`, or the operator with
+  `/furb-kit` and a request: the three ways to extend furb and when to take each, a kit of the session with a view, and
+  the parts of a kit. The skill `furb`, with no code, says how to drive furb from its command line and points at
+  `furb-kit` and `furb-develop`. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
@@ -161,7 +163,7 @@ with their path. The `.furb` of a project keeps all that it holds out of version
 ## Write your own
 
 The smallest extension is a function that a model wrote in a word. When a later chain needs it too, a model calls
-`extend(name, ...)` of `ouroboros`, which writes the extension for you. You can also write one by hand: an extension
+`extend(name, ...)` of `furb-kit`, which writes the extension for you. You can also write one by hand: an extension
 is a folder.
 
 ```text
@@ -288,7 +290,7 @@ A field of furb that the manifest does not know is refused with its path, so a t
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the
 clock, a chance, and a prompt to the operator. It can also make acts that an ear of its own answers, written in
 Python, as `remember()` does, and answer the reads of a scheme of its own. An extension that needs an ear in Rust is
-a change of furb. The skill `ouroboros` gives an example of each.
+a change of furb. The skill `furb-kit` gives an example of each.
 
 A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
 'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next

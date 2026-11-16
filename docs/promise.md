@@ -148,6 +148,7 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `.agents/skills/ouroboros/ouroboros.pyi LORE: the const goes`: the kit ouroboros was rewritten.
 - `.agents/skills/ouroboros/ouroboros.pyi ouroboros: the def goes`: as LORE.
 - `.agents/skills/ouroboros/ouroboros.pyi extend: the parameter tui goes`: the old window, which loaded the part that this parameter wrote, is removed; a kit of the session names its view with view.
+- `.agents/skills/ouroboros/ouroboros.pyi: the contract goes`: the kit ouroboros is the kit furb-kit, with the same names and laws in `.agents/skills/furb-kit/furb-kit.pyi`; a record that enabled ouroboros plays the word that its fact enable holds, and a config turns on `furb-kit` in its place.
 - `.agents/skills/skills/skills.pyi skill: its type of return changes from Text to Act[Text]`: a word awaits the skill.
 
 The sentences of the contract that changed since v0.4.2 stand for 1.0.0 too. After it, a sentence that changes its

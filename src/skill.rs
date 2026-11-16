@@ -184,9 +184,9 @@ const OFFICIAL: [(&str, &str, &str, Option<&str>); 10] = [
     Some(include_str!("../.agents/skills/naming/keys.json")),
   ),
   (
-    include_str!("../.agents/skills/ouroboros/SKILL.md"),
-    include_str!("../.agents/skills/ouroboros/ouroboros.py"),
-    include_str!("../.agents/skills/ouroboros/ouroboros.pyi"),
+    include_str!("../.agents/skills/furb-kit/SKILL.md"),
+    include_str!("../.agents/skills/furb-kit/furb-kit.py"),
+    include_str!("../.agents/skills/furb-kit/furb-kit.pyi"),
     None,
   ),
   (

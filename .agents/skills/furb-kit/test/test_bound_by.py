@@ -10,7 +10,7 @@ async def test_bound_by_gives_the_names_that_the_words_of_a_chain_bind_at_their_
   tmp_path: Path,
 ) -> None:
   """bound_by gives the names that the words of a chain bind at their top level, a def, a class, an assignment or a quote, each with the rung whose word bound it last, and it asks nothing."""
-  _, root = extended("ouroboros", tmp_path, lives=True)
+  _, root = extended("furb-kit", tmp_path, lives=True)
   first = engine.rung("x = 1\ndef f() -> int:\n  return x", on=root)
   second = engine.rung("class K:\n  pass\nx = 2\n<s:q>\nhi\n</s:q>", on=root)
   await second
@@ -25,7 +25,7 @@ async def test_the_words_of_the_skills_that_play_on_the_chain_count_each_under_t
   tmp_path: Path,
 ) -> None:
   """The words of the extensions that play on the chain count, each under the rung that played it, and a name that the engine defines is not there unless a word binds it again."""
-  _, root = extended("ouroboros", tmp_path, lives=True)
+  _, root = extended("furb-kit", tmp_path, lives=True)
   played = [by for by, text in engine.program(root).items() if "def extend(" in text]
   got = await engine.rung("close(bound_by())", on=root)
   assert isinstance(got, dict)

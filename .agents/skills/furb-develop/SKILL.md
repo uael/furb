@@ -1,6 +1,6 @@
 ---
 name: furb-develop
-description: "Work on furb from a session of furb: build the window and the daemon, reload them and the skills of the session on the build, and check the window. Use it when a chain changes the code of furb itself."
+description: "A part of the skill furb. Work on furb from a session of furb: build the window and the daemon, reload them and the skills of the session on the build, and check the window. Use it when a chain changes the code of furb itself."
 ---
 
 # Work on furb from furb

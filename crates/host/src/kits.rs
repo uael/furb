@@ -1,5 +1,5 @@
 //! The view of a kit of a session (D20), and the name under which a kit speaks. A kit that lives
-//! in the record alone, which `extend(name, *rungs, session=True, view=value)` of ouroboros makes,
+//! in the record alone, which `extend(name, *rungs, session=True, view=value)` of furb-kit makes,
 //! names in its fact enable a value of the module of the root that holds the tree of its view. The
 //! daemon serves that view as a skill serves one: a peer of its own, in the process of the daemon,
 //! attaches the life through the door of the daemon with an outbox of its own, as a peer of a

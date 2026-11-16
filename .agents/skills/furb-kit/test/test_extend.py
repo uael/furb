@@ -30,7 +30,7 @@ G = "def g() -> int:\n  return 2"
 
 async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> None:
   """extend writes the words of the rungs it names, in order, as the program of the chain holds them, with a blank line between two, after the word that the file holds, as the word of the extension of that name in .furb/skills/<name>, with its manifest SKILL.md, whose metadata names that word under furb-word and which keeps each other line that it holds, and gives the word as it landed."""
-  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  _, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   f, g = engine.rung(F, on=root), engine.rung(G, on=root)
   await g
   got = await engine.rung(f"close(extend('kit', {g!r}))", on=root)
@@ -55,7 +55,7 @@ async def test_extend_turns_the_skill_on_in_the_config_of_the_project(tmp_path: 
   (config := tmp_path / "work" / ".furb" / "config.json").write_text(
     '{"skills": {"memory": false}, "x": 1}', encoding="utf-8", newline=""
   )
-  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  _, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await engine.rung(f"extend('kit', {f!r})", on=root)
   assert json.loads(config.read_text(encoding="utf-8")) == {"skills": {"memory": False, "kit": "skills/kit"}, "x": 1}
@@ -63,7 +63,7 @@ async def test_extend_turns_the_skill_on_in_the_config_of_the_project(tmp_path: 
 
 async def test_a_write_of_the_config_of_the_project_enables_what_it_turns_on(tmp_path: Path) -> None:
   """When a write of the config of the project lands, the World enables each extension that it turns on by its path and that the life does not run, so it plays as a rung on every chain there is and on each chain at its birth, and the record keeps the fact for every later life."""
-  sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  sand, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   there = engine.chain("there")
   await settle()
   f = engine.rung(F, on=root)
@@ -71,17 +71,17 @@ async def test_a_write_of_the_config_of_the_project_enables_what_it_turns_on(tmp
   await settle()
   born = engine.chain("born")
   await settle()
-  assert [a[3] for a in engine.transcript(on=root) if a[0] == "enable"] == ["ouroboros", "kit"]
+  assert [a[3] for a in engine.transcript(on=root) if a[0] == "enable"] == ["furb-kit", "kit"]
   assert [callable(engine.module(one).get("f")) for one in (there, born)] == [True, True]
-  _, again = extended("ouroboros", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
+  _, again = extended("furb-kit", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
   await settle()
-  assert await engine.rung("close(enabled())", on=again) == ["ouroboros", "kit"]
+  assert await engine.rung("close(enabled())", on=again) == ["furb-kit", "kit"]
   assert callable(engine.module(again).get("f"))
 
 
 async def test_a_write_again_of_a_skill_that_the_life_runs_reloads_its_definitions(tmp_path: Path) -> None:
   """When extend writes again the word of an extension that the life runs, the World enables it again with the new word, and each chain plays the definitions of that word alone, so a function and a name in capitals take their new value and every other name keeps its value."""
-  sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  sand, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   there = engine.chain("there")
   await settle()
   f = engine.rung(F + "\n\nkept = ['first']\nLIMIT = 1", on=root)
@@ -91,18 +91,18 @@ async def test_a_write_again_of_a_skill_that_the_life_runs_reloads_its_definitio
   g = engine.rung(G + "\n\nkept = []\nLIMIT = 2", on=root)
   await engine.rung(f"extend('kit', {g!r})", on=root)
   await settle()
-  assert [a[3] for a in engine.transcript(on=root) if a[0] == "enable"] == ["ouroboros", "kit", "kit"]
+  assert [a[3] for a in engine.transcript(on=root) if a[0] == "enable"] == ["furb-kit", "kit", "kit"]
   held = engine.module(there)
   assert (held.get("kept"), held.get("LIMIT"), callable(held.get("g"))) == (["first", "mine"], 2, True)
-  _, again = extended("ouroboros", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
+  _, again = extended("furb-kit", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
   await settle()
-  assert await engine.rung("close(enabled())", on=again) == ["ouroboros", "kit"]
+  assert await engine.rung("close(enabled())", on=again) == ["furb-kit", "kit"]
   assert [engine.module(again).get(name) for name in ("kept", "LIMIT")] == [[], 2]
 
 
 async def test_extend_with_session_keeps_the_kit_in_the_record_alone(tmp_path: Path) -> None:
   """extend with session keeps the kit in the record alone: it writes no file, says the fact enable of the root with the word, so each chain plays it as an extension, and gives the word at session://<name>/<name>.py."""
-  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  _, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await f
   got = await engine.rung(f"close(extend('todo', {f!r}, session=True))", on=root)
@@ -115,7 +115,7 @@ async def test_extend_with_session_keeps_the_kit_in_the_record_alone(tmp_path: P
 
 async def test_extend_with_session_and_view_names_the_value_of_the_view_in_the_fact(tmp_path: Path) -> None:
   """extend with session and view names in that fact the value of the root that holds the tree of the view of the kit, a node of the protocol as a dict, as {'id': 'todo', 'node': 'text', 'runs': [{'text': 'nothing to do'}]}: each window that mounts the view of the kit gets that tree from the daemon, and again each time that the value changes, at each later open too."""
-  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  _, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await f
   await engine.rung(f"extend('todo', {f!r}, session=True, view='view')", on=root)
@@ -125,12 +125,12 @@ async def test_extend_with_session_and_view_names_the_value_of_the_view_in_the_f
 
 async def test_a_later_life_plays_the_session_kit_from_the_record(tmp_path: Path) -> None:
   """A later life on the record plays the kit on each chain from that fact, with no file in the project or the config."""
-  sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  sand, root = extended("furb-kit", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await f
   await engine.rung(f"extend('todo', {f!r}, session=True)", on=root)
   await settle()
-  _, again = extended("ouroboros", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
+  _, again = extended("furb-kit", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
   await settle()
   await engine.rung("three = chain('three')", on=again)
   await settle()
