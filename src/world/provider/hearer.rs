@@ -396,7 +396,7 @@ impl Hearer {
     reply.waits = true;
     // The next turn of the chain pays the request of the call that failed.
     let failed = reply.call.bill.take().map_or(0.0, |bill| bill.dollars);
-    *self.replies.owed.entry(reply.chain.clone()).or_default() += failed;
+    owe(&mut self.replies.owed, &reply.chain, failed);
     if let Some(watch) = reply.call.watch.as_mut() {
       watch.forget();
     }
@@ -518,7 +518,7 @@ impl Hearer {
     // chain.
     if a.by() != a.about() || !turned(a) {
       let read = call.bill.map_or(0.0, |bill| bill.dollars);
-      *self.replies.owed.entry(chain.clone()).or_default() += read;
+      owe(&mut self.replies.owed, &chain, read);
     }
     if a.by() == a.about() {
       return;
@@ -779,4 +779,13 @@ pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tells
     drop(tells.send(Replied::Wrote(Wrote { id: id.clone(), text, thinking })));
   });
   Tells { told, billed }
+}
+
+/// What a chain owes for the calls of its model, grown by an amount: the map copies the name of a
+/// chain only the first time that it holds it.
+fn owe(owed: &mut HashMap<String, f64>, chain: &str, amount: f64) {
+  match owed.get_mut(chain) {
+    Some(one) => *one += amount,
+    None => drop(owed.insert(chain.to_owned(), amount)),
+  }
 }

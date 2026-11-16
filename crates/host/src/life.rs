@@ -476,17 +476,21 @@ impl Spent {
   fn heard(&mut self, seq: Seq, event: &Event) -> Vec<Seq> {
     match event {
       Event::Act(act) => {
-        if let Some(before) = self.acts.insert(act.id.clone(), seq) {
-          self.replaced.push_back((seq, before));
+        // A later event of an act moves the place of its name, which the map holds once.
+        if let Some(at) = self.acts.get_mut(&act.id) {
+          self.replaced.push_back((seq, mem::replace(at, seq)));
+        } else {
+          self.acts.insert(act.id.clone(), seq);
         }
         if act.word.is_some() || matches!(act.phase, Phase::Done(_)) {
           let parts = self.parts.remove(&act.id).unwrap_or_default();
           self.replaced.extend(parts.into_iter().map(|part| (seq, part)));
         }
       }
-      Event::Text { rung, .. } | Event::Retried { rung, .. } => {
-        self.parts.entry(rung.clone()).or_default().push(seq);
-      }
+      Event::Text { rung, .. } | Event::Retried { rung, .. } => match self.parts.get_mut(rung) {
+        Some(parts) => parts.push(seq),
+        None => drop(self.parts.insert(rung.clone(), vec![seq])),
+      },
       _ => {}
     }
     let mut dropped = Vec::new();

@@ -156,8 +156,11 @@ impl Streamed {
 
   /// What a model added to the text and to the thought of a rung, at a millisecond of the epoch.
   pub fn wrote(&mut self, rung: &str, [text, thinking]: [&str; 2], now: u64) {
-    let wrote =
-      self.wrote.entry(rung.to_owned()).or_insert_with(|| Wrote { began: now, ..Wrote::default() });
+    // A rung that wrote before holds its name already, so a later part copies none.
+    if !self.wrote.contains_key(rung) {
+      self.wrote.insert(rung.to_owned(), Wrote { began: now, ..Wrote::default() });
+    }
+    let Some(wrote) = self.wrote.get_mut(rung) else { return };
     wrote.text.push_str(text);
     wrote.thinking.push_str(thinking);
     wrote.retry = None;
@@ -178,8 +181,10 @@ impl Streamed {
     let word = |at: usize| fact.get(at).and_then(Value::as_str);
     let (true, Some(about), Some(text)) = (wrote(fact), word(1), word(3)) else { return };
     let stream = usize::from(word(4) == Some("stderr"));
-    let streams = self.outs.entry(about.to_owned()).or_default();
-    if let Some(one) = streams.get_mut(stream) {
+    if !self.outs.contains_key(about) {
+      self.outs.insert(about.to_owned(), <[Kept; 2]>::default());
+    }
+    if let Some(one) = self.outs.get_mut(about).and_then(|streams| streams.get_mut(stream)) {
       one.push(text);
     }
   }
@@ -200,15 +205,15 @@ impl Streamed {
     }
     if act.done() && matches!(act.kind, Kind::Prompt | Kind::Bash) {
       if self.began.contains_key(&act.id) {
-        self.ended.entry(act.id.clone()).or_insert(now);
+        once(&mut self.ended, &act.id, now);
       }
     } else if act.kind == Kind::Rung && act.cancelled() {
       self.began.remove(&act.id);
-      self.ended.entry(act.id.clone()).or_insert(now);
+      once(&mut self.ended, &act.id, now);
     } else if act.done() && act.run != Some(RunState::Running) {
       self.began.remove(&act.id);
     } else {
-      self.began.entry(act.id.clone()).or_insert(now);
+      once(&mut self.began, &act.id, now);
     }
     if (act.word.is_some() || act.done())
       && let Some(wrote) = self.wrote.get_mut(&act.id)
@@ -894,4 +899,11 @@ fn awaited(act: &Act) -> Vec<String> {
     return vec![act.id.clone()];
   }
   act.words.iter().skip(1).filter_map(Value::as_str).map(str::to_owned).collect()
+}
+
+/// The time of a name, kept from the first time that it is told, so a later time copies no name.
+fn once(times: &mut HashMap<String, u64>, id: &str, now: u64) {
+  if !times.contains_key(id) {
+    times.insert(id.to_owned(), now);
+  }
 }

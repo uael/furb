@@ -562,7 +562,9 @@ impl Fold {
       chains.extend(self.remote_of(act));
       if act.kind != Kind::Chain {
         let state = State::of(act);
-        self.acts.entry(id.clone()).and_modify(|act| act.state = state);
+        if let Some(act) = self.acts.get_mut(id) {
+          act.state = state;
+        }
       }
     }
     // A chain is read once, however many of its acts moved.

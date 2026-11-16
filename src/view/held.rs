@@ -123,8 +123,8 @@ impl Held {
         self.unordered = true;
       }
       self.at.insert(act.id.clone(), at);
-      self.made.entry(act.by.clone()).or_default().push(at);
-      self.on.entry(act.chain.clone()).or_default().push(at);
+      placed(&mut self.made, &act.by, at);
+      placed(&mut self.on, &act.chain, at);
       self.acts.push(act);
       (at, None)
     };
@@ -428,5 +428,13 @@ impl Held {
         self.acts.iter().map(|act| &**act).filter(|act| on.is_none_or(|chain| act.chain == chain)),
       ),
     }
+  }
+}
+
+/// A place of an act under a name, which the map copies only the first time that it holds it.
+fn placed(map: &mut HashMap<String, Vec<usize>>, name: &str, at: usize) {
+  match map.get_mut(name) {
+    Some(places) => places.push(at),
+    None => drop(map.insert(name.to_owned(), vec![at])),
   }
 }

@@ -182,7 +182,11 @@ impl Quiet {
     if act.kind == Kind::Chain && done {
       self.chains.remove(&act.id);
     } else if act.kind == Kind::Chain {
-      self.chains.entry(act.id.clone()).or_insert_with(|| Chain::new(now)).state = act.state;
+      if let Some(chain) = self.chains.get_mut(&act.id) {
+        chain.state = act.state;
+      } else {
+        self.chains.insert(act.id.clone(), Chain { state: act.state, ..Chain::new(now) });
+      }
     }
     if done {
       self.ours.remove(&act.id);
