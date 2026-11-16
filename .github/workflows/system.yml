@@ -43,9 +43,9 @@ jobs:
     name: the build on ${{ inputs.os }}
     runs-on: ${{ inputs.os }}
     # A change of the lock, of this file or of the script of the build makes every system build each crate from
-    # nothing, which took 26 minutes on Windows, and main saves the cache only from a job that passes. A limit shorter
-    # than that build fails every later run too, since none finds a cache.
-    timeout-minutes: 60
+    # nothing, which took 59 minutes on Windows in run 43806453852, and a job saves the cache only when it passes. A
+    # limit shorter than that build fails every later run too, since none finds a cache.
+    timeout-minutes: 90
     # One shell on every system. On Windows it is the bash of Git for Windows.
     defaults:
       run:
@@ -115,7 +115,7 @@ jobs:
           done
           # On Windows a program of the window loads the DLL of OpenTUI, which it finds beside itself.
           if [ "$RUNNER_OS" = Windows ]; then
-            grep "^window" "$RUNNER_TEMP/programs.tsv" | cut -f4 | while read -r one; do
+            grep "^crates/window" "$RUNNER_TEMP/programs.tsv" | cut -f4 | while read -r one; do
               cp target/opentui/*/opentui.dll "$copy/$(dirname "$one")/"
             done
           fi
@@ -241,8 +241,8 @@ jobs:
           while IFS="$(printf '\t')" read -r folder kind name program; do
             [ "$kind" = test ] || continue
             filter=""
-            if [ "$RUNNER_OS" = macOS ] && [ "$folder" != . ] && [ "$folder" != window ]; then
-              [ "$folder" = cli ] && [ "$name" = suite ] || continue
+            if [ "$RUNNER_OS" = macOS ] && [ "$folder" != . ] && [ "$folder" != crates/window ]; then
+              [ "$folder" = crates/cli ] && [ "$name" = suite ] || continue
               filter=kills::
             fi
             echo "::group::$folder $name"
