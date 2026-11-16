@@ -603,7 +603,8 @@ impl Model {
   }
 
   /// The rows of the input: the form of a question of the open thread, or its box under the row
-  /// that says that a question waits; then the row of hints. The box is the box of a message of the
+  /// that says that a question waits; then the bar of the time of the open thread, and the row of
+  /// hints. The box is the box of a message of the
   /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
   /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
@@ -630,6 +631,8 @@ impl Model {
       rows.extend([self.launcher(), self.band(Vec::new(), None)]);
       rows
     };
+    // The bar of the time stands under the box, always: calm at now, or the bar that he holds.
+    rows.extend(self.time_rows());
     rows.push(self.hints());
     rows
   }

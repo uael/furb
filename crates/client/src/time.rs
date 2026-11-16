@@ -24,8 +24,9 @@ const STEP: Duration = Duration::from_millis(120);
 /// The bar of the time of a thread: the moments that its machine gave, the moment that the thread
 /// shows, none for now, whether they changed since the machine gave them, when the play last
 /// stepped while it plays, the first line of each message that a page of the thread gave, by the
-/// moment that it was said, which the track marks, the chains of the life while they show, and
-/// when the bar opened, on the clock of the loaders.
+/// moment that it was said, which the track marks, the chains of the life while they show, when
+/// the bar opened, on the clock of the loaders, and the share of its track that a click on the calm
+/// bar aimed at, a column and the count of columns, until the moments come.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Time {
   pub since: Duration,
@@ -35,6 +36,7 @@ pub struct Time {
   pub played: Option<Duration>,
   pub messages: BTreeMap<u64, String>,
   pub chains: Option<Chains>,
+  pub aimed: Option<(usize, usize)>,
 }
 
 /// The chains of a life under the bar of the time of a thread: what its machine gave, whether the
@@ -154,6 +156,12 @@ pub(crate) fn rewinds(line: &str) -> bool {
   line.contains(&format!("on=chain('{REWIND}'"))
 }
 
+/// The place among a count of moments that a column of a track of a count of columns stands for:
+/// the last column is now.
+fn shared(column: usize, span: usize, count: usize) -> usize {
+  (column * count.saturating_sub(1) + span / 2) / span.max(1)
+}
+
 /// Whether a chain rests: its work ended, or never began.
 pub fn resting(state: State) -> bool {
   matches!(state, State::Done | State::Idle | State::Cancelled)
@@ -236,6 +244,24 @@ impl Client {
       time.at = at;
       thread.moved();
     }
+  }
+
+  /// The open thread at a share of its time, as a click on the calm bar gives it: a column of its
+  /// track and the count of its columns. The bar opens, and the thread goes there once its moments
+  /// come.
+  pub fn aim(&mut self, column: usize, span: usize) {
+    if self.thread.as_ref().is_some_and(|one| one.thread.time.is_none()) {
+      self.time();
+    }
+    let place = {
+      let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else { return };
+      if time.stale {
+        time.aimed = Some((column, span));
+        return;
+      }
+      shared(column, span, time.moments.len())
+    };
+    self.reach(place);
   }
 
   /// The play of the open thread started from where it shows, from the first moment when it shows
@@ -321,10 +347,14 @@ impl Client {
       _ => Vec::new(),
     };
     time.stale = false;
+    let aimed = time.aimed.take().map(|(column, span)| shared(column, span, time.moments.len()));
     let last = time.moments.last().copied();
     // A moment at or past the last of the thread is now, where the page follows each change.
     if time.at.take_if(|at| last.is_none_or(|last| *at >= last)).is_some() {
       opened.thread.moved();
+    }
+    if let Some(place) = aimed {
+      self.reach(place);
     }
   }
 

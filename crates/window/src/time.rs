@@ -20,7 +20,7 @@ use crate::{
   model::Model,
   opens::QUIET,
   thread::{Click, Hot, Row},
-  tokens::Role,
+  tokens::{Loader, Role},
 };
 
 /// The columns before the track: the margin, the play button, and a blank.
@@ -66,12 +66,12 @@ impl Model {
   /// the chains while they show.
   pub(crate) fn time_rows(&self) -> Vec<Row> {
     let Some(time) = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref()) else {
-      return Vec::new();
+      return self.calm_row().into_iter().collect();
     };
     // A bar that opens draws once its moments and its chains came, or from [`QUIET`] on, so the
-    // feed moves down once, by the whole height of the bar.
+    // input moves once, by the whole height of the bar; until then the calm bar stands.
     if time.reads() && self.client.moved.saturating_sub(time.since) < QUIET {
-      return Vec::new();
+      return self.calm_row().into_iter().collect();
     }
     let t = &self.tokens;
     let key = &self.client.thread.as_ref().map(|one| one.thread.key.clone()).unwrap_or_default();
@@ -121,11 +121,14 @@ impl Model {
     hot.push((label..label + said, Some(Click::Key(Does::Chains))));
     line.push(run(format!("{says:>said$}"), muted));
     let flows = time.chains.as_ref().map(|chains| flowed(time, chains, &axis)).unwrap_or_default();
-    let under = self.under(time, &axis, &flows);
+    let chained = self.chain_rows(time, &axis, &flows);
+    // The bar, its chains and the row under them stand right above the row of hints, the last row.
+    let top = usize::from(self.size.1).saturating_sub(chained.len() + 3);
+    let under = self.under(time, &axis, &flows, top);
     // The chains stand right under the bar, so a column reads as one moment down each row, and one
     // row under them says what is under the pointer, else what finds a chain.
     let mut rows = vec![Row { line, hot, ..Row::default() }];
-    rows.extend(self.chain_rows(time, &axis, &flows));
+    rows.extend(chained);
     let wide = self.wide().saturating_sub(BEFORE);
     let said = under.map(|text| cut(&text, wide)).or_else(|| found(time));
     rows.push(Row::of(vec![run(
@@ -135,10 +138,31 @@ impl Model {
     rows
   }
 
+  /// The bar of the time while the operator does not hold it: one calm row under the input, from
+  /// the margin of the boxes to their right margin, the track of the whole thread up to now, where
+  /// a click or a drag goes back in its time as the rewind does. Its mark of now moves only while
+  /// the thread works.
+  fn calm_row(&self) -> Option<Row> {
+    let key = &self.client.thread.as_ref()?.thread.key;
+    if key.2.is_empty() {
+      return None;
+    }
+    let t = &self.tokens;
+    let span = self.wide().saturating_sub(5);
+    let line: Line = vec![
+      run("  ", Style::new()),
+      run("─".repeat(span), Style::new().fg(t.border)),
+      run("●", Style::new().fg(t.muted)),
+    ];
+    let hot = (0..=span).map(|one| (2 + one..3 + one, Some(Click::Aim(one, span)))).collect();
+    let works = self.client.card(key).is_some_and(|card| card.thread.works());
+    let loaders = if works { vec![(2 + span, Loader::Model)] } else { Vec::new() };
+    Some(Row { line, hot, loaders, ..Row::default() })
+  }
+
   /// What the pointer is on under the bar: on the track, the message in force at its moment, and on
   /// a flow between the chains, what it asks or answers.
-  fn under(&self, time: &Time, axis: &Axis, flows: &Flows) -> Option<String> {
-    let row = 1 + self.open_rows().len();
+  fn under(&self, time: &Time, axis: &Axis, flows: &Flows, row: usize) -> Option<String> {
     let (x, y) = self.pointed()?;
     let column = usize::from(x).checked_sub(BEFORE).filter(|one| *one < axis.room)?;
     match usize::from(y).checked_sub(row)? {
@@ -246,9 +270,10 @@ impl Model {
   /// under the pointer.
   pub(crate) fn dragged_left(&mut self, x: u16, y: usize) {
     let x = usize::from(x);
-    if let Some(Click::Time(at)) = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x))
-    {
-      self.client.reach(at);
+    match self.left_rows().into_iter().nth(y).and_then(|row| row.click(x)) {
+      Some(Click::Time(at)) => self.client.reach(at),
+      Some(Click::Aim(column, span)) => self.client.aim(column, span),
+      _ => {}
     }
   }
 
