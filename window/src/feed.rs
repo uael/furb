@@ -557,7 +557,9 @@ impl Feed<'_> {
     let mark = self.mark(line);
     let (number, color, loader) = self.number(line, mark);
     let room = inner.saturating_sub(gutter + 2);
-    let output = line.output.as_ref().map(|one| self.output(one, gutter, room));
+    let ground = if loader.is_some() { t.lifted } else { t.raised };
+    // What the command of a line at work writes stands in the band of the line, as one work.
+    let output = line.output.as_ref().map(|one| self.output(one, (gutter, room), ground));
     let (mut under, look) = match mark {
       Mark::Failed { why } => (wrapped(why, room), Style::new().fg(t.danger)),
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
@@ -569,7 +571,6 @@ impl Feed<'_> {
       }
       _ => self.written(line, mark).unwrap_or(colors),
     };
-    let ground = if loader.is_some() { t.lifted } else { t.raised };
     let muted = self.style(Role::Muted);
     let timer = self.right(line, mark).map(|right| vec![run(right, muted)]).unwrap_or_default();
     let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
@@ -803,15 +804,15 @@ impl Feed<'_> {
 
   /// What the command of a line wrote, under it at the column of the code: how many lines came
   /// before its last ones, as the block says the lines above it, then those, muted, cut to the box,
-  /// with the home folder written `~`, as the code above them writes it.
-  fn output(&self, output: &Output, gutter: usize, room: usize) -> Vec<Row> {
+  /// with the home folder written `~`, as the code above them writes it, on the ground of its line.
+  fn output(&self, output: &Output, (gutter, room): (usize, usize), ground: Color) -> Vec<Row> {
     let muted = self.style(Role::Muted);
     let more = (output.more > 0).then(|| format!("… {}", lines(output.more)));
     let lines = more.into_iter().chain(output.tail.iter().map(|line| self.model.homed(line)));
     let row = |text: String| {
       let mut shown = vec![run(format!("{:gutter$}  ", ""), muted)];
       shown.extend(clipped(vec![run(text, muted)], room, muted));
-      Row::of(self.boxed(shown, self.model.tokens.raised))
+      Row::of(self.boxed(shown, ground))
     };
     lines.map(row).collect()
   }
