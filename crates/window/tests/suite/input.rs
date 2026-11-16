@@ -1222,3 +1222,23 @@ fn ctrl_s_puts_the_input_aside_brings_it_back_and_trades_it_with_a_new_text() {
   app.press("ctrl+s");
   typed(&app, "draft two");
 }
+
+#[test]
+fn ctrl_j_breaks_the_line_of_the_input_as_shift_and_enter_do() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.project("furb");
+  daemon.served();
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.paste("one");
+  typed(&app, "one");
+  app.press("ctrl+j");
+  app.paste("two");
+  let rows = || {
+    let text = app.text();
+    let lines: Vec<String> =
+      text.lines().map(|one| one.trim_matches(['┃', ' ']).to_owned()).collect();
+    lines.windows(2).any(|two| two[0] == "one" && two[1] == "two")
+  };
+  assert!(app.wait_until(PATIENCE, rows), "the input never broke its line:\n{}", app.text());
+}

@@ -267,12 +267,14 @@ fn heard_edits(window: &Shared, area: &Textarea) {
 }
 
 /// The editor of the text of the input, which has the focus. Enter sends, so a line breaks with
-/// shift and enter, and the end goes to the end of the feed, as the table of the keys says.
+/// shift and enter, or with ctrl and j, which a terminal with no keys of Kitty sends for both, and
+/// the end goes to the end of the feed, as the table of the keys says.
 fn edited(app: &App, tokens: &Tokens) -> Textarea {
   let area = Textarea::new(app).absolute().wrap(WrapMode::Word);
   let area = area.colors(tokens.text, tokens.raised).focused_colors(tokens.text, tokens.raised);
   let area = area.placeholder_color(tokens.muted).cursor_color(tokens.text);
-  area.bind("shift+enter", EditorAction::Newline).unbind("end")
+  let area = area.bind("shift+enter", EditorAction::Newline).bind("ctrl+j", EditorAction::Newline);
+  area.unbind("end")
 }
 
 /// The widgets of the window on a model: the left side, the editor of the input over it, and the
