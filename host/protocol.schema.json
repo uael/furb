@@ -4844,6 +4844,16 @@
             }
           ],
           "default": null
+        },
+        "sub": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Agent"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -4851,7 +4861,7 @@
         "above",
         "agents"
       ],
-      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the\nagents of the whole thread, in the order the thread made them, and the context of its chain."
+      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the\nagents of the whole thread, in the order the thread made them, the context of its chain, and,\nfor a sub thread, which no list holds, the thread itself as the thread that it is on holds it."
     },
     "Exchange": {
       "type": "object",
@@ -5508,6 +5518,16 @@
             "string",
             "null"
           ]
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Anchor"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -5515,7 +5535,33 @@
         "title",
         "standing"
       ],
-      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once\nit ended, counted from milliseconds as the time of a thought, and the line of its last word\nwhere it stands: the line that runs or asks, else the last one, and the number in the thread\nof the line of the word that made it, none when no line of a word of the thread made it, and\nthe last line of the thought of its model while it thinks and writes no word yet. A host that\nopened the life after the agent began saw it begin at that open."
+      "description": "An agent of a thread: a thread under it, which a word of the thread started on another chain,\nor a sub thread, a prompt on it whose message carries an anchor. It holds its card, the\nmillisecond of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, the anchor of a sub thread, and the\nline of its last word\nwhere it stands: the line that runs or asks, else the last one, and the number in the thread\nof the line of the word that made it, none when no line of a word of the thread made it, and\nthe last line of the thought of its model while it thinks and writes no word yet. A host that\nopened the life after the agent began saw it begin at that open."
+    },
+    "Anchor": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "before": {
+          "type": "boolean"
+        },
+        "quote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "before",
+        "quote"
+      ],
+      "description": "A line of a file that a message is about: its path, its number in the file after the change,\nor before it for a line that the change removed, and its text then."
     },
     "Context": {
       "type": "object",
@@ -6248,5 +6294,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 66
+  "x-protocol": 67
 }

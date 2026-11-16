@@ -219,16 +219,22 @@ impl Feed<'_> {
     let untold = self.model.untold();
     let card = self.model.client.card(&root.thread.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
-    let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
+    let session = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let muted = self.style(Role::Muted);
     let title = self.model.title().unwrap_or_default();
     let (branch, branches) = self.branch();
+    let sub = self.opened.sub().and_then(|one| one.anchor.as_ref());
     let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
       (Some(_), _, Some(at)) => (format!("⑂ {} · ", at + 2), title),
+      (Some(_), _, None) if let Some(one) = sub => {
+        (format!("◆ {}:{} · ", named(&one.path), one.line), title)
+      }
       (Some(_), Some(_), None) => ("agent · ".to_owned(), title),
       (Some(_), None, None) => (String::new(), title),
-      (None, ..) if branches > 0 => (format!("⑂ 1 of {} · ", branches + 1), named.unwrap_or(title)),
-      (None, ..) => (String::new(), named.unwrap_or(title)),
+      (None, ..) if branches > 0 => {
+        (format!("⑂ 1 of {} · ", branches + 1), session.unwrap_or(title))
+      }
+      (None, ..) => (String::new(), session.unwrap_or(title)),
     };
     // The head marks a session whose life runs as its card does, in the column of the bars of the
     // messages, so its project stands over their text.
@@ -270,11 +276,16 @@ impl Feed<'_> {
   ) -> (Option<Span<'static>>, Option<(Span<'static>, Does)>) {
     let t = &self.model.tokens;
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
+    // A sub thread resolves as a thread of the list does, and escape goes back from it.
+    let sub = self.opened.sub().map(|one| &one.card);
     // A life that a fault ended takes no resolve: it only reads.
-    let made = !self.opened.thread.key.2.is_empty() && !self.model.leaves() && !self.ended();
-    let (mark, button) = match card.map(|card| &card.thread) {
+    let leaves = self.model.leaves() && sub.is_none();
+    let made = !self.opened.thread.key.2.is_empty() && !leaves && !self.ended();
+    let (mark, button) = match sub.or(card.map(|card| &card.thread)) {
       _ if branch.is_some() => (None, Some((run(" ⑂ 1 ", button), Does::Close))),
-      _ if self.opened.from.is_some() => (None, Some((run(" Back ", button), Does::Close))),
+      _ if self.opened.from.is_some() && sub.is_none() => {
+        (None, Some((run(" Back ", button), Does::Close)))
+      }
       _ if !made => (None, None),
       Some(thread) if thread.ended() => {
         let mark = match thread.standing {
@@ -991,16 +1002,25 @@ impl Feed<'_> {
       })
       .collect();
     if done > 0 {
-      let noun = if done == 1 { "agent" } else { "agents" };
+      // Sub threads that rest were resolved, as a thread of the list is.
+      let mut rested = self.opened.thread.agents.iter().filter(|one| one.at.is_none()).take(done);
+      let subs = under.is_none() && rested.all(|one| one.anchor.is_some());
+      let noun = match (subs, done) {
+        (true, 1) => "sub thread",
+        (true, _) => "sub threads",
+        (false, 1) => "agent",
+        (false, _) => "agents",
+      };
+      let ended = if subs { "resolved" } else { "done" };
       let (muted, ground) = (self.style(Role::Muted), self.model.tokens.raised);
       rows.insert(
         0,
         match under {
           Some((_, numbers)) => {
-            let said = format!("{:>width$}  └ {done} {noun} done", "", width = numbers.width);
+            let said = format!("{:>width$}  └ {done} {noun} {ended}", "", width = numbers.width);
             Row::of(self.boxed(vec![run(said, muted)], ground))
           }
-          None => says(&format!("└ {done} {noun} done"), muted),
+          None => says(&format!("└ {done} {noun} {ended}"), muted),
         },
       );
     }
@@ -1027,7 +1047,12 @@ impl Feed<'_> {
       .map(|one| vec![run(format!("{THINKS} · "), muted), run(one.clone(), muted.italic())]);
     let stands = stands.or(thinks);
     let title = if rest { muted } else { self.style(Role::Prose) };
-    let title = vec![run(agent.card.title.clone(), title)];
+    let mut title = vec![run(agent.card.title.clone(), title)];
+    // A sub thread names the line that it is about before its title.
+    if let Some(one) = &agent.anchor {
+      let line = format!("{}:{}  ", named(&one.path), one.line);
+      title.splice(0..0, [run("◆ ", Style::new().fg(self.model.tokens.accent)), run(line, muted)]);
+    }
     let open = Click::Agent(agent.card.prompt.clone());
     let Some((numbers, value)) = under else {
       let room = self.wide.saturating_sub(2);

@@ -41,7 +41,7 @@ use crate::{
   pick::Pick,
   picture,
   question::Keyed,
-  review::{NEXT, PREVIOUS},
+  review::{MARKS, NEXT, PREVIOUS},
   thread::Spot,
   tokens::{AWAY, Role, Tokens},
 };
@@ -302,7 +302,10 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let text = || Text::new(app, "").wrap(WrapMode::None);
   let (head, side, foot) = (text(), text(), text());
   let diff = diff.line_numbers(true).colors(tokens.diff()).syntax_theme(syntax());
-  let scroll = scroll.child(&diff);
+  // The marks of the sub threads stand in a column beside the diff, so they scroll with it.
+  let marks = Text::new(app, "").wrap(WrapMode::None).width(u32::from(MARKS)).shrink(0.0);
+  let rows = View::new(app).row().child(&marks).child(&diff.grow(1.0));
+  let scroll = scroll.child(&rows);
   let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
   let panel = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
@@ -326,6 +329,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
       foot.set_text(shown.foot.clone());
       let view = if shown.split { DiffView::Split } else { DiffView::Unified };
       diff.set_diff(shown.diff.clone()).filetype(shown.kind).view(view);
+      marks.set_text(written(&shown.marks));
     }
   });
 }
@@ -880,8 +884,8 @@ fn found(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 }
 
 /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
-/// file under it goes bright, a click on a line of the diff turns the input to a message about
-/// that line, and the wheel scrolls the diff.
+/// file under it goes bright, a click on a line of the diff opens the sub thread about that line,
+/// or turns the input to a message about it, and the wheel scrolls the diff.
 fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
   let file = window.borrow().screen.model.review_at(event.x, event.y);
   // The diff stands under the two rows of the head, from the row where its box scrolled.
@@ -894,6 +898,13 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
       && let Some(review) = model.client.review.as_mut()
     {
       review.chosen = file;
+    } else if down
+      && !model.on_side(event.x)
+      && let Some(sub) = row.and_then(|row| model.sub_on(row))
+    {
+      // A line that a sub thread is about opens that thread.
+      model.client.review = None;
+      model.open_agent(sub);
     } else if down
       && !model.on_side(event.x)
       && let Some(anchor) = row.and_then(|row| model.anchor_at(event.x, row))

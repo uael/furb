@@ -9,7 +9,8 @@ use std::{iter, mem};
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Review};
+use furb::view::Agent;
+use furb_client::{Anchor, Opened, Review, rests};
 use furb_host::protocol::{Change, Changed, Changes};
 
 use crate::{
@@ -23,6 +24,9 @@ use crate::{
 /// The rows of the panel above its first file: its head and a blank row.
 const ABOVE: u16 = 2;
 
+/// The width of the column of the marks of the sub threads, at the left of the diff.
+pub(crate) const MARKS: u16 = 1;
+
 /// The review as the window draws it: the head of the diff, the rows of the panel, which shows
 /// only where the list would, the foot, the diff of the file that he reads with the kind of its
 /// text, and whether its old and new lines stand side by side.
@@ -34,6 +38,7 @@ pub(crate) struct Shown {
   pub(crate) diff: String,
   pub(crate) kind: Option<&'static str>,
   pub(crate) split: bool,
+  pub(crate) marks: Vec<Line>,
 }
 
 impl Model {
@@ -46,14 +51,61 @@ impl Model {
     let diff = diff.map(|one| one.1.clone()).unwrap_or_default();
     let mut side = vec![self.review_sums(changes), Line::new()];
     side.extend(self.review_files(review.chosen, changes));
+    let split = self.splits(&diff);
     Some(Shown {
       head: self.review_head(review),
       side: self.sided().then_some(side),
       foot: self.review_foot(),
-      split: self.splits(&diff),
+      marks: read.map(|one| self.review_marks(&one.path, &diff, split)).unwrap_or_default(),
+      split,
       kind: read.and_then(|one| kind(&one.path)),
       diff,
     })
+  }
+
+  /// The column at the left of the diff: a mark on each row of a line that a sub thread of the
+  /// open thread is about, in the accent while it lives and muted once it rests.
+  fn review_marks(&self, path: &str, diff: &str, split: bool) -> Vec<Line> {
+    let t = &self.tokens;
+    let mark = |sub: Option<&Agent>| match sub {
+      Some(agent) => {
+        let hue = if rests(agent) { t.muted } else { t.accent };
+        vec![run("◆", Style::new().fg(hue))]
+      }
+      None => vec![run(" ", Style::new())],
+    };
+    self.subs(path, diff, split).into_iter().map(mark).collect()
+  }
+
+  /// The sub thread of the open thread that each row of the diff of a file is about, on either
+  /// side, none for a row that no sub thread is about.
+  fn subs(&self, path: &str, diff: &str, split: bool) -> Vec<Option<&Agent>> {
+    let Some(opened) = self.client.thread.as_ref().map(Opened::root) else { return Vec::new() };
+    let sides: Vec<Vec<Diffed>> = if split {
+      vec![rows(diff, Some(false)), rows(diff, Some(true))]
+    } else {
+      vec![rows(diff, None)]
+    };
+    let about = |row: usize| {
+      let lines: Vec<&(u64, bool, String)> =
+        sides.iter().filter_map(|side| side.get(row)?.as_ref()).collect();
+      let at = |agent: &&Agent| {
+        let Some(anchor) = agent.anchor.as_ref().filter(|one| one.path == path) else {
+          return false;
+        };
+        lines.iter().any(|line| anchor.line == line.0 && anchor.before == line.1)
+      };
+      opened.thread.agents.iter().find(at)
+    };
+    (0..sides[0].len()).map(about).collect()
+  }
+
+  /// The sub thread that a row of the diff that the review reads is about, which a click opens.
+  pub(crate) fn sub_on(&self, row: usize) -> Option<String> {
+    let shown = self.reviewing()?;
+    let path = &self.client.reviewed()?.path;
+    let subs = self.subs(path, &shown.diff, shown.split);
+    Some(subs.get(row).copied().flatten()?.card.prompt.clone())
   }
 
   /// The head of the diff, as the head of a thread: the project and its branch muted, the file
@@ -171,7 +223,8 @@ impl Model {
 
   /// The columns of the diff: those that the panel leaves, less one on each side.
   pub(crate) fn diff_width(&self) -> usize {
-    usize::from(self.size.0.saturating_sub(if self.sided() { self.panel_width() } else { 0 } + 2))
+    let panel = if self.sided() { self.panel_width() } else { 0 };
+    usize::from(self.size.0.saturating_sub(panel + 2 + MARKS))
   }
 
   /// Whether the panel of the files shows: where the list shows beside a thread.
@@ -203,7 +256,7 @@ impl Model {
   pub(crate) fn anchor_at(&self, x: u16, row: usize) -> Option<Anchor> {
     let shown = self.reviewing()?;
     let path = self.client.reviewed()?.path.clone();
-    let right = usize::from(x.checked_sub(1)?) >= self.diff_width() / 2;
+    let right = usize::from(x.checked_sub(1 + MARKS)?) >= self.diff_width() / 2;
     let rows = rows(&shown.diff, shown.split.then_some(right));
     let (line, before, quote) = rows.get(row)?.clone()?;
     Some(Anchor { path, line, before, quote })

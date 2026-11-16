@@ -30,7 +30,7 @@ use super::{
   held::Held,
   ladder::lives,
   quote::{quotes, writing},
-  threads::{Lookup, message_of, noted},
+  threads::{Lookup, anchor_of, message_of, noted, parent_of, said_of},
   time::moments_of,
 };
 
@@ -308,13 +308,21 @@ impl<'a> Reader<'a> {
         .filter(|act| !act.asks_operator() && !noted(act, &self.held))
         .map(|agent| (*rung, agent))
     });
-    let agents = agents
+    let mut agents: Vec<Agent> = agents
       .map(|(rung, agent)| Agent {
         at: before.get(rung.id.as_str()).and_then(|before| self.made_at(rung, *before, agent)),
         ..self.agent(agent)
       })
       .collect();
-    Page { exchanges, above: start, agents, context: self.context(&prompts[0].chain) }
+    // Each sub thread of the thread stands with its agents: a prompt on it about a line of a file.
+    let sub = |act: &&Act| {
+      act.kind == Kind::Prompt
+        && anchor_of(act).is_some()
+        && parent_of(act, &self.held) == Some(thread)
+    };
+    agents.extend(self.held.on_chain(&prompts[0].chain).filter(sub).map(|act| self.agent(act)));
+    let sub = anchor_of(prompts[0]).map(|_| Box::new(self.agent(prompts[0])));
+    Page { exchanges, above: start, agents, context: self.context(&prompts[0].chain), sub }
   }
 
   /// The number in the thread of the line of the word of a rung that made an act.
@@ -623,16 +631,24 @@ impl<'a> Reader<'a> {
     lines
   }
 
-  /// An agent of a thread: the thread that a word of the thread started on another chain.
+  /// An agent of a thread: the thread that a word of the thread started on another chain, or a sub
+  /// thread, which stands as each message on it stands too.
   fn agent(self, prompt: &Act) -> Agent {
-    let rungs: Vec<&Act> = self.rungs(&prompt.id).collect();
+    let anchor = anchor_of(prompt);
+    let told = anchor.as_ref().and_then(|_| self.told(&prompt.id));
+    let (prompts, rungs): (Vec<&Act>, Vec<&Act>) = match told {
+      Some(told) => (told.prompts, told.rungs),
+      None => (vec![prompt], self.rungs(&prompt.id).collect()),
+    };
+    // The last prompt that is not done says how it stands, and else the last one.
+    let now = prompts.iter().rfind(|one| !one.done()).or(prompts.last()).copied().unwrap_or(prompt);
     let work: Vec<&Act> = rungs
       .iter()
       .copied()
       .chain(rungs.iter().flat_map(|rung| self.held.made_by(&rung.id)))
       .collect();
     let asks = work.iter().any(|act| act.asks_operator() && act.owed());
-    let state = match State::of(prompt) {
+    let state = match State::of(now) {
       _ if asks => State::Asks,
       State::Runs if working(&work, &[]) == State::Thinks => State::Thinks,
       state => state,
@@ -641,11 +657,11 @@ impl<'a> Reader<'a> {
       Maker::Model { model, .. } => Some(model.clone()),
       _ => None,
     });
-    let title = text(prompt.words.get(1));
+    let title = said_of(prompt).lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
     let card = Card {
       prompt: prompt.id.clone(),
-      title: title.lines().find(|line| !line.trim().is_empty()).unwrap_or_default().to_owned(),
-      standing: Standing::of(state, prompt.done(), prompt.pause.as_ref()),
+      title: title.to_owned(),
+      standing: Standing::of(state, now.done(), now.pause.as_ref()),
       model,
       agents: 0,
       readers: Vec::new(),
@@ -664,6 +680,7 @@ impl<'a> Reader<'a> {
       line: stands(&lines).map(|at| lines[at].clone()),
       at: None,
       thought: thought.map(|line| line.trim().to_owned()),
+      anchor,
     }
   }
 }

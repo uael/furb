@@ -639,7 +639,11 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     name: "14-changes",
     has: Has::Walk(Walk {
       sessions: &[],
-      words: &[CHANGES, "close('It sums the count of each item.')"],
+      words: &[
+        CHANGES,
+        "close('It sums the count of each item.')",
+        "count = 2\nawait bash('sleep 600')",
+      ],
       pace: &[],
       reads: false,
       steps: &[
@@ -666,10 +670,31 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           ],
           "Say what to do with report.py, line 2",
         ),
+        // The message is a sub thread of its own, which opens, and its model answers in it.
         step(
           "x-anchored",
           &[Act::Type("Say what it sums."), Act::Key("Enter")],
           "It sums the count of each item.",
+        ),
+        step("x-reply", &[Act::Type("Keep it open."), Act::Key("Enter")], "count = 2"),
+        // A sub thread that works asks a confirm, as a thread of the list does.
+        step(
+          "x-resolve",
+          &[Act::Key("C-x"), Act::Key("r"), Act::Key("C-x"), Act::Key("r")],
+          "✓ Resolved",
+        ),
+        // The thread that it is on names it under its messages.
+        step("x-back", &[Act::Key("Escape")], "1 sub thread resolved"),
+        // The review marks its line, and a click on that line opens it again.
+        step(
+          "x-mark",
+          &[Act::Key("C-x"), Act::Key("g"), Act::Until("return sum(one.count")],
+          "return sum(one.count",
+        ),
+        step(
+          "x-open",
+          &[Act::Pointer { on: "return sum(one.count", button: 0 }],
+          "◆ report.py:2 ·",
         ),
       ],
     }),

@@ -132,11 +132,10 @@ impl Client {
       Some(Err(why)) => return Err(why),
       None => (text, self.draft.python),
     };
-    // A message about a line of a file carries that line, as it stands now.
-    let text = match self.draft.anchor.take().filter(|_| !python) {
-      Some(anchor) => anchor.said(&text),
-      None => text,
-    };
+    // A message about a line of a file carries that line, as it stands now. On a thread, it is a
+    // sub thread of its own, which opens once its life named it, so the thread does not show it.
+    let anchor = self.draft.anchor.take().filter(|_| !python);
+    let text = anchor.as_ref().map_or(text.clone(), |anchor| anchor.said(&text));
     let images = mem::take(&mut self.draft.images);
     let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();
     let pending = Pending { act: None, text: text.clone() };
@@ -149,6 +148,7 @@ impl Client {
         (self.selected, self.aim) = (Some(thread.key.clone()), None);
         self.thread = Some(Opened { thread, ..Opened::default() });
       }
+      (Some(_), false, Some(_)) if anchor.is_some() => {}
       (Some(_), false, Some(open)) => open.thread.pending.push(pending),
     }
     self.outgoing.push_back(Outgoing { at, life, thread, text, python, images });

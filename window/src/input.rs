@@ -10,7 +10,7 @@ use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Chosen, Outgoing, Target};
+use furb_client::{Anchor, Asked, Chosen, Outgoing, Target};
 
 use crate::{
   keys::Does,
@@ -148,8 +148,9 @@ impl Model {
   /// reply opens it again, so the input turns to it, as a message, at the end of its feed.
   pub(crate) fn resolve(&mut self) -> Option<(usize, Verb)> {
     let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
-    let card =
-      self.client.card(&opened.thread.key).map(|one| (one.thread.ended(), one.thread.works()));
+    let card = self.client.card(&opened.thread.key).map(|one| &one.thread);
+    let card = card.or_else(|| opened.sub().map(|one| &one.card)).or_else(|| opened.agent());
+    let card = card.map(|one| (one.ended(), one.works()));
     let (ended, works) = card.unwrap_or_default();
     let opened = self.client.thread.as_mut()?;
     if ended {
@@ -346,6 +347,15 @@ impl Model {
     }
     // A message makes the hints of the last word that ran go, so they never cover its work.
     self.word = None;
+    // A sub thread opens from the thread that it is on, which the back key returns to.
+    let on = self.client.thread.as_ref().map(|one| &one.thread.key);
+    let sub =
+      sent.thread.as_ref().filter(|one| !one.is_empty() && Anchor::of(&sent.text).is_some());
+    if let Some(thread) = sub
+      && on.is_some_and(|key| key.0 == sent.at && key.1 == sent.life && key.2 == *thread)
+    {
+      return self.open_agent(act);
+    }
     let thread = sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
     for next in self.client.outgoing.iter_mut().filter(|one| one.life == sent.life) {
       if next.thread.as_deref() == Some("") {
@@ -470,7 +480,11 @@ impl Model {
           Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_)
-            if self.client.thread.as_ref().is_some_and(|one| one.from.is_some()) =>
+            if self
+              .client
+              .thread
+              .as_ref()
+              .is_some_and(|one| one.from.is_some() && one.sub().is_none()) =>
           {
             "Write to this agent"
           }
@@ -751,6 +765,7 @@ impl Model {
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.client.thread.as_ref()?;
     let card = self.client.card(&opened.thread.key).map(|card| &card.thread);
+    let card = card.or_else(|| opened.sub().map(|one| &one.card));
     let card = card.or_else(|| opened.agent()).map(|card| card.title.clone());
     let first = || opened.thread.exchanges.get(&0).map(|one| one.text.clone());
     let pending = || opened.thread.pending.first().map(|one| one.text.clone());

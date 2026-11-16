@@ -1,12 +1,16 @@
-//! The place in a file that a message is about, as a review of a pull request anchors a comment:
-//! the message carries the path, the line and the text of that line as it stood when the message
+//! The place in a file that a thread is about, as a review of a pull request anchors a comment:
+//! its message carries the path, the line and the text of that line as it stood when the message
 //! was said, which anchors it in time and which the model reads. The anchor is part of the text
-//! of the message, so it goes as any message goes, with no verb of its own, and each window that
-//! reads the message reads the anchor from it.
+//! of the message, so a person and a model say it with the same `prompt`, with no verb of its
+//! own. A prompt on a thread whose message carries an anchor is a sub thread: a thread of its own
+//! under that thread, which holds its answers and resolves apart.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 /// A line of a file that a message is about: its path, its number in the file after the change,
 /// or before it for a line that the change removed, and its text then.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Anchor {
   pub path: String,
   pub line: u64,

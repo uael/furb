@@ -74,6 +74,12 @@ impl Opened {
     agents.map(|one| &one.card).find(|one| one.prompt == self.thread.key.2)
   }
 
+  /// The sub thread that this thread is, as the thread that it is on holds it: a thread about a
+  /// line of a file, which resolves as a thread of the list does.
+  pub fn sub(&self) -> Option<&Agent> {
+    self.thread.sub.as_deref()
+  }
+
   /// The thread that the operator opened from the list, whose agent this thread is, or this one.
   pub fn root(&self) -> &Self {
     self.from.as_deref().map_or(self, Self::root)
@@ -119,6 +125,8 @@ pub struct Thread {
   /// page came.
   pub above: Option<usize>,
   pub agents: Vec<Agent>,
+  /// The thread itself when it is a sub thread, as the thread that it is on holds it.
+  pub sub: Option<Box<Agent>>,
   /// Each page that the client asked and that did not come, by the id of its request: the place
   /// of the exchange that it stands before, or none for the page of the end.
   pub asked: HashMap<u64, Option<usize>>,
@@ -181,7 +189,7 @@ impl Thread {
       time.heard(&page.exchanges);
     }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
-    (self.agents, self.context) = (page.agents, page.context);
+    (self.agents, self.context, self.sub) = (page.agents, page.context, page.sub);
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
     let ended = marked(&self.exchanges, |mark| *mark == Mark::Ran);

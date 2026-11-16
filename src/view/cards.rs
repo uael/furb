@@ -98,13 +98,19 @@ impl Held {
     })
   }
 
-  /// The acts that keep a thread of the operator open, each with its shape, in the order that they
-  /// began: its prompt and each message on it that is not done. A close of each, the last first,
-  /// resolves the thread, since a close of a prompt cancels each prompt under it.
+  /// The acts that keep a thread of the operator open, at any depth of the tree of the threads,
+  /// each with its shape, in the order that they began: its prompt and each message on it that is
+  /// not done. A close of each, the last first, resolves the thread, since a close of a prompt
+  /// cancels each prompt under it.
   pub fn open_in(&self, thread: &str) -> Vec<(String, String)> {
-    let nodes = self.rail(&[], None);
-    let Some(node) = nodes.into_iter().find(|node| node.thread.prompt == thread) else {
-      return Vec::new();
+    // A sub thread, or an agent, stands under the thread that it is on.
+    let mut nodes = self.rail(&[], None);
+    let node = loop {
+      let Some(node) = nodes.pop() else { return Vec::new() };
+      if node.thread.prompt == thread {
+        break node;
+      }
+      nodes.extend(node.agents);
     };
     let ids = [&node.thread.prompt].into_iter().chain(&node.thread.messages);
     let open = ids.filter_map(|id| (&self).act(id)).filter(|act| !act.done());

@@ -1772,6 +1772,18 @@ withdrawal, when a cancel ended it before anyone answered, with the reason that 
 """
 
 
+class Anchor(TypedDict):
+  """
+  A line of a file that a message is about: its path, its number in the file after the change,
+  or before it for a line that the change removed, and its text then.
+  """
+
+  path: str
+  line: int
+  before: bool
+  quote: str
+
+
 class Context(TypedDict):
   """
   The context of a chain at its last answer: what that answer read, the window that the roster of
@@ -2790,9 +2802,11 @@ What a said is. A question holds the shape that its answer takes, which `choices
 
 class Agent(TypedDict):
   """
-  An agent of a thread: the thread that a word of the thread started on another chain, as a card,
-  with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
-  it ended, counted from milliseconds as the time of a thought, and the line of its last word
+  An agent of a thread: a thread under it, which a word of the thread started on another chain,
+  or a sub thread, a prompt on it whose message carries an anchor. It holds its card, the
+  millisecond of the epoch at which the host saw it begin, the seconds that it took once it
+  ended, counted from milliseconds as the time of a thought, the anchor of a sub thread, and the
+  line of its last word
   where it stands: the line that runs or asks, else the last one, and the number in the thread
   of the line of the word that made it, none when no line of a word of the thread made it, and
   the last line of the thought of its model while it thinks and writes no word yet. A host that
@@ -2810,6 +2824,7 @@ class Agent(TypedDict):
   line: NotRequired[Line | None]
   at: NotRequired[int | None]
   thought: NotRequired[str | None]
+  anchor: NotRequired[Anchor | None]
 
 
 class Event2(TypedDict):
@@ -2947,13 +2962,15 @@ class Exchange(TypedDict):
 class Page(TypedDict):
   """
   Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
-  agents of the whole thread, in the order the thread made them, and the context of its chain.
+  agents of the whole thread, in the order the thread made them, the context of its chain, and,
+  for a sub thread, which no list holds, the thread itself as the thread that it is on holds it.
   """
 
   exchanges: list[Exchange]
   above: int
   agents: list[Agent]
   context: NotRequired[Context | None]
+  sub: NotRequired[Agent | None]
 
 
 class Frame8(TypedDict):
@@ -3194,4 +3211,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 66
+PROTOCOL = 67

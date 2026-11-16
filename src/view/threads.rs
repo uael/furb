@@ -1,5 +1,6 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
-//! messages and what it asks the operator, nested under the thread whose ladder made it.
+//! messages and what it asks the operator, nested under the thread whose ladder made it, or under
+//! the thread that it is on when its message carries an anchor, as a sub thread.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -10,6 +11,7 @@ use serde_json::Value;
 
 use furb_wire::{
   act::{Act, Kind, WATCH, operator},
+  anchor::Anchor,
   state::{State, working},
   threads::{Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, ThreadNode},
 };
@@ -53,11 +55,37 @@ pub(super) fn works<'a>(on: impl IntoIterator<Item = &'a Act>, at: u64) -> bool 
 /// How deep a walk up the threads or the makers goes at most.
 const DEEP: usize = 64;
 
+/// The anchor of a sub thread: a prompt on a thread whose message carries an anchor, which starts a
+/// thread of its own under the thread that it is on.
+pub(super) fn anchor_of(act: &Act) -> Option<Anchor> {
+  act.thread()?;
+  Anchor::of(act.words.get(1)?.as_str()?).map(|(anchor, _)| anchor)
+}
+
+/// The text of the message of a prompt that a person reads: what a message about a line says of
+/// it, and else the whole message.
+pub(super) fn said_of(act: &Act) -> &str {
+  let message = act.words.get(1).and_then(Value::as_str).unwrap_or_default();
+  Anchor::of(message).map_or(message, |(_, said)| said)
+}
+
+/// The thread that a prompt stands under: the thread that a sub thread is on, and else the thread
+/// of its makers.
+pub(super) fn parent_of<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
+  match act.thread().and_then(|up| rows.act(up)) {
+    Some(up) if anchor_of(act).is_some() => Some(root_of(up, rows)),
+    _ => thread_of(act, rows),
+  }
+}
+
 /// The first prompt of the thread that a prompt stands in: the prompt itself, or the prompt that
-/// its thread starts at.
+/// its thread starts at, which a sub thread is itself.
 pub fn root_of<'a>(prompt: &'a Act, rows: &impl Lookup<'a>) -> &'a str {
   let mut at = prompt;
   for _ in 0..DEEP {
+    if anchor_of(at).is_some() {
+      break;
+    }
     match at.thread().and_then(|up| rows.act(up)) {
       Some(up) => at = up,
       None => break,
@@ -114,7 +142,8 @@ pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Works<'a>) -> Option<&'a 
 /// asks, are notices: no one of the operator made them.
 fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
-    return Verdict::Message(root_of(act, rows));
+    let root = root_of(act, rows);
+    return if root == act.id { Verdict::Own } else { Verdict::Message(root) };
   }
   let maker = rows.act(act.by.as_str());
   let starts = maker.is_some_and(|one| {
@@ -358,7 +387,7 @@ pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<Thr
   for inner in under {
     let Some(on) = by_chain.get(inner.id.as_str()) else { continue };
     for thread in chain_threads(on, rows) {
-      let parent = rows.get(thread.prompt.as_str()).and_then(|act| thread_of(act, rows));
+      let parent = rows.get(thread.prompt.as_str()).and_then(|act| parent_of(act, rows));
       if parent.is_some_and(|parent| list.iter().any(|one| one.prompt == parent)) {
         list.push(thread);
       }
@@ -381,8 +410,7 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     Some(maker) if maker.kind == Kind::Rung => Origin::Rung,
     _ => Origin::Ear,
   };
-  let message = act.words.get(1).and_then(|one| one.as_str()).unwrap_or_default();
-  let title = message.lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
+  let title = said_of(act).lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
   // An image that the title names stands as its name.
   let title = images::references(title)
     .into_iter()
@@ -400,9 +428,9 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   }
 }
 
-/// The threads of a list as a tree: each under the thread whose ladder made its prompt, and a
-/// thread whose maker is no thread of the list at the top, each list in the order that it was
-/// given.
+/// The threads of a list as a tree: each under the thread whose ladder made its prompt, or that a
+/// sub thread is on, and a thread whose maker is no thread of the list at the top, each list in
+/// the order that it was given.
 pub fn nest_threads(list: Vec<ChainThread>, rows: &Rows<'_>) -> Vec<ThreadNode> {
   let at: HashMap<&str, usize> =
     list.iter().enumerate().map(|(n, one)| (one.prompt.as_str(), n)).collect();
@@ -411,7 +439,7 @@ pub fn nest_threads(list: Vec<ChainThread>, rows: &Rows<'_>) -> Vec<ThreadNode> 
     .enumerate()
     .map(|(n, one)| {
       let act = rows.get(one.prompt.as_str())?;
-      at.get(thread_of(act, rows)?).copied().filter(|parent| *parent != n)
+      at.get(parent_of(act, rows)?).copied().filter(|parent| *parent != n)
     })
     .collect();
   let mut threads: Vec<Option<ChainThread>> = list.into_iter().map(Some).collect();

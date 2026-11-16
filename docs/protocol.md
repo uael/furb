@@ -418,7 +418,11 @@ daemon answers requests in any order.
     seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or
     asks, else its last line, and `at`, the number in the thread of the line of the word that made it, absent when
     no line of a word of the thread made it. A note to a chain that works is no agent: its model reads it at its
-    next step;
+    next step. Each sub thread of the thread follows: a prompt on it whose message carries an anchor, a line of a
+    file as `crates/wire/src/anchor.rs` writes it, with `anchor`, its `path`, its `line`, whether the line stands
+    `before` the change, and its `quote`. A sub thread is no message of the thread and no card: its answers stay in
+    it, and it resolves apart. The page of a sub thread holds `sub`, the sub thread itself as an agent, which says
+    its line and how it stands, since no card does; it is absent on each other page;
   - `context`, null before the first answer on the chain of the thread: what its last answer `read`, its `tokens` in
     all, of which it read `cached` from the cache and `written` to it, the `window` that the roster of the standing
     gives the actor of that answer, null when the roster names no such actor, and the `dollars` of each answer on the

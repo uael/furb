@@ -1600,13 +1600,15 @@ export interface Began {
 }
 /**
  * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
- * agents of the whole thread, in the order the thread made them, and the context of its chain.
+ * agents of the whole thread, in the order the thread made them, the context of its chain, and,
+ * for a sub thread, which no list holds, the thread itself as the thread that it is on holds it.
  */
 export interface Page {
   exchanges: Exchange[];
   above: number;
   agents: Agent[];
   context?: Context | null;
+  sub?: Agent | null;
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -1725,9 +1727,11 @@ export interface Answered {
   reply: Reply;
 }
 /**
- * An agent of a thread: the thread that a word of the thread started on another chain, as a card,
- * with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
- * it ended, counted from milliseconds as the time of a thought, and the line of its last word
+ * An agent of a thread: a thread under it, which a word of the thread started on another chain,
+ * or a sub thread, a prompt on it whose message carries an anchor. It holds its card, the
+ * millisecond of the epoch at which the host saw it begin, the seconds that it took once it
+ * ended, counted from milliseconds as the time of a thought, the anchor of a sub thread, and the
+ * line of its last word
  * where it stands: the line that runs or asks, else the last one, and the number in the thread
  * of the line of the word that made it, none when no line of a word of the thread made it, and
  * the last line of the thought of its model while it thinks and writes no word yet. A host that
@@ -1745,6 +1749,17 @@ export interface Agent {
   line?: Line | null;
   at?: number | null;
   thought?: string | null;
+  anchor?: Anchor | null;
+}
+/**
+ * A line of a file that a message is about: its path, its number in the file after the change,
+ * or before it for a line that the change removed, and its text then.
+ */
+export interface Anchor {
+  path: string;
+  line: number;
+  before: boolean;
+  quote: string;
 }
 /**
  * The context of a chain at its last answer: what that answer read, the window that the roster of
@@ -1786,4 +1801,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 66;
+export const PROTOCOL = 67;

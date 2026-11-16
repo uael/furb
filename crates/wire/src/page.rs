@@ -10,12 +10,14 @@ use serde_json::Value;
 
 use crate::{
   act::{Act, Maker, Read, fault},
+  anchor::Anchor,
   card::Card,
   words::timer,
 };
 
 /// Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
-/// agents of the whole thread, in the order the thread made them, and the context of its chain.
+/// agents of the whole thread, in the order the thread made them, the context of its chain, and,
+/// for a sub thread, which no list holds, the thread itself as the thread that it is on holds it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Page {
   pub exchanges: Vec<Exchange>,
@@ -23,6 +25,8 @@ pub struct Page {
   pub agents: Vec<Agent>,
   #[serde(default)]
   pub context: Option<Context>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub sub: Option<Box<Agent>>,
 }
 
 /// The context of a chain at its last answer: what that answer read, the window that the roster of
@@ -64,9 +68,11 @@ impl Context {
   }
 }
 
-/// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
-/// with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
-/// it ended, counted from milliseconds as the time of a thought, and the line of its last word
+/// An agent of a thread: a thread under it, which a word of the thread started on another chain,
+/// or a sub thread, a prompt on it whose message carries an anchor. It holds its card, the
+/// millisecond of the epoch at which the host saw it begin, the seconds that it took once it
+/// ended, counted from milliseconds as the time of a thought, the anchor of a sub thread, and the
+/// line of its last word
 /// where it stands: the line that runs or asks, else the last one, and the number in the thread
 /// of the line of the word that made it, none when no line of a word of the thread made it, and
 /// the last line of the thought of its model while it thinks and writes no word yet. A host that
@@ -85,6 +91,8 @@ pub struct Agent {
   pub at: Option<usize>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub thought: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub anchor: Option<Anchor>,
 }
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of

@@ -238,6 +238,52 @@ fn the_agents_of_a_thread_stand_as_cards() {
 }
 
 #[test]
+fn a_prompt_on_a_thread_about_a_line_of_a_file_is_a_sub_thread_that_holds_its_answers() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  let about = "On `a.py`, line 2 after the change:\n> x = 2\n\nwhy two?";
+  facts.extend([
+    json!(["prompt", "prompt5", "operator", "prompt1", "str", about, ""]),
+    json!(["rung", "rung5", "prompt5", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["done", "prompt5", "rung5", "Because."]),
+    json!(["done", "rung5", "chain1", null]),
+    json!(["prompt", "prompt6", "operator", "prompt5", "str", "and three?", ""]),
+    // A model opens one with the same prompt.
+    json!([
+      "prompt",
+      "prompt7",
+      "rung2",
+      "prompt1",
+      "str",
+      "On `b.py`, line 1 before the change:\n> y\n\nwhy y?",
+      ""
+    ]),
+  ]);
+  let held = held(facts, &mut streams);
+  // The thread holds no message of it, and no card stands for it.
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  assert_eq!(messages, ["prompt1", "prompt3"]);
+  let cards: Vec<String> = held.cards().into_iter().map(|one| one.prompt).collect();
+  assert_eq!(cards, ["prompt1"]);
+  // It stands under the thread with its anchor, and its reply opens it again.
+  let [sub, model] = page.agents.as_slice() else { panic!("{page:?}") };
+  let by_model = model.anchor.as_ref().map(|one| (one.path.as_str(), one.line, one.before));
+  assert_eq!((model.card.title.as_str(), by_model), ("why y?", Some(("b.py", 1, true))));
+  let anchor = sub.anchor.as_ref().map(|one| (one.path.as_str(), one.line, one.before));
+  assert_eq!((sub.card.title.as_str(), anchor), ("why two?", Some(("a.py", 2, false))));
+  assert!(sub.card.works(), "{sub:?}");
+  let own = held.page(&streams, "prompt5", Reach { before: None, limit: 10 });
+  let messages: Vec<&str> = own.exchanges.iter().map(|one| one.message.as_str()).collect();
+  assert_eq!(messages, ["prompt5", "prompt6"]);
+  // A resolve of it closes what stands open in it alone.
+  let open: Vec<String> = held.open_in("prompt5").into_iter().map(|one| one.0).collect();
+  assert_eq!(open, ["prompt6"]);
+  let open: Vec<String> = held.open_in("prompt1").into_iter().map(|one| one.0).collect();
+  assert_eq!(open, ["prompt3"]);
+}
+
+#[test]
 fn an_agent_whose_model_only_thinks_peeks_at_the_last_line_of_its_thought() {
   let peek = |more: Vec<Value>| {
     let mut streams = Streamed::default();

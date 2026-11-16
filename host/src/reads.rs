@@ -82,11 +82,13 @@ impl Read {
       let changed: Vec<_> =
         page.exchanges.iter().filter(|one| !told.exchanges.contains(one)).cloned().collect();
       // What a page holds beside its exchanges, which a frame tells whole.
-      let moved =
-        page.above != told.above || page.agents != told.agents || page.context != told.context;
+      let moved = page.above != told.above
+        || page.agents != told.agents
+        || page.context != told.context
+        || page.sub != told.sub;
       if !changed.is_empty() || moved {
-        let (agents, context) = (page.agents.clone(), page.context.clone());
-        let page = Page { exchanges: changed, above: page.above, agents, context };
+        let (agents, context, sub) = (page.agents.clone(), page.context.clone(), page.sub.clone());
+        let page = Page { exchanges: changed, above: page.above, agents, context, sub };
         let frame = Frame::Thread { life: self.life.clone(), thread: self.thread.clone(), page };
         if self.outbox.send(frame).is_err() {
           return;

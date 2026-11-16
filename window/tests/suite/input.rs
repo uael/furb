@@ -608,6 +608,48 @@ fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
 }
 
 #[test]
+fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line() {
+  let (app, daemon, sessions) = started();
+  let project = daemon.file("furb-try");
+  let git = |args: &[&str]| {
+    let done = Command::new("git").arg("-C").arg(&project).args(args).status().unwrap();
+    assert!(done.success(), "git {args:?}");
+  };
+  fs::write(project.join("a.py"), "one = 1\n").unwrap();
+  git(&["init", "-q", "-b", "trunk"]);
+  git(&["add", "a.py"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(project.join("a.py"), "one = 2\n").unwrap();
+  sent(&app, &format!("Change one. {ANSWERS}"));
+  shows(&app, "The open takes");
+  app.press("ctrl+x");
+  app.press("g");
+  shows(&app, "one = 2");
+  let (x, y) = at(&app, "one = 2", 0);
+  app.click(x, y);
+  sent(&app, "why two");
+  // The sub thread opens with its line in its head, and its model answers in it.
+  let shown = shows(&app, "◆ a.py:1 · why two");
+  assert!(shown.contains("why two"), "{shown}");
+  shows(&app, "✓ Resolved");
+  // The thread that it is on holds none of it, and names it under its messages.
+  let parent = [format!("Change one. {ANSWERS}")];
+  let held = app.wait_until(PATIENCE, || told(&daemon, &sessions) == parent);
+  assert!(held, "{:?}", told(&daemon, &sessions));
+  app.press("escape");
+  shows(&app, "└ 1 sub thread resolved");
+  // The review marks its line, and a click on that line opens it again.
+  app.press("ctrl+x");
+  app.press("g");
+  let shown = shows(&app, "one = 2");
+  let row = shown.lines().find(|one| one.contains("one = 2")).unwrap_or_default();
+  assert!(row.contains("◆"), "{shown}");
+  let (x, y) = at(&app, "one = 2", 0);
+  app.click(x, y);
+  shows(&app, "◆ a.py:1 · why two");
+}
+
+#[test]
 fn a_file_changed_with_no_life_counts_once_the_window_takes_the_focus_again() {
   let (app, daemon, _) = started();
   let project = daemon.file("furb-try");
