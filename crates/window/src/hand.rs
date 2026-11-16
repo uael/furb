@@ -28,7 +28,7 @@ use opentui::{
 use furb_host::protocol::Verb;
 
 use furb::world::images;
-use furb_client::{Anchor, Asked, Folded, Pasted, Picture, Where, mentioned};
+use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, mentioned};
 
 use crate::{
   Machine, Options, Screen,
@@ -1184,7 +1184,8 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
     Does::Chains => |model| model.client.chains(),
-    Does::Aside => |model| model.client.aside_draft(),
+    Does::Aside => |model| model.client.drafted(ASIDE.trim_end()),
+    Does::Cd => |model| model.client.drafted(CD),
     Does::Rename => |model| model.client.rename_draft(),
     Does::Running => Model::act_on_open,
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,

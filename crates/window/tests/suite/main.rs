@@ -8,6 +8,7 @@ mod tailscale;
 mod yard;
 
 mod cards;
+mod commands;
 mod context;
 mod copy;
 mod daemon;
@@ -22,7 +23,6 @@ mod palette;
 mod part;
 mod prose;
 mod question;
-mod rename;
 mod screens;
 mod settings;
 mod skills;

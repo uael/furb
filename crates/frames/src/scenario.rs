@@ -521,6 +521,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Key("C-c"), Act::Type("/rename Taxes"), Act::Key("Enter")],
           "demo · Taxes",
         ),
+        // The command cd moves the chain of the thread, as a word of his that the thread shows.
+        step("x-cd", &[Act::Type("/cd .. "), Act::Key("Enter")], "cd(\"..\")"),
       ],
     }),
   },

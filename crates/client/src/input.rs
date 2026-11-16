@@ -27,6 +27,10 @@ pub const ASIDE: &str = "/btw ";
 /// message is the name, and an empty rest takes the default name again.
 pub const RENAME: &str = "/rename";
 
+/// The start of a message that moves the chain of the open thread to a folder, as a word of his on
+/// the thread: the rest of the message is the path.
+pub const CD: &str = "/cd";
+
 /// The sign of a long text that a paste folded into one mark, before its name.
 pub const FOLDED: &str = "≡ ";
 
@@ -156,9 +160,7 @@ impl Client {
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
       hold.actor = Some(chosen.actor);
     }
-    let rewound =
-      if self.draft.python { None } else { self.aside(&text).or_else(|| self.rewound(&text)) };
-    let (text, python) = match rewound {
+    let (text, python) = match self.worded(&text) {
       Some(Ok(word)) => (word, true),
       Some(Err(why)) => return Err(why),
       None => (text, self.draft.python),
@@ -231,6 +233,28 @@ impl Client {
     })
   }
 
+  /// The word of his on the open thread that a message of a command says: an aside, a move to a
+  /// folder, or a rewind, or why it cannot. A word of Python is no command.
+  fn worded(&mut self, text: &str) -> Option<Result<String, String>> {
+    if self.draft.python {
+      return None;
+    }
+    self.aside(text).or_else(|| self.went(text)).or_else(|| self.rewound(text))
+  }
+
+  /// The word that moves the chain of the open thread to a folder for a message that starts with
+  /// `/cd`, or why it cannot: it names no folder, or the session has no chain yet.
+  fn went(&self, text: &str) -> Option<Result<String, String>> {
+    let path = text.strip_prefix(CD).filter(|rest| rest.is_empty() || rest.starts_with(' '))?;
+    Some(match path.trim() {
+      "" => Err(format!("Name the folder: {CD} <path>.")),
+      _ if matches!(self.target(), Target::New(..)) => {
+        Err("A new session runs in the folder of the launcher: choose it there.".to_owned())
+      }
+      path => Ok(format!("cd({})", Value::String(path.to_owned()))),
+    })
+  }
+
   /// The input turned to name the session: `/rename ` and the name that the session has now, which
   /// he writes over.
   pub fn rename_draft(&mut self) {
@@ -285,10 +309,11 @@ impl Client {
     }
   }
 
-  /// The input turned to ask its text aside: it starts with `/btw ` once.
-  pub fn aside_draft(&mut self) {
-    let rest = self.draft.text.trim_start().trim_start_matches(ASIDE.trim_end()).trim_start();
-    self.restore = Some(format!("{ASIDE}{rest}"));
+  /// The input turned to a command that takes its text, as `/btw` or `/cd`: it starts with the
+  /// command once, and keeps the text that it holds.
+  pub fn drafted(&mut self, command: &str) {
+    let rest = self.draft.text.trim_start().trim_start_matches(command).trim_start();
+    self.restore = Some(format!("{command} {rest}"));
   }
 
   /// The folder that the life of a record opens in when no life holds the record: the folder that

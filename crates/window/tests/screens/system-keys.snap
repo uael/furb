@@ -6,14 +6,14 @@ source: crates/window/tests/suite/screens.rs
 ┃ which keys does the form take                                Needs you 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃   Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
-    ▌Search a key                                 1 / 34      ▐   FU furb                    opus ▌
+    ▌Search a key                                 1 / 35      ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
     ▌Ctrl+P or Ctrl+O   go to anything, or run a…         ┃
      Ctrl+X ?           each key                          ┃
      Alt+A or Ctrl+X A  the next thread that needs you    ┃
      Alt+↓ or Ctrl+X J  the next card                     ┃
-     Alt+↑ or Ctrl+X K  the card before                   ┃
+     Alt+↑ or Ctrl+X K  the card before
      Ctrl+X L           show or hide the list
 
     The thread

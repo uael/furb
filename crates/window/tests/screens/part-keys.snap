@@ -6,14 +6,14 @@ source: crates/window/tests/suite/screens.rs
   Nothing needs you.
   ● 1 session r
                  Each key
-  ⌃P          g  ▌Search a key                                              1 / 34
+  ⌃P          g  ▌Search a key                                              1 / 35
   ⌃X ?        e
                  Go                                                                 ┃
                  ▌⌃P or ⌃O    go to anything, or run a command                      ┃
                   ⌃X ?        each key                                              ┃
                   ⌥A or ⌃X A  the next thread that needs you                        ┃
                   ⌥↓ or ⌃X J  the next card                                         ┃
-                  ⌥↑ or ⌃X K  the card before                                       ┃
+                  ⌥↑ or ⌃X K  the card before
                   ⌃X L        show or hide the list
 
                  The thread
