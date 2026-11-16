@@ -193,7 +193,9 @@ impl Feed<'_> {
         rows
       }
       // Until its page comes, the thread shows what its card holds: the first line of its message,
-      // which a model gave to the thread of an agent.
+      // which a model gave to the thread of an agent. A thread that his message started shows that
+      // message already, as it waits for the daemon to show it.
+      (None, None) if self.opened.thread.started => return Vec::new(),
       (None, None) => {
         let his = self.opened.from.is_none();
         return self.model.title().map(|title| self.message(&title, his)).unwrap_or_default();
