@@ -97,7 +97,6 @@ class Future:
   that is done run on its loop, each in the order that it came."""
 
   _asyncio_future_blocking = False
-  _log_destroy_pending = False
 
   def __init__(self, loop: Loop) -> None:
     self._loop = loop
@@ -137,11 +136,6 @@ class Future:
     else:
       self.callbacks.append(fn)
 
-  def remove_done_callback(self, fn: Callable[[Future], object]) -> int:
-    kept = [x for x in self.callbacks if x != fn]
-    removed, self.callbacks = len(self.callbacks) - len(kept), kept
-    return removed
-
   def set_result(self, value: object) -> None:
     self.settle("result", value)
 
@@ -169,8 +163,6 @@ class Future:
       self._asyncio_future_blocking = True
       yield self
     return self.result()
-
-  __iter__ = __await__
 
 
 class Task(Future):
