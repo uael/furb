@@ -283,23 +283,13 @@ impl Model {
   pub(crate) fn entries(&self) -> Vec<Entry> {
     let Some(picker) = &self.picker else { return Vec::new() };
     let all = match picker.of {
-      Pick::GoTo => self.places(!picker.filter.is_empty()),
-      Pick::Keys => self.each_key(),
-      Pick::Sessions => self.sessions(),
-      Pick::Machines => self.machines(),
-      Pick::Projects => self.projects(),
-      Pick::Models => self.models(),
-      Pick::History => self.sent(),
-      Pick::Session => self.session_choices(),
-      Pick::Leave => self.leave_choices(),
+      // The filter is the value that he writes, so it hides no row.
+      Pick::Value(place) => return self.value(place),
       Pick::Settings if picker.filter.is_empty() => {
         let tab = self.tab();
         self.settings().into_iter().filter(|one| one.part == tab).collect()
       }
-      Pick::Settings => self.settings(),
-      Pick::Skills => self.played(),
-      // The filter is the value that he writes, so it hides no row.
-      Pick::Value(place) => return self.value(place),
+      of => self.unfiltered(of, !picker.filter.is_empty()),
     };
     // The filter matches the text of a row and its right, and lights the letters of its text.
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
@@ -322,6 +312,26 @@ impl Model {
     }
     found.sort_by_key(|one| parts.iter().position(|part| *part == one.part));
     found
+  }
+
+  /// The rows of a list part before a filter takes some: with a search, the rows that only a search
+  /// shows too, and each group of the settings.
+  fn unfiltered(&self, of: Pick, searches: bool) -> Vec<Entry> {
+    match of {
+      Pick::GoTo => self.places(searches),
+      Pick::Keys => self.each_key(),
+      Pick::Sessions => self.sessions(),
+      Pick::Machines => self.machines(),
+      Pick::Projects => self.projects(),
+      Pick::Models => self.models(),
+      Pick::History => self.sent(),
+      Pick::Session => self.session_choices(),
+      Pick::Leave => self.leave_choices(),
+      Pick::Settings => self.settings(),
+      Pick::Skills => self.played(),
+      // The part that writes a value stands in the columns of the settings that it came from.
+      Pick::Value(place) => self.settings().into_iter().chain(self.value(place)).collect(),
+    }
   }
 
   /// The places of Go to: each thread that needs the operator, each thread that works, each
@@ -875,9 +885,13 @@ impl Model {
   /// The columns where a list part stands at its middle: those of the home while the list stands
   /// beside it, so the part covers no card, else the whole window. The columns of the part, which
   /// leave two on each side at least, or those of the box of the input for the history, which
-  /// grows from it. A part grows past its least width as far as its widest entry asks, up to its
-  /// most, so each entry stands whole on one row while the window has the room.
-  fn spans(&self, entries: &[Entry]) -> (u16, u16) {
+  /// grows from it. A part grows past its least width as far as its widest row asks, up to its
+  /// most, so each row stands whole on one row while the window has the room. The rows that it
+  /// measures are those before a filter or a group takes some, so the part keeps its columns while
+  /// he types or changes the group, as a palette does.
+  fn spans(&self) -> (u16, u16) {
+    let entries =
+      &self.picker.as_ref().map(|one| self.unfiltered(one.of, false)).unwrap_or_default();
     let beside = self.listed() && self.size.0 >= BESIDE;
     let columns = if beside { self.size.0.saturating_sub(self.panel_width()) } else { self.size.0 };
     let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
@@ -907,7 +921,7 @@ impl Model {
     let t = &self.tokens;
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
     let entries = self.entries();
-    let (columns, width) = self.spans(&entries);
+    let (columns, width) = self.spans();
     let room = usize::from(width).saturating_sub(4);
     let padded = |line: Line| {
       let mut row = vec![run("  ", Style::new())];
