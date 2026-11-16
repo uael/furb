@@ -10,9 +10,10 @@ use std::{
   time::Duration,
 };
 
-use tokio::{process::Command, time::timeout};
+use serde::Deserialize;
+use tokio::{join, process::Command, time::timeout};
 
-use crate::protocol::{Change, Changed, Changes};
+use crate::protocol::{Change, Changed, Changes, Lines, Pull};
 
 /// How long git may take to answer, past which the daemon says that it did not.
 const BOUND: Duration = Duration::from_secs(10);
@@ -40,11 +41,80 @@ pub(crate) async fn changes(folder: &Path, path: Option<&str>) -> Result<Changes
   for one in files.iter_mut().filter(|one| one.state == Change::Untracked) {
     one.added = lines(&top.join(&one.path));
   }
-  let diff = match path {
-    Some(path) => Some(diff(folder, path).await?),
-    None => None,
+  let (diff, base, pull) = match path {
+    Some(path) => (Some(diff(folder, path).await?), None, None),
+    None => {
+      let (base, pull) = join!(based(folder), pulled(folder));
+      (None, base, pull)
+    }
   };
-  Ok(Changes { branch, files, diff })
+  Ok(Changes { branch, files, diff, base, pull })
+}
+
+/// The lines that the checkout adds and removes in the folder against the point where its branch
+/// leaves the default branch of its remote, its tree included: none with no such remote, as git
+/// then has nothing to count against.
+async fn based(folder: &Path) -> Option<Lines> {
+  let remote = git(folder, &["rev-parse", "--abbrev-ref", "origin/HEAD"]).await.ok()??;
+  let base = git(folder, &["merge-base", "HEAD", remote.trim()]).await.ok()??;
+  let counts = git(folder, &["diff", base.trim(), "--numstat", "-z", "--", "."]).await.ok()??;
+  let sums = counted(&counts).into_iter().fold((0, 0), |sum, one| (sum.0 + one.1, sum.1 + one.2));
+  Some(Lines { added: sums.0, removed: sums.1 })
+}
+
+/// A pull request as `gh pr view --json` writes it.
+#[derive(Deserialize)]
+struct Viewed {
+  number: u64,
+  title: String,
+  url: String,
+  additions: u32,
+  deletions: u32,
+  #[serde(default, rename = "statusCheckRollup")]
+  checks: Vec<Check>,
+}
+
+/// A check of a pull request as gh writes it: a run of a workflow with its conclusion once it
+/// ended, or a status with its state.
+#[derive(Deserialize)]
+struct Check {
+  #[serde(default)]
+  conclusion: Option<String>,
+  #[serde(default)]
+  state: Option<String>,
+}
+
+/// The pull request of the branch of the checkout, as the program gh of the machine gives it: none
+/// with no gh, no pull request or no answer in time, which the part of the changes shows as a
+/// branch with no pull request.
+async fn pulled(folder: &Path) -> Option<Pull> {
+  let fields = "number,title,url,additions,deletions,statusCheckRollup";
+  let mut command = Command::new("gh");
+  command.current_dir(folder).args(["pr", "view", "--json", fields]);
+  command.stdin(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true);
+  let out = timeout(BOUND, command.output()).await.ok()?.ok()?;
+  let viewed: Viewed = serde_json::from_slice(&out.stdout).ok()?;
+  let mut pull = Pull {
+    number: viewed.number,
+    title: viewed.title,
+    url: viewed.url,
+    added: viewed.additions,
+    removed: viewed.deletions,
+    failing: 0,
+    pending: 0,
+    passing: 0,
+  };
+  for check in &viewed.checks {
+    let word = check.conclusion.as_deref().filter(|one| !one.is_empty()).or(check.state.as_deref());
+    match word.unwrap_or_default() {
+      "SUCCESS" | "NEUTRAL" | "SKIPPED" => pull.passing += 1,
+      "FAILURE" | "ERROR" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED" | "STARTUP_FAILURE" => {
+        pull.failing += 1;
+      }
+      _ => pull.pending += 1,
+    }
+  }
+  Some(pull)
 }
 
 /// The diff of one file of the checkout that holds a folder, by its path from its top.

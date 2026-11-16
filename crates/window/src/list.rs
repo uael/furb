@@ -33,6 +33,8 @@ pub(crate) enum Row {
   Card(usize, bool),
   /// The one line of a resolved thread.
   Resolved(usize),
+  /// A row of the part of the changes of the open thread, over the box of the context, by its place.
+  Changes(usize),
   /// A row of the box of the context of the open thread, at the foot of the list, by its place.
   Context(usize),
 }
@@ -110,6 +112,7 @@ impl Model {
         if second { then } else { first }
       }
       Row::Resolved(card) => self.resolved(card, self.ground(card, at(pointed))),
+      Row::Changes(at) => self.changes_line(at, pointed == Some(row)),
       Row::Context(at) => {
         let line = self.context_rows().into_iter().nth(at).unwrap_or_default();
         // The text of the box goes bright under the pointer, and its colored cells keep their

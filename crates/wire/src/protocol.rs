@@ -1066,13 +1066,41 @@ pub struct Files {
 
 /// The changes of a checkout of git against its last commit: its branch, none when its head names
 /// no branch, each file that differs, and the diff of the file that the peer named, as git writes
-/// a unified diff, a file that git does not track yet added whole.
+/// a unified diff, a file that git does not track yet added whole. With no file named, also the
+/// lines that it adds and removes against the base of its branch, and the pull request of its
+/// branch, as gh gives it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Changes {
   pub branch: Option<String>,
   pub files: Vec<Changed>,
   #[serde(default)]
   pub diff: Option<String>,
+  #[serde(default)]
+  pub base: Option<Lines>,
+  #[serde(default)]
+  pub pull: Option<Pull>,
+}
+
+/// The lines that a checkout adds and removes against the point where its branch leaves the
+/// default branch of its remote, its tree included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Lines {
+  pub added: u32,
+  pub removed: u32,
+}
+
+/// The pull request of the branch of a checkout: its number, its title, its address, the lines
+/// that it adds and removes, and how many of its checks fail, wait and pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Pull {
+  pub number: u64,
+  pub title: String,
+  pub url: String,
+  pub added: u32,
+  pub removed: u32,
+  pub failing: u32,
+  pub pending: u32,
+  pub passing: u32,
 }
 
 /// A file of a checkout that differs from the last commit: its path from the top of the checkout,

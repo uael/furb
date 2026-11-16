@@ -435,6 +435,7 @@ impl Model {
         self.client.split_again();
       }
       Some(Row::Context(_)) => self.fold_context(),
+      Some(Row::Changes(at)) => return self.changes_clicked(at),
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
         // The resolved threads end the list, so the list moves to its end to show them.
@@ -535,7 +536,7 @@ impl Model {
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
     let views = || self.kit_rows().iter().any(|row| !row.loaders.is_empty());
-    pulses || self.steps() || self.client.settled.iter().any(works) || views()
+    pulses || self.steps() || self.client.settled.iter().any(works) || views() || self.checks_wait()
   }
 
   /// Whether the rows of the left side change with each moment, past the cells of its loaders: a
@@ -595,10 +596,10 @@ impl Model {
     usize::from(self.size.1).saturating_sub(PINNED + self.boxed())
   }
 
-  /// The rows at the foot of the list that the box of the context takes, with the blank row above
-  /// it, as the input has one above it.
+  /// The rows at the foot of the list that the part of the changes and the box of the context take,
+  /// with the blank row above them, as the input has one above it.
   fn boxed(&self) -> usize {
-    let rows = self.context_rows().len();
+    let rows = self.changes_rows().len() + self.context_rows().len();
     if rows == 0 { 0 } else { rows + 1 }
   }
 
@@ -606,7 +607,12 @@ impl Model {
   pub(crate) fn row(&self, y: usize) -> Option<Row> {
     let foot = usize::from(self.size.1).saturating_sub(self.boxed());
     if y >= foot {
-      return Some(if y == foot { Row::Blank } else { Row::Context(y - foot - 1) });
+      let (at, changes) = ((y - foot).saturating_sub(1), self.changes_rows().len());
+      return Some(match () {
+        () if y == foot => Row::Blank,
+        () if at < changes => Row::Changes(at),
+        () => Row::Context(at - changes),
+      });
     }
     let rows = self.rows();
     rows.get(if y < PINNED { y } else { y + self.scroll }).copied()
@@ -623,7 +629,9 @@ impl Model {
     if boxed > 0 {
       scrolled.resize(self.room(), Row::Blank);
       scrolled.push(Row::Blank);
-      scrolled.extend((0..boxed - 1).map(Row::Context));
+      let changes = self.changes_rows().len();
+      scrolled.extend((0..changes).map(Row::Changes));
+      scrolled.extend((0..boxed - 1 - changes).map(Row::Context));
     }
     rows.into_iter().take(pinned).chain(scrolled)
   }
