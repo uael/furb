@@ -22,7 +22,7 @@ Work that an ear begins while it speaks keeps the site of that ear, so what the 
 
 hearer: Final[ContextVar[str]] = ContextVar("hearer", default="")
 """The hearer is the ear that hears a fact now, empty while no ear hears, and the Kernel makes the rung of a word the hearer while it steps that word.
-A fact said under the site of an ear while another ear is the hearer is said by the code that runs there, so the record keeps it not, and a later life says it again when it runs that code again.
+A fact said under the site of an ear while another ear is the hearer is said by the code that runs there, so the record does not keep it, and a later life says it again when it runs that code again.
 """
 
 type Fact = tuple[str, str, str, *tuple[object, ...]]

@@ -27,7 +27,7 @@ async def test_the_hearer_is_the_ear_that_hears_a_fact_now() -> None:
 
 
 async def test_a_fact_said_under_the_site_of_an_ear_while_another_ear_is_the_hearer_is_not_kept() -> None:
-  """A fact said under the site of an ear while another ear is the hearer is said by the code that runs there, so the record keeps it not, and a later life says it again when it runs that code again."""
+  """A fact said under the site of an ear while another ear is the hearer is said by the code that runs there, so the record does not keep it, and a later life says it again when it runs that code again."""
   sand, log, root = born()
   word = "\n".join(
     [
