@@ -36,7 +36,9 @@ test("a source of the crate that changed after the build stales the native modul
 test("a source of the TypeScript side that changed after the build stales the package", () => {
   const root = checkout();
   touch(root, "crates/typescript/src/index.ts", 3000);
-  expect(stale(root)).toEqual(["crates/typescript/src/index.ts changed after crates/typescript/dist/index.js"]);
+  expect(stale(root)).toEqual([
+    "crates/typescript/src/index.ts changed after crates/typescript/dist/index.js",
+  ]);
 });
 
 test("a test, a note and a cache that the build does not read stale nothing", () => {

@@ -19,7 +19,11 @@ const crate = [
   ".agents/skills/*/*/SKILL.md",
 ];
 /** What tsc reads, beside the types that the native build wrote. */
-const side = ["crates/typescript/src/**/*", "crates/typescript/tsconfig.json", "crates/typescript/index.d.cts"];
+const side = [
+  "crates/typescript/src/**/*",
+  "crates/typescript/tsconfig.json",
+  "crates/typescript/index.d.cts",
+];
 /** Each file that a build writes at each run, with the sources that it reads. */
 const builds: [string, string[]][] = [
   ["crates/typescript/index.cjs", crate],
