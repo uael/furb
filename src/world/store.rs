@@ -20,7 +20,7 @@ use std::{
 use futures::stream;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, value::RawValue};
+use serde_json::value::{RawValue, to_raw_value};
 use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
@@ -683,8 +683,8 @@ impl<S: Store> Held<S> {
 /// The ear that keeps the record keeps its store, which the image of a life holds nothing of, and
 /// syncs it at the end of each run.
 impl<S: Store + 'static> Kept for Held<S> {
-  fn image(&self) -> Option<Value> {
-    Some(Value::Null)
+  fn image(&self) -> Option<Box<RawValue>> {
+    to_raw_value(&()).ok()
   }
 
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.

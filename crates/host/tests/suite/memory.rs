@@ -4,9 +4,10 @@
 //! attaches at the start of the log reads. The ignored test `bench` is the measure of the bench, at
 //! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
 //! `crates/xtask/budgets.toml`. From each size to the next, both runs bound the allocations that
-//! each fact costs as the life grows, `memory_allocs_per_fact` of the same file. The test counts
-//! each byte and each allocation of the process, so a child of the suite runs it alone, as `apart`
-//! says.
+//! each fact costs as the life grows, `memory_allocs_per_fact` of the same file, and
+//! `memory_allocs_per_fact_large` for the bench, whose life writes its image as it goes. The test
+//! counts each byte and each allocation of the process, so a child of the suite runs it alone, as
+//! `apart` says.
 #![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 #![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
@@ -61,7 +62,8 @@ const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 const LIMITS: &str = include_str!("../../../xtask/budgets.toml");
 
 /// The limit `key` of the table `[bench]` of `crates/xtask/budgets.toml`: `memory_heap_mib`, the
-/// most heap that a life of the last large size may hold, and `memory_allocs_per_fact`, the most
+/// most heap that a life of the last large size may hold, and `memory_allocs_per_fact` and
+/// `memory_allocs_per_fact_large`, the most
 /// allocations that each fact costs as a life grows.
 fn limit(key: &str) -> usize {
   let mut table = "";
@@ -326,11 +328,13 @@ fn checked(
     );
   }
   // The growth to the first size holds the open of the life, so the bound holds from it on.
-  let most = limit("memory_allocs_per_fact");
+  let key =
+    if budget.is_some() { "memory_allocs_per_fact_large" } else { "memory_allocs_per_fact" };
+  let most = limit(key);
   for &(facts, allocs, ..) in rows.iter().skip(1) {
     assert!(
       allocs <= most,
-      "as the life grew to {facts} facts, each fact cost {allocs} allocations, past the {most} of memory_allocs_per_fact"
+      "as the life grew to {facts} facts, each fact cost {allocs} allocations, past the {most} of {key}"
     );
   }
   for &(facts, _, parts, events, acts) in rows {

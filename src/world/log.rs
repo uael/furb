@@ -41,7 +41,10 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use serde_json::Value;
+use serde_json::{
+  Value,
+  value::{RawValue, to_raw_value},
+};
 
 use crate::{
   ear::{Co, Ear, Kept, ear, hear},
@@ -169,8 +172,8 @@ fn heard(mut log: Log, tail: usize) -> Box<dyn Ear> {
 /// The ear keeps its log, whose image is what it knows of the lines, and which hands the lines to
 /// the file at the end of each run.
 impl Kept for Log {
-  fn image(&self) -> Option<Value> {
-    serde_json::to_value(&self.tip).ok()
+  fn image(&self) -> Option<Box<RawValue>> {
+    to_raw_value(&self.tip).ok()
   }
 
   /// A fault of the file ends no run: the lines wait and the ear writes them again.

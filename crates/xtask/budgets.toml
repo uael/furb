@@ -36,8 +36,12 @@ pytest = 180
 # test runs as `memory::bench -- --ignored`.
 memory_heap_mib = 512
 # The most allocations that each fact costs as a life grows, in the same test: the allocations of the whole process
-# while the life grows from one size to the next, over the facts that it said, both in the suite and in the bench.
-memory_allocs_per_fact = 1600
+# while the life grows from one size to the next, over the facts that it said. The count is the same at each run, so
+# the bound is the measure, and one more allocation for each fact fails it. memory_allocs_per_fact holds the sizes of
+# the suite, which write no image, and memory_allocs_per_fact_large the sizes of the bench, whose life writes its
+# image each 10 000 facts. Measured on 11-17: 1405, and 1448 / 1409 / 1417.
+memory_allocs_per_fact = 1405
+memory_allocs_per_fact_large = 1417
 # The most allocations, of the daemon and of the window, for each frame that a window reads when it attaches at the
-# start of the log of a life, in the test of the slow window, in the suite and in the bench.
-memory_allocs_per_frame = 24
+# start of the log of a life, in the test of the slow window, in the suite and in the bench. Measured on 11-17: 23.
+memory_allocs_per_frame = 23

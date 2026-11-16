@@ -55,7 +55,10 @@ use futures::{
 };
 use once_cell::sync::OnceCell;
 use serde::{Serialize, de::DeserializeOwned};
-use serde_json::{Value, json};
+use serde_json::{
+  Value,
+  value::{RawValue, to_raw_value},
+};
 use tokio::{
   runtime::{Handle, Runtime},
   task::AbortHandle,
@@ -185,8 +188,9 @@ pub trait Ear {
   /// What a fresh ear of the same make needs to stand where this ear stands, for the image of its
   /// life: the acts that it took and did not end, and what it keeps of the facts that it heard.
   /// Nothing when the ear cannot say it, as a generator of a host, and a life with such an ear
-  /// writes no image.
-  fn image(&self) -> Option<Value> {
+  /// writes no image. It is the text of the part, which the image holds as it is, so no tree of
+  /// values is made of it.
+  fn image(&self) -> Option<Box<RawValue>> {
     None
   }
 
@@ -261,7 +265,7 @@ impl<H: Hooks> Ear for With<H> {
     self.hooks.unkept(&*self.ear)
   }
 
-  fn image(&self) -> Option<Value> {
+  fn image(&self) -> Option<Box<RawValue>> {
     self.ear.image()
   }
 
@@ -312,8 +316,8 @@ enum Gave {
 /// while the body waits, where the life reads what the image holds of it, ends a run with it and
 /// counts what it holds unkept.
 pub trait Kept: Any {
-  /// What the image of the life holds of it, or nothing when it cannot say it.
-  fn image(&self) -> Option<Value>;
+  /// What the image of the life holds of it, as its text, or nothing when it cannot say it.
+  fn image(&self) -> Option<Box<RawValue>>;
 
   /// What the ear does at the end of each run, as [`Ear::ran`] says.
   fn ran(&mut self) -> Result<(), Fault> {
@@ -328,8 +332,8 @@ pub trait Kept: Any {
 
 /// A value that serde writes is kept as its JSON.
 impl<T: Serialize + 'static> Kept for T {
-  fn image(&self) -> Option<Value> {
-    serde_json::to_value(self).ok()
+  fn image(&self) -> Option<Box<RawValue>> {
+    to_raw_value(self).ok()
   }
 }
 
@@ -346,6 +350,15 @@ struct Imaged {
   asked: HashMap<String, Fact>,
   started: Vec<String>,
   resumed: HashSet<String>,
+}
+
+/// The part of a coroutine in the image of its life, as [`Ear::imaged`] reads it back: the question
+/// of each act in flight, the acts that an earlier life took, and what the body keeps, or null.
+#[derive(Serialize)]
+struct Part<'a> {
+  flight: Vec<&'a Object>,
+  resumed: Vec<&'a String>,
+  kept: Option<Box<RawValue>>,
 }
 
 impl Imaged {
@@ -655,18 +668,16 @@ impl Ear for Coroutine {
 
   /// Each act in flight goes out as the question that the ear heard, with what the body keeps;
   /// nothing while the body holds what it keeps.
-  fn image(&self) -> Option<Value> {
+  fn image(&self) -> Option<Box<RawValue>> {
     let imaged = &self.imaged;
-    let asked = imaged.started.iter().filter_map(|id| imaged.asked.get(id));
-    let flight =
-      asked.map(|fact| serde_json::to_value(&fact.0).ok()).collect::<Option<Vec<_>>>()?;
-    let resumed: Vec<&String> = imaged.resumed.iter().collect();
+    let flight = imaged.started.iter().filter_map(|id| imaged.asked.get(id)).map(|fact| &fact.0);
     let kept = match self.kept.as_deref() {
-      Some(kept) => kept.image()?,
+      Some(kept) => Some(kept.image()?),
       None if self.keeps => return None,
-      None => Value::Null,
+      None => None,
     };
-    Some(json!({ "flight": flight, "resumed": resumed, "kept": kept }))
+    let part = Part { flight: flight.collect(), resumed: imaged.resumed.iter().collect(), kept };
+    to_raw_value(&part).ok()
   }
 
   /// The body is not polled yet, so it finds its state where it asks for what it keeps. It holds

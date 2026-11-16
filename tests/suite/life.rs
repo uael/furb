@@ -14,6 +14,7 @@ fn drop_image(record: &Path) {
 }
 
 use std::{
+  collections::HashMap,
   env, fs,
   io::Write,
   path::{Path, PathBuf},
@@ -27,6 +28,9 @@ use std::time::Instant;
 
 use futures::channel::mpsc::unbounded;
 use futures::{executor, future, future::select};
+use num_bigint::BigInt;
+use serde::Serialize;
+use serde_json::value::to_raw_value;
 use tokio::runtime;
 
 use crate::yard::Yard;
@@ -886,6 +890,41 @@ fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_r
   let (recorded, booted) = read();
   assert!(booted, "with no image the life boots on its record");
   assert_eq!(imaged, recorded, "the image of an earlier build gives the state of its record");
+}
+
+/// The image holds the part of each ear as the text that its value writes, where an earlier build
+/// wrote the text of a tree of values made of it: the two texts are the same for each shape that a
+/// part holds, so no image changes and each image of an earlier build reads the same.
+#[test]
+fn the_part_of_an_ear_in_an_image_is_the_text_of_its_tree_of_values() {
+  let wide = BigInt::from(u64::MAX) * 3;
+  let words = [
+    Object::string("a \"quoted\" text\n"),
+    Object::int(-7),
+    Object::bigint(wide),
+    Object::float(1.0),
+    Object::float(0.1),
+    Object::float(f64::INFINITY),
+    Object::bool(true),
+    Object::none(),
+    Object::bytes(*b"bytes"),
+    Object::set([Object::int(1)]),
+    Object::dict([(Object::string("b"), Object::list([])), (Object::string("a"), Object::int(1))]),
+  ];
+  let fact = Fact::says("done", "run1", words);
+  let kept: HashMap<String, Vec<Object>> =
+    (0..9).map(|n| (format!("act{n}"), vec![Object::int(n)])).collect();
+  for text in [image_text(&fact), image_text(&kept), image_text(&()), image_text(&"tip")] {
+    let (raw, tree) = text;
+    assert_eq!(raw, tree);
+  }
+}
+
+/// The text of a part as the image writes it now, and as the text of its tree of values.
+fn image_text(part: &impl Serialize) -> (String, String) {
+  let raw = to_raw_value(part).unwrap().get().to_owned();
+  let tree = serde_json::to_value(part).map_or_else(|_| raw.clone(), |tree| tree.to_string());
+  (raw, tree)
 }
 
 /// The record of the life of `WORK`, and that record once it crossed to another build, which a
