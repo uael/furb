@@ -10,7 +10,6 @@
 //! of this user whose command names a tree of the clone of the folder of the watch, as git worktree
 //! list gives the trees. A daemon of furb is no part of the work, since no end of a test process
 //! frees its memory. It ends no other process.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   env, fs,
@@ -236,8 +235,11 @@ fn counted(me: &str, table: &str, trees: &[String]) -> Result<Census, Fault> {
 /// Whether a command names a tree as a whole path.
 fn names(command: &str, trees: &[String]) -> bool {
   trees.iter().filter(|tree| !tree.is_empty()).any(|tree| {
-    command
-      .match_indices(tree.as_str())
-      .any(|(at, _)| matches!(command[at + tree.len()..].chars().next(), None | Some('/' | ' ')))
+    command.match_indices(tree.as_str()).any(|(at, _)| {
+      matches!(
+        command.get(at + tree.len()..).map(|rest| rest.chars().next()),
+        Some(None | Some('/' | ' '))
+      )
+    })
   })
 }

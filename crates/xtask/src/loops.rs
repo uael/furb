@@ -9,7 +9,6 @@
 //! wrapper that points it at the same server. Each arm reads `BRIEF`. The server measures each arm:
 //! the bench reads the totals of its `/metrics` before and after the arm, so run each arm alone on
 //! the server. `score` compares each label with the known one.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,
@@ -23,7 +22,7 @@ use clap::{Args, ValueEnum};
 use serde_json::{Map, Value, json};
 use wait_timeout::ChildExt;
 
-use crate::{Fault, deepswe};
+use crate::{Fault, deepswe, field};
 
 /// Each label, and what it means, which each arm reads.
 const LABELS: [(&str, &str); 8] = [
@@ -307,17 +306,17 @@ fn made(folder: &Path, seed: u64, count: usize) -> Result<(), Fault> {
     let words = [
       ("{order}", format!("#{}", rng.u32(10_000..=99_999))),
       ("{amount}", format!("{}.{:02} EUR", rng.u32(5..=400), rng.u32(0..=99))),
-      ("{date}", format!("{} {}", MONTHS[rng.usize(..MONTHS.len())], rng.u32(1..=28))),
-      ("{product2}", PRODUCTS[other].to_owned()),
-      ("{product}", PRODUCTS[product].to_owned()),
-      ("{name}", NAMES[rng.usize(..NAMES.len())].to_owned()),
+      ("{date}", format!("{} {}", rng.choice(MONTHS).unwrap_or_default(), rng.u32(1..=28))),
+      ("{product2}", PRODUCTS.get(other).copied().unwrap_or_default().to_owned()),
+      ("{product}", PRODUCTS.get(product).copied().unwrap_or_default().to_owned()),
+      ("{name}", rng.choice(NAMES).unwrap_or_default().to_owned()),
       ("{years}", rng.u32(2..=9).to_string()),
     ];
     let parts = [
-      OPENERS[rng.usize(..OPENERS.len())],
-      ASIDES[rng.usize(..ASIDES.len())],
-      TEMPLATES[at][rng.usize(..TEMPLATES[at].len())],
-      CLOSERS[rng.usize(..CLOSERS.len())],
+      rng.choice(OPENERS).unwrap_or_default(),
+      rng.choice(ASIDES).unwrap_or_default(),
+      TEMPLATES.get(at).and_then(|one| rng.choice(one.iter().copied())).unwrap_or_default(),
+      rng.choice(CLOSERS).unwrap_or_default(),
     ];
     let filled: Vec<String> = parts
       .iter()
@@ -326,7 +325,7 @@ fn made(folder: &Path, seed: u64, count: usize) -> Result<(), Fault> {
         words.iter().fold((*part).to_owned(), |text, (key, value)| text.replace(key, value))
       })
       .collect();
-    rows.push((filled.join(" "), LABELS[at].0));
+    rows.push((filled.join(" "), LABELS.get(at).map_or("", |one| one.0)));
   }
   rng.shuffle(&mut rows);
   let (mut tickets, mut known) = (Vec::new(), Map::new());
@@ -371,7 +370,7 @@ fn arm(folder: &Path, name: &str, mut command: Process, cap: Duration) -> Result
     .map(|key| {
       (
         (*key).to_owned(),
-        json!(after[key].as_i64().unwrap_or(0) - before[key].as_i64().unwrap_or(0)),
+        json!(field(&after, key).as_i64().unwrap_or(0) - field(&before, key).as_i64().unwrap_or(0)),
       )
     })
     .collect();
@@ -400,7 +399,7 @@ fn totals() -> Result<Value, Fault> {
     });
   }
   let read: Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
-  Ok(read["totals"].clone())
+  Ok(field(&read, "totals").clone())
 }
 
 /// The share of right labels of each arm, and its tokens and seconds per ticket as the server
@@ -440,20 +439,20 @@ fn scored(folder: &Path) -> Result<Map<String, Value>, Fault> {
       .collect();
     let right = known.iter().filter(|(id, label)| clean.get(id.as_str()) == Some(*label)).count();
     let labeled = known.keys().filter(|id| clean.contains_key(id.as_str())).count();
-    let server = |key: &str| run["server"][key].as_f64().unwrap_or(0.0);
+    let server = |key: &str| field(field(&run, "server"), key).as_f64().unwrap_or(0.0);
     out.insert(
       name,
       json!({
         "right": right,
         "labeled": labeled,
         "share": per(f64::from(u32::try_from(right).unwrap_or(0)), 1000.0),
-        "requests": run["server"]["requests"],
+        "requests": field(field(&run, "server"), "requests"),
         "prompt_tokens_per_ticket": per(server("prompt_tokens"), 1.0),
         "reused_per_ticket": per(server("reused"), 1.0),
         "output_tokens_per_ticket": per(server("output_tokens"), 1.0),
         "server_s_per_ticket": per((server("prompt_ms") + server("decode_ms")) / 1000.0, 100.0),
-        "wall_s_per_ticket": per(run["wall_s"].as_f64().unwrap_or(0.0), 100.0),
-        "code": run["code"],
+        "wall_s_per_ticket": per(field(&run, "wall_s").as_f64().unwrap_or(0.0), 100.0),
+        "code": field(&run, "code"),
       }),
     );
   }

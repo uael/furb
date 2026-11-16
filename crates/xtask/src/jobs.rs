@@ -1,6 +1,5 @@
 //! The budget of time of each job of the gates, in `.github/budgets.json`: one and a half times its
 //! median time in the last green runs of `gates.yml` on main, rounded up to a whole minute.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,
@@ -97,7 +96,7 @@ fn names(workflow: &Path, under: &str) -> Result<Vec<String>, Fault> {
     let first = |pattern: &Regex| -> Result<Option<String>, Fault> {
       for line in &chunk {
         if let Some(hit) = pattern.captures(*line)? {
-          return Ok(Some(hit[1].to_owned()));
+          return Ok(Some(crate::group(&hit, 1).to_owned()));
         }
       }
       Ok(None)
@@ -136,10 +135,11 @@ fn gh(root: &Path, args: &[&str]) -> Result<Value, Fault> {
 fn twice_median(times: &mut [i64]) -> i64 {
   times.sort_unstable();
   let half = times.len() / 2;
+  let at = |at: usize| times.get(at).copied().unwrap_or_default();
   match times.len() {
     0 => 0,
-    len if len % 2 == 1 => 2 * times[half],
-    _ => times[half - 1] + times[half],
+    len if len % 2 == 1 => 2 * at(half),
+    _ => at(half - 1) + at(half),
   }
 }
 

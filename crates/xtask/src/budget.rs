@@ -1,7 +1,6 @@
 //! The limit of time of a part of the suite. The run of its command fails when it passes the limit
 //! of that part, which `crates/xtask/budgets.toml` holds: the table `local` for this machine and
 //! `ci` for a runner of the gates.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs, hint,
@@ -327,7 +326,8 @@ fn probed() -> Option<f64> {
         // that is slower or shared.
         let table: Vec<u32> =
           (0..TABLE).map(|at| (at.wrapping_mul(5).wrapping_add(1)) % TABLE).collect();
-        (0..PROBE).fold(0_u32, |at, _| hint::black_box(table[at as usize]))
+        (0..PROBE)
+          .fold(0_u32, |at, _| hint::black_box(table.get(at as usize).copied().unwrap_or_default()))
       });
     }
   });

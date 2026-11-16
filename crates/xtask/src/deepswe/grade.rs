@@ -1,6 +1,5 @@
 //! The grade of a submission: the verifier of the task, held out of the life, over the diff that
 //! the life left, in the image of the task, in a mount namespace of its own, or on plain paths.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeMap,
@@ -161,7 +160,7 @@ impl Rig {
     }
     let reward = kept(&grading.logs, out)?;
     let collected = grading.logs.join("artifacts/cases.json");
-    if reference && reward["reward"] == 1 && collected.is_file() {
+    if reference && crate::field(&reward, "reward") == 1 && collected.is_file() {
       written(&cases, &read(&collected)?)?;
     }
     // The log and the reports beside a reward are those of that grade, so those of an earlier
@@ -174,7 +173,7 @@ impl Rig {
       }
     }
     removed(&root)?;
-    say!("reward {}: {}", reward["reward"], reward);
+    say!("reward {}: {}", crate::field(&reward, "reward"), reward);
     Ok(reward)
   }
 
@@ -236,7 +235,9 @@ impl Rig {
     let what = || config.display().to_string();
     let mut told: Value = serde_json::from_slice(&read(&config)?)
       .map_err(|source| Fault::Json { what: what(), source })?;
-    told["base_commit"] = Value::from(syn);
+    if let Some(fields) = told.as_object_mut() {
+      fields.insert("base_commit".to_owned(), Value::from(syn));
+    }
     if let Some(reports) = told.pointer_mut("/grade/reports").and_then(Value::as_array_mut) {
       for report in reports {
         if let Some(rest) = report.as_str().and_then(|one| one.strip_prefix("/logs")) {

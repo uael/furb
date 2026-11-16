@@ -1,7 +1,6 @@
 //! The width of the comments of Rust. rustfmt sets the width of the code at 100 and wraps no
 //! comment, so a comment goes past it with no gate that says so: this check fails on a comment
 //! line that a change adds past it.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -81,12 +80,15 @@ fn long(text: &str) -> Vec<usize> {
   for token in tokenize(text, FrontmatterAllowed::No) {
     let end = at + token.len as usize;
     if matches!(token.kind, TokenKind::LineComment { .. }) {
-      let start = text[..at].rfind('\n').map_or(0, |newline| newline + 1);
-      if text[start..at].trim().is_empty() && text[start..end].chars().count() > WIDTH {
+      let start =
+        text.get(..at).and_then(|before| before.rfind('\n')).map_or(0, |newline| newline + 1);
+      let (lead, whole) =
+        (text.get(start..at).unwrap_or_default(), text.get(start..end).unwrap_or_default());
+      if lead.trim().is_empty() && whole.chars().count() > WIDTH {
         found.push(line);
       }
     }
-    line += text[at..end].matches('\n').count();
+    line += text.get(at..end).unwrap_or_default().matches('\n').count();
     at = end;
   }
   found

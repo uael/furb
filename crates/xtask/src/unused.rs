@@ -1,6 +1,5 @@
 //! The names that nothing but a test uses: each exported name of the TypeScript side and each
 //! public item of the crates that no file but a test names, its own file included.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeSet, HashMap, HashSet},
@@ -11,7 +10,7 @@ use std::{
 
 use fancy_regex::{Captures, Regex, escape};
 
-use crate::{Fault, git, written};
+use crate::{Fault, git, group, written};
 
 const PACKAGE: &str = "crates/typescript/src/";
 const SOURCES: [&str; 6] =
@@ -161,10 +160,18 @@ fn sources(
       }
       for one in owned.captures_iter(code.as_str()) {
         let one = one?;
-        world.calls.entry(one[2].to_owned()).or_default().insert((path.clone(), one[1].to_owned()));
+        world
+          .calls
+          .entry(group(&one, 2).to_owned())
+          .or_default()
+          .insert((path.clone(), group(&one, 1).to_owned()));
       }
       for one in called.captures_iter(code.as_str()) {
-        world.calls.entry(one?[1].to_owned()).or_default().insert((path.clone(), String::new()));
+        world
+          .calls
+          .entry(group(&one?, 1).to_owned())
+          .or_default()
+          .insert((path.clone(), String::new()));
       }
     } else if written(path, "py") {
       world.py.extend(patterns.words(body)?);
@@ -189,23 +196,26 @@ fn imports(
     }
     for one in patterns.inline.captures_iter(body.as_str()) {
       let one = one?;
-      if let Some(there) = resolve(text, path, &one[1]) {
-        used.insert((there, one[2].to_owned()));
+      if let Some(there) = resolve(text, path, group(&one, 1)) {
+        used.insert((there, group(&one, 2).to_owned()));
       }
     }
     for one in patterns.from.captures_iter(body.as_str()) {
       let one: Captures<'_, str> = one?;
-      let Some(there) = resolve(text, path, &one[4]) else { continue };
+      let Some(there) = resolve(text, path, group(&one, 4)) else { continue };
       if let Some(space) = one.get(2) {
         let member = Regex::new(&format!(r"\b{}\.(\w+)", escape(space.as_str())))?;
         for name in member.captures_iter(body.as_str()) {
-          used.insert((there.clone(), name?[1].to_owned()));
+          used.insert((there.clone(), group(&name?, 1).to_owned()));
         }
       } else if let Some(names) = one.get(3) {
-        let into =
-          if &one[1] == "export" { renamed.entry(path.clone()).or_default() } else { &mut used };
+        let into = if group(&one, 1) == "export" {
+          renamed.entry(path.clone()).or_default()
+        } else {
+          &mut used
+        };
         into.extend(listed(names.as_str()).into_iter().map(|name| (there.clone(), name)));
-      } else if &one[1] == "export" {
+      } else if group(&one, 1) == "export" {
         stars.entry(path.clone()).or_default().push(there);
       }
     }
@@ -289,12 +299,12 @@ fn scan(patterns: &Patterns, path: &str, body: &str, world: &World) -> Result<Fo
   let at: HashMap<&str, &Item> = items.iter().map(|item| (item.name.as_str(), item)).collect();
   let mut used: HashSet<&str> = items
     .iter()
-    .filter(|item| item.seen || counts[item.name.as_str()] > 1)
+    .filter(|item| item.seen || counts.get(item.name.as_str()).is_some_and(|count| *count > 1))
     .map(|item| item.name.as_str())
     .collect();
   let mut queue: Vec<&str> = used.iter().copied().collect();
   while let Some(name) = queue.pop() {
-    let item = at[name];
+    let Some(item) = at.get(name) else { continue };
     for other in declared(patterns, &lines, item.line, WHOLE.contains(&item.kind.as_str()))? {
       if let Some((&other, _)) = at.get_key_value(other.as_str())
         && used.insert(other)
@@ -310,7 +320,7 @@ fn scan(patterns: &Patterns, path: &str, body: &str, world: &World) -> Result<Fo
     .collect();
   let alone = items
     .iter()
-    .filter(|item| !item.seen && counts[item.name.as_str()] > 1)
+    .filter(|item| !item.seen && counts.get(item.name.as_str()).is_some_and(|count| *count > 1))
     .map(|item| (path.to_owned(), item.name.clone()))
     .collect();
   Ok((found, alone))
@@ -327,23 +337,29 @@ fn items_of(
   for (n, line) in lines.iter().enumerate() {
     let made = if written(path, "ts") {
       patterns.ts.captures(*line)?.map(|one| {
-        let seen = world.imported.contains(&(path.to_owned(), one[2].to_owned()))
-          || world.documented.contains(&one[2]);
-        Item { name: one[2].to_owned(), line: n, kind: one[1].to_owned(), seen }
+        let seen = world.imported.contains(&(path.to_owned(), group(&one, 2).to_owned()))
+          || world.documented.contains(group(&one, 2));
+        Item { name: group(&one, 2).to_owned(), line: n, kind: group(&one, 1).to_owned(), seen }
       })
     } else {
       if line.starts_with('}') {
         owner.clear();
       }
       if let Some(one) = patterns.implemented.captures(*line)? {
-        one[1].clone_into(&mut owner);
+        group(&one, 1).clone_into(&mut owner);
       }
       match patterns.rs.captures(*line)? {
         Some(one) => {
-          let near = lines[n.saturating_sub(12)..n].join("\n");
+          let near = lines.get(n.saturating_sub(12)..n).unwrap_or_default().join("\n");
           let door = patterns.door.is_match(&near)?;
-          let seen = (door && world.hosted(&one[2], &one[3])) || world.named(path, &one, &owner);
-          Some(Item { name: one[3].to_owned(), line: n, kind: one[2].to_owned(), seen })
+          let seen = (door && world.hosted(group(&one, 2), group(&one, 3)))
+            || world.named(path, &one, &owner);
+          Some(Item {
+            name: group(&one, 3).to_owned(),
+            line: n,
+            kind: group(&one, 2).to_owned(),
+            seen,
+          })
         }
         None => None,
       }
@@ -368,7 +384,7 @@ impl World {
   /// Whether a file that is no test, and is not the file of the item, names a public item of Rust,
   /// an associated item through its type or its method call.
   fn named(&self, path: &str, one: &Captures<'_, str>, owner: &str) -> bool {
-    let (indent, name) = (&one[1], &one[3]);
+    let (indent, name) = (group(one, 1), group(one, 3));
     if !indent.is_empty() && !owner.is_empty() {
       let calls = self.calls.get(name).into_iter().flatten();
       return calls.into_iter().any(|(file, by)| file != path && (by.is_empty() || by == owner));
@@ -388,7 +404,8 @@ fn declared(
   let indent = |line: &str| line.len() - line.trim_start().len();
   let (mut out, mut depth) = (Vec::new(), 0_i64);
   for (j, line) in lines.iter().enumerate().skip(at) {
-    let ends = !line.trim().is_empty() && indent(line) <= indent(lines[at]);
+    let ends =
+      !line.trim().is_empty() && indent(line) <= lines.get(at).map_or(0, |first| indent(first));
     let goes_on = ["}", ")", "]", ">", "|", ".", "&", "+", "?", ":", "="]
       .iter()
       .any(|one| line.trim_start().starts_with(one));

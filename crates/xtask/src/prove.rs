@@ -1,6 +1,5 @@
 //! The proof of the crates of furb as a user takes them: as crates.io will give them, from their
 //! packs alone.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   env, fs, io,
@@ -107,7 +106,7 @@ fn monty(root: &Path, work: &Path, manifest: &str) -> Result<(String, Vec<String
   let rev =
     Regex::new(r#"(?m)^monty = \{ git = "https://github\.com/uael/monty", rev = "([0-9a-f]*)""#)?
       .captures(manifest)?
-      .map(|one| one[1].to_owned())
+      .map(|one| crate::group(&one, 1).to_owned())
       .unwrap_or_default();
   let monty = work.join("monty");
   ran(Process::new("git").args(["clone", "-q", "https://github.com/uael/monty"]).arg(&monty))?;
@@ -229,7 +228,8 @@ fn read(path: &Path) -> Result<String, Fault> {
 fn workspace_version(manifest: &str) -> Result<String, Fault> {
   let table: toml::Table = toml::from_str(manifest)
     .map_err(|fault| Fault::Unproven(format!("a manifest is no toml: {fault}")))?;
-  Ok(table["workspace"]["package"]["version"].as_str().unwrap_or_default().to_owned())
+  let version = table.get("workspace").and_then(|one| one.get("package")?.get("version")?.as_str());
+  Ok(version.unwrap_or_default().to_owned())
 }
 
 /// The crates of the fork that furb runs: those that its lock takes from the fork.

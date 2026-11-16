@@ -7,7 +7,6 @@
 //! `include_bytes!` or `#[path]`, beside that source, and by a `rerun-if-changed` of its build
 //! script, from the folder of the crate. The task reads each source of the pack, as `cargo package
 //! --list` gives it, and builds nothing, so it ends in a second and runs before each commit.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::BTreeSet,
@@ -28,7 +27,7 @@ pub(crate) fn check() -> Result<ExitCode, Fault> {
   let metadata: Value =
     serde_json::from_str(&cargo(&["metadata", "--no-deps", "--format-version", "1"])?)
       .map_err(|no| Fault::Cargo { args: "metadata".to_owned(), stderr: no.to_string() })?;
-  let packages = metadata["packages"].as_array().cloned().unwrap_or_default();
+  let packages = metadata.get("packages").and_then(Value::as_array).cloned().unwrap_or_default();
   // A crate whose `publish` is an empty list is never packed.
   let published =
     packages.iter().filter(|one| one["publish"].as_array().is_none_or(|to| !to.is_empty()));
@@ -99,8 +98,8 @@ fn read(home: &Path, listed: &BTreeSet<String>) -> Result<Vec<PathBuf>, Fault> {
     for (path, text) in &sources {
       for hit in declared.captures_iter(text.as_str()) {
         let hit = hit?;
-        if tests.contains(path) || only.is_match(&hit[1])? {
-          tests.extend(module(path, &hit[1], &hit[2]));
+        if tests.contains(path) || only.is_match(crate::group(&hit, 1))? {
+          tests.extend(module(path, crate::group(&hit, 1), crate::group(&hit, 2)));
         }
       }
     }
@@ -112,10 +111,10 @@ fn read(home: &Path, listed: &BTreeSet<String>) -> Result<Vec<PathBuf>, Fault> {
   for (path, text) in sources.iter().filter(|(path, _)| !tests.contains(path)) {
     let folder = path.parent().unwrap_or(home);
     for hit in named.captures_iter(text.as_str()) {
-      read.push(plain(&folder.join(&hit?[1])));
+      read.push(plain(&folder.join(crate::group(&hit?, 1))));
     }
     for hit in watched.captures_iter(text.as_str()) {
-      read.push(plain(&home.join(&hit?[1])));
+      read.push(plain(&home.join(crate::group(&hit?, 1))));
     }
   }
   read.retain(|one| one.is_file());

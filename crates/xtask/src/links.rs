@@ -1,7 +1,5 @@
 //! The links of the README that each package carries. The registry of each package shows that
 //! README and reads no relative link as GitHub does, so each of its links is absolute.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{cmp::Reverse, collections::BTreeSet, fs, ops::Range, path::Path, process::ExitCode};
 
@@ -60,10 +58,13 @@ fn packages(root: &Path, files: &BTreeSet<&str>) -> Result<Vec<Package>, Fault> 
     let (label, readme) = match name {
       "package.json" => {
         let package: Value = serde_json::from_str(&text).unwrap_or_default();
-        if package["private"].as_bool() == Some(true) {
+        if package.get("private").and_then(Value::as_bool) == Some(true) {
           continue;
         }
-        (package["name"].as_str().map(str::to_owned), Some("README.md".to_owned()))
+        (
+          package.get("name").and_then(Value::as_str).map(str::to_owned),
+          Some("README.md".to_owned()),
+        )
       }
       "Cargo.toml" => {
         let Some(package) =
@@ -119,8 +120,8 @@ fn checked(
     fs::read_to_string(&path).map_err(|source| Fault::Read { path: path.clone(), source })?;
   let (mut wrong, mut edits) = (Vec::new(), Vec::new());
   for at in targets(&text)? {
-    let target = &text[at.clone()];
-    let line = text[..at.start].matches('\n').count() + 1;
+    let target = text.get(at.clone()).unwrap_or_default();
+    let line = text.get(..at.start).unwrap_or_default().matches('\n').count() + 1;
     if target.starts_with('#') || schemed(target) {
       if let Some(ours) = ours(target)
         && !stands(ours, files)
@@ -167,7 +168,7 @@ fn checked(
 fn targets(text: &str) -> Result<Vec<Range<usize>>, Fault> {
   let html = Regex::new(r#"\b(?:src|href)\s*=\s*["']([^"']*)["']"#)?;
   let within = |span: &Range<usize>, target: &str| {
-    text[span.clone()].rfind(target).map(|at| span.start + at..span.start + at + target.len())
+    text.get(span.clone())?.rfind(target).map(|at| span.start + at..span.start + at + target.len())
   };
   let parsed = Parser::new_ext(text, Options::all()).into_offset_iter();
   let mut found: Vec<Range<usize>> = parsed
@@ -181,7 +182,7 @@ fn targets(text: &str) -> Result<Vec<Range<usize>>, Fault> {
         found.extend(within(&span, &dest_url).filter(|_| !dest_url.is_empty()));
       }
       Event::Html(_) | Event::InlineHtml(_) => {
-        for one in html.captures_iter(&text[span.clone()]) {
+        for one in html.captures_iter(text.get(span.clone()).unwrap_or_default()) {
           if let Some(target) = one?.get(1) {
             found.push(span.start + target.start()..span.start + target.end());
           }
@@ -219,7 +220,7 @@ fn stands(path: &str, files: &BTreeSet<&str>) -> bool {
     || files
       .range(path..)
       .take_while(|one| one.starts_with(path))
-      .any(|one| one[path.len()..].starts_with('/'))
+      .any(|one| one.get(path.len()..).is_some_and(|rest| rest.starts_with('/')))
 }
 
 fn absolute(path: &str, anchor: &str, files: &BTreeSet<&str>) -> String {

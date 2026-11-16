@@ -811,6 +811,17 @@ fn words_of(matches: &ArgMatches) -> Vec<String> {
   matches.get_many::<String>("words").map(|words| words.cloned().collect()).unwrap_or_default()
 }
 
+/// A field of a map of JSON, or null when it holds none, as an index of serde reads it.
+fn field<'v>(value: &'v serde_json::Value, key: &str) -> &'v serde_json::Value {
+  const NULL: &serde_json::Value = &serde_json::Value::Null;
+  value.get(key).unwrap_or(NULL)
+}
+
+/// The text of a group of a match, or nothing when the group took no part in it.
+fn group<'t>(hit: &fancy_regex::Captures<'t, str>, at: usize) -> &'t str {
+  hit.get(at).map_or("", |one| one.as_str())
+}
+
 fn strs(words: &[String]) -> Vec<&str> {
   words.iter().map(String::as_str).collect()
 }

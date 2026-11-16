@@ -3,8 +3,6 @@
 //! rig that asks it, the names of its credential and its address, and of each model the fields that
 //! the crate reads. models.dev lists every provider but two, whose models come from the data that
 //! pi-ai publishes.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::BTreeSet,
@@ -126,18 +124,22 @@ pub(crate) fn refresh(root: &Path) -> Result<ExitCode, Fault> {
   let catalog: Value = serde_json::from_slice(&fetched(URL)?).unwrap_or_default();
   let latest: Value =
     serde_json::from_slice(&fetched(&format!("{PI}/latest"))?).unwrap_or_default();
-  let version = latest["version"].as_str().unwrap_or_default().to_owned();
-  let package = fetched(latest["dist"]["tarball"].as_str().unwrap_or_default())?;
+  let version = latest.get("version").and_then(Value::as_str).unwrap_or_default().to_owned();
+  let package =
+    fetched(latest.pointer("/dist/tarball").and_then(Value::as_str).unwrap_or_default())?;
   let pis = pis();
   let mut providers: Vec<Provider> = Vec::new();
   for (name, served) in served().as_object().into_iter().flatten() {
-    providers.push(provided(name, served, &catalog[name])?);
+    providers.push(provided(name, served, catalog.get(name).unwrap_or(&Value::Null))?);
   }
   for (name, served) in pis.as_object().into_iter().flatten() {
     let mut models = Map::new();
     for one in data(&package, name)? {
       let model = pi(&one);
-      models.insert(one["id"].as_str().unwrap_or_default().to_owned(), classed(model));
+      models.insert(
+        one.get("id").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        classed(model),
+      );
     }
     providers.push((name.clone(), served.as_object().cloned().unwrap_or_default(), models));
   }
@@ -146,8 +148,8 @@ pub(crate) fn refresh(root: &Path) -> Result<ExitCode, Fault> {
   let read = |path: &str| fs::read_to_string(root.join(path)).unwrap_or_default();
   let held: Value = serde_json::from_str(&read(SOURCES)).unwrap_or_default();
   let names: Vec<&String> = pis.as_object().map(|one| one.keys().collect()).unwrap_or_default();
-  let same =
-    held["pi-ai"]["version"] == version.as_str() && held["pi-ai"]["providers"] == json!(names);
+  let same = held.pointer("/pi-ai/version").and_then(Value::as_str) == Some(version.as_str())
+    && held.pointer("/pi-ai/providers") == Some(&json!(names));
   if text == read(SNAPSHOT) && same {
     return Ok(ExitCode::SUCCESS);
   }
@@ -178,7 +180,7 @@ fn provided(name: &str, served: &Value, listed: &Value) -> Result<Provider, Faul
   }
   let mut places = placed(api)?;
   for one in models.values() {
-    places.extend(placed(one["provider"]["api"].as_str())?);
+    places.extend(placed(one.pointer("/provider/api").and_then(Value::as_str))?);
   }
   let names = |key: &str, value: &Value| -> Vec<String> {
     value[key]
@@ -228,7 +230,7 @@ fn placed(api: Option<&str>) -> Result<BTreeSet<String>, Fault> {
   let place = Regex::new(r"\$\{([^}]+)\}")?;
   let mut found = BTreeSet::new();
   for one in place.captures_iter(api.unwrap_or_default()) {
-    found.insert(one?[1].to_owned());
+    found.insert(crate::group(&one?, 1).to_owned());
   }
   Ok(found)
 }
@@ -257,7 +259,8 @@ fn pi(listing: &Value) -> Value {
 /// A model with its class, from the price of a million tokens that it reads: cheap at `CHEAP` or
 /// less, and dear above it or with no price.
 fn classed(mut model: Value) -> Value {
-  let cheap = model["cost"]["input"].as_f64().is_some_and(|price| price <= CHEAP);
+  let cheap =
+    model.pointer("/cost/input").and_then(Value::as_f64).is_some_and(|price| price <= CHEAP);
   if let Some(fields) = model.as_object_mut() {
     fields.insert("class".to_owned(), json!(if cheap { "cheap" } else { "dear" }));
   }
@@ -302,8 +305,10 @@ fn written(providers: &[Provider]) -> String {
   let mut lines = vec!["{".to_owned()];
   for (at, (name, head, models)) in providers.iter().enumerate() {
     let head = python(&Value::Object(head.clone()));
-    let opened =
-      if head == "{}" { "{".to_owned() } else { format!("{}, ", &head[..head.len() - 1]) };
+    let opened = match head.strip_suffix('}') {
+      Some(fields) if head != "{}" => format!("{fields}, "),
+      _ => "{".to_owned(),
+    };
     lines.push(format!("{}: {opened}\"models\": {{", python(&json!(name))));
     let mut ordered: Vec<(&String, &Value)> = models.iter().collect();
     ordered.sort_by(|one, other| one.0.cmp(other.0));
@@ -370,8 +375,10 @@ fn float(value: f64) -> String {
   let (sign, mantissa) = mantissa.strip_prefix('-').map_or(("", mantissa), |rest| ("-", rest));
   let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
   if !(-4..16).contains(&exponent) {
-    let mantissa =
-      if digits.len() > 1 { format!("{}.{}", &digits[..1], &digits[1..]) } else { digits };
+    let mantissa = match digits.split_at_checked(1) {
+      Some((first, rest)) if !rest.is_empty() => format!("{first}.{rest}"),
+      _ => digits,
+    };
     let mark = if exponent < 0 { '-' } else { '+' };
     return format!("{sign}{mantissa}e{mark}{:02}", exponent.unsigned_abs());
   }
@@ -381,7 +388,8 @@ fn float(value: f64) -> String {
   } else if digits.len() <= point {
     format!("{digits}{}.0", "0".repeat(point - digits.len()))
   } else {
-    format!("{}.{}", &digits[..point], &digits[point..])
+    let (whole, part) = digits.split_at_checked(point).unwrap_or((&digits, ""));
+    format!("{whole}.{part}")
   };
   format!("{sign}{text}")
 }

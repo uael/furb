@@ -1,7 +1,6 @@
 //! The kills of a run of the rig, as crashes: the rig kills the life at a random point after the
 //! first answer of each life, and opens it again on its record, which takes the work up. The
 //! measures read the record and the lives that the rig started, which `.run/lives.json` keeps.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{BTreeMap, BTreeSet},
@@ -135,11 +134,8 @@ pub(crate) fn measured(runs: &Path) -> Result<Crashed, Fault> {
     .iter()
     .filter_map(|id| {
       let (at, command) = (commands.iter().position(|one| one.0 == *id)?, line(id)?);
-      let later: Vec<String> = commands[at + 1..]
-        .iter()
-        .filter(|one| one.1 == command)
-        .map(|one| one.0.to_owned())
-        .collect();
+      let later = commands.iter().skip(at + 1).filter(|one| one.1 == command);
+      let later: Vec<String> = later.map(|one| one.0.to_owned()).collect();
       (!later.is_empty()).then(|| Again {
         command: command.to_owned(),
         interrupted: (*id).to_owned(),
@@ -147,12 +143,13 @@ pub(crate) fn measured(runs: &Path) -> Result<Crashed, Fault> {
       })
     })
     .collect();
-  let after = || lives.windows(2).filter(|two| two[0].killed).map(|two| &two[1]);
+  let after =
+    || lives.iter().zip(lives.iter().skip(1)).filter(|(was, _)| was.killed).map(|(_, now)| now);
   Ok(Crashed {
     kills: lives.iter().filter(|life| life.killed).count(),
     resume_seconds: after()
       .filter_map(|life| {
-        let first = held.get(life.entries)?[1].as_f64()? / 1000.0;
+        let first = held.get(life.entries)?.get(1)?.as_f64()? / 1000.0;
         Some(((first - life.spawned) * 100.0).round() / 100.0)
       })
       .collect(),
@@ -165,7 +162,7 @@ pub(crate) fn measured(runs: &Path) -> Result<Crashed, Fault> {
       .map(|one| one.0.to_owned())
       .collect(),
     replies_asked_again: after()
-      .flat_map(|life| open(&facts[..life.entries.min(facts.len())]))
+      .flat_map(|life| open(facts.get(..life.entries).unwrap_or(&facts)))
       .filter(|id| id.starts_with("reply"))
       .collect(),
   })
