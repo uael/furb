@@ -3,7 +3,10 @@
 
 use std::{
   collections::{HashMap, HashSet, VecDeque},
-  sync::atomic::{AtomicI64, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicI64, Ordering},
+  },
   task::{Context, Poll, Waker},
   time::{Duration, Instant},
 };
@@ -312,11 +315,11 @@ impl Outside {
   /// from what one ear said first until no ear says more: a saying, or a verb, whose value goes
   /// nowhere. The first that raises ends it.
   pub(super) fn said(&mut self, sand: &mut Sand, first: (String, Spoken)) -> Result<(), Fault> {
-    let (speaks, spoke) = (self.opened.speaks.clone(), self.opened.spoke.clone());
+    let opened = Arc::clone(&self.opened);
     let mut next = Some(first);
     while let Some((by, spoken)) = next {
       self.asking.clear();
-      let token = sand.call(self, &speaks, vec![Object::string(&by)], vec![])?;
+      let token = sand.call(self, &opened.speaks, vec![Object::string(&by)], vec![])?;
       let got = match spoken {
         Spoken::Saying(saying) => self.says(sand, &saying),
         // What the verb came to goes back to the ear, which takes it at its next poll.
@@ -328,7 +331,7 @@ impl Outside {
           Ok(())
         }
       };
-      let reset = sand.call(self, &spoke, vec![token.clone()], vec![]);
+      let reset = sand.call(self, &opened.spoke, vec![token.clone()], vec![]);
       if let Some(handle) = token.as_ref().handle() {
         self.drop_handle(sand, &handle);
       }
@@ -372,7 +375,7 @@ impl Outside {
   /// It is over, so the object stops, and it raised, so the object raises. A generator that the
   /// host started before it crossed was born there, so its object begins where it waits.
   pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<Object>) -> Answer {
-    let Some((name, at)) = self.hosted.standing.get(&on).cloned() else {
+    let Some(&(_, at)) = self.hosted.standing.get(&on) else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
     let a = a.filter(|one| !one.as_ref().is_none());
@@ -408,7 +411,11 @@ impl Outside {
     {
       return answer;
     }
-    let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
+    let Hosted { standing, handed, .. } = &mut self.hosted;
+    let Some((name, mut ear)) =
+      standing.get(&on).and_then(|(name, _)| handed.ears.remove_entry(name))
+    else {
+      let name = standing.get(&on).map_or("", |(name, _)| name);
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
     let (at, answer) = match self.stepped(sand, &mut *ear, heard) {
@@ -423,8 +430,10 @@ impl Outside {
       Stepped::Over => (At::Over, Answer::Fault(Fault::stop_iteration())),
       Stepped::Raised(fault) => (At::Over, self.raising(sand, fault)),
     };
-    self.hosted.handed.ears.insert(name.clone(), ear);
-    self.hosted.standing.insert(on, (name, at));
+    self.hosted.handed.ears.insert(name, ear);
+    if let Some(standing) = self.hosted.standing.get_mut(&on) {
+      standing.1 = at;
+    }
     answer
   }
 

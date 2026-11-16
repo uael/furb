@@ -3,7 +3,7 @@
 //! A life that opens from its image runs no boot and replays no entry: its session is the one that
 //! monty loads, and each of its ears is a fresh one that stands where the ear before it stood.
 
-use std::{collections::HashMap, num::ParseIntError};
+use std::{collections::HashMap, num::ParseIntError, sync::Arc};
 
 use monty_types::MontyUuid;
 use serde::{Deserialize, Serialize};
@@ -72,7 +72,7 @@ impl Engine {
     let (hosted, crossing) = (&self.outside.hosted, &self.outside.crossing);
     let half = Half {
       made: self.made.clone(),
-      opened: self.outside.opened.clone(),
+      opened: Opened::clone(&self.outside.opened),
       given: self.outside.given.to_string(),
       standing: hosted.standing.iter().map(|(id, (name, at))| (*id, name.clone(), *at)).collect(),
       waits: hosted.waits.iter().map(|(id, wait)| (*id, wait.clone())).collect(),
@@ -110,7 +110,7 @@ impl Engine {
     }
     let mut outside = Outside {
       hosted: Hosted { handed, ..Hosted::default() },
-      opened: half.opened,
+      opened: Arc::new(half.opened),
       given: half.given.parse().map_err(|no: ParseIntError| Fault::refused(no.to_string()))?,
       ..Outside::default()
     };

@@ -25,18 +25,12 @@ impl Fact {
   /// One fact or saying from an object, which must be a tuple whose kind and about are text: a fact has who said
   /// it third, and a saying has its first word there.
   pub fn of(said: ObjectRef<'_>) -> Option<Self> {
-    let held = said.items()?;
-    (held.len() >= 2 && held.iter().take(2).all(|one| one.as_str().is_some()))
-      .then(|| Self(said.to_owned()))
+    fits(&said).then(|| Self(said.to_owned()))
   }
 
   /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.
   pub fn owned(said: Object) -> Option<Self> {
-    let fits = said
-      .as_ref()
-      .items()
-      .is_some_and(|held| held.len() >= 2 && held.iter().take(2).all(|one| one.as_str().is_some()));
-    fits.then_some(Self(said))
+    fits(&said.as_ref()).then_some(Self(said))
   }
 
   /// The kind of the fact, which is its first entry.
@@ -72,6 +66,11 @@ impl Fact {
   fn at(&self, i: usize) -> &str {
     entry(&self.0.as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
   }
+}
+
+/// Whether an object reads as a fact or a saying: a tuple whose kind and about are text.
+fn fits(said: &ObjectRef<'_>) -> bool {
+  (0..2).all(|at| entry(said, at).is_some_and(|one| one.as_str().is_some()))
 }
 
 /// Whether a name is the name of an act of a kind: the kind and a number, as `chain1` or `stand3`.

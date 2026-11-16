@@ -35,3 +35,9 @@ pytest = 180
 # The most heap, in MiB, that a life of the last size of LARGE in crates/host/tests/suite/memory.rs may hold, when its
 # test runs as `memory::bench -- --ignored`.
 memory_heap_mib = 512
+# The most allocations that each fact costs as a life grows, in the same test: the allocations of the whole process
+# while the life grows from one size to the next, over the facts that it said, both in the suite and in the bench.
+memory_allocs_per_fact = 1600
+# The most allocations, of the daemon and of the window, for each frame that a window reads when it attaches at the
+# start of the log of a life, in the test of the slow window, in the suite and in the bench.
+memory_allocs_per_frame = 24

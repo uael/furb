@@ -41,6 +41,7 @@ mod record;
 
 use std::{
   collections::{HashMap, HashSet},
+  sync::{Arc, LazyLock},
   task::Waker,
   time::Instant,
 };
@@ -142,7 +143,7 @@ fn seeded(
   let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
-    sand.call(outside, &outside.opened.seed.clone(), vec![data], vec![])
+    sand.call(outside, &Arc::clone(&outside.opened).seed, vec![data], vec![])
   })??;
   // The sandbox gives a part that many heads share as one part, and a copy of a head walks the
   // arena down to its lowest part, so each head is made here from its two texts.
@@ -180,12 +181,14 @@ fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result
 
 /// The side of the host in one life: its ears and its functions, which the sandbox calls, and what
 /// the host holds of the sandbox, by which each value crosses. Its default is the side of the host
-/// of a life of nothing, which stands in for one that is lent to code of a host.
-#[derive(Default)]
+/// of a life of nothing, which stands in for one that is lent to code of a host at each step of an
+/// ear, so it allocates nothing.
 struct Outside {
   hosted: Hosted,
   crossing: Crossing,
-  opened: Opened,
+  /// The callables of the opening, which a life of nothing shares with each other one, and which a
+  /// call of one of them borrows with no copy of its value.
+  opened: Arc<Opened>,
   /// How many ids the host gave, which names the next.
   given: u128,
   /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
@@ -203,6 +206,26 @@ struct Outside {
   /// The questions of the record that the life opened on, as [`settled`] gives them: while boot
   /// replays the record, no bound of a turn holds a step of the word of such a run.
   settled: HashSet<String>,
+}
+
+/// The callables of a life of nothing, made once: each of its values is a graph of its own, which a
+/// life of nothing at each step of an ear would allocate again.
+static NOTHING: LazyLock<Arc<Opened>> = LazyLock::new(|| Arc::new(Opened::default()));
+
+impl Default for Outside {
+  fn default() -> Self {
+    Self {
+      hosted: Hosted::default(),
+      crossing: Crossing::default(),
+      opened: Arc::clone(&NOTHING),
+      given: 0,
+      stepping: Vec::new(),
+      past: None,
+      asking: HashMap::new(),
+      ending: None,
+      settled: HashSet::new(),
+    }
+  }
 }
 
 impl Host for Outside {
@@ -267,7 +290,7 @@ impl Outside {
     Ok(Self {
       hosted: Hosted { handed, ..Hosted::default() },
       crossing: Crossing { kept, ..Crossing::default() },
-      opened,
+      opened: Arc::new(opened),
       given: 0,
       stepping: Vec::new(),
       past: None,
@@ -318,8 +341,8 @@ impl Outside {
 
   /// The names of the engine that are callable, read where they stand now. Each is the engine's to hold.
   fn bound(&mut self, sand: &mut Sand) -> Result<(), Fault> {
-    let names = self.opened.names.clone();
-    let got = sand.call(self, &names, vec![], vec![])?;
+    let opened = Arc::clone(&self.opened);
+    let got = sand.call(self, &opened.names, vec![], vec![])?;
     self.crossing.names.clear();
     self.crossing.named.clear();
     for (name, one) in got.as_ref().pairs().unwrap_or_default() {
@@ -342,8 +365,8 @@ impl Outside {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     args.insert(0, Object::string(name));
-    let call = self.opened.call.clone();
-    sand.call(self, &call, args, kwargs)
+    let opened = Arc::clone(&self.opened);
+    sand.call(self, &opened.call, args, kwargs)
   }
 
   /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
@@ -358,9 +381,9 @@ impl Outside {
   ) -> Result<Object, Fault> {
     let (mut args, _) = self.inwards(sand, args, vec![])?;
     args.insert(0, Object::string(name));
-    let call = self.opened.checkpoint.clone();
+    let opened = Arc::clone(&self.opened);
     let by = by.map(|text| ("by", Object::string(text))).into_iter().collect();
-    let got = sand.call(self, &call, args, by)?;
+    let got = sand.call(self, &opened.checkpoint, args, by)?;
     self.outward(sand, &got)
   }
 
@@ -408,11 +431,11 @@ impl Outside {
 
   /// Who speaks in the life, and who speaks from now on when a value is given.
   fn site(&mut self, sand: &mut Sand, value: Option<&Object>) -> Result<Object, Fault> {
-    let (site, speaks) = (self.opened.site.clone(), self.opened.speaks.clone());
-    let previous = sand.call(self, &site, vec![], vec![])?;
+    let opened = Arc::clone(&self.opened);
+    let previous = sand.call(self, &opened.site, vec![], vec![])?;
     if let Some(value) = value.filter(|one| !one.as_ref().is_none()) {
       let by = value.as_ref().as_str().map_or_else(|| value.py_repr(), str::to_owned);
-      let token = sand.call(self, &speaks, vec![Object::string(by)], vec![])?;
+      let token = sand.call(self, &opened.speaks, vec![Object::string(by)], vec![])?;
       if let Some(handle) = token.as_ref().handle() {
         self.drop_handle(sand, &handle);
       }
@@ -718,7 +741,7 @@ impl Engine {
       sand.run(OPENING, inputs(&source, &kernel, checkpointer), &mut Nobody("the opening"))?;
     sand.watch();
     let mut outside = Outside::new(given, &opened)?;
-    let Opened { kernel, lasting, parking, park, .. } = outside.opened.clone();
+    let Opened { kernel, lasting, parking, park, .. } = Opened::clone(&outside.opened);
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     outside.hosted.replay = Some(Replay::of(&record, replayed));
@@ -749,7 +772,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = sand.call(outside, &outside.opened.boot.clone(), vec![entries?], given);
+      let got = sand.call(outside, &Arc::clone(&outside.opened).boot, vec![entries?], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
@@ -785,7 +808,7 @@ impl Engine {
         outside.crossing.recorded = true;
         let entries = recorded(sand, outside, tail);
         outside.crossing.recorded = false;
-        sand.call(outside, &outside.opened.fed.clone(), vec![entries?], vec![]).map(drop)
+        sand.call(outside, &Arc::clone(&outside.opened).fed, vec![entries?], vec![]).map(drop)
       })
     });
     self.outside.settled.clear();
@@ -796,7 +819,7 @@ impl Engine {
   /// took and that is not done, as `held` of the checkpointer gives them.
   pub fn held(&mut self) -> Result<Object, Fault> {
     self.run(|sand, outside| {
-      let got = sand.call(outside, &outside.opened.held.clone(), vec![], vec![])?;
+      let got = sand.call(outside, &Arc::clone(&outside.opened).held, vec![], vec![])?;
       outside.outward(sand, &got)
     })
   }
@@ -916,8 +939,8 @@ impl Engine {
   pub fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
     let names = Object::dict(inputs.into_iter().map(|(name, one)| (Object::string(name), one)));
     self.run(|sand, outside| {
-      let (word_of, names) = (outside.opened.word.clone(), outside.inward(sand, &names)?);
-      let got = sand.call(outside, &word_of, vec![Object::string(word), names], vec![])?;
+      let (opened, names) = (Arc::clone(&outside.opened), outside.inward(sand, &names)?);
+      let got = sand.call(outside, &opened.word, vec![Object::string(word), names], vec![])?;
       outside.outward(sand, &got)
     })
   }
@@ -1066,8 +1089,9 @@ impl Engine {
       return Err(Fault::refused(format!("{id} is not parked")));
     }
     self.parked.retain(|(one, _)| one != id);
-    let unpark = self.outside.opened.unpark.clone();
-    self.run(|sand, outside| sand.call(outside, &unpark, vec![Object::string(id)], vec![]))?;
+    let opened = Arc::clone(&self.outside.opened);
+    self
+      .run(|sand, outside| sand.call(outside, &opened.unpark, vec![Object::string(id)], vec![]))?;
     self.verb("wake", vec![Object::string(id)], vec![]).map(|_| ())
   }
 
@@ -1150,7 +1174,7 @@ impl Engine {
   pub fn watch(&mut self, id: &str, then: impl FnMut(&Object) + 'static) -> Result<(), Fault> {
     self.run(|sand, outside| {
       sand
-        .call(outside, &outside.opened.settles.clone(), vec![Object::string(id)], vec![])
+        .call(outside, &Arc::clone(&outside.opened).settles, vec![Object::string(id)], vec![])
         .map(drop)
     })?;
     self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));

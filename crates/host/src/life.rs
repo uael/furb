@@ -45,7 +45,7 @@ use furb::{
 use furb_wire::{ChainTrack, FollowUp, act::interruption, card::Skill};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Value, json, value::to_raw_value};
 use tokio::{
   runtime,
   sync::{
@@ -377,7 +377,7 @@ pub struct Life {
 /// that the log let go since the record holds them, as [`Life::let_go`] says, and what the models
 /// wrote and thought and when each act that lives began, which no fact holds and a page of a
 /// thread reads. The image holds it as a [`Part`].
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 struct Kept {
   log: Vec<Option<Slot>>,
   spent: Spent,
@@ -1437,8 +1437,13 @@ fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>, imagin
   life.told(None);
   life.kept.watch.imaged();
   life.kept.held.shown(&mut life.kept.streams);
+  // The part of the host goes to the write as its text, which one buffer holds, where a copy of
+  // what the life keeps would allocate each act and each event again.
   match image::take(engine, Path::new(record)) {
-    Ok(Some(taken)) => imaging.start(taken, Part { version: VERSION, kept: life.kept.clone() }),
+    Ok(Some(taken)) => match to_raw_value(&Part { version: VERSION, kept: &life.kept }) {
+      Ok(part) => imaging.start(taken, part),
+      Err(no) => life.put(unimaged(&Fault::refused(no.to_string()))),
+    },
     Ok(None) => {}
     Err(no) => life.put(unimaged(&no)),
   }

@@ -276,7 +276,18 @@ pub fn field<'a>(said: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {
 
 /// One entry of a list or a tuple, by its place.
 pub fn entry<'a>(said: &ObjectRef<'a>, at: usize) -> Option<ObjectRef<'a>> {
-  said.items()?.into_iter().nth(at)
+  // The item by its place in the arena of the value, with no list of the items, which `items` of
+  // monty allocates at each call: a fact reads its kind, its act and its maker this way.
+  match unstable::node(*said) {
+    MontyNode::List(ids)
+    | MontyNode::Tuple(ids)
+    | MontyNode::Set(ids)
+    | MontyNode::FrozenSet(ids)
+    | MontyNode::NamedTuple { values: ids, .. } => {
+      ids.get(at).map(|id| unstable::child(*said, *id))
+    }
+    _ => None,
+  }
 }
 
 /// A value as it goes in: every instance of a class of a sandbox in it, wherever it came from, as its name and
@@ -313,20 +324,20 @@ pub(crate) const REPEATED: &str = "<repeated too often>";
 /// host over the value is bounded by its depth and by its size in the sandbox.
 pub(crate) fn carried(value: Object) -> Object {
   let (graph, root) = unstable::graph_parts(&value);
-  let (mut height, mut size) = (Vec::with_capacity(graph.len()), Vec::with_capacity(graph.len()));
+  let mut measured: Vec<(usize, usize)> = Vec::with_capacity(graph.len());
   // The arena holds each part after the parts it holds, so one pass gives each part its height and its size.
   for node in graph.nodes() {
     let (mut high, mut many) = (0usize, 1usize);
     node.for_each_child(|one| {
-      high = high.max(height.get(one.index()).map_or(0, |held: &usize| held.saturating_add(1)));
-      many = many.saturating_add(size.get(one.index()).copied().unwrap_or_default());
+      if let Some((held_high, held_many)) = measured.get(one.index()) {
+        high = high.max(held_high.saturating_add(1));
+        many = many.saturating_add(*held_many);
+      }
     });
-    height.push(high);
-    size.push(many);
+    measured.push((high, many));
   }
   let limit = graph.len().saturating_mul(REPEATS);
-  let (high, many) = (height.get(root.index()), size.get(root.index()));
-  if high.is_some_and(|high| *high < DEEPEST) && many.is_some_and(|many| *many <= limit) {
+  if measured.get(root.index()).is_some_and(|(high, many)| *high < DEEPEST && *many <= limit) {
     return value;
   }
   let mut cut = Cut { graph, into: MontyGraph::new(), left: limit };

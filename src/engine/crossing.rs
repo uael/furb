@@ -7,7 +7,10 @@
 )]
 use std::{
   collections::{HashMap, HashSet},
-  sync::atomic::{AtomicI64, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicI64, Ordering},
+  },
 };
 
 use monty_types::{
@@ -90,7 +93,13 @@ impl Outside {
   /// deeper or longer than the value bounds. A value with no data form that is not callable is let
   /// go of once the whole value went out, since the value may hold it more than once.
   pub(super) fn outward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let (graph, root) = unstable::into_graph_parts(carried(value.clone()));
+    let value = carried(value.clone());
+    // A value whose parts each go out as they stand goes out whole, with no copy of each part: a
+    // fact of the engine is one, and goes out at each ear that hears it.
+    if unstable::graph_parts(&value).0.nodes().iter().all(|node| !changes(&value, node)) {
+      return Ok(value);
+    }
+    let (graph, root) = unstable::into_graph_parts(value);
     let mut shown = HashMap::new();
     let got = self.goes(sand, &graph, root, &mut shown);
     for held in shown.into_keys() {
@@ -143,8 +152,8 @@ impl Outside {
         if let Some(repr) = shown.get(handle) {
           return Ok(repr.clone());
         }
-        let shown_of = self.opened.shown.clone();
-        let repr = sand.call(self, &shown_of, vec![held.clone()], vec![])?;
+        let opened = Arc::clone(&self.opened);
+        let repr = sand.call(self, &opened.shown, vec![held.clone()], vec![])?;
         if let Some(repr) = repr.as_ref().as_str() {
           let repr = Object::repr(repr);
           shown.insert(*handle, repr.clone());
@@ -193,8 +202,8 @@ impl Outside {
       return Ok(marked("name", [("name", Object::string(name))]));
     }
     let n = self.number(handle, &class);
-    let base_of = self.opened.base.clone();
-    let base = sand.call(self, &base_of, vec![class], vec![])?;
+    let opened = Arc::clone(&self.opened);
+    let base = sand.call(self, &opened.base, vec![class], vec![])?;
     let base = self.outward(sand, &base)?;
     Ok(marked("class", [("id", Object::int(n)), ("name", Object::string(name)), ("base", base)]))
   }
@@ -272,8 +281,8 @@ impl Outside {
       // A callable of the record, which no later life holds: what stands in its place, which is
       // equal to each callable, as the one that the word makes again.
       "made" if self.crossing.recorded => {
-        let unmade = self.opened.unmade.clone();
-        sand.call(self, &unmade, vec![], vec![]).map(Some)
+        let opened = Arc::clone(&self.opened);
+        sand.call(self, &opened.unmade, vec![], vec![]).map(Some)
       }
       // A callable the engine made, or a class a word defined, back from the host by the number it
       // went out under.
@@ -313,8 +322,8 @@ impl Outside {
             graph.value(spec).to_owned(),
           ]));
         }
-        let template = self.opened.template.clone();
-        sand.call(self, &template, vec![Object::list(each)], vec![]).map(Some)
+        let opened = Arc::clone(&self.opened);
+        sand.call(self, &opened.template, vec![Object::list(each)], vec![]).map(Some)
       }
       _ => self.made_of(sand, graph, mark, pairs),
     }
@@ -359,6 +368,21 @@ impl Outside {
       return self.named_call(sand, mark, args, named).map(Some);
     }
     builtin_of(mark, args.first().map(Object::as_ref))
+  }
+}
+
+/// Whether a part of a value goes out in another form than it stands in, as `goes` says: a map
+/// that names what it is, a handle, or a class of a word or an instance of one.
+fn changes(value: &Object, node: &MontyNode) -> bool {
+  let graph = unstable::graph_parts(value).0;
+  match node {
+    MontyNode::Dict(pairs) => pairs.iter().any(|(one, _)| graph.value(*one).as_str() == Some(IS)),
+    MontyNode::Handle { .. } => true,
+    MontyNode::ClassType(class) => !class.host_defined,
+    MontyNode::ClassInstance { class_type, .. } => {
+      matches!(graph.node(*class_type), MontyNode::ClassType(class) if !class.host_defined)
+    }
+    _ => false,
   }
 }
 

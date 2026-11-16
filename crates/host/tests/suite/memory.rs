@@ -3,8 +3,10 @@
 //! process is read at the sizes of `SMALL`, with the events and the bytes that a reader who
 //! attaches at the start of the log reads. The ignored test `bench` is the measure of the bench, at
 //! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
-//! `crates/xtask/budgets.toml`. The test counts each byte that the process allocates, so a child of
-//! the suite runs it alone, as `apart` says.
+//! `crates/xtask/budgets.toml`. From each size to the next, both runs bound the allocations that
+//! each fact costs as the life grows, `memory_allocs_per_fact` of the same file. The test counts
+//! each byte and each allocation of the process, so a child of the suite runs it alone, as `apart`
+//! says.
 #![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 #![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
@@ -58,20 +60,21 @@ const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 /// The limits of the benches, whose home is `crates/xtask/budgets.toml`.
 const LIMITS: &str = include_str!("../../../xtask/budgets.toml");
 
-/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench,
-/// which the key `memory_heap_mib` of `crates/xtask/budgets.toml` gives.
-fn budget() -> usize {
+/// The limit `key` of the table `[bench]` of `crates/xtask/budgets.toml`: `memory_heap_mib`, the
+/// most heap that a life of the last large size may hold, and `memory_allocs_per_fact`, the most
+/// allocations that each fact costs as a life grows.
+fn limit(key: &str) -> usize {
   let mut table = "";
   for line in LIMITS.lines().map(str::trim) {
     if let Some(name) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
       table = name;
-    } else if let (Some((key, value)), "bench") = (line.split_once('='), table)
-      && key.trim() == "memory_heap_mib"
+    } else if let (Some((named, value)), "bench") = (line.split_once('='), table)
+      && named.trim() == key
     {
       return value.split('#').next().unwrap_or("").trim().parse().expect("a limit is a number");
     }
   }
-  panic!("the table [bench] of crates/xtask/budgets.toml gives memory_heap_mib")
+  panic!("the table [bench] of crates/xtask/budgets.toml gives {key}")
 }
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life
@@ -237,7 +240,7 @@ fn runtime() -> Runtime {
 
 /// The heap of a life at the sizes of [`SMALL`], or of [`LARGE`] with the budget of the bench.
 fn grown(large: bool) {
-  let budget = budget();
+  let budget = limit("memory_heap_mib");
   let sizes: Vec<usize> = env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
     |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
@@ -263,11 +266,12 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   let (mut facts, mut last) = (0, 0);
-  println!("facts\theap MiB\tbytes/fact\tattach events\tattach MiB");
+  println!("facts\theap MiB\tbytes/fact\tallocs/fact\tattach events\tattach MiB");
   let mut rows = Vec::new();
   let started = Instant::now();
   let mut biggest = (0, 0);
   for &size in sizes {
+    let (from, calls) = (facts, Counted::calls());
     while facts < size {
       let heap = Counted::live();
       assert!(heap < MOST, "the process holds {heap} bytes at {facts} facts, past {MOST}");
@@ -287,26 +291,32 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
       let (end, after) = until(&mut events, done(asked)).await;
       (facts, last) = (facts + more + after, seq.max(end));
     }
+    let allocs = (Counted::calls() - calls) / (facts - from).max(1);
     time::sleep(Duration::from_millis(200)).await;
     let heap = Counted::live().saturating_sub(base);
     let (count, bytes, parts, events, acts) = attached(&life, last).await;
     println!(
-      "{facts}\t{}\t{}\t{count}\t{}\t{}",
+      "{facts}\t{}\t{}\t{allocs}\t{count}\t{}\t{}",
       heap >> 20,
       heap / facts,
       bytes >> 20,
       footprint()
     );
-    rows.push((facts, parts, events, acts));
+    rows.push((facts, allocs, parts, events, acts));
     biggest = (facts, heap);
   }
   life.send(Command::End).await.ok();
   checked(&rows, biggest, budget);
 }
 
-/// What each size showed: what a reader that attaches read and, for the bench, the budget in MiB of
-/// the heap of the last size, as its facts and its bytes.
-fn checked(rows: &[(usize, usize, usize, usize)], last: (usize, usize), budget: Option<usize>) {
+/// What each size showed: the allocations of each fact as the life grew to it, what a reader that
+/// attaches read and, for the bench, the budget in MiB of the heap of the last size, as its facts
+/// and its bytes.
+fn checked(
+  rows: &[(usize, usize, usize, usize, usize)],
+  last: (usize, usize),
+  budget: Option<usize>,
+) {
   if let Some(most) = budget {
     let (facts, heap) = last;
     assert!(
@@ -315,7 +325,15 @@ fn checked(rows: &[(usize, usize, usize, usize)], last: (usize, usize), budget: 
       heap >> 20
     );
   }
-  for &(facts, parts, events, acts) in rows {
+  // The growth to the first size holds the open of the life, so the bound holds from it on.
+  let most = limit("memory_allocs_per_fact");
+  for &(facts, allocs, ..) in rows.iter().skip(1) {
+    assert!(
+      allocs <= most,
+      "as the life grew to {facts} facts, each fact cost {allocs} allocations, past the {most} of memory_allocs_per_fact"
+    );
+  }
+  for &(facts, _, parts, events, acts) in rows {
     assert!(
       parts <= PARTS,
       "at {facts} facts, a reader who attaches reads {parts} parts that a model wrote, past the {PARTS} of the last reply: the log keeps each part of each reply that is done"
@@ -373,16 +391,17 @@ impl Peer {
     }
   }
 
-  /// The facts that the daemon pushed until an act is done.
-  async fn until_done(&mut self, id: &str) -> usize {
-    let mut facts = 0;
+  /// The facts and the frames that the daemon pushed until an act is done.
+  async fn until_done(&mut self, id: &str) -> (usize, usize) {
+    let (mut facts, mut frames) = (0, 0);
     loop {
+      frames += 1;
       match self.read().await {
         Frame::Event { event: Event::Fact(_), .. } => facts += 1,
         Frame::Event { event: Event::Act(act), .. }
           if act.id == id && matches!(act.phase, Phase::Done(_)) =>
         {
-          return facts;
+          return (facts, frames);
         }
         _ => {}
       }
@@ -425,7 +444,7 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
   };
   assert_eq!(driver.ask(open).await, Answer::Done);
   assert_eq!(driver.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Answer::Done);
-  let mut facts = 0;
+  let (mut facts, mut last) = (0, String::new());
   while facts < attached {
     let word =
       format!("for i in range({DRAWS}):\n  chance()\nfor i in range({READS}):\n  read('big.txt')");
@@ -433,7 +452,8 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     else {
       panic!("the word made no rung")
     };
-    facts += driver.until_done(&rung).await;
+    facts += driver.until_done(&rung).await.0;
+    last = rung;
   }
   time::sleep(Duration::from_millis(500)).await;
   let before = Counted::live();
@@ -447,4 +467,22 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     "a window that reads nothing on a life of {facts} facts took {taken} bytes of the daemon, past {most}: the daemon copies the log for it"
   );
   drop(slow);
+  read_at_once(&local, life, &last).await;
+}
+
+/// A window that attaches at the start of the log of a life and reads at once, up to the end of its
+/// last rung: the allocations of the daemon and of the window for each frame that it reads stay
+/// under `memory_allocs_per_frame` of `crates/xtask/budgets.toml`.
+async fn read_at_once(local: &Local, life: String, last: &str) {
+  let mut fast = Peer::dialed(local).await;
+  let calls = Counted::calls();
+  fast.said(Verb::Attach { life, from: 0 }).await;
+  let frames = fast.until_done(last).await.1;
+  let allocs = (Counted::calls() - calls) / frames.max(1);
+  println!("a window that reads {frames} frames at once: {allocs} allocations for each frame");
+  let most = limit("memory_allocs_per_frame");
+  assert!(
+    allocs <= most,
+    "each frame of a window that attaches cost {allocs} allocations, past the {most} of memory_allocs_per_frame"
+  );
 }
