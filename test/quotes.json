@@ -83,5 +83,10 @@
   "word": "k = '''\n<s:old-text>\n'''",
   "python": "k = '''\n<s:old-text>\n'''",
   "open": false
+ },
+ {
+  "word": "<s:a>\n</s:a>\n<s:b>\nHello\n",
+  "python": "a = ''\n\n<s:b>\nHello\n",
+  "open": true
  }
 ]

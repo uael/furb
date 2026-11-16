@@ -367,7 +367,3 @@ pub(super) fn fault(word: &str) -> Option<usize> {
   let no = parse_module(word).err()?;
   Some(word[..usize::from(no.location.start())].matches('\n').count() + 1)
 }
-
-#[cfg(test)]
-#[path = "watch.test.rs"]
-mod test;

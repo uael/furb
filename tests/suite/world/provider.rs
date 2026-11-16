@@ -33,7 +33,10 @@ use std::{
   time::{Duration, Instant},
 };
 
-use futures::{FutureExt, StreamExt};
+use futures::{
+  FutureExt, StreamExt,
+  channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded},
+};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse, Usage},
   message::{AssistantContent, Message, Reasoning, UserContent},
@@ -445,13 +448,13 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
 struct Halting {
   parts: Vec<&'static str>,
   dropped: Arc<AtomicBool>,
-  breaks: bool,
+  breaks: Option<fn() -> CompletionError>,
   bill: Option<Value>,
 }
 
 impl Halting {
   fn writes(parts: &[&'static str]) -> Self {
-    Self { parts: parts.to_vec(), dropped: Arc::default(), breaks: false, bill: None }
+    Self { parts: parts.to_vec(), dropped: Arc::default(), breaks: None, bill: None }
   }
 
   /// A model that tells this bill of its request before it writes these parts of its text, as the
@@ -462,7 +465,10 @@ impl Halting {
 
   /// A model that writes these parts of its text, and whose stream then fails, in place of waiting.
   fn breaks(parts: &[&'static str]) -> Self {
-    Self { breaks: true, ..Self::writes(parts) }
+    Self {
+      breaks: Some(|| CompletionError::ProviderError("the stream broke".into())),
+      ..Self::writes(parts)
+    }
   }
 }
 
@@ -522,8 +528,8 @@ impl CompletionModel for Halting {
     let wrote =
       self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned())));
     let said = stream::iter(billed.into_iter().chain(wrote));
-    if self.breaks {
-      let broke = stream::iter([Err(CompletionError::ProviderError("the stream broke".into()))]);
+    if let Some(broke) = self.breaks {
+      let broke = stream::iter([Err(broke())]);
       return std_future::ready(Ok(StreamingCompletionResponse::stream(
         "halting",
         Box::pin(said.chain(broke)),
@@ -680,7 +686,16 @@ fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_wr
     "  y = 1\n",
     "else:\n",
     "  y = 2\n",
-    "close(x[0] + len(t) + y + len(note))",
+    "z = 1 + \\\n",
+    "  2\n",
+    "try:\n",
+    "  w = 3\n",
+    "except ValueError:\n",
+    "  w = 0\n",
+    "def f(a,\n",
+    "      b):\n",
+    "  return a + b\n",
+    "close(x[0] + len(t) + y + len(note) + z + w + f(1, 2))",
   ];
   let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
   let events: Vec<_> = parts
@@ -692,7 +707,7 @@ fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_wr
   let (mut engine, _) = life("whole", vec![scripted(&model)]);
   let id = asked(&mut engine);
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
-  assert_eq!(got.as_ref().as_int(), Some(3 + 18 + 1 + 6));
+  assert_eq!(got.as_ref().as_int(), Some(3 + 18 + 1 + 6 + 3 + 3 + 3));
 }
 
 #[test]
@@ -1365,6 +1380,276 @@ fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain
   assert!(facts[2].2.contains("the provider dropped that line"), "{}", facts[2].2);
   assert!(facts[3].2.starts_with("('assistant', 'x = 3\\ny = x', "), "{}", facts[3].2);
   assert!(facts[3].2.ends_with("[{'type': 'text', 'text': 'x = 3\\ny = x'}])"), "{}", facts[3].2);
+}
+
+/// The parts of the word of the root that the provider said as writings, each with how many
+/// characters of the word stand before it.
+fn writings(engine: &mut Engine) -> Vec<(String, i64)> {
+  let root = engine.root().to_owned();
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .expect("the root has a transcript");
+  let part = |one: &Fact| {
+    let text = one.word(0).and_then(|word| word.as_str().map(str::to_owned));
+    text.zip(one.word(1).and_then(|word| word.as_int()))
+  };
+  facts.iter().filter(|one| one.kind() == "writing").filter_map(part).collect()
+}
+
+/// The word of the turn that the first reply of the root was done with, once it is done.
+fn turn(engine: &mut Engine) -> String {
+  replied(engine);
+  let root = engine.root().to_owned();
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .expect("the root has a transcript");
+  let done = facts.iter().find(|one| {
+    one.by() == "provider" && one.kind() == "done" && fact::named(one.about(), "reply")
+  });
+  let items = done.and_then(|one| one.word(0)).and_then(|word| word.items());
+  items.and_then(|items| items.get(1)?.as_str().map(str::to_owned)).expect("a turn has a word")
+}
+
+/// A life whose model streams this text as its reply in one part, and the word of the turn that
+/// the reply was done with.
+fn turned(name: &str, text: &str) -> (Engine, String) {
+  let model = streaming(&[(text, Usage::new())]);
+  let (mut engine, _) = life(name, vec![scripted(&model)]);
+  asked(&mut engine);
+  let word = turn(&mut engine);
+  (engine, word)
+}
+
+/// Each text that a model streams as its reply comes to the turn beside it, and the chain of the
+/// first text is told this of what the provider dropped.
+fn turns(name: &str, rows: &[(&str, &str)], told: &str) {
+  for (at, (text, word)) in rows.iter().enumerate() {
+    let (mut engine, got) = turned(&format!("{name}{at}"), text);
+    assert_eq!((text, got.as_str()), (text, *word));
+    assert!(at > 0 || told_of(&mut engine, &[told]), "{text:?} is told {told:?}");
+  }
+}
+
+#[test]
+fn the_statements_of_a_word_run_in_parts_that_end_where_a_line_at_the_left_edge_starts() {
+  let search = "s = await act('search', '', None, 'q', 'm')\n";
+  let parts = ["x = 1\n", search, "if x:\n  y", " = 2\nelsewhere", " = 3\n", "w = 4\n"];
+  let model = Model::new("m", 1000, Halting::writes(&parts)).searches(found_by_native());
+  let (mut engine, _) = life("parts", vec![model]);
+  asked(&mut engine);
+  let given = ["x = 1\n", search, "if x:\n  y = 2\n", "elsewhere = 3\n"];
+  assert!(
+    until(&mut engine, |engine| given.iter().all(|part| wrote(engine, part))),
+    "{:?}",
+    writings(&mut engine)
+  );
+  let starts: Vec<_> = writings(&mut engine).into_iter().map(|(part, _)| part).collect();
+  assert_eq!(starts, given, "a name that starts with else opens no clause of the if before it");
+}
+
+#[test]
+fn a_part_counts_the_characters_of_the_word_before_it_as_python_counts_them() {
+  let model = Halting::writes(&["é = 1\n", "\n", "y = 2\n", "z"]);
+  let (mut engine, _) = life("counted", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  assert!(until(&mut engine, |engine| writings(engine).len() == 2), "{:?}", writings(&mut engine));
+  assert_eq!(writings(&mut engine), [("é = 1\n\n".to_owned(), 0), ("y = 2\n".to_owned(), 7)]);
+}
+
+#[test]
+fn a_whole_word_whose_end_more_text_could_mend_is_the_word_that_ran_and_its_chain_is_told_the_line()
+{
+  let (mut engine, word) = turned("mendable", "x = 1\ny = (2,\n");
+  assert_eq!(word, "x = 1");
+  let told = ["is the word that ran", "line 2: the statement there cannot be python"];
+  assert!(until(&mut engine, |engine| told_of(engine, &told)));
+}
+
+#[test]
+fn a_text_loses_the_marks_of_a_fence_around_it_and_keeps_all_else() {
+  let quoted = "```python\n<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)\n```";
+  let rows = [
+    ("```python\nclose(3)\n```", "close(3)"),
+    ("```\nclose(3)", "close(3)"),
+    (quoted, "<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)"),
+    ("close(3)\n```", "close(3)"),
+    ("x = 1\n```\n", "x = 1"),
+    ("```js and more\nclose(3)", "```js and more"),
+  ];
+  turns("fenced", &rows, "wrapped its word in a fence");
+}
+
+#[test]
+fn a_text_loses_the_markup_of_a_tool_call_around_it_and_keeps_all_else() {
+  let call =
+    "<invoke name=\"python\">\n<parameter name=\"code\">\nclose(3)\n</parameter>\n</invoke>";
+  let inline = "<function_calls>\n<invoke name=\"python\">\n<parameter name=\"code\">x = 1\nclose(x)</parameter>\n</invoke>\n</function_calls>";
+  let rows = [
+    (call, "close(3)"),
+    (inline, "x = 1\nclose(x)"),
+    ("<invoke name=\"bash\">", ""),
+    ("x = 1\n<invoke name=\"a\">", "x = 1"),
+    ("<s:invoke>\nhi\n</s:invoke>\nclose(invoke)", "<s:invoke>\nhi\n</s:invoke>\nclose(invoke)"),
+  ];
+  turns("called", &rows, "in the markup of a tool call");
+}
+
+#[test]
+fn the_close_of_a_tag_of_a_tool_call_alone_after_a_word_of_python_goes() {
+  let rows = [
+    ("x = 1\nclose(x)\n</parameter>", "x = 1\nclose(x)"),
+    ("x = 1\n</invoke>\n</function_calls>", "x = 1"),
+    ("<s:doc>\nhi\n</s:doc>\nclose(doc)\n</parameter>", "<s:doc>\nhi\n</s:doc>\nclose(doc)"),
+    ("x = \"\"\"\n</parameter>\n\"\"\"", "x = \"\"\"\n</parameter>\n\"\"\""),
+    ("<s:doc>\n</parameter>\n</s:doc>\nclose(doc)", "<s:doc>\n</parameter>\n</s:doc>\nclose(doc)"),
+    ("x = (\n</parameter>", "x = (\n</parameter>"),
+  ];
+  turns("closed", &rows, "in the markup of a tool call");
+}
+
+#[test]
+fn the_markup_of_a_tool_call_of_qwen_goes_as_that_of_a_tool_call_of_claude_does() {
+  let call = "<tool_call>\n<function=write>\n<parameter=content>\nx = 1\nclose(x)\n</parameter>\n</function>\n</tool_call>";
+  let rows = [
+    (call, "x = 1\nclose(x)"),
+    ("<function=write><parameter=content>x = 1", "x = 1"),
+    ("<function=write>\n<parameter=content>x = 1\nclose(x)</function>", "x = 1\nclose(x)"),
+    ("x = 1\n<function=write>", "x = 1"),
+  ];
+  turns("qwen", &rows, "the text of a file is a quote");
+}
+
+#[test]
+fn a_break_of_html_alone_goes_before_the_word() {
+  let rows = [
+    ("<br>", ""),
+    ("<br/>\n```\nclose(1)", "close(1)"),
+    ("<BR />\nclose(1)", "close(1)"),
+    ("close(1)\n<br>", "close(1)"),
+  ];
+  turns("broke", &rows, "in a break of HTML");
+}
+
+#[test]
+fn a_first_line_that_starts_with_a_lone_equal_sign_binds_an_underscore() {
+  let rows = [
+    ("= 3\nclose(_)", "_ = 3\nclose(_)"),
+    ("```python\n= read(\"a\")\n```", "_ = read(\"a\")"),
+    ("x == 1", "x == 1"),
+    ("== 1", "== 1"),
+    ("x = 1\n= 2", "x = 1"),
+  ];
+  turns("unnamed", &rows, "a binding with no name");
+}
+
+#[test]
+fn a_fence_or_the_markup_of_a_tool_call_around_a_word_goes_as_each_of_its_lines_ends() {
+  let call = "<invoke name=\"python\">\n<parameter name=\"code\">x = 1\ny = 2\nclose(y)</parameter>\n</invoke>";
+  for (at, text) in ["```python\nx = 1\ny = 2\nclose(y)\n```", call].into_iter().enumerate() {
+    let (mut engine, word) = turned(&format!("wrapped{at}"), text);
+    assert_eq!(word, "x = 1\ny = 2\nclose(y)");
+    assert_eq!(writings(&mut engine), [("x = 1\ny = 2\n".to_owned(), 0)], "{text:?}");
+  }
+}
+
+#[test]
+fn the_mark_that_ends_a_fence_or_a_tool_call_starts_no_statement() {
+  for (at, end) in ["```", "```\n", "</parameter>", "</invoke>\n"].into_iter().enumerate() {
+    let (mut engine, word) = turned(&format!("ends{at}"), &format!("x = 1\nclose(x)\n{end}"));
+    assert_eq!(word, "x = 1\nclose(x)");
+    assert_eq!(writings(&mut engine), [("x = 1\n".to_owned(), 0)], "{end:?}");
+  }
+}
+
+#[test]
+fn a_line_of_three_backticks_at_the_end_of_a_word_stays_while_a_quote_stands_open_before_it() {
+  let rows: Vec<Value> =
+    serde_json::from_str(include_str!("../../../test/quotes.json")).expect("the table of quotes");
+  for (at, row) in rows.iter().enumerate() {
+    let word = row["word"].as_str().expect("a word");
+    let text = format!("{word}\n```");
+    let (_, got) = turned(&format!("quoted{at}"), &text);
+    let open = row["open"].as_bool().expect("whether a quote stands open");
+    assert_eq!(got, if open { text.as_str() } else { word.trim_end() }, "{word:?}");
+  }
+}
+
+#[test]
+fn a_mark_whose_name_is_no_python_name_opens_no_quote_so_a_reply_ends_at_its_line() {
+  let (mut engine, word) = turned("dashed", "<s:old-text>\nHello\n```");
+  assert_eq!(word, "<s:old-text>");
+  assert!(until(&mut engine, |engine| told_of(engine, &["raised", "SyntaxError"])));
+}
+
+#[test]
+fn a_model_asked_again_writes_its_word_from_its_start() {
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let halting =
+    Halting { breaks: Some(|| usage_limit(from_now(-3600))), ..Halting::writes(&["x = (\n"]) };
+  let model =
+    First { halting, then: streaming(&[("z = 3\nclose(z)", usage)]), called: Arc::default() };
+  let (mut engine, _) = life("again", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(3))
+  };
+  assert!(until(&mut engine, done), "{:?}", said(&mut engine));
+  assert_eq!(writings(&mut engine), [("z = 3\n".to_owned(), 0)]);
+}
+
+/// A model whose one stream says each part that the test sends it, and ends when the test drops
+/// its sender.
+#[derive(Clone)]
+struct Paced(Arc<Mutex<Option<UnboundedReceiver<RawStreamingChoice>>>>);
+
+impl Paced {
+  fn new() -> (Self, UnboundedSender<RawStreamingChoice>) {
+    let (send, said) = unbounded();
+    (Self(Arc::new(Mutex::new(Some(said)))), send)
+  }
+}
+
+impl CompletionModel for Paced {
+  fn completion(
+    &self,
+    _: CompletionRequest,
+  ) -> impl Future<Output = Result<CompletionResponse, CompletionError>> {
+    std_future::ready(Err(CompletionError::ProviderError("the provider streams".into())))
+  }
+
+  fn stream(
+    &self,
+    _: CompletionRequest,
+  ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> {
+    let said = self.0.lock().expect("the parts").take().expect("the model streams once");
+    std_future::ready(Ok(StreamingCompletionResponse::stream("paced", Box::pin(said.map(Ok)))))
+  }
+}
+
+#[test]
+fn a_word_whose_first_part_a_pause_held_runs_whole_with_its_turn_and_in_no_part() {
+  let (model, send) = Paced::new();
+  let (writes, told) = heard();
+  let provider = Provider::new(yard("held").display().to_string(), vec![scripted(&model)]);
+  let mut engine = lived(provider.writes(writes));
+  let id = asked(&mut engine);
+  let started = |engine: &mut Engine| said(engine).iter().any(|(kind, ..)| kind == "started");
+  assert!(until(&mut engine, started), "the provider took the reply");
+  let root = engine.root().to_owned();
+  engine.pause(&root, verbs::Pause::default()).expect("the chain pauses");
+  let part = |text: &str| RawStreamingChoice::Message(text.to_owned());
+  send.unbounded_send(part("x = 1\ny")).expect("the model writes");
+  send.unbounded_send(part(" = 2\n")).expect("the model writes");
+  let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
+  assert!(until(&mut engine, |_| parts(&told) == 2), "the ear heard each part in turn");
+  engine.wake(&root).expect("the chain wakes");
+  send.unbounded_send(part("z = 3\nclose(z)")).expect("the model writes");
+  let end = RawStreamingChoice::FinalResponse(StreamFinal::new("paced", Usage::new()));
+  send.unbounded_send(end).expect("the model ends");
+  drop(send);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  assert_eq!(writings(&mut engine), []);
 }
 
 #[test]
