@@ -30,7 +30,7 @@ use crate::{
   image::{self, Image},
   minify,
   skill::{self, Places},
-  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
+  world::{self, Catalog, Mode, Retries, Scratch, Writes, skills::skills},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -255,8 +255,8 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider,
   /// the extensions, each official extension, the files, the commands and time, and the store and
-  /// the log of the life when the life keeps. The ears of the servers of MCP and of
-  /// the fetch do work, so a life that inspects hears them silent.
+  /// the log of the life when the life keeps. The ears of the kits and of the fetch do work, so a
+  /// life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -342,20 +342,12 @@ impl Opening {
     let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
     let user = config.clone();
-    let servers = world::mcp::Settings::of(project.clone(), config.clone(), gallery.clone());
     let life = self.record.clone().unwrap_or_default();
     let ears = vec![
       ("provider", provider),
       (skill::EAR, skill::telling(played, refused, places.clone())),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       ("kits", working(works.then(|| world::kits::kits(life, project, gallery.clone(), places)))),
-      (
-        "mcp",
-        working(works.then(|| {
-          let again = servers.clone();
-          lasting(mcp(servers), move || mcp(again.clone()))
-        })),
-      ),
       ("fetch", working(works.then(|| lasting(world::fetch(), world::fetch)))),
       (
         "files",

@@ -87,9 +87,8 @@ contract needs a request of the owner.
 | `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`, and a read of an image, which a model sees. |
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs`, `src/world/bash/` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. `shell.rs` holds the sh and its PATH, `group.rs` the processes that a command ends together, and `kept.rs` the head and the tail that a stream keeps. |
-| `src/world/kits.rs` | The host of the kits: the process of each kit that a life plays, started at the first act of a kind that its manifest names, spoken to on its stdin and its stdout, and ended with the life. |
+| `src/world/kits.rs`, `src/world/kits/uv.rs` | The host of the kits: the process of each kit that a life plays, started at the first act of a kind that its manifest names, a module of Python with a header of PEP 723 on uv, spoken to on its stdin and its stdout, and ended with the life, after a grace in which it ends its own work. |
 | `src/world/fetch.rs` | The fetch: a page over HTTP as a text, as Markdown when it is HTML, which the question `fetch` asks. |
-| `src/world/mcp.rs`, `src/world/mcp/` | The client of the MCP servers: the ear `mcp`, which answers the acts `mcp_*` and says the fact `mcp_changed`, and the servers, their config, their sign-in and their tools. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
