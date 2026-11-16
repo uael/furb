@@ -769,7 +769,7 @@ def opened(id, of, **words):
 
 def shown(text, show):
   lines = text.lines
-  return "\n".join(x[:1000] + f"... ({len(x)} chars)" if (x := lines[i - 1])[1000:] else x for i in picked(show, lines))
+  return "\n".join(lines[i - 1] for i in picked(show, lines))
 
 
 def unquoted(word):

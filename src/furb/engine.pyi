@@ -1067,7 +1067,7 @@ def opened(id: str, of: str, **words: object) -> Tell:
   """The paragraph that opens an act: its header with no event and the binding of each of its words, then the statement that binds the name of the act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so a model reads what an await of it gives."""
 
 def shown(text: Text, show: Show) -> str:
-  """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters and then marked with its length, as ... (1045 chars), so a long line of a command or of a file does not fill the turns and a cut line does not read as the end of the text."""
+  """The lines of a text that a show picks, whole and as they are, one on each line, so a line of any length reaches the model as the text holds it: LARGEST bounds what a read tells, and a command bounds what its streams tell."""
 
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.

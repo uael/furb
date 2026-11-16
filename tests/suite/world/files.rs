@@ -136,7 +136,7 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder
   fs::create_dir_all(at.join("sub").join("deep")).expect("the folders");
   fs::write(at.join("B.txt"), "b").expect("the file");
   let mut engine = life(&at, None);
-  let large = text(&mut engine, &format!("read({})", quoted(&at.join("large.txt"))));
+  let large = text(&mut engine, &format!("read({}, HIDDEN)", quoted(&at.join("large.txt"))));
   assert_eq!(large.map(|one| one.1 == content), Ok(true));
   let listing = text(&mut engine, &format!("read({})", quoted(&at))).expect("a folder reads");
   assert_eq!(listing.1, "B.txt\nlarge.txt\nsub/");
