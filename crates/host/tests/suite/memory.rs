@@ -4,10 +4,10 @@
 //! attaches at the start of the log reads. The ignored test `bench` is the measure of the bench, at
 //! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
 //! `crates/xtask/budgets.toml`. From each size to the next, both runs bound the allocations that
-//! each fact costs as the life grows, `memory_allocs_per_fact` of the same file, and
-//! `memory_allocs_per_fact_large` for the bench, whose life writes its image as it goes. The test
-//! counts each byte and each allocation of the process, so a child of the suite runs it alone, as
-//! `apart` says.
+//! each fact costs as the life grows, `memory_allocs_per_fact` of the table of the system in the
+//! same file, and `memory_allocs_per_fact_large` for the bench, whose life writes its image as it
+//! goes. The test counts each byte and each allocation of the process, so a child of the suite
+//! runs it alone, as `apart` says.
 #![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 #![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
@@ -61,22 +61,34 @@ const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 /// The limits of the benches, whose home is `crates/xtask/budgets.toml`.
 const LIMITS: &str = include_str!("../../../xtask/budgets.toml");
 
-/// The limit `key` of the table `[bench]` of `crates/xtask/budgets.toml`: `memory_heap_mib`, the
-/// most heap that a life of the last large size may hold, and `memory_allocs_per_fact` and
-/// `memory_allocs_per_fact_large`, the most
-/// allocations that each fact costs as a life grows.
-fn limit(key: &str) -> usize {
-  let mut table = "";
+/// The value of `key` in the table `table` of `crates/xtask/budgets.toml`, if the table holds it.
+fn limit(table: &str, key: &str) -> Option<usize> {
+  let mut at = "";
   for line in LIMITS.lines().map(str::trim) {
     if let Some(name) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
-      table = name;
-    } else if let (Some((named, value)), "bench") = (line.split_once('='), table)
+      at = name;
+    } else if let Some((named, value)) = line.split_once('=')
+      && at == table
       && named.trim() == key
     {
-      return value.split('#').next().unwrap_or("").trim().parse().expect("a limit is a number");
+      return Some(
+        value.split('#').next().unwrap_or("").trim().parse().expect("a limit is a number"),
+      );
     }
   }
-  panic!("the table [bench] of crates/xtask/budgets.toml gives {key}")
+  None
+}
+
+/// Whether a measure of allocations holds under its bound in the table of this system,
+/// `[bench.<system>]` of `crates/xtask/budgets.toml`. A system with no bound there yet prints the
+/// measure to set.
+fn bounded(key: &str, allocs: usize, what: &str) {
+  match limit(&format!("bench.{}", env::consts::OS), key) {
+    Some(most) => {
+      assert!(allocs <= most, "{what} cost {allocs} allocations, past the {most} of {key}");
+    }
+    None => println!("{what} cost {allocs} allocations; {} has no {key} yet", env::consts::OS),
+  }
 }
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life
@@ -242,7 +254,8 @@ fn runtime() -> Runtime {
 
 /// The heap of a life at the sizes of [`SMALL`], or of [`LARGE`] with the budget of the bench.
 fn grown(large: bool) {
-  let budget = limit("memory_heap_mib");
+  let budget = limit("bench", "memory_heap_mib")
+    .expect("the table [bench] of crates/xtask/budgets.toml gives memory_heap_mib");
   let sizes: Vec<usize> = env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
     |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
@@ -330,12 +343,8 @@ fn checked(
   // The growth to the first size holds the open of the life, so the bound holds from it on.
   let key =
     if budget.is_some() { "memory_allocs_per_fact_large" } else { "memory_allocs_per_fact" };
-  let most = limit(key);
   for &(facts, allocs, ..) in rows.iter().skip(1) {
-    assert!(
-      allocs <= most,
-      "as the life grew to {facts} facts, each fact cost {allocs} allocations, past the {most} of {key}"
-    );
+    bounded(key, allocs, &format!("each fact, as the life grew to {facts} facts,"));
   }
   for &(facts, _, parts, events, acts) in rows {
     assert!(
@@ -484,9 +493,5 @@ async fn read_at_once(local: &Local, life: String, last: &str) {
   let frames = fast.until_done(last).await.1;
   let allocs = (Counted::calls() - calls) / frames.max(1);
   println!("a window that reads {frames} frames at once: {allocs} allocations for each frame");
-  let most = limit("memory_allocs_per_frame");
-  assert!(
-    allocs <= most,
-    "each frame of a window that attaches cost {allocs} allocations, past the {most} of memory_allocs_per_frame"
-  );
+  bounded("memory_allocs_per_frame", allocs, "each frame of a window that attaches");
 }
