@@ -1618,21 +1618,16 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
 /// started.
 #[cfg(unix)]
 fn systems_read(at: &Path) -> Vec<String> {
-  let mut args: Vec<(usize, String)> = fs::read_dir(at)
-    .unwrap()
-    .filter_map(|one| {
-      let path = one.ok()?.path();
-      let n = path.file_name()?.to_str()?.strip_prefix("args.")?.parse().ok()?;
-      Some((n, fs::read_to_string(path).ok()?))
-    })
-    .collect();
-  args.sort();
-  let file = |args: &str| {
+  // The command line of the test writes its pid in `pids` as it starts, so the file holds the
+  // order of its runs, which the pids alone lose once the system wraps them.
+  let pids = fs::read_to_string(at.join("pids")).unwrap();
+  let file = |pid: &str| {
+    let args = fs::read_to_string(at.join(format!("args.{pid}"))).unwrap();
     let args: Vec<&str> = args.split('\0').collect();
     let at = args.iter().position(|one| *one == "--system-prompt-file").expect("a system prompt");
     fs::read_to_string(args[at + 1]).unwrap()
   };
-  args.iter().map(|(_, one)| file(one)).collect()
+  pids.lines().map(file).collect()
 }
 
 /// The opening of a life whose model is the claude command line of a test, which writes the words
