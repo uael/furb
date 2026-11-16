@@ -397,16 +397,13 @@ fn imaged(app: &App, stage: &View, screen: &mut Screen<Model>) {
   });
 }
 
-/// The stage of each widget of the left side at its margin and its width, so the margin that
-/// centers the left side is one place.
+/// The stage of each widget of the left side at the left edge and at the width that the list
+/// leaves it.
 fn staged(screen: &mut Screen<Model>, stage: &View) {
-  let stage = stage.clone();
-  screen.part(
-    |model: &Model| (model.margin(), model.wide()),
-    move |(margin, wide)| {
-      stage.position(Edge::Left, *margin).width(u16::try_from(*wide).unwrap_or(u16::MAX));
-    },
-  );
+  let stage = stage.position(Edge::Left, 0);
+  screen.part(Model::wide, move |wide| {
+    stage.width(u16::try_from(*wide).unwrap_or(u16::MAX));
+  });
 }
 
 /// The review of the changes of a project over the whole window, while one stands, in the frame of

@@ -863,7 +863,7 @@ impl Model {
     if rises {
       // Its foot stands on the last row of the input, over the row of hints.
       let y = self.size.1.saturating_sub(1).saturating_sub(u16::try_from(rows.len()).ok()?);
-      return Some(Over { x: self.margin(), y, width, rows });
+      return Some(Over { x: 0, y, width, rows });
     }
     let x = columns.saturating_sub(width) / 2;
     Some(Over { x, y: OVER, width, rows })

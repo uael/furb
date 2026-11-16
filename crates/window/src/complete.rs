@@ -160,7 +160,6 @@ impl Model {
   /// The place among the rows that match of the row of the panel at a cell, which a click takes.
   pub(crate) fn completion_at(&self, x: u16, y: u16) -> Option<usize> {
     let (_, top, width, lines) = self.drawn_completion()?;
-    let x = x.checked_sub(self.margin())?;
     let row = usize::from(y.checked_sub(top)?);
     if x >= width || row < HEAD || row >= lines.len() {
       return None;

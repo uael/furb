@@ -12,7 +12,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
   code::{Colors, Gutter},
   line::{self, Line, run},
-  tokens::{APART, Role, Tokens},
+  tokens::{APART, PROSE, Role, Tokens},
 };
 
 /// The lines of a text of markdown in a count of columns, each from the column of the prose.
@@ -196,7 +196,7 @@ impl Prose<'_> {
       if space && used == 0 {
         continue;
       }
-      if used + word.content.width() > self.room && used > 0 && !space {
+      if used + word.content.width() > self.room.min(PROSE) && used > 0 && !space {
         self.out.push(line);
         line = vec![run(" ".repeat(indent), Style::new())];
         used = indent;

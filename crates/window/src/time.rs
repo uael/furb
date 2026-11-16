@@ -245,7 +245,7 @@ impl Model {
   /// A drag on the left side: on the track of the bar of the time, the thread goes to the moment
   /// under the pointer.
   pub(crate) fn dragged_left(&mut self, x: u16, y: usize) {
-    let Some(x) = x.checked_sub(self.margin()).map(usize::from) else { return };
+    let x = usize::from(x);
     if let Some(Click::Time(at)) = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x))
     {
       self.client.reach(at);

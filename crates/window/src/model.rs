@@ -438,7 +438,7 @@ impl Model {
 
   /// The columns of the list of cards: its least width, and half of the columns that a wider
   /// window leaves past the measure of the left side, up to its most, so a long title stands whole
-  /// where the window has the room, and the left side keeps a margin on each side.
+  /// where the window has the room, and the left side takes the rest.
   pub(crate) fn list_width(&self) -> u16 {
     let spare = self.size.0.saturating_sub(LIST + 1 + MEASURE) / 2;
     LIST + spare.min(LISTS - LIST)
@@ -449,23 +449,15 @@ impl Model {
     self.list_width() + 1
   }
 
-  /// How many columns the left side draws: those that the list leaves it, at most a measure.
+  /// How many columns the left side draws: those that the list leaves it. It draws up to two
+  /// columns before its last, apart from the list.
   pub(crate) fn wide(&self) -> usize {
-    usize::from(self.side().min(MEASURE))
-  }
-
-  /// The column of the window where the left side starts, which centers it in its room. The left
-  /// side draws up to two columns before its last, apart from the list, so it centers what it
-  /// draws.
-  pub(crate) fn margin(&self) -> u16 {
-    let spare = self.side().saturating_sub(MEASURE);
-    u16::midpoint(spare, 2).min(spare)
+    usize::from(self.side())
   }
 
   /// The pointer on the left side, at a column of its rows.
   pub(crate) fn pointed(&self) -> Option<(u16, u16)> {
-    let (x, y) = self.pointer.filter(|(x, _)| !self.on_list(*x))?;
-    Some((x.checked_sub(self.margin())?, y))
+    self.pointer.filter(|(x, _)| !self.on_list(*x))
   }
 
   /// The columns that the list leaves to the left side while the list shows.

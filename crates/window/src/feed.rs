@@ -31,7 +31,7 @@ use crate::{
   question::{closed, person},
   review::shown_at,
   thread::{Boxed, Click, Item, Items, Row, width},
-  tokens::{APART, Loader, PROMPT, Role, WORKS, mixed},
+  tokens::{APART, Loader, PROMPT, PROSE, Role, WORKS, mixed},
 };
 
 /// The word on the line of a block whose model has not begun to write it.
@@ -418,6 +418,7 @@ impl Feed<'_> {
     let t = &self.model.tokens;
     let pictures = images::references(text);
     let room = self.wide.saturating_sub(6 + width(&right) + 2 * usize::from(!right.is_empty()));
+    let room = room.min(PROSE);
     let lines = picture::shown(&self.model.homed(text))
       .lines()
       .flat_map(|line| wrapped(line, room))

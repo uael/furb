@@ -36,9 +36,13 @@ pub(crate) const LISTS: u16 = 56;
 /// The least width of the window that shows the list beside the thread.
 pub(crate) const BESIDE: u16 = 100;
 
-/// The most columns that the left side draws: a line of code of 100 columns beside its numbers.
-/// A wider left side centers its column, so a line of prose stays short to read.
+/// The columns that the left side takes before the list of cards grows past its least width: a
+/// line of code of 100 columns beside its numbers.
 pub(crate) const MEASURE: u16 = 110;
+
+/// The most columns of a line of prose, a paragraph of a model or the text of a message, so it
+/// stays short to read on a wide window, where a block of code and a table take the whole side.
+pub(crate) const PROSE: usize = 100;
 
 /// The columns between two things of one line, as the parts of the launcher, and the mark and the
 /// button of the head of a thread.
