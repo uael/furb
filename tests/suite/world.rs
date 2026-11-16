@@ -13,5 +13,6 @@ mod operator;
 mod provider;
 mod reader;
 mod schema;
+mod scratch;
 mod search;
 mod store;

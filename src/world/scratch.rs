@@ -472,7 +472,3 @@ fn absolute(path: &Path) -> Result<PathBuf, Fault> {
   };
   Ok(resolved(&here, &path.to_string_lossy()))
 }
-
-#[cfg(test)]
-#[path = "scratch.test.rs"]
-mod test;
