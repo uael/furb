@@ -729,18 +729,25 @@ impl Model {
     row.names.iter().find(|one| one.0.contains(&usize::from(x))).map(|one| one.1.clone())
   }
 
-  /// The name under the pointer, which the machine of the open thread reads, or none.
-  pub(crate) fn pointed_name(&mut self) {
+  /// The name under the pointer, which the machine of the open thread reads, or none. A move that
+  /// changes nothing else keeps the rows that it read for its draw.
+  pub(crate) fn pointed_name(&mut self, moved: bool) {
     let rows = self.left_rows();
     let name = self.pointed().and_then(|at| Self::named(&rows, at));
     let key = self.client.thread.as_ref().map(|one| one.thread.key.clone());
     let pointed = key.as_ref().zip(name.as_deref());
     self.client.inspect(pointed);
+    if moved {
+      self.moved_rows.replace(Some(rows));
+    }
   }
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
   /// the dock; then the input.
   pub(crate) fn left_rows(&self) -> Vec<Row> {
+    if let Some(rows) = self.moved_rows.take() {
+      return rows;
+    }
     let mut rows = match self.feed() {
       None => self.home(),
       Some(feed) => {

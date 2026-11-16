@@ -6,7 +6,7 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{io, path::PathBuf, time::Duration};
+use std::{cell::RefCell, io, path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
 use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
@@ -28,6 +28,7 @@ use crate::{
   list::Row,
   names::Names,
   pick::Picker,
+  thread,
   tokens::{BESIDE, CALL, LIST, LISTS, MEASURE, Tokens},
 };
 
@@ -73,6 +74,9 @@ pub(crate) struct Model {
   pub(crate) colors: Colors,
   /// The names of each text of python that the window read.
   pub(crate) names: Names,
+  /// The rows of the left side that a move of the pointer read, which the draw of that move takes:
+  /// a move changes no row, and the rows cost the most of what the window does.
+  pub(crate) moved_rows: RefCell<Option<Vec<thread::Row>>>,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
@@ -123,6 +127,7 @@ impl Model {
       fault: None,
       colors: Colors::new(),
       names: Names::default(),
+      moved_rows: RefCell::default(),
       armed: None,
       picker: None,
       word: None,

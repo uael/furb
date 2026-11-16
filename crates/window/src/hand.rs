@@ -253,10 +253,17 @@ fn watched(app: &App, window: &Shared) {
 /// The editor of the input heard: a change of its text, which the draft takes with the place of
 /// its caret, and a move of its caret to another word, which completes that word.
 fn heard_edits(window: &Shared, area: &Textarea) {
-  let (on, editor) = (Rc::clone(window), area.clone());
+  // The caret that an edit completed at, until the end of the event of that edit: the editor tells
+  // the move of the caret of an edit after the edit, and a second layout of the window for it
+  // would show nothing new.
+  let completed = Rc::new(Cell::new(None));
+  let (on, editor, at) = (Rc::clone(window), area.clone(), Rc::clone(&completed));
   area.on_change(move |cx, text| {
     let text = text.to_owned();
     let caret = usize::try_from(editor.cursor_offset()).unwrap_or_default();
+    at.set(Some(caret));
+    let ended = Rc::clone(&at);
+    cx.app().defer(move |_| ended.set(None));
     tell(cx.app(), &on, |model| {
       // A word that he writes leaves what a first press of a key named.
       if !text.is_empty() {
@@ -278,6 +285,9 @@ fn heard_edits(window: &Shared, area: &Textarea) {
   let (on, editor) = (Rc::clone(window), area.clone());
   area.on_cursor_change(move |cx, _, _| {
     let caret = usize::try_from(editor.cursor_offset()).unwrap_or_default();
+    if completed.get() == Some(caret) {
+      return;
+    }
     tell(cx.app(), &on, |model| model.client.complete_at(caret));
   });
 }
@@ -1489,7 +1499,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   let (on, does, verb) = tell(app, window, |model| {
     let y = usize::from(event.y);
     model.pointer = Some((event.x, event.y));
-    model.pointed_name();
+    model.pointed_name(event.kind == MouseEventKind::Moved);
     let on = model.on_list(event.x);
     let (does, verb) = match (event.kind, on) {
       (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
