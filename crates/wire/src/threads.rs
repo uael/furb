@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::State;
 
+/// The sign of an image in a text that names it by its name, before its name, as the title of a
+/// thread and the input of a client show it.
+pub const PICTURE: &str = "▣ ";
+
 /// One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
 /// made and the questions of them that wait, and its state. A thread is over once its prompt
 /// and each of its messages is done, and a message to a thread that is over opens it again until
@@ -15,7 +19,8 @@ pub struct ChainThread {
   pub prompt: String,
   /// The name of the thread: the label of its chain for the first thread that no operator made on
   /// a chain under the root, the name of the session for the first thread of the operator on the
-  /// root, and else the first line of its message that is not empty.
+  /// root, and else the first line of its message that is not empty, with each image that it names
+  /// as its name after [`PICTURE`].
   pub title: String,
   pub messages: Vec<String>,
   pub asked: Vec<String>,

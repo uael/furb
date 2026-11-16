@@ -12,6 +12,7 @@ use crate::{
   keys::Does,
   line::{Line, edged, run, spread},
   model::{Key, Link, Model},
+  picture,
   tokens::{CALL, Loader, Role, WORKS, called, mixed},
 };
 
@@ -243,8 +244,8 @@ impl Model {
     let live = self.live(key, card);
     let (mark, style) =
       if live { ("● ", t.style(Role::Title)) } else { ("  ", t.style(Role::Prose)) };
-    let title =
-      vec![run(mark, on(Style::new().fg(t.live))), run(card.thread.title.clone(), on(style))];
+    let marked = picture::marked(&card.thread.title, on(style), on(style.fg(t.accent)));
+    let title = [vec![run(mark, on(Style::new().fg(t.live)))], marked].concat();
     let first = spread(title, self.state(key, card, ground), self.card_width(), on(Style::new()));
 
     let project = project(card);

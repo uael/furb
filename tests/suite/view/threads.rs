@@ -230,7 +230,7 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
 }
 
 #[test]
-fn a_thread_whose_message_names_an_image_is_titled_with_the_name_of_the_image() {
+fn a_thread_whose_message_names_an_image_is_titled_with_the_sign_and_the_name_of_the_image() {
   let image = format!("![shot.png](furb-image://{}.png)", "a".repeat(64));
   let facts = [
     json!(["chain", "chain1", "operator", "", "root", ""]),
@@ -239,7 +239,7 @@ fn a_thread_whose_message_names_an_image_is_titled_with_the_name_of_the_image() 
   let acts = folded(facts);
   assert_eq!(
     tree(&acts, "chain1"),
-    vec![(0, "prompt1".to_owned(), "What is shot.png?".to_owned())]
+    vec![(0, "prompt1".to_owned(), "What is ▣ shot.png?".to_owned())]
   );
 }
 

@@ -13,7 +13,9 @@ use furb_wire::{
   act::{Act, Kind, WATCH, operator},
   anchor::Anchor,
   state::{State, working},
-  threads::{Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, ThreadNode},
+  threads::{
+    Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, PICTURE, ThreadNode,
+  },
 };
 
 use super::{fold::followed, named::NAME};
@@ -413,10 +415,10 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     _ => Origin::Ear,
   };
   let title = said_of(act).lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
-  // An image that the title names stands as its name.
-  let title = images::references(title)
-    .into_iter()
-    .fold(title.to_owned(), |title, one| title.replacen(&one.text, &one.name, 1));
+  // An image that the title names stands as its name after its sign.
+  let title = images::references(title).into_iter().fold(title.to_owned(), |title, one| {
+    title.replacen(&one.text, &format!("{PICTURE}{}", one.name), 1)
+  });
   let asked: Vec<String> = act.asks_operator().then(|| act.id.clone()).into_iter().collect();
   ChainThread {
     prompt: act.id.clone(),

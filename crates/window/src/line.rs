@@ -40,18 +40,27 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
   kept.trim_end_matches([' ', '·']).to_owned() + "…"
 }
 
-/// A row of a count of columns: the runs of its left, of which the last gives way, then the runs
-/// of its right at its end, two columns after the left at least.
-pub(crate) fn spread(mut left: Line, right: Line, room: usize, fill: Style) -> Line {
+/// A row of a count of columns: the runs of its left, of which the one that crosses its room gives
+/// way and those after it go, then the runs of its right at its end, two columns after the left at
+/// least.
+pub(crate) fn spread(left: Line, right: Line, room: usize, fill: Style) -> Line {
   let wide = |line: &Line| line.iter().map(|span| span.content.width()).sum::<usize>();
   let taken = match wide(&right) {
     0 => 0,
     wide => wide + 2,
   };
-  if let Some(last) = left.pop() {
-    let content = cut(&last.content, room.saturating_sub(taken + wide(&left)));
-    left.push(run(content, last.style));
-  }
+  let free = room.saturating_sub(taken);
+  let mut left: Line = left
+    .into_iter()
+    .scan(0, |used, one| {
+      let content =
+        (*used < free || one.content.is_empty()).then(|| cut(&one.content, free - *used))?;
+      let whole = content == one.content;
+      // The run that gave way ends the left.
+      *used = if whole { *used + content.width() } else { free };
+      Some(run(content, one.style))
+    })
+    .collect();
   let used = wide(&left) + wide(&right);
   left.push(run(" ".repeat(room.saturating_sub(used)), fill));
   left.extend(right);

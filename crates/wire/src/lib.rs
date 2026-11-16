@@ -35,7 +35,7 @@ pub use page::{
 };
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
-  Aside, Attention, Began, ChainAside, ChainThread, ChainTrack, Concern, NoteRun, Origin,
+  Aside, Attention, Began, ChainAside, ChainThread, ChainTrack, Concern, NoteRun, Origin, PICTURE,
   ThreadNode, Threads,
 };
 pub use words::{age, elapsed, grouped, homed, lines, percent, share, since, size, timer, tokens};

@@ -10,7 +10,7 @@
 use std::{mem, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use furb_wire::{anchor::Anchor, protocol::BOUND};
+use furb_wire::{PICTURE, anchor::Anchor, protocol::BOUND};
 use jiff::Timestamp;
 use serde_json::Value;
 
@@ -21,9 +21,6 @@ const STASH: usize = 50;
 
 /// The start of a message that asks its question aside, in a fork of the chain of the open thread.
 pub const ASIDE: &str = "/btw ";
-
-/// The sign of an image in the text of the input, before its name.
-pub const PICTURE: &str = "▣ ";
 
 /// The sign of a long text that a paste folded into one mark, before its name.
 pub const FOLDED: &str = "≡ ";

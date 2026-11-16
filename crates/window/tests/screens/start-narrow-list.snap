@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃                                             Ground the…        ‖ Paused 11h
 ┃ A reply opens this thread again             FU furb                    opus
 ┃
-┃  Message  Python    → ……opus   + ⌃N      Context               No answer yet
+┃  Message  Python    →   opus   + ⌃N      Context               No answer yet
 ┃                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ~…  ◆ 1 other thread asks   ⌃P find

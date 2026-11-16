@@ -244,7 +244,9 @@ impl Feed<'_> {
       run(format!(" {project} · "), muted),
     ];
     let forks = (width(&left)..width(&left) + mark.width() - 3, branches > 0);
-    left.extend([run(mark, muted), run(title, self.style(Role::Title))]);
+    left.push(run(mark, muted));
+    let accent = self.style(Role::Title).fg(self.model.tokens.accent);
+    left.extend(picture::marked(&title, self.style(Role::Title), accent));
     let (mark, button) = self.closer(card, branch);
     // The thread of an agent that the operator went back from stands ahead, beside the closer.
     let ahead = self.opened.ahead.as_ref().map(|_| run(" Forward ", self.style(Role::Button)));
