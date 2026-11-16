@@ -29,5 +29,5 @@ source: crates/window/tests/suite/screens.rs
   ┃
   ┃  Message  Python    → where… ▾      opus  high   + ⌃N
   ┃                                                            Context
-  ↑↓ choose · ⏎ answer · ⎋ refuse               ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · ⏎ answer                          ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━●            now  chains ▾    No answer yet

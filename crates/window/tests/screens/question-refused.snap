@@ -29,5 +29,5 @@ source: crates/window/tests/suite/screens.rs
   ┃
   ┃  Message  Python    → how many… ▾   opus  high   + ⌃N
   ┃                                                            Context
-  ⏎ answer · ⎋ refuse                           ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⏎ answer                                      ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━●            now  chains ▾    No answer yet

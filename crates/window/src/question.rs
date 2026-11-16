@@ -392,7 +392,7 @@ impl Model {
     if matches!(offers, Offers::Ticks(_)) && form.at < offers.values() {
       said.push(format!("{} tick", key(Does::Tick)));
     }
-    said.push(format!("{} answer · {} refuse", key(Does::Send), key(Does::Close)));
+    said.push(format!("{} answer", key(Does::Send)));
     if self.questions().len() > 1 {
       said.push(format!(
         "{} next · {} before",
