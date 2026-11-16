@@ -531,11 +531,13 @@ impl Model {
       rows
     } else {
       // A word of Python takes the prompts of the interpreter: `>>>` before its first line and
-      // `...` before each other line, as the REPL of Python writes them.
+      // `...` before each other line, as the REPL of Python writes them, in the accent of the mode.
       let prompt = |at: usize| {
         let mark = if at == 1 { ">>> " } else { "... " };
         let python = self.client.draft.python && (1..=self.grown()).contains(&at);
-        python.then(|| run(mark, self.tokens.style(Role::Muted).bg(self.tokens.raised))).into_iter()
+        python
+          .then(|| run(mark, Style::new().fg(self.tokens.accent).bg(self.tokens.raised)))
+          .into_iter()
       };
       let band = |at| self.band(prompt(at).collect(), None);
       let bands = (0..self.grown() + 2).map(band);
@@ -596,7 +598,9 @@ impl Model {
     let raised = Style::new().bg(t.raised);
     let muted = t.style(Role::Muted).bg(t.raised);
     let on = t.style(Role::Button);
-    let (message, python) = if self.client.draft.python { (muted, on) } else { (on, muted) };
+    // The mode of Python takes the accent, as its prompts do, so the input says that a word runs.
+    let (message, python) =
+      if self.client.draft.python { (muted, on.fg(t.accent)) } else { (on, muted) };
     let switch = [run(" Message ", message), run(" Python ", python)];
     let gap = || run(" ".repeat(APART), raised);
     let (mark, target, color) = match self.client.target() {
