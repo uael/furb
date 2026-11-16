@@ -41,7 +41,7 @@ use tokio::{
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
-use crate::{tailscale::tailscale, yard::Yard};
+use crate::{tailscale::tailnet, yard::Yard};
 
 /// How long a test waits for a daemon, which a loaded machine cannot pass. It stays under the 60 s
 /// after which the runner ends a test, so a wait that fails prints its frame.
@@ -182,21 +182,23 @@ impl Daemon {
   }
 
   /// The daemon served on the tailnet too, by TCP on loopback, where the fake of the local API of
-  /// Tailscale names each peer by a login that may write. The machine of the daemon there under a
-  /// name, as `machines.json` names it.
-  pub(crate) fn tailed(&mut self, name: &str, login: &str) -> Machine {
+  /// Tailscale names each peer by a login that may write, and names the machine of the daemon
+  /// online under a name. The tailnet where a window finds that machine, at the port of the daemon.
+  pub(crate) fn tailed(&mut self, name: &str, login: &str) -> furb_window::Tailnet {
     let listener = self.listener.take().expect("a daemon is served once");
     let (tell, mut reported) = mpsc::unbounded_channel();
     let log = Log(Arc::new(move |line: &str| drop(tell.send(line.to_owned()))));
-    let settings = self.settings();
+    // The user of the far machine has the folder of the test as its home.
+    let home = dunce::canonicalize(&self.yard).ok();
+    let settings = Settings { home, ..self.settings() };
     let opening = Opening { log: Some(log), ..settings.opening };
     let local = self.local.clone();
-    let login = login.to_owned();
-    let port = self.runtime.block_on(async move {
-      let (api, _) = tailscale(&login).await;
+    let (login, name) = (login.to_owned(), name.to_owned());
+    self.runtime.block_on(async move {
+      let (api, _) = tailnet(&login, &[&name]).await;
       let access: Access = [(login, Role::Write)].into_iter().collect();
       let ports = Ports { tcp: Some(0), websocket: None };
-      let tailnet = Some(Tailnet { identity: Tailscale::new(api, access), ports });
+      let tailnet = Some(Tailnet { identity: Tailscale::new(api.clone(), access), ports });
       let settings = Settings { opening, tailnet, ..settings };
       tokio::spawn(async move { run(&local, listener, settings).await });
       loop {
@@ -204,15 +206,11 @@ impl Daemon {
         let line = line.expect("the daemon listens on the tailnet");
         if let Some(at) = line.strip_prefix("furb host: listens on the tailnet at ") {
           let at = at.split_once(" by ").map_or(at, |one| one.0);
-          break at.parse::<SocketAddr>().expect("an address").port();
+          let port = at.parse::<SocketAddr>().expect("an address").port();
+          break furb_window::Tailnet { api, port };
         }
       }
-    });
-    Machine {
-      name: name.to_owned(),
-      reach: Reach::Tailnet(format!("127.0.0.1:{port}")),
-      reads: false,
-    }
+    })
   }
 
   /// A daemon of a new build in the place of the daemon that runs, on the runtime of another app,
@@ -259,6 +257,7 @@ impl Daemon {
       stall: STALL,
       tailnet: None,
       door: None,
+      home: None,
       data: Some(self.yard.join("data")),
     }
   }

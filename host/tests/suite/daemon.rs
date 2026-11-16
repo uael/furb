@@ -195,8 +195,16 @@ async fn started_with(
   let listener = local.listen().await.unwrap();
   // The data folder of the test, so no session with no project of the machine stands in its list.
   let data = Some(at.join("data"));
-  let settings =
-    Settings { opening, grace, first: STARTING, stall: STALL, tailnet: None, door: None, data };
+  let settings = Settings {
+    opening,
+    grace,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    data,
+    home: None,
+  };
   let served = local.clone();
   (local, tokio::spawn(async move { run(&served, listener, settings).await }))
 }
@@ -261,6 +269,7 @@ async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let operators: Arc<[&str]> = ["alice", "bob", "alice"].into();
@@ -304,6 +313,7 @@ async fn started_as(at: &Path, roles: &[Role]) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
@@ -526,8 +536,16 @@ async fn a_daemon_that_no_peer_dials_ends_once_its_start_passed() {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let (opening, grace, first) = (opening(&at), GRACE, SHORT);
-  let settings =
-    Settings { opening, grace, first, stall: STALL, tailnet: None, door: None, data: None };
+  let settings = Settings {
+    opening,
+    grace,
+    first,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    data: None,
+    home: None,
+  };
   let ended = timeout(PATIENCE, run(&local, listener, settings)).await;
   assert!(matches!(ended, Ok(Ok(()))), "the daemon ends with no peer: {ended:?}");
   assert!(local.dial().await.is_err(), "no daemon listens after its start");
@@ -1461,6 +1479,7 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let next = local.clone();
@@ -1524,6 +1543,7 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let served = local.clone();
@@ -1544,6 +1564,7 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let next = local.clone();
@@ -1630,6 +1651,7 @@ where
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let served = identity(local.clone());
@@ -1957,6 +1979,7 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
     stall: STALL,
     tailnet,
     door: None,
+    home: None,
     data: None,
   };
   let served = local.clone();
@@ -2202,6 +2225,7 @@ async fn watched(at: &Path, opening: Opening, stall: Duration) -> Local {
     stall,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let served = local.clone();
@@ -2546,6 +2570,7 @@ async fn served(at: &Path) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
+    home: None,
     data: None,
   };
   let served = local.clone();

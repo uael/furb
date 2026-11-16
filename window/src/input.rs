@@ -1060,7 +1060,7 @@ impl Model {
       .target_folder()
       .filter(|(at, one)| *at != 0 || self.folder_named(*at, one) == NO_PROJECT);
     let folder = elsewhere.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
-    let folder = self.folder_shown(&folder);
+    let folder = self.folder_shown(at, &folder);
     let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;

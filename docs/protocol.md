@@ -64,9 +64,11 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens and dials only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no
   other network encrypts the frames.
-- A window reaches the daemon of another machine by TCP at the address that `machines.json`, in the config folder of
-  furb on the machine of the window, names for it: `[{"name": "studio", "address": "studio:7860"}]`. It dials each
-  machine of the file beside the daemon of its own machine, in the order of the file, and starts none of them.
+- A window finds the daemon of each other machine of the tailnet with no word of the operator: it asks the local API of
+  Tailscale for each machine that is online, when it opens and each 30 seconds after, and dials each one by TCP at port
+  7860, the port of furb on the tailnet. A machine whose daemon takes the dial joins the window under its name in
+  MagicDNS, and the window dials it again as it dials the daemon of its own machine, but starts nothing there. A
+  daemon that listens by TCP at another port is not found.
 
 ## Framing
 
@@ -90,11 +92,12 @@ The first frame of a peer is its hello:
   proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
   proved. With no `role`, the peer has the role that its transport proved.
 - The daemon answers with its protocol and the peer as it knows it: its `operator`, its role, its kind and its name.
-  The answer also names the `machine` of the daemon, without its domain, and the `build` of the daemon, which is its
-  version of furb.
+  The answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its
+  version of furb, and the `home` folder of the user of the machine, which a window of another machine shows as `~` in
+  a folder of that machine.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2"}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "home": "/Users/uael"}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A skill is the

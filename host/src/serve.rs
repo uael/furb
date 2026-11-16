@@ -8,6 +8,7 @@
 use std::{
   env,
   future::Future,
+  path::PathBuf,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -114,6 +115,11 @@ pub fn fixed(role: Role) -> Granted {
 
 /// What a daemon does with each verb of a peer, once the door checked its role.
 pub trait Host {
+  /// The home folder of the user of the machine, which the welcome tells each peer.
+  fn home(&self) -> Option<PathBuf> {
+    home_folder()
+  }
+
   /// The answer to a verb of a peer, which may push frames to that peer through its outbox.
   fn answer(
     &self,
@@ -146,7 +152,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       let asked = hello.role;
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
       let peer = Peer { operator: who.operator, role, kind: hello.kind, name: hello.name };
-      send(&mut out, &Frame::Reply { id, answer: welcome(&peer) }).await?;
+      send(&mut out, &Frame::Reply { id, answer: welcome(&peer, host.home()) }).await?;
       (peer, asked)
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) => {
@@ -202,8 +208,9 @@ fn spoken(hello: &Hello) -> bool {
   }
 }
 
-/// The welcome of a peer: who it is to the daemon, the machine and its build.
-fn welcome(peer: &Peer) -> Answer {
+/// The welcome of a peer: who it is to the daemon, the machine, its build and the home folder of
+/// its user.
+fn welcome(peer: &Peer, home: Option<PathBuf>) -> Answer {
   let (machine, build) = (machine(), BUILD.to_owned());
   Answer::Welcome {
     protocol: PROTOCOL,
@@ -212,7 +219,14 @@ fn welcome(peer: &Peer) -> Answer {
     build,
     capabilities: Vec::new(),
     folders: None,
+    home: home.map(|one| one.display().to_string()),
   }
+}
+
+/// The home folder of the user of this machine, with no link, as the daemon names each record by
+/// its path with no link.
+pub(crate) fn home_folder() -> Option<PathBuf> {
+  env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home))
 }
 
 /// The build of the daemon: the version of furb that serves it.

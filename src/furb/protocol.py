@@ -1728,12 +1728,12 @@ literal of python cut to `LITERAL` characters.
 
 class Written(TypedDict):
   """
-  What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added
-  and removed against the text of the path that the life knew before it, from a read or a write
-  of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
-  line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
-  did not know before counts each of its lines as added, and is not `known`, since the life does
-  not know what stood there.
+  What a write of a file that a line made changed: the name of its act, the path of the file, the
+  lines that it added and removed against the text of the path that the life knew before it, from
+  a read or a write of the path, and the first `DIFF` lines of their diff, as git writes a unified
+  diff with one line around each change but the header of its first hunk, with the count of the
+  lines past them. A write of a path that the life did not know before counts each of its lines as
+  added, and is not `known`, since the life does not know what stood there.
   """
 
   act: str
@@ -2325,14 +2325,16 @@ class Data(TypedDict):
   build: str
   capabilities: NotRequired[list[str]]
   folders: NotRequired[Folders | None]
+  home: NotRequired[str | None]
 
 
 class Answer2(TypedDict):
   """
   The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  of the machine of the daemon, and its build. A life that answers the process of a kit names
-  too each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the
-  life, as `initialize` gives them in LSP.
+  of the machine of the daemon, its build, and the home folder of its user, which a window of
+  another machine shows as `~` in a folder of that machine. A life that answers the process of a
+  kit names too each verb that it takes past those of the protocol 44 of [`KITS`], and the
+  folders of the life, as `initialize` gives them in LSP.
   """
 
   answer: Literal["welcome"]
@@ -3227,4 +3229,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 68
+PROTOCOL = 69

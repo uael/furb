@@ -146,10 +146,12 @@ impl Model {
     (place, actor)
   }
 
-  /// A folder with the home folder of the user as `~`, and `/` between its parts on each system,
-  /// so a folder of Windows shows as `~/furb` too. A folder outside the home shows as it is.
-  pub(crate) fn folder_shown(&self, folder: &str) -> String {
-    let home = self.home.as_ref().map(|one| one.display().to_string());
+  /// A folder of a machine with the home folder of its user as `~`, as its daemon told it, and `/`
+  /// between its parts on each system, so a folder of Windows shows as `~/furb` too. A folder
+  /// outside the home shows as it is.
+  pub(crate) fn folder_shown(&self, at: usize, folder: &str) -> String {
+    let here = || self.home.as_ref().map(|one| one.display().to_string());
+    let home = if at == 0 { here() } else { self.client.machines[at].home.clone() };
     match home.as_deref().and_then(|home| folder.strip_prefix(home)) {
       Some("") => "~".to_owned(),
       Some(rest) if rest.starts_with('/') => format!("~{rest}"),

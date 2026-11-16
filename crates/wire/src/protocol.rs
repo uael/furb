@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 68;
+pub const PROTOCOL: u32 = 69;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -760,9 +760,10 @@ impl Frame {
 pub enum Answer {
   Done,
   /// The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  /// of the machine of the daemon, and its build. A life that answers the process of a kit names
-  /// too each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the
-  /// life, as `initialize` gives them in LSP.
+  /// of the machine of the daemon, its build, and the home folder of its user, which a window of
+  /// another machine shows as `~` in a folder of that machine. A life that answers the process of a
+  /// kit names too each verb that it takes past those of the protocol 44 of [`KITS`], and the
+  /// folders of the life, as `initialize` gives them in LSP.
   Welcome {
     protocol: u32,
     peer: Peer,
@@ -772,6 +773,8 @@ pub enum Answer {
     capabilities: Vec<String>,
     #[serde(default)]
     folders: Option<Folders>,
+    #[serde(default)]
+    home: Option<String>,
   },
   Lives(Vec<Listed>),
   Projects(Vec<Project>),

@@ -107,8 +107,8 @@ pub(crate) struct Walk {
   pub(crate) pace: &'static [(&'static str, Duration)],
   /// Whether the window only reads, as `furb --read` opens it.
   pub(crate) reads: bool,
-  /// A second machine on the tailnet, by its name, which `machines.json` of the window names: a
-  /// daemon of its own, with the project `lab` and one session there.
+  /// A second machine on the tailnet, by its name, which the window finds through the stand-in of
+  /// Tailscale: a daemon of its own, with the project `lab` and one session there.
   pub(crate) far: Option<&'static str>,
   pub(crate) steps: &'static [Step],
 }

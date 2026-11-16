@@ -37,6 +37,7 @@ use crate::{
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
+  machine::Looking,
   model::{Acts, Model, Told},
   pick::Pick,
   picture,
@@ -153,12 +154,28 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<
   let reloads = Rc::clone(&window.reloads);
   let window = Rc::new(RefCell::new(window));
   listened(app, &window, &area);
-  for (at, machine) in machines.into_iter().enumerate() {
+  let (known, reads) = (machines.iter().map(|one| one.name.clone()).collect(), machines[0].reads);
+  for machine in machines {
+    dialed(app, &window, machine);
+  }
+  if let Some(tailnet) = options.tailnet {
     let on = Rc::clone(&window);
-    let asker = link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
-    window.borrow_mut().askers.push(asker);
+    let looking = Looking { tailnet, known, reads };
+    link::looked(app, looking, Duration::ZERO, move |app, machine| {
+      let told = Told { name: machine.name.clone(), ..Told::default() };
+      tell(app, &on, |model| model.client.machines.push(told));
+      dialed(app, &on, machine);
+    });
   }
   reloads
+}
+
+/// The daemon of a machine dialed, whose frames the window hears under the place of the machine in
+/// its list.
+fn dialed(app: &App, window: &Shared, machine: Machine) {
+  let (on, at) = (Rc::clone(window), window.borrow().askers.len());
+  let asker = link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
+  window.borrow_mut().askers.push(asker);
 }
 
 /// The window hears the terminal: its keys, the edits of its input, the pointer, its focus and its

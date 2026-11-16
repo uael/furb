@@ -1,25 +1,25 @@
 //! A machine: one daemon of furb, which the window reaches on the local transport, and starts when
-//! none listens, or on the tailnet by TCP at the address that `machines.json` of the config folder
-//! of furb names.
+//! none listens, or on the tailnet by TCP, where the window finds it through the local API of
+//! Tailscale.
 
 use std::{
   env,
   fs::{self, DirBuilder, File},
   io,
+  net::SocketAddr,
   path::{Path, PathBuf},
   process::{ExitStatus, Stdio},
   time::Duration,
 };
 
-use furb::{skill::Places, world};
+use furb::world;
 use furb_host::{
   STARTING, TransportError,
-  transport::{Dialer, Local, Tcp},
+  transport::{Dialer, Local, LocalApi, Tcp},
 };
-use serde::Deserialize;
+use futures::future;
 use tokio::{
   io::{AsyncRead, AsyncWrite},
-  net,
   process::{Child, Command},
   time,
 };
@@ -32,6 +32,10 @@ const AGAIN: Duration = Duration::from_millis(25);
 /// The file of the folder of a daemon that takes what the daemon says, which says why when the
 /// daemon ends before it listens.
 const LOG: &str = "host.log";
+
+/// How long the window waits for a machine of the tailnet to take a dial before it takes the
+/// machine as one where no daemon listens: Tailscale may first find its path to the machine.
+const KNOCK: Duration = Duration::from_secs(5);
 
 /// One daemon of furb, where the window reaches it.
 #[derive(Debug)]
@@ -51,22 +55,64 @@ pub enum Reach {
   /// The daemon of this computer on the local transport: the folder where it listens, and the
   /// command that serves it, which the window runs when no daemon answers there.
   Here { folder: PathBuf, served: Box<Command> },
-  /// The daemon of another machine on the tailnet, by TCP at an address as `host:port`, which
-  /// Tailscale names. The window starts nothing there.
-  Tailnet(String),
+  /// The daemon of another machine on the tailnet, by TCP at its address there and the port of
+  /// furb. The window starts nothing there.
+  Tailnet(SocketAddr),
+}
+
+/// Where the window finds the other machines of the tailnet: the local API of Tailscale, which
+/// names them, and the port where it looks for the daemon of each.
+#[derive(Debug, Clone)]
+pub struct Tailnet {
+  pub api: LocalApi,
+  pub port: u16,
+}
+
+impl Tailnet {
+  /// The tailnet of this machine, where Tailscale runs, at the port of furb. A debug build looks at
+  /// the port that `FURB_TAILNET_PORT` names in its place, as a capture of the frames asks for its
+  /// stand-in of Tailscale, whose machines all stand on loopback.
+  pub fn here() -> Option<Self> {
+    let api = LocalApi::find()?;
+    #[cfg(debug_assertions)]
+    let port = env::var("FURB_TAILNET_PORT").ok().and_then(|one| one.parse().ok());
+    #[cfg(not(debug_assertions))]
+    let port = None;
+    Some(Self { api, port: port.unwrap_or(Tcp::PORT) })
+  }
+}
+
+/// The look of a window at the tailnet: where it looks, the machines that it knows by name, and
+/// whether it only reads on each one that it finds.
+pub(crate) struct Looking {
+  pub(crate) tailnet: Tailnet,
+  pub(crate) known: Vec<String>,
+  pub(crate) reads: bool,
+}
+
+impl Looking {
+  /// Each machine of the tailnet that the window did not know, whose daemon takes a dial at the
+  /// port, which the window knows from then on. None while Tailscale does not answer.
+  pub(crate) async fn found(&mut self) -> Vec<Machine> {
+    let Ok(machines) = self.tailnet.api.machines().await else { return Vec::new() };
+    let (port, reads) = (self.tailnet.port, self.reads);
+    let knocked = machines.into_iter().filter(|(name, _)| !self.known.contains(name)).map(
+      |(name, ip)| async move {
+        let addr = SocketAddr::new(ip, port);
+        let serves = time::timeout(KNOCK, Tcp::new(addr).dial()).await.is_ok_and(|one| one.is_ok());
+        serves.then_some(Machine { name, reach: Reach::Tailnet(addr), reads })
+      },
+    );
+    let found: Vec<Machine> = future::join_all(knocked).await.into_iter().flatten().collect();
+    self.known.extend(found.iter().map(|one| one.name.clone()));
+    found
+  }
 }
 
 /// A stream of a daemon that the window dialed, by any transport.
 pub trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Stream for S {}
-
-/// A machine of `machines.json`: its name and its address on the tailnet.
-#[derive(Deserialize)]
-struct Listed {
-  name: String,
-  address: String,
-}
 
 impl Machine {
   /// The daemon of this machine, in the cache of furb, as `furb host` serves it: the program furb
@@ -86,37 +132,13 @@ impl Machine {
     Ok(Self { name: furb_host::machine(), reach: Reach::Here { folder, served }, reads: false })
   }
 
-  /// The machines of the tailnet that `machines.json` of the config folder of furb names, in its
-  /// order, each with its name and its address, as `[{"name": "studio", "address":
-  /// "studio:7860"}]`. None where no file stands.
-  pub fn listed() -> Result<Vec<Self>, Error> {
-    let file = Places::here().config.join("machines.json");
-    let text = match fs::read_to_string(&file) {
-      Err(no) if no.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-      read => {
-        read.map_err(|source| Error::Machines { file: file.clone(), why: source.to_string() })?
-      }
-    };
-    let listed: Vec<Listed> = serde_json::from_str(&text)
-      .map_err(|source| Error::Machines { file, why: source.to_string() })?;
-    let machine =
-      |one: Listed| Self { name: one.name, reach: Reach::Tailnet(one.address), reads: false };
-    Ok(listed.into_iter().map(machine).collect())
-  }
-
   /// The stream of the daemon. The window serves the daemon of this computer first when none
   /// listens. A daemon that another window started at the same moment takes the place and this one
   /// ends, so the window dials once more after the end of its own.
   pub async fn reach(&mut self) -> Result<Box<dyn Stream>, Error> {
     let (folder, served) = match &mut self.reach {
       Reach::Here { folder, served } => (folder, served),
-      Reach::Tailnet(address) => {
-        let dialed = |source| TransportError::Dial { place: address.clone(), source };
-        let mut found = net::lookup_host(address.as_str()).await.map_err(dialed)?;
-        let unknown = || io::Error::new(io::ErrorKind::NotFound, "the name has no address");
-        let addr = found.next().ok_or_else(|| dialed(unknown()))?;
-        return Ok(Box::new(Tcp::new(addr).dial().await?));
-      }
+      Reach::Tailnet(addr) => return Ok(Box::new(Tcp::new(*addr).dial().await?)),
     };
     let local = Local::new(&*folder);
     match local.dial().await {

@@ -9,11 +9,14 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-use crate::{tailscale::tailscale, yard};
+use crate::{
+  tailscale::{tailnet, tailscale},
+  yard,
+};
 
 use std::{
   fs, future,
-  net::SocketAddr,
+  net::{IpAddr, SocketAddr},
   path::Path,
   process,
   sync::{
@@ -204,6 +207,14 @@ async fn plain_tcp_dials_no_address_off_loopback_and_the_tailnet() {
   assert!(matches!(refused, Err(TransportError::Open { addr }) if addr == public));
 }
 
+#[tokio::test]
+async fn the_local_api_names_each_other_machine_of_the_tailnet_by_its_name_in_magicdns() {
+  let (api, _heard) = tailnet("alice@github", &["studio", "attic"]).await;
+  let loopback = IpAddr::from([127, 0, 0, 1]);
+  let machines = api.machines().await.unwrap();
+  assert_eq!(machines, [("attic".to_owned(), loopback), ("studio".to_owned(), loopback)]);
+}
+
 #[test]
 fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_profile() {
   let held = folder();
@@ -239,6 +250,7 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
     stall: STALL,
     tailnet: Some(Tailnet { identity, ports }),
     door: Some(held.join("door/window.json")),
+    home: None,
     data: None,
   };
   let local = Local::new(held.join("host"));
@@ -389,6 +401,7 @@ async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
     stall: STALL,
     tailnet: None,
     door: Some(file.to_owned()),
+    home: None,
     data: None,
   };
   let local = Local::new(yard.join("host"));

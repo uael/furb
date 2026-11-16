@@ -2801,6 +2801,13 @@
                     }
                   ],
                   "default": null
+                },
+                "home": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -2815,7 +2822,7 @@
             "answer",
             "data"
           ],
-          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, and its build. A life that answers the process of a kit names\ntoo each verb that it takes past those of the protocol 44 of [`KITS`], and the folders of the\nlife, as `initialize` gives them in LSP."
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, its build, and the home folder of its user, which a window of\nanother machine shows as `~` in a folder of that machine. A life that answers the process of a\nkit names too each verb that it takes past those of the protocol 44 of [`KITS`], and the\nfolders of the life, as `initialize` gives them in LSP."
         },
         {
           "type": "object",
@@ -5283,7 +5290,7 @@
         "diff",
         "more"
       ],
-      "description": "What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added\nand removed against the text of the path that the life knew before it, from a read or a write\nof the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one\nline around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life\ndid not know before counts each of its lines as added, and is not `known`, since the life does\nnot know what stood there."
+      "description": "What a write of a file that a line made changed: the name of its act, the path of the file, the\nlines that it added and removed against the text of the path that the life knew before it, from\na read or a write of the path, and the first `DIFF` lines of their diff, as git writes a unified\ndiff with one line around each change but the header of its first hunk, with the count of the\nlines past them. A write of a path that the life did not know before counts each of its lines as\nadded, and is not `known`, since the life does not know what stood there."
     },
     "Thought": {
       "type": "object",
@@ -6314,5 +6321,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 68
+  "x-protocol": 69
 }

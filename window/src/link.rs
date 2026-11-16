@@ -26,7 +26,7 @@ use tokio::{
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
-use crate::{Error, Machine};
+use crate::{Error, Machine, machine::Looking};
 
 /// How many frames of the daemon wait for the thread of the app before the task reads no more.
 const WAITING: usize = 256;
@@ -37,6 +37,9 @@ const FIRST: Duration = Duration::from_millis(250);
 
 /// The longest wait between two dials of a machine that does not answer.
 const SLOWEST: Duration = Duration::from_secs(10);
+
+/// How long the window waits between two looks at the tailnet for a machine that came online.
+const LOOK: Duration = Duration::from_secs(30);
 
 /// What the task tells the thread of the app: a frame of the daemon, or why the connection ended.
 pub(crate) type Heard = Result<Frame, Error>;
@@ -62,6 +65,27 @@ pub(crate) fn dialed(app: &App, machine: Machine, on: impl FnMut(&App, Heard) + 
   }));
   hearing(app, frames, on);
   Asker { requests }
+}
+
+/// The window looks for the daemon of each machine of the tailnet after a wait, then again at each
+/// [`LOOK`], and gives each one that it finds, once, to what hears it on the thread of the app.
+pub(crate) fn looked(
+  app: &App,
+  mut looking: Looking,
+  wait: Duration,
+  mut on: impl FnMut(&App, Machine) + 'static,
+) {
+  let look = async move {
+    time::sleep(wait).await;
+    let found = looking.found().await;
+    (looking, found)
+  };
+  drop(app.spawn(look, move |cx, (looking, found)| {
+    for machine in found {
+      on(cx.app(), machine);
+    }
+    looked(cx.app(), looking, LOOK, on);
+  }));
 }
 
 /// What sends the requests of the window to the daemon of a machine, each under the id that the

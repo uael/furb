@@ -60,7 +60,7 @@ use opentui::{
 
 pub use error::Error;
 pub use keys::System;
-pub use machine::{Machine, Reach};
+pub use machine::{Machine, Reach, Tailnet};
 use reload::RELOADED;
 use screen::Screen;
 
@@ -92,6 +92,9 @@ pub struct Options {
   /// Whether the window before this one gave it its place, so it opens where that one stood: on its
   /// thread, at its place of the feed, with its draft.
   pub reloaded: bool,
+  /// Where the window finds the other machines of the tailnet, each of which joins its machines
+  /// once its daemon takes a dial. None looks for none.
+  pub tailnet: Option<Tailnet>,
 }
 
 impl Options {
@@ -116,7 +119,8 @@ impl Options {
     let still = still().is_some();
     let program = env::current_exe().ok();
     let reloaded = env::var_os(RELOADED).is_some();
-    Ok(Self { folder, home, kept, zone, clock, still, system, browse, program, reloaded })
+    let tailnet = Tailnet::here();
+    Ok(Self { folder, home, kept, zone, clock, still, system, browse, program, reloaded, tailnet })
   }
 }
 
@@ -130,9 +134,7 @@ fn still() -> Option<u64> {
 /// leaves it. The app asks the terminal for its colors, so the window stands on its background,
 /// and for each move of the pointer, so what takes a click rises under it.
 pub fn run(reads: bool) -> Result<(), Error> {
-  let here = Machine { reads, ..Machine::here()? };
-  let machines: Vec<Machine> = [here].into_iter().chain(Machine::listed()?).collect();
-  let machines = machines.into_iter().map(|one| Machine { reads, ..one }).collect();
+  let machines = vec![Machine { reads, ..Machine::here()? }];
   let options = Options::here()?;
   let terminal =
     TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };

@@ -4,6 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
+  collections::HashMap,
   fmt::Display,
   fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -72,6 +73,10 @@ pub struct WebSocket {
 }
 
 impl Tcp {
+  /// The port of furb on the tailnet: a window looks for the daemon of each machine of the tailnet
+  /// there, by TCP.
+  pub const PORT: u16 = 7860;
+
   pub fn new(addr: SocketAddr) -> Self {
     Self { addr }
   }
@@ -240,6 +245,21 @@ pub struct Tailscale {
 struct Status {
   #[serde(rename = "TailscaleIPs", default)]
   ips: Vec<IpAddr>,
+  #[serde(rename = "Peer", default)]
+  peers: HashMap<String, Node>,
+}
+
+/// Another machine of the tailnet, as the status of the local API gives it.
+#[derive(Deserialize)]
+struct Node {
+  #[serde(rename = "DNSName", default)]
+  dns: String,
+  #[serde(rename = "HostName", default)]
+  host: String,
+  #[serde(rename = "TailscaleIPs", default)]
+  ips: Vec<IpAddr>,
+  #[serde(rename = "Online", default)]
+  online: bool,
 }
 
 #[derive(Deserialize)]
@@ -284,6 +304,25 @@ impl LocalApi {
     let port: u16 = port.to_str()?.parse().ok()?;
     let token = fs::read_to_string(format!("/Library/Tailscale/sameuserproof-{port}")).ok()?;
     Some(Self::Port { port, token: token.trim().to_owned() })
+  }
+
+  /// Each other machine of the tailnet that is online, in the order of its name: its name in
+  /// the DNS of the tailnet with no domain, else its host name, and its first address, IPv4 before
+  /// IPv6.
+  pub async fn machines(&self) -> Result<Vec<(String, IpAddr)>, AccessError> {
+    let status: Status = self.asked("/localapi/v0/status").await?;
+    let mut machines: Vec<(String, IpAddr)> = status
+      .peers
+      .into_values()
+      .filter(|node| node.online)
+      .filter_map(|node| {
+        let ip = node.ips.iter().find(|ip| ip.is_ipv4()).or(node.ips.first()).copied()?;
+        let name = node.dns.split('.').next().filter(|one| !one.is_empty()).unwrap_or(&node.host);
+        Some((name.to_owned(), ip))
+      })
+      .collect();
+    machines.sort();
+    Ok(machines)
   }
 
   /// The answer of the local API to a path, as JSON.

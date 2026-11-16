@@ -36,6 +36,9 @@ pub struct Told {
   pub name: String,
   #[serde(default)]
   pub login: String,
+  /// The home folder of the user of the machine, from the welcome of its daemon.
+  #[serde(default)]
+  pub home: Option<String>,
   #[serde(default)]
   pub heard: u64,
   #[serde(default)]
@@ -131,8 +134,9 @@ impl Client {
       return Listing::Same;
     }
     match heard {
-      Ok(Frame::Reply { answer: Answer::Welcome { peer, .. }, .. }) => {
-        (told.login, told.role, told.link) = (peer.operator, Some(peer.role), Link::Dialing);
+      Ok(Frame::Reply { answer: Answer::Welcome { peer, home, .. }, .. }) => {
+        (told.login, told.role, told.home) = (peer.operator, Some(peer.role), home);
+        told.link = Link::Dialing;
       }
       Ok(Frame::Reply { answer: Answer::Cards(cards), .. }) => {
         (told.cards, told.heard, told.link) = (cards, now, Link::Listed);
@@ -157,9 +161,7 @@ impl Client {
         told.cards.extend(changed);
         told.heard = now;
       }
-      Ok(Frame::Presence { life, operators }) => {
-        told.presence.insert(life, operators);
-      }
+      Ok(Frame::Presence { life, operators }) => drop(told.presence.insert(life, operators)),
       Ok(Frame::Granted { role }) => told.role = Some(role),
       Ok(Frame::Refused { why, .. }) | Err(why) => {
         told.link = Link::Lost(why.clone());

@@ -300,6 +300,7 @@ impl Kits {
       build: env!("CARGO_PKG_VERSION").to_owned(),
       capabilities: CAPABILITIES.map(str::to_owned).to_vec(),
       folders: Some(folders),
+      home: None,
     }
   }
 

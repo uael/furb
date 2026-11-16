@@ -87,7 +87,7 @@ use crate::{
   },
   reads::{Read, Readers},
   records,
-  serve::{Host, Outbox, fixed, serve},
+  serve::{Host, Outbox, fixed, home_folder, serve},
   stall::{Quiet, Stall},
   stops::Stops,
   transport::{
@@ -132,6 +132,9 @@ pub struct Settings {
   /// The data folder of furb, whose `sessions` holds each session with no project: that of the
   /// user of the machine when none is given.
   pub data: Option<PathBuf>,
+  /// The home folder of the user, which the welcome tells each peer: that of the user of the
+  /// machine when none is given.
+  pub home: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -409,6 +412,8 @@ fn report(log: Option<&Log>, what: &dyn Display) {
 #[derive(Clone)]
 struct Daemon {
   asks: mpsc::UnboundedSender<Asked>,
+  /// The home folder that the welcome of a peer tells.
+  home: Option<PathBuf>,
 }
 
 type Replied = oneshot::Sender<Result<Answer, ProtocolError>>;
@@ -428,7 +433,8 @@ impl Inside {
     outbox: &Outbox,
   ) -> Result<Answer, ProtocolError> {
     let asks = self.0.upgrade().ok_or(ProtocolError::Stopped)?;
-    Daemon { asks }.answer(peer, verb, outbox).await
+    // A peer of the process of the daemon says no hello, so it hears no home.
+    Daemon { asks, home: None }.answer(peer, verb, outbox).await
   }
 }
 
@@ -478,6 +484,7 @@ impl Daemon {
     let (leave, leaving) = oneshot::channel();
     let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
+    let home = settings.home.clone().or_else(home_folder);
     let (index, records) = mpsc::unbounded_channel();
     let log = settings.opening.log.clone();
     tokio::spawn(indexed(records, asks.downgrade(), log));
@@ -501,7 +508,7 @@ impl Daemon {
     lives.members.set(lives.operators());
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
-    (Self { asks }, leaving, emptied)
+    (Self { asks, home }, leaving, emptied)
   }
 
   /// What the task that owns the lives answers.
@@ -539,6 +546,10 @@ impl Daemon {
 }
 
 impl Host for Daemon {
+  fn home(&self) -> Option<PathBuf> {
+    self.home.clone()
+  }
+
   async fn answer(
     &self,
     peer: &Peer,

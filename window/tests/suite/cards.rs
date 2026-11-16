@@ -44,6 +44,7 @@ pub(crate) fn options(kept: &Path) -> Options {
     browse: |_| Ok(()),
     program: None,
     reloaded: false,
+    tailnet: None,
   }
 }
 
@@ -258,20 +259,19 @@ fn the_start_shows_what_waits_and_what_worked_while_no_window_was_open() {
 }
 
 #[test]
-fn a_session_starts_on_a_machine_of_the_tailnet_that_the_launcher_picks() {
+fn a_session_starts_on_a_machine_of_the_tailnet_that_the_window_finds_and_the_launcher_picks() {
   let app = app();
   let mut here = Daemon::bound(&app);
   here.project("furb");
   here.served();
-  // The second machine stands on the tailnet, where Tailscale names the operator by a login.
+  // The second machine stands on the tailnet, where Tailscale names it and names the operator by
+  // a login, and the window finds it there with no word of the operator.
   let mut far = Daemon::bound(&app);
   let lab = far.project("lab");
-  let studio = far.tailed("studio", "demo@github");
+  let tailnet = Some(far.tailed("studio", "demo@github"));
   far.peer().rested(&lab.join("first.jsonl"), &format!("set up the lab\n{ANSWERS}"), None);
-  // The home of the window is the folder of the far machine, so its project shows as `~/lab`.
-  let home = dunce::canonicalize(far.file("")).ok();
-  let options = Options { home, ..options(&here.file("cards.json")) };
-  open(&app, vec![here.machine("mac"), studio], options);
+  let options = Options { tailnet, ..options(&here.file("cards.json")) };
+  open(&app, vec![here.machine("mac")], options);
   shows(&app, "set up the lab");
   app.press("ctrl+x");
   app.press("h");

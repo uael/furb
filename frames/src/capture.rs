@@ -12,6 +12,7 @@ use std::{
   path::{Path, PathBuf},
   process::{self, Stdio},
   str,
+  sync::OnceLock,
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -33,7 +34,7 @@ use crate::{
   openai,
   replay::put,
   scenario::{Act, Size, Step, Walk},
-  tailscale::tailscale,
+  tailscale::tailnet,
 };
 
 /// The login that the stand-in of Tailscale gives the window on the far machine of a walk.
@@ -182,6 +183,9 @@ struct Rig {
   bin: PathBuf,
   moving: bool,
   openai: String,
+  /// The tailnet of the far machine of a walk, once it listens there: the variables by which a
+  /// window finds it through the stand-in of Tailscale.
+  tailnet: OnceLock<[(&'static str, String); 2]>,
 }
 
 impl Rig {
@@ -200,6 +204,7 @@ impl Rig {
       bin: programs.bin.clone(),
       moving: programs.moving,
       openai: openai.to_owned(),
+      tailnet: OnceLock::new(),
     };
     let write = |path: PathBuf, text: &str| -> Result<(), Error> {
       fs::create_dir_all(path.parent().unwrap_or(root))
@@ -354,12 +359,13 @@ impl Rig {
     write(config.join("host.json"), host.to_string())
   }
 
-  /// The far machine of a walk on the tailnet, whose identity a stand-in of the local API of
-  /// Tailscale gives: one session of its project said first, then its daemon, which this process
-  /// ends, and `machines.json` of the window, which names it at the address where it listens. A
-  /// release build takes no stand-in of Tailscale, so its far daemon does not start.
+  /// The far machine of a walk on the tailnet, which a stand-in of the local API of Tailscale names
+  /// online under a name, and whose identity it gives: one session of its project said first, then
+  /// its daemon, which this process ends, and the variables by which the window finds it at the
+  /// port where it listens. A release build takes no stand-in of Tailscale, so its far daemon does
+  /// not start.
   async fn far_daemon(&self, name: &str) -> Result<Child, Error> {
-    let LocalApi::Port { port, token } = tailscale(LOGIN).await.0 else {
+    let LocalApi::Port { port, token } = tailnet(LOGIN, &[name]).await.0 else {
       return Err(Error::Listen);
     };
     let mut environment = self.environment_of(&self.far());
@@ -386,10 +392,11 @@ impl Rig {
       None
     };
     let address = timeout(PATIENCE, listens).await.ok().flatten().ok_or(Error::Listen)?;
+    let at = address.rsplit_once(':').map(|one| one.1.to_owned()).ok_or(Error::Listen)?;
     // What the daemon says later goes nowhere, and never fills the pipe that it writes to.
     drop(task::spawn(async move { while let Ok(Some(_)) = said.next_line().await {} }));
-    let machines = serde_json::json!([{ "name": name, "address": address }]);
-    put(&self.root.join("config/machines.json"), machines.to_string().as_bytes())?;
+    let api = ("FURB_TAILSCALE_API", format!("{port}:{token}"));
+    self.tailnet.set([api, ("FURB_TAILNET_PORT", at)]).ok();
     Ok(daemon)
   }
 
@@ -400,7 +407,9 @@ impl Rig {
   /// The environment of the window and of its daemon, and nothing of the environment of this
   /// process, so a capture is the same on each machine.
   fn environment(&self) -> Vec<(&'static str, String)> {
-    self.environment_of(&self.root)
+    let mut environment = self.environment_of(&self.root);
+    environment.extend(self.tailnet.get().into_iter().flatten().cloned());
+    environment
   }
 
   /// The environment of a machine of the capture whose folders stand in a place, with the
