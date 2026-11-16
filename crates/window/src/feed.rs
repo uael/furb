@@ -9,7 +9,7 @@ use std::{cell::OnceCell, collections::HashMap, mem, path::Path, rc::Rc};
 use crate::cells::Cells;
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
-  Standing, Thought, Work, homed, lines, operator, timer,
+  Standing, Thought, Work, Written, homed, lines, operator, timer,
 };
 use furb::world::images;
 use furb_client::{
@@ -54,13 +54,16 @@ pub(crate) struct Feed<'a> {
   wide: usize,
   /// The code of each block of the thread, once a row asks for the line that binds a name.
   blocks: OnceCell<Vec<Rc<Read>>>,
+  /// The last answer that wrote a file that furb knew before, once a row asks for it.
+  reverts: OnceCell<Option<(&'a str, Vec<&'a Written>)>>,
 }
 
 impl Model {
   /// The rows of the open thread.
   pub(crate) fn feed(&self) -> Option<Feed<'_>> {
     let opened = self.client.thread.as_ref()?;
-    Some(Feed { model: self, opened, wide: self.wide(), blocks: OnceCell::new() })
+    let (wide, blocks, reverts) = (self.wide(), OnceCell::new(), OnceCell::new());
+    Some(Feed { model: self, opened, wide, blocks, reverts })
   }
 }
 
@@ -401,8 +404,8 @@ impl Feed<'_> {
     // under its block or the band of his word, before the blank row that ends the block, to a
     // window that may write.
     let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
-    if let Some((message, writes)) = self.model.reverts()
-      && message == exchange.message
+    if let Some((message, writes)) = self.reverts.get_or_init(|| self.model.reverts())
+      && *message == exchange.message
       && !reads
     {
       let mut files: Vec<&str> =
@@ -703,7 +706,9 @@ impl Feed<'_> {
     }
     let read = Rc::new(Read { lines, style, colors, names, binds });
     let mut kept = self.model.read.borrow_mut();
-    if kept.len() >= READ {
+    // A name of a line asks for the code of each block of the thread, so the window forgets none of
+    // them while it holds more blocks than its bound: else each layout would read them all again.
+    if kept.len() >= READ.max(self.opened.thread.exchanges.len()) {
       kept.clear();
     }
     kept.insert(message.to_owned(), Rc::clone(&read));

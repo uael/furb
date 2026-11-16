@@ -118,6 +118,9 @@ struct Window {
   keeps: bool,
   /// The timer of the loaders, while a mark moves.
   moves: Option<TimerId>,
+  /// The rows that the steps of the wheel over the feed moved since the last change, and where the
+  /// pointer stood at the last of them, which a timer tells once the input of the terminal ends.
+  wheel: Option<(isize, (u16, u16))>,
   /// What asks each machine a verb, in the order of the machines.
   askers: Vec<Asker>,
   /// The box of the diff of the review of the changes, which the keys of a page scroll.
@@ -198,6 +201,7 @@ fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
     settles: false,
     keeps: false,
     moves: None,
+    wheel: None,
     askers: Vec::new(),
     scroll,
     diff,
@@ -633,7 +637,10 @@ fn told<T>(app: &App, window: &Shared, steady: bool, change: impl FnOnce(&mut Mo
     // What the operator saw marks the card of his thread read at once, in the same layout: a card
     // of a login that only reads, which records no Seen, would else show the unread mark that the
     // last cards of its machine gave it.
+    let scrolled = mem::take(&mut model.scrolled);
+    model.shows += u64::from(!steady && !scrolled);
     let saw = pump(askers, model);
+    model.shows += u64::from(saw);
     model.changes += u64::from(!steady || saw);
     given
   });
@@ -902,10 +909,15 @@ fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
     opened.thread.again = false;
   }
   said(askers, model);
-  let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
-  model.client.show_pictures(pictures);
-  let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
-  model.client.show_wholes(&wholes);
+  // The images and the whole outputs of the open thread read each of its exchanges, so they are
+  // read again only when what the feed shows changed, and not at each scroll.
+  if model.pictured != model.shows {
+    model.pictured = model.shows;
+    let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
+    model.client.show_pictures(pictures);
+    let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
+    model.client.show_wholes(&wholes);
+  }
   let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
   for (at, verb, asked) in model.client.asks_due(listing) {
     if let Some(id) = ask(askers, model, at, verb) {
@@ -1674,13 +1686,15 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     }
     return;
   }
+  if let Some(by) = over_feed(window, event) {
+    return wheeled(app, window, event, by);
+  }
   let change = |model: &mut Model| pointed(model, event);
-  let (on, does, verb) = if event.kind == MouseEventKind::Moved {
+  let (on, does) = if event.kind == MouseEventKind::Moved {
     steadily(app, window, change)
   } else {
     tell(app, window, change)
   };
-  older(window, verb);
   if on {
     window.borrow_mut().touched = Some(app.now());
   }
@@ -1975,32 +1989,69 @@ fn dropped(app: &App, window: &Shared, why: Option<String>) {
 }
 
 /// The pointer at a place of the window, and what it does there: whether it stands on the list,
-/// what a click does, and the verb that a scroll of the feed asks.
-fn pointed(model: &mut Model, event: MouseEvent) -> (bool, Option<Does>, Option<Verb>) {
+/// and what a click does.
+fn pointed(model: &mut Model, event: MouseEvent) -> (bool, Option<Does>) {
   let y = usize::from(event.y);
   model.pointer = Some((event.x, event.y));
   model.pointed_name();
   let on = model.on_list(event.x);
-  let (does, verb) = match (event.kind, on) {
-    (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
-    (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
+  let does = match (event.kind, on) {
+    (MouseEventKind::Down(MouseButton::Left), true) => model.clicked(y),
+    (MouseEventKind::Down(MouseButton::Left), false) => model.clicked_left(event.x, y),
     (MouseEventKind::Drag(MouseButton::Left), false) => {
       model.dragged_left(event.x, y);
-      (None, None)
+      None
     }
     (MouseEventKind::ScrollUp, true) => {
       model.scrolled(-isize::from(WHEEL));
-      (None, None)
+      None
     }
     (MouseEventKind::ScrollDown, true) => {
       model.scrolled(isize::from(WHEEL));
-      (None, None)
+      None
     }
-    (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-isize::from(WHEEL))),
-    (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(isize::from(WHEEL))),
-    _ => (None, None),
+    _ => None,
   };
-  (on, does, verb)
+  (on, does)
+}
+
+/// The rows that a step of the wheel moves the feed, when it turns over the feed.
+fn over_feed(window: &Shared, event: MouseEvent) -> Option<isize> {
+  let rows = isize::from(WHEEL);
+  let by = match event.kind {
+    MouseEventKind::ScrollUp => -rows,
+    MouseEventKind::ScrollDown => rows,
+    _ => return None,
+  };
+  (!window.borrow().screen.model.on_list(event.x)).then_some(by)
+}
+
+/// A step of the wheel over the feed, which waits for the end of the input that the terminal sent
+/// with it: the steps that come together move the feed in one change, so in one layout and one
+/// frame.
+fn wheeled(app: &App, window: &Shared, event: MouseEvent, by: isize) {
+  let waits = {
+    let mut held = window.borrow_mut();
+    let waits = held.wheel.is_some();
+    let rows = held.wheel.map_or(0, |one| one.0) + by;
+    held.wheel = Some((rows, (event.x, event.y)));
+    waits
+  };
+  if !waits {
+    let on = Rc::clone(window);
+    app.set_timeout(Duration::ZERO, move |cx| turned(cx.app(), &on));
+  }
+}
+
+/// The steps of the wheel that came together, told as one change of the feed.
+fn turned(app: &App, window: &Shared) {
+  let Some((by, at)) = window.borrow_mut().wheel.take() else { return };
+  let verb = tell(app, window, |model| {
+    model.pointer = Some(at);
+    model.pointed_name();
+    model.scroll_feed(by)
+  });
+  older(window, verb);
 }
 
 #[cfg(test)]

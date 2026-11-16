@@ -145,3 +145,82 @@ fn laid_out() {
     println!("{lines} lines: {:?} a change", start.elapsed() / runs);
   }
 }
+
+/// A window on a long thread: a count of answers, each a message that wraps and a block of twelve
+/// lines.
+fn long(app: &TestApp, answers: usize) -> Shared {
+  let window = windowed(app, &[], options());
+  let line = |number: usize| Line {
+    number,
+    text: format!("found = await bash(f\"grep -n step{number} src/hand.rs\")"),
+    mark: Mark::Ran,
+    output: None,
+    made: Vec::new(),
+    writes: Vec::new(),
+    awaits: Vec::new(),
+    pictures: Vec::new(),
+  };
+  let exchange = |at: usize| Exchange {
+    at,
+    message: format!("rung{at}"),
+    said_at: 0,
+    by: Maker::default(),
+    text: format!(
+      "The step {at} reads the feed and says what it found, in a paragraph that wraps over more \
+       than one row of the window, as the answer of a model does, with `code` and **marks**."
+    ),
+    python: false,
+    runs: false,
+    block: Some(Block {
+      maker: Maker::default(),
+      lines: (12 * at + 1..=12 * at + 12).map(line).collect(),
+      more: false,
+      thought: None,
+    }),
+    said: Vec::new(),
+  };
+  let key = (0, LIFE.to_owned(), "prompt1".to_owned());
+  let exchanges = (0..answers).map(|at| (at, exchange(at))).collect();
+  let thread = Thread { key, exchanges, above: Some(0), ..Thread::default() };
+  let (name, login) = ("mac".to_owned(), "uael".to_owned());
+  let told = Told { name, login, link: Link::Listed, cards: vec![card()], ..Told::default() };
+  tell(app, &window, |model| {
+    model.client.machines.push(told);
+    model.client.thread = Some(Opened { thread, ..Opened::default() });
+  });
+  app.advance(Duration::from_secs(1));
+  window
+}
+
+/// What a step of the wheel costs on a long thread, with its draw, and what a burst of steps that
+/// come in one frame costs: `cargo test -p furb-window --lib -- --ignored --nocapture wheeled`.
+#[test]
+#[ignore = "a measure, which prints its times"]
+fn wheeled() {
+  for answers in [50, 400] {
+    let app = TestApp::new(200, 60);
+    let window = long(&app, answers);
+    app.render();
+    let runs = 60u32;
+    let (before, start) = (layouts(&window), Instant::now());
+    for _ in 0..runs {
+      app.scroll(10, 20, false);
+      app.advance(Duration::ZERO);
+      app.render();
+    }
+    let step = start.elapsed() / runs;
+    let laid = layouts(&window) - before;
+    let start = Instant::now();
+    for _ in 0..runs {
+      for _ in 0..5 {
+        app.scroll(10, 20, true);
+      }
+      app.advance(Duration::ZERO);
+      app.render();
+    }
+    let burst = start.elapsed() / runs;
+    println!(
+      "{answers} answers: a step {step:?} with {laid} layouts for {runs}, a burst of 5 {burst:?}"
+    );
+  }
+}

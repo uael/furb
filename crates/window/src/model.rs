@@ -49,6 +49,9 @@ const PINNED: usize = 2;
 /// that they show.
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
 
+/// The rows of each part of the feed, with the count of changes and the clock that they show.
+pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, Vec<thread::Row>>);
+
 pub(crate) struct Model {
   /// What each machine told, and the cards of all of them in the order of the list.
   pub(crate) client: Client,
@@ -100,6 +103,17 @@ pub(crate) struct Model {
   /// The rows of the left side, with what they show: a layout costs the most of what the window
   /// does, and a step of the loaders or a move of the pointer takes them again.
   pub(crate) laid: RefCell<Option<Laid>>,
+  /// How many changes of what the parts of the feed show the model heard: each change of the left
+  /// side but one that only scrolls the feed, which moves it and changes no part of it.
+  pub(crate) shows: u64,
+  /// Whether the change that the model hears only scrolled the feed.
+  pub(crate) scrolled: bool,
+  /// The rows of each part of the feed that the window laid out, with what they show, so a scroll
+  /// lays out only the parts that come into sight.
+  pub(crate) parts: RefCell<Parts>,
+  /// The count of changes for which the window last told the images and the whole outputs of the
+  /// open thread.
+  pub(crate) pictured: u64,
   /// How many times the left side was laid out, which a test of speed counts.
   #[cfg(test)]
   pub(crate) layouts: Cell<u64>,
@@ -158,6 +172,10 @@ impl Model {
       read: RefCell::default(),
       changes: 0,
       laid: RefCell::default(),
+      shows: 0,
+      scrolled: false,
+      parts: RefCell::default(),
+      pictured: 0,
       #[cfg(test)]
       layouts: Cell::default(),
       armed: None,

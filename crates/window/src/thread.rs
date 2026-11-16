@@ -25,6 +25,7 @@ use opentui::style::{Color, Span, Style};
 use furb_client::{Filled, Fold, Hold, Opened, Place, Thread};
 
 use crate::{
+  feed::Feed,
   keys::Does,
   line::{Line, styled},
   list::hash,
@@ -198,7 +199,7 @@ pub(crate) struct Spot {
 
 /// One part of the feed in its order: the head of the feed, which says what stands before the
 /// exchanges that the window holds, then each of those exchanges by its place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Item {
   Head,
   At(usize),
@@ -572,16 +573,38 @@ impl Model {
     true
   }
 
+  /// The rows of a part of the feed, laid out once for what it shows, so a scroll lays out only the
+  /// parts that come into sight.
+  fn part_rows(&self, feed: &Feed<'_>, item: Item) -> Vec<Row> {
+    let stamp = Some((self.shows, self.clock()));
+    {
+      let kept = self.parts.borrow();
+      if kept.0 == stamp
+        && let Some(rows) = kept.1.get(&item)
+      {
+        return rows.clone();
+      }
+    }
+    let rows = feed.rows(item);
+    let mut parts = self.parts.borrow_mut();
+    if parts.0 != stamp {
+      *parts = (stamp, HashMap::new());
+    }
+    parts.1.insert(item, rows.clone());
+    rows
+  }
+
   /// The feed moved by a count of rows, up for a negative count: at its end it follows its end,
   /// and when less than a screen of it stands above, it asks the page before.
   pub(crate) fn scroll_feed(&mut self, by: isize) -> Option<Verb> {
+    self.scrolled = true;
     let room = self.feed_room();
     let feed = self.feed()?;
     let items = feed.items();
-    let now = items.shown(feed.opened.top, room, |item| feed.rows(item));
+    let now = items.shown(feed.opened.top, room, |item| self.part_rows(&feed, item));
     let moved = now.top.map(|top| Place { at: top.at, row: top.row + by });
-    let then = items.shown(moved, room, |item| feed.rows(item));
-    let near = then.top.is_none_or(|top| items.above(top, room, |item| feed.rows(item)) < room);
+    let then = items.shown(moved, room, |item| self.part_rows(&feed, item));
+    let near = then.top.is_none_or(|top| items.above(top, room, |item| self.part_rows(&feed, item)) < room);
     let opened = self.client.thread.as_mut()?;
     opened.top = then.top.filter(|_| !then.end);
     let older = opened.thread.asked.values().any(Option::is_some);
@@ -596,7 +619,7 @@ impl Model {
   pub(crate) fn step_message(&mut self, back: bool) -> Option<Verb> {
     let room = self.feed_room();
     let feed = self.feed()?;
-    let top = feed.items().shown(feed.opened.top, room, |item| feed.rows(item)).top?;
+    let top = feed.items().shown(feed.opened.top, room, |item| self.part_rows(&feed, item)).top?;
     let held = &feed.opened.thread.exchanges;
     let to = match back {
       true if top.row > 0 => Some(top.at),
@@ -792,7 +815,7 @@ impl Model {
       None => self.home(),
       Some(feed) => {
         let room = self.feed_room();
-        let shown = feed.items().shown(feed.opened.top, room, |item| feed.rows(item));
+        let shown = feed.items().shown(feed.opened.top, room, |item| self.part_rows(&feed, item));
         let mut rows = vec![feed.head()];
         rows.extend(self.open_rows());
         rows.extend(self.time_rows());
