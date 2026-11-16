@@ -9,6 +9,7 @@ use opentui::style::{Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+  keys::Does,
   line::{Line, run},
   model::Model,
   thread::{Click, Row},
@@ -18,19 +19,27 @@ use crate::{
 /// The cells of the bar of a progress.
 const BAR: u32 = 20;
 
+/// The fewest cells of the buttons and the inputs of a column of a view.
+const FIELD: usize = 40;
+
+/// What Enter does in an input of a view: it gives its text to the view.
+const SUBMIT: &str = "send";
+
 impl Model {
-  /// The rows of the views of the life of the target of the input: a blank row, then each tree,
-  /// each after a blank row of its own; none while no view shows.
+  /// The rows of the views of the life of the target of the input: each tree after a blank row of
+  /// its own, and a blank row under the last, so no view touches the input; none while no view
+  /// shows.
   pub(crate) fn kit_rows(&self) -> Vec<Row> {
-    let room = self.wide().saturating_sub(4);
+    // A view stands at the left edge, as the bands of the threads and the input do.
+    let room = self.wide().saturating_sub(2);
     let mut rows = Vec::new();
     for view in self.client.shown_views() {
       let Some(tree) = &view.tree else { continue };
       rows.push(Row::default());
-      let drawn = self.node_rows(&view, tree, room);
-      rows.extend(
-        drawn.into_iter().map(|row| row.shifted(2).with_head(vec![run("  ", Style::new())])),
-      );
+      rows.extend(self.node_rows(&view, tree, room));
+    }
+    if !rows.is_empty() {
+      rows.push(Row::default());
     }
     rows
   }
@@ -42,10 +51,13 @@ impl Model {
     match &node.shape {
       Shape::Box { axis, gap, border, children } => {
         let inner = if *border { room.saturating_sub(2) } else { room };
-        let parts = children.iter().map(|child| self.node_rows(view, child, inner)).collect();
         let rows = match axis {
-          Axis::Column => under(parts, usize::from(*gap)),
-          Axis::Row => beside(&parts, usize::from(*gap)),
+          Axis::Column => under(self.column(view, children, inner), usize::from(*gap)),
+          Axis::Row => {
+            let parts: Vec<Vec<Row>> =
+              children.iter().map(|child| self.node_rows(view, child, inner)).collect();
+            beside(&parts, usize::from(*gap))
+          }
         };
         if *border { self.bordered(rows) } else { rows }
       }
@@ -62,14 +74,9 @@ impl Model {
         .collect(),
       Shape::Table { header, rows } => self.table(view, (header, rows), room),
       Shape::Input { value, hint, inert } => {
-        vec![self.view_input(view, node, (value, hint, *inert))]
+        vec![self.view_input((view, node), (value, hint, *inert), 0)]
       }
-      Shape::Button { label, inert } => {
-        let line =
-          vec![run(format!(" {label} "), if *inert { muted } else { t.style(Role::Button) })];
-        let press = Click::Press { viewer: view.viewer.clone(), node: node.id.clone() };
-        vec![if *inert { Row::of(line) } else { Row::clicked(line, press) }]
-      }
+      Shape::Button { label, inert } => vec![self.button((view, node), (label, *inert), 0)],
       Shape::Progress { done } => vec![Row::of(self.progress(*done))],
       Shape::Code { text, .. } | Shape::Markdown { text } => {
         text.lines().map(|line| Row::of(vec![run(line.to_owned(), prose)])).collect()
@@ -78,24 +85,62 @@ impl Model {
     }
   }
 
-  /// The row of an input of a view: its value, or its hint while it holds none, between two
-  /// edges, in the accent while the input of the window fills it. A click there turns the input of
-  /// the window to it.
+  /// The rows of the children of a column, whose buttons and inputs take one width: the widest
+  /// row of the column, at least [`FIELD`] cells, within its room, as the rows of a list do.
+  fn column(&self, view: &View, children: &[Node], room: usize) -> Vec<Vec<Row>> {
+    let parts: Vec<Vec<Row>> =
+      children.iter().map(|child| self.node_rows(view, child, room)).collect();
+    let widest = parts.iter().flatten().map(Row::width).max().unwrap_or_default();
+    let wide = widest.max(FIELD).min(room);
+    let one = |(child, part): (&Node, Vec<Row>)| match &child.shape {
+      Shape::Button { label, inert } => vec![self.button((view, child), (label, *inert), wide)],
+      Shape::Input { value, hint, inert } => {
+        vec![self.view_input((view, child), (value, hint, *inert), wide)]
+      }
+      _ => part,
+    };
+    children.iter().zip(parts).map(one).collect()
+  }
+
+  /// The row of a button of a view, as wide as its label or as a width that it fills. A click
+  /// presses it.
+  fn button(&self, (view, node): (&View, &Node), (label, inert): (&str, bool), wide: usize) -> Row {
+    let t = &self.tokens;
+    let style = if inert { t.style(Role::Muted) } else { t.style(Role::Button) };
+    let text = format!(" {label} ");
+    let pad = wide.saturating_sub(text.width());
+    let line = vec![run(format!("{text}{}", " ".repeat(pad)), style)];
+    let press = Click::Press { viewer: view.viewer.clone(), node: node.id.clone() };
+    if inert { Row::of(line) } else { Row::clicked(line, press) }
+  }
+
+  /// The row of an input of a view: its value, or its hint while it holds none, then what Enter
+  /// does there, on the ground of a field as wide as its text or as a width that it fills, in the
+  /// accent while the input of the window fills it. A click there turns the input of the window
+  /// to it.
   fn view_input(
     &self,
-    view: &View,
-    node: &Node,
+    (view, node): (&View, &Node),
     (value, hint, inert): (&str, &Option<String>, bool),
+    wide: usize,
   ) -> Row {
     let t = &self.tokens;
     let filled = self.client.filled.as_ref();
     let filled = filled.is_some_and(|one| one.viewer == view.viewer && one.node == node.id);
-    let shown = match hint {
-      Some(hint) if value.is_empty() => run(hint.clone(), t.style(Role::Muted)),
-      _ => run(value.to_owned(), t.style(Role::Prose)),
+    let ground = Style::new().bg(t.panel);
+    let (text, style) = match hint {
+      Some(hint) if value.is_empty() => (hint.clone(), t.style(Role::Muted)),
+      _ => (value.to_owned(), t.style(Role::Prose)),
     };
-    let edge = Style::new().fg(if filled { t.accent } else { t.border });
-    let line = vec![run("▏", edge), shown, run(" ▕", edge)];
+    let enter = if inert { String::new() } else { format!("{} {SUBMIT}", self.key(Does::Send)) };
+    let pad = wide.saturating_sub(text.width() + enter.width() + 3);
+    let edge = Style::new().fg(if filled { t.accent } else { t.border }).bg(t.panel);
+    let line = vec![
+      run("▎", edge),
+      run(format!("{text}{}", " ".repeat(pad + 1)), style.bg(t.panel)),
+      run(enter, t.style(Role::Muted).bg(t.panel)),
+      run(" ", ground),
+    ];
     let (viewer, node, value) = (view.viewer.clone(), node.id.clone(), value.to_owned());
     if inert { Row::of(line) } else { Row::clicked(line, Click::Fill { viewer, node, value }) }
   }

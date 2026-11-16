@@ -35,6 +35,8 @@ include = [
   "/.agents/skills/mcp/process.py",
   "/.agents/skills/grant/SKILL.md",
   "/.agents/skills/grant/grant.py*",
+  "/.agents/skills/todo/SKILL.md",
+  "/.agents/skills/todo/todo.py*",
   "/.agents/skills/*/keys.json",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",

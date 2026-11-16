@@ -218,7 +218,11 @@ impl Rig {
     }
     put(&rig.project().join(SHOT.0), SHOT.1)?;
     committed(&rig.project())?;
-    write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
+    let mut skills = serde_json::json!({ "naming": false });
+    for kit in walk.kits {
+      skills[*kit] = true.into();
+    }
+    write(root.join("config/config.json"), &serde_json::json!({ "skills": skills }).to_string())?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;
     if walk.far.is_some() {

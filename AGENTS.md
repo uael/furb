@@ -22,7 +22,7 @@ API of its own:
 - `src/skill.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
   chain or the root alone, and plays the setup of the root on a new record. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
-  `compaction`, `naming`, `ouroboros`, `web`, `mcp` and `grant`, each a word, a contract and a suite, and `src/world/` holds the ear of
+  `compaction`, `naming`, `ouroboros`, `web`, `mcp`, `grant` and `todo`, each a word, a contract and a suite, and `src/world/` holds the ear of
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.

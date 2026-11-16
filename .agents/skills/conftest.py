@@ -162,6 +162,24 @@ def naming(
   return extended("naming", at, _monty.skills, lives=lives, doctrine="Read first.\n", roster=given, record=record)
 
 
+def todo(at: Path, record: Sequence[tuple] = ()) -> tuple[Sand, str]:
+  """A life of a new record, or of the record that it is given, that runs the extension todo with its life word: the
+  World and the root."""
+  return extended("todo", at, lives=True, doctrine="Read first.\n", record=record)
+
+
+def viewed(root: str) -> list[tuple]:
+  """Each prompt of the view of the list of tasks on a root, in order: the chain labelled todo that the list made."""
+  made = [a for a in engine.transcript(root) if a[0] == "chain"]
+  return [a for one in made for a in engine.transcript(str(one[1])) if a[0] == "prompt"]
+
+
+def tasks(root: str) -> list[str]:
+  """The label of each task that the last view of the list on a root shows."""
+  tree = json.loads(str(viewed(root)[-1][5]))["tree"]
+  return [x["label"] for x in tree["children"] if x["node"] == "button"]
+
+
 CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")
 """CATCHUP is the official extension catchup, with its life word."""
 
