@@ -1,3 +1,6 @@
+//! The check of the archive of uv against its pin, where no door reaches it with no network: the
+//! one door downloads uv from GitHub.
+
 use super::{PINS, checked};
 
 #[test]
