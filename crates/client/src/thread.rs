@@ -8,7 +8,7 @@ use std::{
 };
 
 use furb_wire::{
-  Agent, Context, Exchange, OPERATOR, Page, Standing, card,
+  Agent, Context, Exchange, Mark, OPERATOR, Page, Standing, card,
   protocol::{Card, Verb},
 };
 
@@ -104,6 +104,10 @@ pub enum Fold {
   Context,
 }
 
+/// How long the number of a line that ended settles, from the accent of its work to the grey of a
+/// line that ran.
+pub const ENDS: Duration = Duration::from_millis(600);
+
 /// A thread that the client reads: its card, the exchanges that the daemon gave, how many stand
 /// before them, its agents, each page that it asked, the messages of the operator that it does not
 /// show yet, and the context of its chain.
@@ -137,6 +141,9 @@ pub struct Thread {
   pub time: Option<Time>,
   /// Whether the next page takes the place of each exchange held, since the thread moved in time.
   pub replaces: bool,
+  /// When each line that ran while the client read it ended, by its number, on the clock of the
+  /// loaders: the moment from which its number settles.
+  pub ended: BTreeMap<usize, Duration>,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the
@@ -160,7 +167,13 @@ impl Thread {
 
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
   /// place of the one before it, and the agents and the context are those of the thread now.
-  pub fn took(&mut self, page: Page) {
+  pub fn took(&mut self, page: Page, now: Duration) {
+    let marked = |exchanges: &BTreeMap<usize, Exchange>, mark: fn(&Mark) -> bool| -> Vec<usize> {
+      let lines = exchanges.values().filter_map(|one| one.block.as_ref());
+      let lines = lines.flat_map(|block| &block.lines);
+      lines.filter(|line| mark(&line.mark)).map(|line| line.number).collect()
+    };
+    let ran = marked(&self.exchanges, |mark| matches!(mark, Mark::Runs { .. }));
     if mem::take(&mut self.replaces) {
       (self.exchanges, self.above) = (BTreeMap::new(), None);
     }
@@ -171,6 +184,10 @@ impl Thread {
     (self.agents, self.context) = (page.agents, page.context);
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
+    let ended = marked(&self.exchanges, |mark| *mark == Mark::Ran);
+    let ended = ended.into_iter().filter(|one| ran.contains(one));
+    self.ended.retain(|_, at| now.saturating_sub(*at) < ENDS);
+    self.ended.extend(ended.map(|number| (number, now)));
     self.shown();
   }
 

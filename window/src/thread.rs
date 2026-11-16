@@ -491,7 +491,7 @@ impl Model {
     }
     let life = (at, opened.thread.key.1.clone());
     match page {
-      Ok(page) => opened.thread.took(page),
+      Ok(page) => opened.thread.took(page, self.client.moved),
       Err(why) => {
         opened.thread.fault = Some(why);
         if self.client.holds.get(&life).is_some_and(Hold::runs) {
@@ -518,7 +518,7 @@ impl Model {
     if opened.thread.past() {
       return false;
     }
-    opened.thread.took(page);
+    opened.thread.took(page, self.client.moved);
     self.client.refollow();
     true
   }

@@ -51,7 +51,7 @@ pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
 pub use sign_in::SignIn;
-pub use thread::{Fold, Opened, PAGE, Pending, Place, Thread, rests};
+pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
 pub use views::{Filled, View};
 

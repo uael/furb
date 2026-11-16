@@ -9,7 +9,7 @@
 use std::{io, path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, Fold, HOLD, Hold, Listing, Step, Time};
+use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event, ProtocolError,
@@ -63,6 +63,9 @@ pub(crate) struct Model {
   /// it did not read, and none while the clocks stand still, as in a capture, where a script
   /// presses each key and the clock that the hold reads never moves.
   pub(crate) hold: Duration,
+  /// How long the number of a line that ended settles: [`ENDS`], and none while the clocks stand
+  /// still, so a capture shows each line as it rests.
+  pub(crate) settles: Duration,
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
@@ -114,6 +117,7 @@ impl Model {
       speaks: CapabilityFlags::default(),
       browse: options.browse,
       hold: if options.still { Duration::ZERO } else { HOLD },
+      settles: if options.still { Duration::ZERO } else { ENDS },
       tokens,
       fault: None,
       colors: Colors::new(),
@@ -484,13 +488,17 @@ impl Model {
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
     let plays = self.client.plays();
-    let time = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
-    let reads = time.is_some_and(Time::reads);
+    let thread = self.client.thread.as_ref().map(|one| &one.thread);
+    let reads = thread.and_then(|one| one.time.as_ref()).is_some_and(Time::reads);
+    let settles = thread.is_some_and(|one| {
+      one.ended.values().any(|at| self.client.moved.saturating_sub(*at) < self.settles)
+    });
     self.slow && !self.known()
       || opens
       || pulses
       || plays
       || reads
+      || settles
       || self.client.settled.iter().any(works)
   }
 

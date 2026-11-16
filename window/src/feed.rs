@@ -29,7 +29,7 @@ use crate::{
   picture, prose,
   question::closed,
   thread::{Click, Item, Items, Row, width},
-  tokens::{APART, Loader, PROMPT, Role, WORKS},
+  tokens::{APART, Loader, PROMPT, Role, WORKS, mixed},
 };
 
 /// The word on the line of a block whose model has not begun to write it.
@@ -742,7 +742,17 @@ impl Feed<'_> {
       Mark::Asks => ("◆".to_owned(), t.attention, None),
       Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
       Mark::Stopped { .. } => ("■".to_owned(), t.muted, None),
-      Mark::Ran => (line.number.to_string(), t.muted, None),
+      // A line that ended while he read the thread lights its number in the accent of its work,
+      // which settles into the grey of a line that ran, so the eye sees where the work moved on.
+      Mark::Ran => {
+        let (ended, settles) = (self.opened.thread.ended.get(&line.number), self.model.settles);
+        let age = ended.map(|at| self.model.client.moved.saturating_sub(*at));
+        let share =
+          age.filter(|age| *age < settles).map(|age| age.as_millis() * 100 / settles.as_millis());
+        let color = share
+          .map_or(t.muted, |share| mixed(t.accent, t.muted, u16::try_from(share).unwrap_or(100)));
+        (line.number.to_string(), color, None)
+      }
     }
   }
 
