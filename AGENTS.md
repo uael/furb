@@ -51,7 +51,11 @@ API of its own:
   that differ from those before it, which a crossing writes alone. An open by the record replays each segment on the
   texts that its fact made holds, in a life that inspects it, gathers the carry of its tip with the checkpointer that
   the next fact made names, and boots the next engine on that carry and the entries of the next segment, up to the
-  last segment, which it replays word by word, so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
+  last segment, which it replays word by word, so it opens at the exact state of its tip. A life that keeps its
+  record keeps the carry of its last crossing beside it, `<record>.carry`, a cache as the image is: its key names each
+  entry up to that crossing and the texts of the build, so each later open boots on it while it agrees and replays
+  those segments again when it does not, and each segment before the last crossing replays on its old engine once. A
+  tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.
 - `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
