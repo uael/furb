@@ -108,10 +108,11 @@ reads it.
   of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a command, its `args`, `env` and
   `cwd` for a server over stdio, or a `type` of `http` or `sse` with a `url` and `headers` for a remote one. `${VAR}`
   and `${VAR:-default}` expand in each of them, `"timeout"` bounds a call in seconds, `"deny"` hides tools, and
-  `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the operator approves it. The ear of the
-  World connects each server, ends each server over stdio with the life, connects a lost server again with a backoff,
-  and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on macOS,
-  else in a file that only the user reads. Its life word, `await mcp_index()`, tells each chain one line for each
+  `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the operator approves it. The process
+  of the kit connects each server, ends each server over stdio with the life, connects a lost server again with a
+  backoff, and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on
+  macOS, else in a file that only the user reads, which the key `tokens` of the kit, `{"mcp": {"tokens": "file"}}`,
+  names on macOS too, as on a Mac reached over SSH, whose Keychain is locked. Its life word, `await mcp_index()`, tells each chain one line for each
   server, with its state and its tools, and binds the tools of each short server as a class of typed functions, so a
   model writes `await github.create_issue(owner="o", repo="r", title="t")` and reads the name and the type of each
   argument in the signature. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures and

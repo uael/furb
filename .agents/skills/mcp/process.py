@@ -12,7 +12,8 @@ where a scope first named it. A server of the project scope runs only once the o
 `"approveAll"` of the local scope approve, `"disabled"` turns servers off, and `"enabled"` turns on a server whose
 definition says `"disabled": true`. A server reaches furb over stdio, the streamable HTTP or the older HTTP with SSE,
 and a remote server logs in by OAuth 2.1, whose tokens stand in the Keychain of macOS, and elsewhere in
-`mcp-tokens.json` of the config folder, which only the user reads.
+`mcp-tokens.json` of the config folder, which only the user reads; the key `tokens` of the kit names the file on macOS
+too.
 
 A server connects when an act first needs it, and its first connect gives its state: connected, failed, or needs-auth
 when it asks for a login. A connection that ends connects again after a wait that doubles from one second, at most
@@ -70,6 +71,8 @@ from furb.skill import Fact, Skill
 
 KINDS = ("mcp_servers", "mcp_call", "mcp_read", "mcp_prompt", "mcp_control")
 CHANGED = "mcp_changed"
+CONFIGURED = "configured"
+"""The fact of a change of a key of the configs, after which the kit reads its keys again."""
 ROOT = "chain1"
 """The fact of a change of a server is about the root chain, so its transcript holds it."""
 
@@ -896,13 +899,20 @@ class Content:
 
 
 class Vault:
-  """The store of the tokens of this machine: the Keychain of macOS, under the service furb-mcp, and else a file of
-  the config folder that only the user reads. A secret goes to the Keychain on the stdin of its program, so it stands
-  in the arguments of no process."""
+  """The store of the tokens of this machine: the Keychain of macOS, under the service furb-mcp, unless the key
+  `tokens` of the kit names the file, and else a file of the config folder that only the user reads. A secret goes to
+  the Keychain on the stdin of its program, so it stands in the arguments of no process. The store is known once the
+  kit read its keys, and a use waits for it."""
 
   def __init__(self, config: Path) -> None:
     self.file = config / "mcp-tokens.json"
-    self.keychain = sys.platform == "darwin" and Path(KEYCHAIN).exists()
+    self.keychain = False
+    self.known = asyncio.Event()
+
+  def stands(self, tokens: object) -> None:
+    """The store that the key `tokens` names, from now on."""
+    self.keychain = tokens == "keychain" and sys.platform == "darwin" and Path(KEYCHAIN).exists()
+    self.known.set()
 
   @staticmethod
   def account(key: str) -> str:
@@ -951,14 +961,17 @@ class Vault:
 
 class Storage:
   """The tokens and the client of one server in the vault, as the SDK reads and writes them. A token keeps when it
-  ends, so a later process refreshes it before it serves. A login takes a client of its redirect alone, else it
+  ends, so a later connection refreshes it before it serves: the SDK takes the end of a token that it reads from its
+  storage from no field, so the storage tells the provider that `provider` names. A login takes a client of its redirect alone, else it
   registers one; a connect that no person watches takes any client, so it registers none before it asks for a
   login."""
 
   def __init__(self, vault: Vault, key: str, run: Run, redirect: str, *, asking: bool) -> None:
     self.vault, self.key, self.client, self.redirect, self.asking = vault, key, run.client, redirect, asking
+    self.provider: OAuthClientProvider | None = None
 
   async def held(self) -> dict[str, Json]:
+    await self.vault.known.wait()
     try:
       held = json.loads(await asyncio.to_thread(self.vault.get, self.key) or "{}")
     except ValueError:
@@ -974,7 +987,10 @@ class Storage:
       return None
     ends = tokens.pop("ends", None)
     left = int(ends - time.time()) if isinstance(ends, int | float) else None
-    return OAuthToken.model_validate({**tokens, "expires_in": None if left is None else max(left, 0)})
+    token = OAuthToken.model_validate({**tokens, "expires_in": None if left is None else max(left, 0)})
+    if self.provider is not None:
+      self.provider.context.update_token_expiry(token)
+    return token
 
   async def set_tokens(self, tokens: OAuthToken) -> None:
     kept = dumped(tokens)
@@ -1311,6 +1327,7 @@ class Hub:
       if action == "login":
         await self.login(name, run)
       if action == "logout":
+        await self.vault.known.wait()
         await asyncio.to_thread(self.vault.forget, f"{name} {run.url}")
       self.restart(name)
     else:
@@ -1328,7 +1345,9 @@ class Hub:
     async def redirected(url: str) -> None:
       if came is None:
         raise Login(name)
-      browse(url)
+      # A browser that BROWSER names can run until it ends, as curl does after the redirect: on a thread, the loop
+      # goes on and takes the redirect back.
+      await asyncio.to_thread(browse, url)
 
     async def called() -> AuthorizationCodeResult:
       try:
@@ -1356,7 +1375,8 @@ class Hub:
       }
     )
     storage = Storage(self.vault, f"{name} {run.url}", run, redirect, asking=came is not None)
-    return OAuthClientProvider(run.url, metadata, storage, redirected, called)
+    storage.provider = OAuthClientProvider(run.url, metadata, storage, redirected, called)
+    return storage.provider
 
   async def login(self, name: str, run: Run) -> None:
     """A login by OAuth 2.1 in the browser of the system, whose tokens the vault keeps."""
@@ -1513,8 +1533,14 @@ async def main() -> None:
     hubs.append(hub)
     return {kind: lambda fact, kind=kind: hub.answer(kind, fact[4:]) for kind in KINDS}  # ty: ignore[invalid-argument-type]
 
-  skill = await Skill.attach(kinds=[], answering=answering)
+  skill = await Skill.attach(kinds=[CONFIGURED], answering=answering)
   (hub,) = hubs
+
+  async def tokens() -> None:
+    hub.vault.stands((await skill.settings()).get("tokens"))
+
+  await tokens()
+  skill.heard(lambda fact, _: asyncio.ensure_future(tokens()) if fact[0] == CONFIGURED else None)
 
   async def told() -> None:
     while True:

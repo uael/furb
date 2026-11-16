@@ -199,7 +199,7 @@ const OFFICIAL: [(&str, &str, &str, Option<&str>); 9] = [
     include_str!("../.agents/skills/mcp/SKILL.md"),
     include_str!("../.agents/skills/mcp/mcp.py"),
     include_str!("../.agents/skills/mcp/mcp.pyi"),
-    None,
+    Some(include_str!("../.agents/skills/mcp/keys.json")),
   ),
   (
     include_str!("../.agents/skills/grant/SKILL.md"),

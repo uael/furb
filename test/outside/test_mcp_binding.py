@@ -7,6 +7,7 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 import jsonschema
 import pytest
@@ -57,7 +58,7 @@ async def sent(word: str, calls: list[str]) -> list[object]:
   """What each call sends, in order, when the word of a binding runs in monty and the calls run after it."""
   made = "".join(f"got.append({one})\n" for one in calls)
   root = life(Dead())[1]
-  return json.loads(await engine.rung(f"{SENDS}{word}got = []\n{made}close(json.dumps(got))", on=root))
+  return json.loads(str(await engine.rung(f"{SENDS}{word}got = []\n{made}close(json.dumps(got))", on=root)))
 
 
 def mapped(schema: object, defs: object) -> tuple[str, str]:
@@ -241,6 +242,23 @@ def corpus() -> Iterator[tuple[str, list[dict]]]:
     yield held["server"], held["tools"]
 
 
+class Param(Protocol):
+  """A parameter of a bound function, as the process makes it."""
+
+  name: str
+  key: str
+  shape: tuple
+  required: bool
+
+
+class Bound(Protocol):
+  """A bound function of a tool, as the process makes it."""
+
+  tool: str
+  name: str
+  params: list[Param]
+
+
 PLAIN = {"str": "a", "int": 1, "float": 1.5, "bool": True}
 """PLAIN is the value that the corpus gives a parameter of each plain type."""
 
@@ -259,7 +277,7 @@ def samples(shape: tuple) -> list[object]:
   return [PLAIN.get(shape[0])]
 
 
-def calls(server: str, one: object) -> list[tuple[str, dict]]:
+def calls(server: str, one: Bound) -> list[tuple[str, dict]]:
   """The calls of a function that the corpus makes from its signature, each with what it must send: one with its
   required parameters alone, by place, then one for each value that a parameter takes, with every parameter, by place
   and by name in turn."""
