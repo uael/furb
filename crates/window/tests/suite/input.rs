@@ -1167,10 +1167,15 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   shows(&app, "~/data/sessions/…");
   sent(&app, &format!("plan the week again {ANSWERS}"));
   shows(&app, "No project · plan the week again");
-  let mut folders: Vec<PathBuf> =
-    fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
-  folders.sort();
-  assert_eq!(folders, [alone.join("plan-the-week"), alone.join("plan-the-week-2")]);
+  // The head shows the new session before the machine made its folder, which comes later.
+  let both = [alone.join("plan-the-week"), alone.join("plan-the-week-2")];
+  let folders = || {
+    let mut folders: Vec<PathBuf> =
+      fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
+    folders.sort();
+    folders
+  };
+  assert!(app.wait_until(PATIENCE, || folders() == both), "{:?}", folders());
 }
 
 #[test]
