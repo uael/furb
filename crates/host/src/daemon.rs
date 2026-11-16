@@ -13,6 +13,8 @@
 //! its lives and their pins, which the new one opens again. Each window then dials again and
 //! attaches, with no loss. The handover first waits until no life runs a command, while the daemon
 //! serves each peer, since the end of a life cuts its commands and no later life takes one again.
+//! A program that asks the handover meanwhile takes the place of the one that asked before it,
+//! which hears that the daemon stops and ends, so the newest build alone takes the place.
 //! It then waits for each life to end, however long it takes: a life given up before its end would
 //! still hold the lease of its record and the facts that its record does not hold yet, and the new
 //! daemon would open a second life on that record.
@@ -157,15 +159,26 @@ where
 /// image of each life, stops to listen and gives its lives and their pins, which this one
 /// opens again. When no daemon answers, this one starts as [`run`] does. A daemon of another
 /// protocol refuses the hello and names its own, so this one dials it again and says its hello in
-/// that protocol: the hello and the handover keep their form across the versions.
+/// that protocol: the hello and the handover keep their form across the versions. A daemon that a
+/// later program asks the handover of while it waits says that it stops, and this one ends, so
+/// the program that asks last takes its place, and one daemon starts.
 pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonError> {
+  let log = settings.opening.log.clone();
   let (handed, asker) = match local.dial().await {
     Ok(stream) => {
-      let (handed, asker) = match handover(stream, PROTOCOL).await {
+      let answered = match handover(stream, PROTOCOL).await {
         Err(DaemonError::Refused(ProtocolError::Protocol { ours, .. })) if ours != PROTOCOL => {
-          handover(local.dial().await?, ours).await?
+          handover(local.dial().await?, ours).await
         }
-        handed => handed?,
+        other => other,
+      };
+      let (handed, asker) = match answered {
+        Ok(both) => both,
+        Err(DaemonError::Refused(ProtocolError::Stopped)) => {
+          report(log.as_ref(), &"a later program takes the place of the daemon");
+          return Ok(());
+        }
+        Err(no) => return Err(no),
       };
       (handed, Some(asker))
     }
@@ -476,8 +489,8 @@ enum Asked {
   Restand,
   /// What a site sent in the project of a record, with what the life of the record holds now.
   History { life: String, site: String, held: Vec<Sent>, reply: oneshot::Sender<Vec<Sent>> },
-  /// A handover that a peer asked, once no life runs a command that it ran when it was asked.
-  Settled { asker: Outbox, reply: Replied },
+  /// The handover that a peer asked, once no life runs a command that it ran when it was asked.
+  Settled,
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -521,6 +534,7 @@ impl Daemon {
       views: Views::default(),
       readers: Readers::default(),
       empty,
+      settling: None,
     };
     lives.members.set(lives.operators());
     lives.adopt(handed);
@@ -792,6 +806,8 @@ struct Lives {
   readers: Readers,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
+  /// The peer that asks the handover while it waits for the commands in flight, and its reply.
+  settling: Option<(Outbox, Replied)>,
   /// The cards that the daemon told to the peers that asked them.
   told: Told,
   /// Each record that the daemon sent to the task that makes the index of its threads, so no
@@ -1059,10 +1075,20 @@ impl Lives {
       };
       match asked {
         None => return,
+        // The program that asks last takes the place of the daemon: the one that asked before it,
+        // a build older than its own, hears that the daemon stops, and ends.
         Some(Asked::Verb { verb, outbox, reply, .. }) if *verb == Verb::Handover => {
-          self.settle(outbox, reply);
+          if let Some((_, before)) = self.settling.replace((outbox, reply)) {
+            before.send(Err(ProtocolError::Stopped)).ok();
+          } else {
+            self.settle();
+          }
         }
-        Some(Asked::Settled { asker, reply }) => return self.handover(asker, reply),
+        Some(Asked::Settled) => {
+          if let Some((asker, reply)) = self.settling.take() {
+            return self.handover(asker, reply);
+          }
+        }
         Some(asked) => self.heard(asked),
       }
       let empty = self.held.is_empty();
@@ -1110,7 +1136,7 @@ impl Lives {
       }
       Asked::Stop(reply) => self.stop(reply),
       // The task hands the lives over before it hears an ask, since the handover ends it.
-      Asked::Settled { .. } => {}
+      Asked::Settled => {}
       Asked::Restand => self.restand(),
       Asked::History { life, site, held, reply } => {
         reply.send(self.history(&life, &site, held)).ok();
@@ -1708,7 +1734,7 @@ impl Lives {
   /// The handover asked, once each life that lives holds no command in flight: the end of a life
   /// cuts its commands, which no later life takes again. The daemon serves each peer meanwhile,
   /// and its log names each life that it waits for.
-  fn settle(&self, asker: Outbox, reply: Replied) {
+  fn settle(&self) {
     let living = self.held.iter().filter(|(_, held)| matches!(held.stage, Stage::Living(_)));
     let runs = living.filter(|(_, held)| held.handle.runs_commands());
     let lives: Vec<(String, LifeHandle)> =
@@ -1722,7 +1748,7 @@ impl Lives {
       }
       future::join_all(lives.iter().map(|(_, life)| life.settled())).await;
       if let Some(asks) = asks.upgrade() {
-        asks.send(Asked::Settled { asker, reply }).ok();
+        asks.send(Asked::Settled).ok();
       }
     });
   }

@@ -1,11 +1,16 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+  collections::HashSet,
+  env, io,
+  process::{Command, Stdio},
+  sync::{Arc, Mutex, PoisonError},
+};
 
 use furb::{
   Ear, Fact, Fault, Object,
-  ear::{Co, ear, hear, hearing},
+  ear::{Co, ear, hear, hearing, say},
   view::{Fold, Pause, followed},
   wire::outward,
   world::{Asked, CONSOLE},
@@ -14,16 +19,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{changes::Journal, event::Event};
+use crate::{
+  changes::Journal,
+  event::Event,
+  serve::{PROGRAM, built},
+};
 
 /// The ears of the host, each under its name, in the order of boot: the console of the operator,
-/// the ear that tells each fact as events, and the ear of the journal of the changes of files of a
-/// life that keeps a record.
+/// the ear that tells each fact as events, the ear of the upgrade, and the ear of the journal of
+/// the changes of files of a life that keeps a record.
 pub(crate) fn ears(
   told: UnboundedSender<Event>,
   journal: Option<&Journal>,
 ) -> Vec<(&'static str, Box<dyn Ear>)> {
-  let mut ears = vec![(CONSOLE, console()), ("events", events(told))];
+  let mut ears = vec![(CONSOLE, console()), ("events", events(told)), (UPGRADE, upgrade())];
   if let Some(journal) = journal {
     ears.push(("changes", journal.ear()));
   }
@@ -39,6 +48,64 @@ fn console() -> Box<dyn Ear> {
       Asked::taken(&mut co, &a).await?;
     }
   })
+}
+
+/// The act by which a word moves furb to its newest build.
+const UPGRADE: &str = "upgrade";
+
+/// The build of the program of this process that the ear of the upgrade started last.
+static STARTED: Mutex<Option<String>> = Mutex::new(None);
+
+/// The ear of the upgrade, which answers the act `upgrade` with what it did. When a build replaced
+/// the program of this process since it started, it starts that program as `furb host upgrade`,
+/// once for each build, which takes the place of the daemon of this machine, and each life opens
+/// again on it. A program that a build writes now cannot start, and the act is refused.
+fn upgrade() -> Box<dyn Ear> {
+  hearing(&[UPGRADE], |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if !a.question() || a.kind() != UPGRADE {
+        continue;
+      }
+      let answer = match upgraded() {
+        Ok(said) => Object::string(said),
+        Err(no) => Fault::refused(format!("furb cannot start its newest build: {no}")).object(),
+      };
+      say(&mut co, Fact::says("done", a.about(), [answer]));
+    }
+  })
+}
+
+/// What the upgrade did: the start of the newest build, in a group of its own, so the end of the
+/// daemon that it takes the place of does not end it.
+fn upgraded() -> io::Result<&'static str> {
+  let program = env::current_exe()?;
+  let unread = || io::Error::other("its program cannot be read, as while a build writes it");
+  let now = built(&program).ok_or_else(unread)?;
+  if PROGRAM.as_ref() == Some(&now) {
+    return Ok("furb runs its newest build.");
+  }
+  let mut started = STARTED.lock().unwrap_or_else(PoisonError::into_inner);
+  if started.as_ref() == Some(&now) {
+    return Ok("furb moves to its newest build already.");
+  }
+  let mut command = Command::new(&program);
+  command.args(["host", "upgrade"]).stdin(Stdio::null());
+  #[cfg(unix)]
+  {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+  }
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+  }
+  // The new build outlives this process, which ends at the handover, and nothing waits for it.
+  drop(command.spawn()?);
+  *started = Some(now);
+  Ok("The newest build of furb takes the place of the daemon, and each life opens again on it.")
 }
 
 /// What the ear of the events keeps of the facts that it heard, which the image of a life holds:

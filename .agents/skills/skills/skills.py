@@ -1,4 +1,4 @@
-from furb.engine import HEAD, Act, Show, Text, act, controlled, opened, read, shown, told
+from furb.engine import HEAD, HIDDEN, Act, Show, Text, act, controlled, module, opened, read, shown, told
 
 
 def skills(on: str = "") -> Text:
@@ -24,6 +24,16 @@ def skill_made[T](_shape: type[T], made) -> Act[T]:
 
 async def listed(on: str = "") -> None:
   skills(on)
+
+
+async def reload(on: str = "") -> object:
+  for line in read("skills://", HIDDEN, on).lines:
+    name, _, marks = line.partition(" (")
+    if marks.startswith(("code, on)", "code, on,")):
+      await skill(name, HIDDEN, on)
+  if callable(servers := module(on).get("mcp_servers")):
+    await servers(on=on)
+  return await act("upgrade", on, None)
 
 
 def defined(*names: str) -> Show:

@@ -31,6 +31,13 @@ async def listed(on: str = "") -> None:
   The life word of the extension is await listed(), so the setup of the root reads the skills in the turn of the life words of the extensions, and each chain with no source holds that read in its setup.
   """
 
+async def reload(on: str = "") -> object:
+  """What a chain plays, taken again, which the key of a reload in a window runs on the root of its session, and a model runs as it runs any word.
+  reload loads again with HIDDEN each skill with code that the life runs on the chain, so the World enables again each word that changed on the disk, and the turn after it tells no text of a skill.
+  When the module of the chain binds mcp_servers, reload awaits it, so the kit mcp reads the servers of the configs again.
+  reload then awaits the act upgrade with no words on its chain, and gives what the World answers it: the host of the life moves furb to its newest build.
+  """
+
 def defined(*names: str) -> Show:
   """defined(*names) is a Show: it selects the lines of each definition at the top of a text whose name is one of names, a definition being a def, an async def, a class, a type or an assignment, with its decorators and each line under it that is indented, blank or closes a bracket.
   defined(*names) keeps the decorators of a definition when a comment or a blank line at the top of the text stands between a decorator and its definition.

@@ -1552,6 +1552,60 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
 }
 
 #[tokio::test]
+async fn a_program_that_asks_the_handover_while_one_waits_takes_its_place_and_the_first_ends() {
+  let at = place();
+  let (local, old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let word = "r = await bash('while [ ! -f go ]; do sleep 0.05; done; echo ran')".to_owned();
+  let verb = Verb::Run { life: life.clone(), word, on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  let runs = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
+  };
+  window.until(runs).await;
+  let upgraded = || {
+    let (next, opening) = (local.clone(), opening(&at));
+    let settings = Settings {
+      opening,
+      grace: SHORT,
+      first: STARTING,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      data: None,
+    };
+    tokio::spawn(async move { upgrade(&next, settings).await })
+  };
+  let first = upgraded();
+  time::sleep(PAST).await;
+  let mut second = upgraded();
+  let ended = timeout(PATIENCE, first).await.expect("the first program ends");
+  assert!(matches!(ended, Ok(Ok(()))), "{ended:?}");
+  assert!(!old.is_finished(), "the handover waits for the command");
+  File::create(at.join("go")).unwrap();
+  assert!(window.closed().await);
+  assert!(matches!(old.await, Ok(Ok(()))));
+  listening(&local, &mut second).await;
+}
+
+#[tokio::test]
+async fn the_act_upgrade_of_a_life_says_that_furb_runs_its_newest_build_while_no_build_replaced_it()
+{
+  let at = place();
+  let (local, _old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  window.ran(&life, "said = await act('upgrade', '', None)").await;
+  let inspect = Verb::Inspect { life: life.clone(), name: "said".to_owned(), on: None };
+  let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
+  assert_eq!(value, json!("furb runs its newest build."));
+}
+
+#[tokio::test]
 async fn a_word_that_awaits_an_agent_is_asked_nothing_more_once_its_life_opens_from_its_image() {
   asked_once_across_a_handover(false).await;
 }
