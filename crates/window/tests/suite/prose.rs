@@ -3,7 +3,13 @@
 
 #![cfg(test)]
 
-use crate::{cards::shows, daemon::TABLES, question::opened, screens::screen, thread::LEFT};
+use crate::{
+  cards::shows,
+  daemon::{MARKDOWN, TABLES},
+  question::opened,
+  screens::screen,
+  thread::LEFT,
+};
 
 /// The rows of the feed from the first row that holds a text, a count of them, each with no blank
 /// at its end.
@@ -66,4 +72,12 @@ fn a_block_of_code_keeps_on_its_right_the_columns_that_its_numbers_leave_blank_o
   let left = (0..number).rev().take_while(|at| ground(*at) == ground(number)).count();
   let right = (end..LEFT).take_while(|at| ground(*at) == ground(number)).count();
   assert_eq!((left, right), (2, 2), "{text}");
+}
+
+#[test]
+fn each_part_of_the_markdown_of_github_draws_as_github_draws_it() {
+  let (app, _daemon, ..) = opened(&format!("draw some markdown\n{MARKDOWN}"), "Alerts");
+  app.resize(200, 140);
+  shows(&app, "What a step can break.");
+  screen("prose-markdown", &app);
 }

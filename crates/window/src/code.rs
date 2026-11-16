@@ -61,11 +61,18 @@ impl Colors {
   /// The lines of a text of python, each as its runs on a ground. A text that the grammar cannot
   /// read shows in the color of the text.
   pub(crate) fn lines(&self, text: &str, plain: Style) -> Rc<Vec<Line>> {
-    let key = format!("{plain:?}{text}");
+    self.coded(text, "python", plain)
+  }
+
+  /// The lines of a text of a language that the grammars of the window read, as a name of a file
+  /// type, `python` or `rust`, each as its runs on a ground. A text of a language that no grammar
+  /// reads shows in the color of the text.
+  pub(crate) fn coded(&self, text: &str, language: &str, plain: Style) -> Rc<Vec<Line>> {
+    let key = format!("{language}{plain:?}{text}");
     if let Some(kept) = self.kept.borrow().get(&key) {
       return Rc::clone(kept);
     }
-    let lines = Rc::new(self.read(text, plain));
+    let lines = Rc::new(self.read(text, language, plain));
     let mut kept = self.kept.borrow_mut();
     if kept.len() >= KEPT {
       kept.clear();
@@ -74,9 +81,9 @@ impl Colors {
     lines
   }
 
-  fn read(&self, text: &str, plain: Style) -> Vec<Line> {
+  fn read(&self, text: &str, language: &str, plain: Style) -> Vec<Line> {
     let spans =
-      highlight(text, "python", &self.theme).unwrap_or_else(|| vec![Span::raw(text.to_owned())]);
+      highlight(text, language, &self.theme).unwrap_or_else(|| vec![Span::raw(text.to_owned())]);
     let mut lines: Vec<Line> = vec![Vec::new()];
     for span in spans {
       // `prompt` is the one call that a model answers, where all else runs as written, so it

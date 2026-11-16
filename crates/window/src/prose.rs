@@ -6,8 +6,11 @@
 use std::mem;
 
 use crate::cells::Cells;
+use opentui::style::Color;
 use opentui::style::{Span, Style};
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+  Alignment, BlockQuoteKind, CodeBlockKind, Event, Options, Parser, Tag, TagEnd,
+};
 
 use crate::{
   code::{Colors, Gutter},
@@ -28,8 +31,16 @@ pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -
     lists: Vec::new(),
     code: None,
     table: None,
+    quotes: Vec::new(),
   };
-  for event in Parser::new_ext(text, Options::ENABLE_TABLES) {
+  // The markdown of GitHub: its tables, its struck words, its lists of tasks, its footnotes and the
+  // alerts of its quotes.
+  let gfm = Options::ENABLE_TABLES
+    | Options::ENABLE_STRIKETHROUGH
+    | Options::ENABLE_TASKLISTS
+    | Options::ENABLE_FOOTNOTES
+    | Options::ENABLE_GFM;
+  for event in Parser::new_ext(text, gfm) {
     prose.event(event);
   }
   prose.flush();
@@ -54,6 +65,8 @@ struct Prose<'a> {
   lists: Vec<Option<usize>>,
   code: Option<(String, String)>,
   table: Option<(Vec<Alignment>, Vec<Vec<Line>>)>,
+  /// The bar of each quote that stands, outer first, in its color.
+  quotes: Vec<Color>,
 }
 
 impl Prose<'_> {
@@ -66,6 +79,18 @@ impl Prose<'_> {
         None => self.text(&text, self.style()),
       },
       Event::Code(text) => self.text(&text, self.style().bg(self.tokens.raised)),
+      // A task stands as its mark in the place of the mark of its item.
+      Event::TaskListMarker(done) => {
+        let (mark, color) =
+          if done { ("✓ ", self.tokens.accent) } else { ("○ ", self.tokens.muted) };
+        if self.words.last().is_some_and(|one| one.content == "• ") {
+          self.words.pop();
+        }
+        self.words.push(run(mark, Style::new().fg(color)));
+      }
+      Event::FootnoteReference(label) => {
+        self.words.push(run(format!("[{label}]"), Style::new().fg(self.tokens.accent)));
+      }
       // A single newline breaks the line, as a comment of GitHub keeps it, so an answer that gives
       // the lines of a command keeps them.
       Event::SoftBreak | Event::HardBreak => self.flush(),
@@ -90,6 +115,11 @@ impl Prose<'_> {
       }
       Tag::Item => {
         self.flush();
+        // An item of a list inside a list stands under the text of the item that holds it.
+        let depth = self.lists.len().saturating_sub(1);
+        if depth > 0 {
+          self.words.push(run(" ".repeat(2 * depth), Style::new()));
+        }
         let mark = match self.lists.last_mut() {
           Some(Some(next)) => {
             *next += 1;
@@ -99,6 +129,16 @@ impl Prose<'_> {
         };
         self.words.push(run(mark, self.tokens.style(Role::Muted)));
       }
+      Tag::BlockQuote(kind) => {
+        self.flush();
+        let color = self.alerted(kind);
+        self.quotes.push(color);
+      }
+      Tag::FootnoteDefinition(label) => {
+        self.flush();
+        self.words.push(run(format!("[{label}] "), self.tokens.style(Role::Muted)));
+      }
+      Tag::Strikethrough => self.styles.push(self.style().strikethrough()),
       Tag::List(first) => {
         self.flush();
         self.lists.push(first.map(|first| usize::try_from(first).unwrap_or_default()));
@@ -135,9 +175,24 @@ impl Prose<'_> {
       TagEnd::List(_) => {
         self.flush();
         self.lists.pop();
+        if self.lists.is_empty() {
+          self.gap();
+        }
+      }
+      TagEnd::BlockQuote(_) => {
+        self.flush();
+        // A quote ends on its last line, and the prose goes on one blank row under it.
+        while self.out.last().is_some_and(|line| self.bare(line)) {
+          self.out.pop();
+        }
+        self.quotes.pop();
         self.gap();
       }
-      TagEnd::Strong | TagEnd::Emphasis => {
+      TagEnd::FootnoteDefinition => {
+        self.flush();
+        self.gap();
+      }
+      TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough => {
         self.styles.pop();
       }
       TagEnd::Link => {
@@ -175,11 +230,24 @@ impl Prose<'_> {
     self.styles.last().copied().unwrap_or_else(|| Style::new().fg(self.tokens.prose))
   }
 
-  /// A text added to the words, each word with its style and the link that stands.
+  /// A text added to the words, each word with its style and the link that stands. An address of
+  /// the web in the text links to itself, as GitHub links it, less the stop that ends a sentence.
   fn text(&mut self, text: &str, style: Style) {
     for (at, word) in text.split(' ').enumerate() {
       let words = [(at > 0).then_some(" "), Some(word).filter(|word| !word.is_empty())];
       for word in words.into_iter().flatten() {
+        let address = word.trim_end_matches(['.', ',', ';', ':', ')', '!', '?']);
+        let bare = self.link.is_none()
+          && (address.starts_with("https://") || address.starts_with("http://"));
+        if bare && address.len() > "https://".len() {
+          let linked = style.fg(self.tokens.accent).underline();
+          self.words.push(run(address, linked).link(address.to_owned()));
+          let rest = &word[address.len()..];
+          if !rest.is_empty() {
+            self.words.push(run(rest, style));
+          }
+          continue;
+        }
         let span = run(word, style);
         self.words.push(match &self.link {
           Some(link) => span.link(link.clone()),
@@ -189,18 +257,55 @@ impl Prose<'_> {
     }
   }
 
+  /// The color of the bar of a quote, and the row of the title of an alert of GitHub with its mark,
+  /// each alert in the color that tells what it says.
+  fn alerted(&mut self, kind: Option<BlockQuoteKind>) -> Color {
+    let t = self.tokens;
+    let (mark, title, color) = match kind {
+      None => return t.border,
+      Some(BlockQuoteKind::Note) => ("ⓘ", "Note", t.attention),
+      Some(BlockQuoteKind::Tip) => ("✦", "Tip", t.added),
+      Some(BlockQuoteKind::Important) => ("❢", "Important", t.hues[0]),
+      Some(BlockQuoteKind::Warning) => ("▲", "Warning", t.hues[2]),
+      Some(BlockQuoteKind::Caution) => ("⊘", "Caution", t.danger),
+    };
+    let mut line = self.lead(color);
+    line.push(run(format!("{mark} {title}"), Style::new().fg(color).bold()));
+    self.out.push(line);
+    color
+  }
+
+  /// The bars of the quotes that stand, and of one more in a color, before a line.
+  fn lead(&self, color: Color) -> Line {
+    let bars = self.quotes.iter().copied().chain([color]);
+    bars.map(|one| run("│ ", Style::new().fg(one))).collect()
+  }
+
+  /// The bars of the quotes that stand, before each line inside them.
+  fn bars(&self) -> Line {
+    self.quotes.iter().map(|one| run("│ ", Style::new().fg(*one))).collect()
+  }
+
+  /// Whether a line holds only the bars of quotes.
+  fn bare(&self, line: &Line) -> bool {
+    !self.quotes.is_empty() && !line.is_empty() && line.iter().all(|one| one.content == "│ ")
+  }
+
   /// The words wrapped into lines between words, under the mark of the item that they follow.
   fn flush(&mut self) {
     let indent = self.lists.len() * 2;
+    let bars = self.bars();
+    let room = self.room.min(PROSE).saturating_sub(2 * self.quotes.len());
     let mut line: Line = Vec::new();
     let mut used = 0;
-    for word in self.words.drain(..) {
+    let words = mem::take(&mut self.words);
+    for word in words {
       let space = word.content == " ";
       if space && used == 0 {
         continue;
       }
-      if used + word.content.width() > self.room.min(PROSE) && used > 0 && !space {
-        self.out.push(line);
+      if used + word.content.width() > room && used > 0 && !space {
+        self.out.push([bars.clone(), line].concat());
         line = vec![run(" ".repeat(indent), Style::new())];
         used = indent;
       }
@@ -208,13 +313,14 @@ impl Prose<'_> {
       line.push(word);
     }
     if used > 0 {
-      self.out.push(line);
+      self.out.push([bars, line].concat());
     }
   }
 
   fn gap(&mut self) {
-    if self.out.last().is_some_and(|line| !line.is_empty()) {
-      self.out.push(Vec::new());
+    if self.out.last().is_some_and(|line| !line.is_empty() && !self.bare(line)) {
+      let bars = self.bars();
+      self.out.push(bars);
     }
   }
 
@@ -274,10 +380,22 @@ impl Prose<'_> {
   fn block(&mut self, text: &str, language: &str) {
     let ground = self.tokens.raised;
     let (plain, muted) = (self.tokens.style(Role::Prose), self.tokens.style(Role::Muted));
-    let lines = if ["", "python", "py"].contains(&language) {
-      self.colors.lines(text, plain.bg(ground)).to_vec()
-    } else {
-      text.split('\n').map(|one| vec![run(one, plain)]).collect()
+    let lines = match language {
+      "" | "py" => self.colors.lines(text, plain.bg(ground)).to_vec(),
+      // A diff reads as each diff of the window: a line that it adds in cyan, one that it removes
+      // in red.
+      "diff" | "patch" => text
+        .split('\n')
+        .map(|one| {
+          let color = match one.as_bytes().first() {
+            Some(b'+') => self.tokens.added,
+            Some(b'-') => self.tokens.danger,
+            _ => self.tokens.prose,
+          };
+          vec![run(one, Style::new().fg(color))]
+        })
+        .collect(),
+      language => self.colors.coded(text, language, plain.bg(ground)).to_vec(),
     };
     let numbers = Gutter::of(lines.len());
     let gutter = numbers.width;

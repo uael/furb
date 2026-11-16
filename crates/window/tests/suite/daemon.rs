@@ -576,6 +576,10 @@ pub(crate) const AWAITS: &str = "(the model awaits an agent)";
 /// The words of a message of a test that make the model answer with a table and a block of code.
 pub(crate) const TABLES: &str = "(the model answers a table)";
 
+/// The words of a message of a test that make the model answer with each part of the markdown of
+/// GitHub.
+pub(crate) const MARKDOWN: &str = "(the model answers markdown)";
+
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
@@ -594,7 +598,8 @@ pub(crate) const DRAWS: &str = "(the model draws a view)";
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
 /// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
 /// and the second waits on its chain.
-const ANSWERED: [(&str, &str); 10] = [
+const ANSWERED: [(&str, &str); 11] = [
+  (MARKDOWN, GFM),
   (
     DRAWS,
     r#"todo = prompt(str, '{"view": 1, "slot": "footer", "tree": {"id": "todo", "node": "text", "runs": [{"text": "buy milk"}]}}', to=OPERATOR, on=chain('todo'))"#,
@@ -636,6 +641,9 @@ for stage in stages:
   cost = cost + len(stage)
 total = cost * 2
 await wait(600, chain)";
+
+/// The answer of a model of a test with each part of the markdown of GitHub.
+const GFM: &str = r#"close('# A sample of GitHub flavored markdown\n\nEach part below is one feature of GFM, so you can judge how the window draws it.\n\n## Text\n\nPlain text, **bold**, *italic*, ***both***, ~~struck through~~, `inline code`, and a [link to the pull request](https://github.com/uael/furb/pull/1389). An autolink: https://github.com/uael/furb.\n\n> A quote: the record is the one truth of a life.\n>\n> > A quote inside a quote.\n\n## Lists\n\n- The window\n  - Whisper in French and English\n  - The view "In progress"\n- The engine\n  1. Replay at a flat depth\n  2. One bound of 1000 frames\n\n## Tasks\n\n- [x] Space bar on the timeline\n- [x] Padding of the colored boxes\n- [x] Reload with F5 or ⌘R\n- [ ] Replay at a flat depth\n- [ ] One handover at a time\n\n## Table\n\n| Chain | Work | State |\n| :--- | :---: | ---: |\n| window | speed of the window | working |\n| stability | replay depth | working |\n| ci | one upgrade, commands | working |\n| kits | his words as code | working |\n\n## Code\n\n```python\nasync def converge(check, fix, bound=8):\n  for n in range(bound):\n    if (got := await bash(check, ok=True)).code == 0:\n      return n\n    await prompt(str, fix + got.stdout.content[-2000:], on=chain("fix"))\n  raise Refused("no convergence")\n```\n\n```diff\n- let home = env::home_dir();\n+ let home = places.home.clone();\n```\n\n```rust\nfn main() {\n  println!("furb");\n}\n```\n\n## Rule and footnote\n\n---\n\nA sentence with a footnote.[^1]\n\n[^1]: The footnote, at the end of the text.\n\n## Alerts\n\n> [!NOTE]\n> A note that the reader should see.\n\n> [!TIP]\n> A tip that helps.\n\n> [!IMPORTANT]\n> What the reader must know.\n\n> [!WARNING]\n> What needs his care at once.\n\n> [!CAUTION]\n> What a step can break.\n')"#;
 
 /// The prose of a model of a test, which closes its thread.
 const PROSE: &str = "found = 2
