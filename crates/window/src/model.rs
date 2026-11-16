@@ -70,6 +70,8 @@ pub(crate) struct Model {
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
+  /// The last levels of the microphone while his voice records, from 0 to 100, the newest last.
+  pub(crate) listening: Option<Vec<u8>>,
   /// The colors of each text of python that the window drew.
   pub(crate) colors: Colors,
   /// The names of each text of python that the window read.
@@ -125,6 +127,7 @@ impl Model {
       settles: if options.still { Duration::ZERO } else { ENDS },
       tokens,
       fault: None,
+      listening: None,
       colors: Colors::new(),
       names: Names::default(),
       moved_rows: RefCell::default(),

@@ -2,7 +2,8 @@
 //! of the system writes what he says into the input as he says it, and the record ends when he lets
 //! the bar go. A terminal tells a held key only by its repeats, so a space that comes as soon after
 //! the one before as a repeat comes starts the record, and the spaces of the hold leave the input:
-//! one tap of the bar stays a space.
+//! one tap of the bar stays a space. The program starts with the window and readies the speech
+//! with no microphone, so a record only opens the microphone, and a tap never opens it.
 
 use std::{
   fs, io,
@@ -11,12 +12,22 @@ use std::{
   time::{Duration, Instant},
 };
 
+use furb_client::{Form, Time};
+use futures::SinkExt;
 use serde::Deserialize;
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::{
+  process::{Child, ChildStdout, Command},
+  runtime::Handle,
+  sync::mpsc::{self, UnboundedSender},
+};
+use tokio_util::codec::{FramedWrite, LinesCodec};
 
 /// A space this soon after the space before it is a repeat of the bar that he holds, which a
 /// terminal sends far sooner than a hand types two spaces.
 const REPEATS: Duration = Duration::from_millis(100);
+
+/// The longest pause of a terminal between the press of a key and its first repeat.
+const FIRST: Duration = Duration::from_secs(2);
 
 /// How long the repeats of the bar stop before the record ends: he let the bar go.
 pub(crate) const RELEASED: Duration = Duration::from_millis(200);
@@ -24,31 +35,49 @@ pub(crate) const RELEASED: Duration = Duration::from_millis(200);
 /// The program of the speech of macOS that the build carries, which is empty where it has none.
 const CARRIED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/listen"));
 
-/// The spaces that he typed one after the other, and the record while one runs.
+/// The spaces that he typed one after the other, the program of the speech while it runs, and the
+/// record while one runs.
 #[derive(Default)]
 pub(crate) struct Voice {
-  run: Option<(Instant, usize)>,
+  run: Option<Run>,
+  pub(crate) listener: Option<Listener>,
   pub(crate) record: Option<Record>,
 }
 
-/// A record of his voice: the program that listens, its input, which the window closes to end the
-/// record, the text of the input around the caret where the voice writes, the last repeat of the
-/// bar, and the last level of the microphone, from 0 to 100.
+/// The program of the speech, and what tells it to start and to stop a record. It ends with the
+/// window, which drops it.
+pub(crate) struct Listener {
+  _child: Child,
+  says: UnboundedSender<&'static str>,
+}
+
+/// A record of his voice: the text of the input around the caret where the voice writes, the last
+/// repeat of the bar, and whether the window told the program to stop.
 pub(crate) struct Record {
-  pub(crate) child: Child,
-  pub(crate) input: Option<ChildStdin>,
   pub(crate) before: String,
   pub(crate) after: String,
   pub(crate) last: Instant,
-  pub(crate) level: u8,
+  pub(crate) stops: bool,
+}
+
+/// The spaces of a run, which come one after the other: when the last came, how many the input
+/// typed, and the parts that a tap changes as they stood before the run: the bar of the time, which
+/// a tap plays, and the form of a question, which a tap ticks.
+#[derive(Clone)]
+pub(crate) struct Run {
+  last: Instant,
+  pub(crate) typed: usize,
+  pub(crate) parts: (Option<Time>, Option<Form>),
 }
 
 /// What a space does.
 pub(crate) enum Space {
-  /// It types a space, as a key of his typing.
-  Types,
-  /// It starts a record, once the spaces of the hold, which it counts, leave the input.
-  Starts(usize),
+  /// It is a tap: the input or a part takes it, as a key of his typing. The first tap of a run
+  /// keeps the parts as they stood.
+  Taps(bool),
+  /// It starts a record, once the taps of the run are undone: the spaces that the input typed
+  /// leave it, and the parts stand again as before the run.
+  Starts(Box<Run>),
   /// It is a repeat of the bar during the record.
   Holds,
 }
@@ -57,6 +86,10 @@ pub(crate) enum Space {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum Said {
+  Ready {
+    #[serde(rename = "ready")]
+    _ready: bool,
+  },
   Level {
     level: u8,
   },
@@ -77,21 +110,47 @@ impl Voice {
       record.last = now;
       return Space::Holds;
     }
-    let (count, soon) = match self.run {
-      Some((last, count)) => (count + 1, now.saturating_duration_since(last) <= REPEATS),
-      None => (1, false),
-    };
-    self.run = Some((now, count));
-    if soon {
-      self.run = None;
-      return Space::Starts(count - 1);
+    match self.run.take() {
+      Some(run) if now.saturating_duration_since(run.last) <= REPEATS => {
+        Space::Starts(Box::new(run))
+      }
+      // A run holds the taps that the first repeat of a hold can follow, which a terminal sends at
+      // most two seconds after the press.
+      Some(run) if now.saturating_duration_since(run.last) <= FIRST => {
+        self.run = Some(Run { last: now, ..run });
+        Space::Taps(false)
+      }
+      _ => {
+        self.run = Some(Run { last: now, typed: 0, parts: (None, None) });
+        Space::Taps(true)
+      }
     }
-    Space::Types
+  }
+
+  /// Where the last tap went: to a part, or to the input, which typed it.
+  pub(crate) fn tapped(&mut self, parted: bool) {
+    if let Some(run) = self.run.as_mut().filter(|_| !parted) {
+      run.typed += 1;
+    }
+  }
+
+  /// The parts that a tap changes, as they stand before the first tap of a run.
+  pub(crate) fn keep(&mut self, parts: (Option<Time>, Option<Form>)) {
+    if let Some(run) = &mut self.run {
+      run.parts = parts;
+    }
   }
 
   /// A key that is no space, which ends a run of spaces.
   pub(crate) fn other(&mut self) {
     self.run = None;
+  }
+}
+
+impl Listener {
+  /// A line told to the program: `start` or `stop`. Whether the program still hears.
+  pub(crate) fn say(&self, line: &'static str) -> bool {
+    self.says.send(line).is_ok()
   }
 }
 
@@ -120,8 +179,9 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   Ok(Some(path))
 }
 
-/// The program started on the runtime of the app, with its input and its output.
-pub(crate) fn started(program: &Path) -> io::Result<(Child, ChildStdin, ChildStdout)> {
+/// The program started on a runtime, with what tells it each line, and its output.
+pub(crate) fn started(program: &Path, runtime: &Handle) -> io::Result<(Listener, ChildStdout)> {
+  let _runtime = runtime.enter();
   let mut child = Command::new(program)
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
@@ -131,5 +191,16 @@ pub(crate) fn started(program: &Path) -> io::Result<(Child, ChildStdin, ChildStd
   let gone = || io::Error::other("the program of the speech gave no pipe");
   let input = child.stdin.take().ok_or_else(gone)?;
   let output = child.stdout.take().ok_or_else(gone)?;
-  Ok((child, input, output))
+  let (says, mut heard) = mpsc::unbounded_channel();
+  // The task ends once the window drops the listener, and the input of the program closes with it,
+  // which ends the program.
+  drop(runtime.spawn(async move {
+    let mut lines = FramedWrite::new(input, LinesCodec::new());
+    while let Some(line) = heard.recv().await {
+      if lines.send(line).await.is_err() {
+        break;
+      }
+    }
+  }));
+  Ok((Listener { _child: child, says }, output))
 }

@@ -26,6 +26,12 @@ use crate::{
 
 /// The fewest rows of text that the input grows to before its text scrolls: it grows to a third of
 /// the rows of the window when they are more, as a box of a rival grows to most of a screen.
+/// How many levels of the microphone the row of hints shows while his voice records.
+pub(crate) const LEVELS: usize = 12;
+
+/// The bars of a level of the microphone, from silence to the loudest.
+const BARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
 const GROWS: usize = 6;
 
 /// The fewest columns of the target in the launcher before the effort gives way to it: the head
@@ -591,11 +597,28 @@ impl Model {
     let grows = self.grows();
     let long = || (lines > grows).then(|| vec![run(format!("  {grows} of {lines} lines"), muted)]);
     self
-      .form_hints()
+      .listening_hints()
+      .or_else(|| self.form_hints())
       .or_else(|| self.completion_hints())
       .or_else(|| self.time_hints())
       .or_else(walked)
       .or_else(long)
+  }
+
+  /// While his voice records: the word that says so, then the last levels of the microphone as
+  /// bars that rise and fall with his voice, then the keys that end the record.
+  fn listening_hints(&self) -> Option<Line> {
+    let levels = self.listening.as_ref()?;
+    let (accent, muted) = (Style::new().fg(self.tokens.accent), self.tokens.style(Role::Muted));
+    let bars: String = (0..LEVELS)
+      .map(|at| {
+        let level = (at + levels.len()).checked_sub(LEVELS).and_then(|at| levels.get(at));
+        let step = usize::from(level.copied().unwrap_or_default()) * (BARS.len() - 1) / 100;
+        BARS[step.min(BARS.len() - 1)]
+      })
+      .collect();
+    let keys = format!("  let go to write · {} drop", self.key(Does::Close));
+    Some(vec![run("  ● Listening ", accent), run(bars, accent), run(keys, muted)])
   }
 
   /// The bar of the input: the color of his turn while it holds the form of a question, else the

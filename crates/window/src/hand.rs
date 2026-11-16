@@ -36,7 +36,7 @@ use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, ment
 use crate::{
   Machine, Options, Screen, cells,
   code::syntax,
-  input::Armed,
+  input::{Armed, LEVELS},
   kept,
   keys::{self, Does},
   line::Line,
@@ -50,7 +50,7 @@ use crate::{
   review::{MARKS, NEXT, PREVIOUS},
   thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
-  voice::{self, RELEASED, Record, Said, Space, Voice},
+  voice::{self, RELEASED, Record, Run, Said, Space, Voice},
 };
 
 /// How long the window waits for a machine before it says that it waits.
@@ -175,6 +175,8 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<
   let reloads = Rc::clone(&window.reloads);
   let window = Rc::new(RefCell::new(window));
   listened(app, &window, &area);
+  // A window with no speech says why at the first hold, which tries to start it again.
+  readied(app, &window).ok();
   let (known, reads) = (machines.iter().map(|one| one.name.clone()).collect(), machines[0].reads);
   for machine in machines {
     dialed(app, &window, machine);
@@ -910,9 +912,13 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if key.kind == KeyEventKind::Release {
     return false;
   }
-  if voiced(app, window, key) {
-    return true;
-  }
+  voiced(app, window, key).unwrap_or_else(|| keyed(app, window, key))
+}
+
+/// A key that the voice left: the leader, a list part, the completion, the review, the bar of the
+/// time, a form, the controls of the views, then the table of the keys. Whether the window took
+/// it; the editor of the input hears each other key.
+fn keyed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   let led = window.borrow_mut().led.take();
   let led = led.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER);
   if keys::leads(key) {
@@ -1546,65 +1552,103 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   }
 }
 
-/// A key that the voice takes: a space while he holds the bar, which starts the record or holds it,
-/// and escape during a record, which drops it. A list part, a form and the review take their spaces
-/// as they do.
-fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+/// A key that the voice takes, whether the window took it: each space, and escape during a
+/// record, which drops it. A space that is a tap goes where a key goes, to the input or to a part
+/// that takes it, as the bar of the time plays on it; a space that holds the bar records his voice
+/// into the input wherever it shows, once the taps of the hold are undone, and a repeat holds the
+/// record. A list part and the review stand over the input, so they take each space. Any other
+/// key goes on.
+fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> Option<bool> {
   let recording = window.borrow().voice.record.is_some();
   if recording && key.code == KeyCode::Escape {
     dropped(app, window, None);
-    return true;
+    return Some(true);
   }
-  let busy = {
+  let over = {
     let model = &window.borrow().screen.model;
-    model.picker.is_some() || model.form().is_some() || model.client.review.is_some()
+    model.picker.is_some() || model.client.review.is_some()
   };
   let space = key.code == KeyCode::Char(' ') && key.modifiers.is_empty();
-  if !space || busy && !recording {
+  if !space || over && !recording {
     window.borrow_mut().voice.other();
-    return false;
+    return None;
   }
   let heard = window.borrow_mut().voice.space(app.now());
-  match heard {
-    Space::Types => false,
+  Some(match heard {
+    Space::Taps(first) => {
+      if first {
+        let parts = window
+          .borrow()
+          .screen
+          .model
+          .client
+          .thread
+          .as_ref()
+          .map(|one| (one.thread.time.clone(), one.form.clone()))
+          .unwrap_or_default();
+        window.borrow_mut().voice.keep(parts);
+      }
+      let parted = keyed(app, window, key);
+      window.borrow_mut().voice.tapped(parted);
+      parted
+    }
     Space::Holds => true,
-    Space::Starts(spaces) => {
-      recorded(app, window, spaces);
+    Space::Starts(run) => {
+      let Run { typed, parts, .. } = *run;
+      tell(app, window, |model| {
+        let Some(opened) = model.client.thread.as_mut() else { return };
+        let (time, form) = parts;
+        if opened.thread.time != time {
+          opened.thread.time = time;
+          opened.thread.moved();
+        }
+        opened.form = form;
+      });
+      recorded(app, window, typed);
       true
     }
-  }
+  })
 }
 
-/// A record of his voice started, once the spaces of the hold left the input: the program of the
-/// speech listens, and what it hears writes itself at the caret. A system with no speech, or a
-/// program that does not start, says so, and the spaces stay.
-fn recorded(app: &App, window: &Shared, spaces: usize) {
+/// The program of the speech started, where the window has one, and each line that it says heard.
+/// The window starts it with its first frame, so the speech is ready before the first hold.
+fn readied(app: &App, window: &Shared) -> Result<(), String> {
   let (named, folder) = {
     let held = window.borrow();
     (held.listen.clone(), held.kept.parent().map(Path::to_path_buf).unwrap_or_default())
   };
-  let started = match voice::program(named.as_deref(), &folder) {
-    Ok(Some(program)) => {
-      let _runtime = app.runtime().enter();
-      voice::started(&program).map_err(|no| format!("The speech did not start: {no}"))
-    }
-    Ok(None) => Err("This window has no speech on this system yet.".to_owned()),
-    Err(no) => Err(format!("The program of the speech cannot be written: {no}")),
+  let program = voice::program(named.as_deref(), &folder)
+    .map_err(|no| format!("The program of the speech cannot be written: {no}"))?
+    .ok_or_else(|| "This window has no speech on this system yet.".to_owned())?;
+  let (listener, output) = voice::started(&program, &app.runtime())
+    .map_err(|no| format!("The speech did not start: {no}"))?;
+  window.borrow_mut().voice.listener = Some(listener);
+  listening(app, window, FramedRead::new(output, LinesCodec::new_with_max_length(BOUND)));
+  Ok(())
+}
+
+/// A record of his voice started, once the spaces of the hold left the input: the program of the
+/// speech opens the microphone, and what it hears writes itself at the caret. A system with no
+/// speech, or a program that does not start, says so, and the spaces stay.
+fn recorded(app: &App, window: &Shared, spaces: usize) {
+  let ready = window.borrow().voice.listener.is_some() || {
+    let readied = readied(app, window);
+    readied.map_err(|why| tell(app, window, |model| model.client.notice = Some(why))).is_ok()
   };
-  let (child, input, output) = match started {
-    Ok(started) => started,
-    Err(why) => return tell(app, window, |model| model.client.notice = Some(why)),
-  };
+  let started =
+    ready && window.borrow().voice.listener.as_ref().is_some_and(|one| one.say("start"));
+  if !started {
+    return;
+  }
   let area = window.borrow().area.clone();
   let text: Vec<char> = area.text().chars().collect();
   let caret = usize::try_from(area.cursor_offset()).unwrap_or_default().min(text.len());
   let typed = text[..caret].iter().rev().take(spaces).take_while(|one| **one == ' ').count();
   let before = text[..caret - typed].iter().collect();
   let after = text[caret..].iter().collect();
-  let record = Record { child, input: Some(input), before, after, last: app.now(), level: 0 };
-  window.borrow_mut().voice.record = Some(record);
+  window.borrow_mut().voice.record = Some(Record { before, after, last: app.now(), stops: false });
+  tell(app, window, |model| model.listening = Some(Vec::new()));
   spoken(app, window, "");
-  listening(app, window, FramedRead::new(output, LinesCodec::new_with_max_length(BOUND)));
   held(app, window);
 }
 
@@ -1627,7 +1671,8 @@ fn spoken(app: &App, window: &Shared, said: &str) {
   tell(app, window, |model| model.client.draft.text = text);
 }
 
-/// Each line of the program of the speech, heard on the app, until its output ends.
+/// Each line of the program of the speech, heard on the app, until its output ends: then the
+/// program is gone, and the next hold starts it again.
 fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, LinesCodec>) {
   let on = Rc::clone(window);
   let next = async move { (lines.next().await, lines) };
@@ -1636,52 +1681,69 @@ fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, Line
       Some(Ok(line)) => serde_json::from_str::<Said>(&line)
         .map_err(|no| format!("The speech said what the window cannot read: {no}")),
       Some(Err(no)) => Err(format!("The speech cannot be read: {no}")),
-      None => Err("The speech ended with no text.".to_owned()),
+      None => Err("The speech ended.".to_owned()),
     };
     match said {
-      Ok(Said::Level { level }) => {
-        if let Some(record) = on.borrow_mut().voice.record.as_mut() {
-          record.level = level;
+      Ok(Said::Ready { .. }) => {}
+      Ok(Said::Level { level }) => tell(cx.app(), &on, |model| {
+        if let Some(levels) = model.listening.as_mut() {
+          levels.push(level);
+          let gone = levels.len().saturating_sub(LEVELS);
+          levels.drain(..gone);
         }
-      }
+      }),
       Ok(Said::Text { text, ends }) => {
         spoken(cx.app(), &on, &text);
         if ends {
           on.borrow_mut().voice.record = None;
-          return;
+          tell(cx.app(), &on, |model| model.listening = None);
         }
       }
-      Ok(Said::Fault { error }) => return dropped(cx.app(), &on, Some(error)),
-      Err(why) => return dropped(cx.app(), &on, Some(why)),
+      Ok(Said::Fault { error }) => dropped(cx.app(), &on, Some(error)),
+      Err(why) => {
+        on.borrow_mut().voice.listener = None;
+        return dropped(cx.app(), &on, Some(why));
+      }
     }
     listening(cx.app(), &on, lines);
   }));
 }
 
 /// The record looked at after each pause of the repeats of the bar: once they stopped, he let the
-/// bar go, and the input of the program closes, so it gives its final text.
+/// bar go, and the program closes the microphone and gives its final text.
 fn held(app: &App, window: &Shared) {
   let on = Rc::clone(window);
   app.set_timeout(RELEASED, move |cx| {
     let now = cx.app().now();
-    let mut window = on.borrow_mut();
-    let Some(record) = window.voice.record.as_mut().filter(|one| one.input.is_some()) else {
-      return;
-    };
-    if now.saturating_duration_since(record.last) >= RELEASED {
-      record.input = None;
-      return;
+    let mut held = on.borrow_mut();
+    let Window { voice, .. } = &mut *held;
+    let Some(record) = voice.record.as_mut().filter(|one| !one.stops) else { return };
+    if now.saturating_duration_since(record.last) < RELEASED {
+      drop(held);
+      return self::held(cx.app(), &on);
     }
-    drop(window);
-    held(cx.app(), &on);
+    record.stops = true;
+    stop(voice);
   });
 }
 
-/// The record dropped, with the input as it stood before it, and why when a fault ended it.
+/// The program told to stop the record. A program that is gone does not hear it, and its output,
+/// which ended, already said why.
+fn stop(voice: &Voice) {
+  if let Some(listener) = &voice.listener {
+    listener.say("stop");
+  }
+}
+
+/// The record dropped, with the input as it stood before it, and why when a fault ended it. The
+/// program stops the record, whose text then comes to no record.
 fn dropped(app: &App, window: &Shared, why: Option<String>) {
-  let Some(mut record) = window.borrow_mut().voice.record.take() else { return };
-  // A program that ended already takes no kill, which is all that the error says.
-  record.child.start_kill().ok();
+  let Some(record) = window.borrow_mut().voice.record.take() else {
+    return tell(app, window, |model| model.client.notice = why.or(model.client.notice.take()));
+  };
+  if !record.stops {
+    stop(&window.borrow().voice);
+  }
   let text = format!("{}{}", record.before, record.after);
   let caret = record.before.chars().count();
   let area = window.borrow().area.clone();
@@ -1689,6 +1751,7 @@ fn dropped(app: &App, window: &Shared, why: Option<String>) {
   area.set_cursor_offset(u32::try_from(caret).unwrap_or(u32::MAX));
   tell(app, window, |model| {
     model.client.draft.text = text;
+    model.listening = None;
     if why.is_some() {
       model.client.notice = why;
     }
