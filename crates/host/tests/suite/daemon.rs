@@ -1534,9 +1534,9 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
-  let go = at.join("go");
-  let word =
-    format!("r = await bash('while [ ! -f {} ]; do sleep 0.05; done; echo ran')", go.display());
+  // The command runs in the folder of the life, so it names its file with no path, which a word of
+  // Python and the sh of each system read alike: a path of Windows holds backslashes.
+  let word = "r = await bash('while [ ! -f go ]; do sleep 0.05; done; echo ran')".to_owned();
   let verb = Verb::Run { life: life.clone(), word, on: None };
   assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
   let runs = |frame: &Frame| {
@@ -1559,7 +1559,7 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
   time::sleep(PAST).await;
   assert!(!old.is_finished(), "the handover waits for the command");
   window.ran(&life, "x = 41 + 1").await;
-  File::create(&go).unwrap();
+  File::create(at.join("go")).unwrap();
   assert!(window.closed().await);
   assert!(matches!(old.await, Ok(Ok(()))));
   listening(&local, &mut new).await;
