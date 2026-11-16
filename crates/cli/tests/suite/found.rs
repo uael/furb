@@ -9,10 +9,16 @@ use crate::yard::Yard;
 
 use std::{
   fs,
+  io::ErrorKind,
   os::unix::fs::PermissionsExt,
   path::{Path, PathBuf},
   process::{self, Command},
+  thread,
+  time::{Duration, Instant},
 };
+
+/// How long a start of furb waits for its file to be free.
+const BUSY: Duration = Duration::from_secs(10);
 
 /// A program in place of the window in a folder, which says its name.
 fn window(folder: &Path, name: &str) -> PathBuf {
@@ -42,7 +48,18 @@ fn launched(furb: &Path, named: Option<&Path>, path: &Path) -> String {
   if let Some(named) = named {
     command.env("FURB_WINDOW", named);
   }
-  let done = command.output().unwrap_or_else(|no| panic!("furb did not start: {no}"));
+  // On Linux an exec of a file that a process holds open to write fails as busy, and a test on
+  // another thread that forks while the copy of furb is open holds it until its child execs: the
+  // start is tried again until that child let go of it.
+  let began = Instant::now();
+  let done = loop {
+    match command.output() {
+      Err(no) if no.kind() == ErrorKind::ExecutableFileBusy && began.elapsed() < BUSY => {
+        thread::yield_now();
+      }
+      done => break done.unwrap_or_else(|no| panic!("furb did not start: {no}")),
+    }
+  };
   assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
   String::from_utf8_lossy(&done.stdout).into_owned()
 }
