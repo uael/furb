@@ -919,11 +919,13 @@ fn the_mouse_alone_reaches_and_runs_each_command_of_go_to() {
   clicked(&app, "go to anything", 0, 0);
   shows(&app, "Search a thread, session");
   assert!(!app.text().contains("The model of the input"), "the row is in view before the wheel");
+  // The wheel turns until the row shows, so a count of the commands above it changes nothing.
   let (x, y) = at(&app, "Each key", 0);
-  for _ in 0..40 {
+  let reached = app.wait_until(PATIENCE, || {
     app.scroll(x, y, true);
-  }
-  shows(&app, "The model of the input");
+    app.text().contains("The model of the input")
+  });
+  assert!(reached, "{}", app.text());
   clicked(&app, "The model of the input", 0, 0);
   shows(&app, "Search a model");
 }
