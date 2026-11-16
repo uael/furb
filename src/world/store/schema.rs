@@ -7,12 +7,14 @@
 //! - [`CHECKPOINT_SCHEMA`] is the schema of the data of a checkpoint, which its field `schema`
 //!   names.
 //!
-//! A schema is `major.minor`. Within a major a schema only adds: a minor adds a kind of fact or a
-//! field. Each reader skips each kind of fact and each field that it does not know, so it opens a
-//! schema of each minor of its major, a later one too, and a build opens a record that a later
-//! build of the major made. A reader refuses a schema of a later major, and the refusal names
-//! both. A life refuses a record from before the stable cut, an earlier major than the one of
-//! [`RECORD_SCHEMA`], and a reader of a record reads it.
+//! A schema is `major.minor`. Within a major a schema only adds: a minor adds a kind of fact, a
+//! field, or a word of an entry after whether the life rested, which the engine of the segment that
+//! holds the entry reads. Each reader skips each kind of fact and each field that it does not know,
+//! and gives each word of an entry to the engine as it stands, so it opens a schema of each minor
+//! of its major, a later one too, and a build opens a record that a later build of the major made.
+//! A reader refuses a schema of a later major, and the refusal names both. A life refuses a record
+//! from before the stable cut, an earlier major than the one of [`RECORD_SCHEMA`], and a reader of
+//! a record reads it.
 
 use std::fmt;
 
@@ -32,8 +34,10 @@ pub struct Schema {
 /// the replay stands in the engine and a record keeps no checkpoint: from it each record replays
 /// with no drift on each later build of the major. A record of an earlier major, or of a build
 /// before the schemas, comes from a build before the cut, which the promise does not hold: no life
-/// opens it, as [`Schema::opens`] says, and a reader of a record reads it.
-pub const RECORD_SCHEMA: Schema = Schema { major: 3, minor: 0 };
+/// opens it, as [`Schema::opens`] says, and a reader of a record reads it. The minor 1 holds, in
+/// the entry of each fact, the count of the facts that waited for their ears as the life said it,
+/// by which the replay says each answer of an ear of the outside where the life said it.
+pub const RECORD_SCHEMA: Schema = Schema { major: 3, minor: 1 };
 
 /// The schema of the data of the checkpoint that this build writes and reads. The minor 1 holds
 /// `systems`, the system prompt of each chain that reads an engine that the next life does not run;

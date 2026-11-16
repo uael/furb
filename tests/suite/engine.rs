@@ -1413,6 +1413,61 @@ fn a_life_whose_act_holds_a_coroutine_in_its_words_replays_with_no_drift() {
 }
 
 #[test]
+fn an_ear_of_a_word_hears_a_fact_before_the_outside_answers_it_in_a_replay_as_it_did_live() {
+  // The ear look notes pong once pong is done, and reads it as it hears ping, which the ear echo of
+  // the outside answers with the done of pong. Live, each ear of the engine hears a fact before
+  // each ear of the outside, so look notes nothing, and pong2 comes next. A replay that says the
+  // done before look hears ping makes look note it, where the record holds pong2 of the next rung.
+  let at = Yard::new(format!("furb-engine-order-{}", process::id()));
+  let life = |at: &Path| {
+    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+    let ears = [
+      ("provider", provider(at.to_path_buf(), VecDeque::new(), mpsc::channel().0)),
+      ("echo", echo()),
+      ("store", store),
+    ];
+    Engine::boot(record, ears).unwrap()
+  };
+  let word = "def pong():\n  pass\ndef note():\n  pass\np = act('pong', '', None)\n\
+    def look(name):\n  yield {'ping'}\n  while True:\n    peek(p, 0) and act('note', '', None)\n    \
+    yield {'ping'}\nact('look', '', look)\nsay('ping', str(p))";
+  let noted = |engine: &mut Engine| engine.get("note1").unwrap().is_some();
+  let first = {
+    let mut engine = life(&at);
+    let root = engine.root().to_owned();
+    for word in [word, "act('pong', '', None)"] {
+      let word = Some(word.to_owned());
+      let rung = engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
+      let rung = rung.id().to_owned();
+      block_on(Act::<Object>::of(&mut engine, &rung)).unwrap();
+    }
+    assert_eq!(engine.peek("pong1", verbs::Peek::default()).unwrap().as_ref().as_int(), Some(7));
+    noted(&mut engine)
+  };
+  assert!(!first, "look heard ping while pong ran");
+  let mut second = life(&at);
+  assert!(second.raised().is_none(), "{:?}", second.raised());
+  assert!(second.stopped().is_none(), "{:?}", second.stopped());
+  assert_eq!(noted(&mut second), first);
+}
+
+/// An ear of the outside that takes each pong, and ends it with 7 when it hears a ping of it.
+fn echo() -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    let mut took = HashSet::new();
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "pong" && a.question() {
+        took.insert(a.about().to_owned());
+        say(&mut co, Fact::says("started", a.about(), []));
+      } else if a.kind() == "ping" && took.remove(a.about()) {
+        say(&mut co, done(a.about(), Object::int(7)));
+      }
+    }
+  })
+}
+
+#[test]
 fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift() {
   let word = "class A:\n  pass\na = await bash(f\"echo '{A()}'\")\nclose(8)";
   let (_yard, root, record) = lived_once("address", word);

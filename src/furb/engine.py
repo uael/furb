@@ -923,7 +923,7 @@ def boot(record=(), **outside):
         return True
     return False
 
-  def ready(e, at=None, rested=True, resting=False):
+  def ready(e, at=None, rested=True, *_, resting=False):
     return (at == n or (at is None and (rested or e[1] in taken))) and (resting or not rested)
 
   def counted(x):
@@ -949,7 +949,7 @@ def boot(record=(), **outside):
         or (a[2] not in known and a[2] not in owned and get(a[1]) and (not a[2] or hearer.get() in ("", a[2])))
       )
     ):
-      return a, n - 1, not busy
+      return a, n - 1, not busy, sum(x[3] is not False for x in log)
     return None
 
   def keep(entry):
@@ -1060,13 +1060,17 @@ def boot(record=(), **outside):
       if broke and broke[-1]:
         broke.append(None)
         raise broke[0]
-      if log and not (due and ready(*due[0]) and not question(due[0][0])):
+      if log:
         a, heard, k, entry = log[0]
         for m, g in ears(k):
+          if m in outside and due and ready(*due[0]) and not question(due[0][0]) and due[0][3:] in ((len(log),), ()):
+            break
           m in heard or heard.add(m) or hear(m, g, a)
-        log.pop(0)
-        keep(entry)
-      elif not play(not log):
+        else:
+          log.pop(0)
+          keep(entry)
+          continue
+      if not play(not log):
         return
 
   def hear(name, g, a):

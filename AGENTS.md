@@ -57,8 +57,11 @@ API of its own:
   those segments again when it does not, and each segment before the last crossing replays on its old engine once. A
   life that crosses as `Engine::cross` keeps there the carry that it gathers at its own tip, so the open after it
   replays no segment. A
-  tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
-  read only, and nothing forks it into a new life.
+  tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to read only,
+  and nothing forks it into a new life. An entry holds the count of the facts that waited for their ears as the life
+  said it, by which a replay says each answer of the outside where the life said it; the texts of the major from
+  before that count, which `src/engine/order.rs` lists by digest, replay with a dispatch and a checkpointer that it
+  gives them.
 - `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
   make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes

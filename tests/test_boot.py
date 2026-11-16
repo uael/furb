@@ -677,7 +677,7 @@ async def test_a_fact_that_the_life_says_at_the_place_of_an_entry_that_waits_or_
   at = next(n for n, (e, *_) in enumerate(record) if e[:2] == ("grant", "grant2"))
   with pytest.raises(Drift, match=r"^grant2 drifts: the life made \('grant', 'grant2', 'rung2', 'chain1', 1.0, "):
     life(Sand(), [one for one in record if one[0][1] != "grant1"])
-  early = [(e, n - 1, rest) if e[:2] == ("grant", "grant2") else (e, n, rest) for (e, n, rest) in record]
+  early = [(e, n - 1, *rest) if e[:2] == ("grant", "grant2") else (e, n, *rest) for (e, n, *rest) in record]
   with pytest.raises(Drift, match=r"^grant2 drifts: the life made \('(?!grant)"):
     life(Sand(), early)
   assert at > 0

@@ -35,6 +35,7 @@ mod crossing;
 mod hosted;
 mod image;
 mod opening;
+mod order;
 mod plain;
 mod record;
 
@@ -705,14 +706,16 @@ impl Engine {
   ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
-    // A record replays on the engine that the fact made of its last segment holds.
+    // A record replays on the engine that the fact made of its last segment holds, in the order of
+    // this build, and carries on the checkpointer of this build in place of one that drops a chain.
     let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
+    let (source, checkpointer) = (order::ordered(source)?, order::carrier(&checkpointer));
     let mut sand = Sand::new(source != crate::ENGINE);
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
     let opened =
-      sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
+      sand.run(OPENING, inputs(&source, &kernel, checkpointer), &mut Nobody("the opening"))?;
     sand.watch();
     let mut outside = Outside::new(given, &opened)?;
     let Opened { kernel, lasting, parking, park, .. } = outside.opened.clone();
@@ -904,6 +907,7 @@ impl Engine {
   /// The carry of the life to the texts of a fact made, as `gathered` of the checkpointer that the
   /// fact names gives it, with these words.
   pub(crate) fn gathered_for(&mut self, made: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    let made = order::carrier(made);
     self.run(|sand, outside| outside.checkpointed(sand, "gathered", &args, Some(made)))
   }
 

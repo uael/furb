@@ -1,15 +1,17 @@
 """Entry, one entry of the record."""
 
-from conftest import Dead, Sand, acts, born, lived, plain, relived, said, settle, sown
+from collections.abc import Generator
+
+from conftest import Dead, Sand, acts, born, life, lived, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_fact() -> None:
-  """One entry of the record: a fact, its place, which counts the facts that the life said before it, and whether the life rested as it said it, an act among them, and the answer of an act after it, as every other fact about it."""
+  """One entry of the record: a fact, its place, which counts the facts that the life said before it, whether the life rested as it said it, and the count of the facts that waited for their ears as the life said it, an act among them, and the answer of an act after it, as every other fact about it."""
   sand, log, _ = await lived()
   facts = [a for a in log if a[0] != "keep"]
-  assert all(len(e) == 3 and facts[e[1]] == e[0] for e in sand.record)
+  assert all(len(e) == 4 and facts[e[1]] == e[0] for e in sand.record)
   assert [e[0][:2] for e in sand.record if e[2]][:2] == [("chain", "chain1"), ("stand", "stand1")]
   assert ("read", "read1") in [e[0][:2] for e in sand.record if not e[2]]
   facts = [e[0] for e in sand.record]
@@ -65,3 +67,39 @@ async def test_an_entry_that_the_life_said_as_it_rested_the_journal_says_only_on
   again, _ = await relived(Sand(), list(sand.record))
   heard = [a[:2] for a in first if a[0] != "keep"]
   assert [a[:2] for a in again if a[0] != "keep"][: len(heard)] == heard
+
+
+async def test_an_entry_that_an_ear_of_the_outside_said_as_it_heard_a_fact_the_journal_says_once_as_many_facts_wait_as_its_count() -> (
+  None
+):
+  """An entry that an ear of the outside said as it heard a fact the journal says once as many facts wait as its count, as the first ear of the outside is about to hear the first of them, so each ear of the engine heard that fact before it, as in the life that said it."""
+  word = (
+    "def pong():\n  pass\ndef note():\n  pass\np = act('pong', '', None)\n"
+    "def look(name):\n  yield {'ping'}\n  while True:\n    peek(p, 0) and act('note', '', None)\n    yield {'ping'}\n"
+    "act('look', '', look)\nsay('ping', str(p))"
+  )
+  sand = sown()
+  _, root = life(sand, echo=echoing())
+  await engine.rung(word, on=root)
+  await engine.rung("act('pong', '', None)", on=root)
+  await settle()
+  assert engine.peek("pong1") == 7 and engine.get("pong2") and engine.get("note1") is None
+  assert [e[3] for e in sand.record if e[0][:2] == ("done", "pong1")] == [2]
+  life(Sand(), plain(sand.record), echo=echoing())
+  await settle(300)
+  assert engine.peek("pong1") == 7 and engine.get("pong2") and engine.get("note1") is None
+
+
+def echoing() -> Generator[tuple | None, tuple]:
+  """An ear of the outside that takes each pong, and ends it with 7 as it hears a ping of it, after each ear of the
+  engine that waits for that ping."""
+  took = set()
+  a = yield
+  while True:
+    if a[0] == "pong" and engine.question(a):
+      took.add(a[1])
+      yield "started", a[1]
+    elif a[0] == "ping" and a[1] in took:
+      took.discard(a[1])
+      yield "done", a[1], 7
+    a = yield
