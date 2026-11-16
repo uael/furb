@@ -2,8 +2,8 @@
 //! each frame of a machine changes in its model.
 
 use std::{
-  cell::RefCell,
-  mem,
+  cell::{Cell, RefCell},
+  fs, mem,
   ops::Range,
   path::PathBuf,
   rc::Rc,
@@ -41,6 +41,7 @@ use crate::{
   pick::Pick,
   picture,
   question::Keyed,
+  reload::{self, Watch},
   review::{MARKS, NEXT, PREVIOUS},
   thread::Spot,
   tokens::{AWAY, Role, Tokens},
@@ -61,6 +62,9 @@ const MOVES: Duration = Duration::from_millis(40);
 
 /// How often the window reads the clock for the age of each card.
 const AGES: Duration = Duration::from_secs(20);
+
+/// How often the window looks at its program, which a build replaces.
+const WATCH: Duration = Duration::from_secs(1);
 
 /// How many loaders move at once at most: the line that runs and its light, the thought, the mark
 /// and the word of each agent of the dock, and the row of hints.
@@ -95,13 +99,18 @@ struct Window {
   scroll: ScrollBox,
   /// The diff of the review, whose changes the keys of a change scroll to.
   diff: Diff,
+  /// The watch of the program of the window, which a build replaces.
+  program: Option<Watch>,
+  /// Whether the window ended to give its place to a new build of its program.
+  reloads: Rc<Cell<bool>>,
 }
 
 type Shared = Rc<RefCell<Window>>;
 
 /// The window drawn on an app, with the cards that the window of before kept, and each machine
-/// dialed.
-pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
+/// dialed, where the window before stood when it gave its place to this one. Whether the window
+/// ended to give its place to a new build of its program, once the app ends.
+pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) -> Rc<Cell<bool>> {
   let tokens = Tokens::on(app.palette().and_then(|palette| palette.background));
   app.set_theme(tokens.theme());
   let mut before: Vec<Told> = kept::kept(&options.kept);
@@ -115,6 +124,12 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   model.client.commands = Model::offered_commands();
   model.client.now = (options.clock)();
   model.settle();
+  if options.reloaded {
+    let file = reload::file_of(&options.kept);
+    model.resume(kept::kept(&file));
+    // A place serves once, so a window that a person starts later opens as a new one.
+    fs::remove_file(file).ok();
+  }
   let area = edited(app, &tokens);
   let (scroll, diff) = (ScrollBox::new(app), Diff::new(app));
   let window = Window {
@@ -132,37 +147,69 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     askers: Vec::new(),
     scroll,
     diff,
+    program: options.program.map(Watch::new),
+    reloads: Rc::new(Cell::new(false)),
   };
+  let reloads = Rc::clone(&window.reloads);
   let window = Rc::new(RefCell::new(window));
-
-  let on = Rc::clone(&window);
-  app.on_key_capture(move |cx, pressed| {
-    if key(cx.app(), &on, pressed) {
-      cx.stop_propagation();
-    }
-  });
-  heard_edits(&window, &area);
-  let on = Rc::clone(&window);
-  app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
-  let on = Rc::clone(&window);
-  app.on_terminal_focus(move |cx, focused| {
-    if focused {
-      tell(cx.app(), &on, |model| model.client.focused());
-    }
-  });
-  let on = Rc::clone(&window);
-  app.on_resize(move |cx, width, height| {
-    tell(cx.app(), &on, |model| model.resized((width, height)));
-  });
-  let on = Rc::clone(&window);
-  app.set_timeout(PATIENCE, move |cx| tell(cx.app(), &on, |model| model.slow = true));
-  let on = Rc::clone(&window);
-  app.set_interval(AGES, move |cx| tick(cx.app(), &on));
+  listened(app, &window, &area);
   for (at, machine) in machines.into_iter().enumerate() {
     let on = Rc::clone(&window);
     let asker = link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
     window.borrow_mut().askers.push(asker);
   }
+  reloads
+}
+
+/// The window hears the terminal: its keys, the edits of its input, the pointer, its focus and its
+/// size, and its clocks and the watch of its program.
+fn listened(app: &App, window: &Shared, area: &Textarea) {
+  let on = Rc::clone(window);
+  app.on_key_capture(move |cx, pressed| {
+    if key(cx.app(), &on, pressed) {
+      cx.stop_propagation();
+    }
+  });
+  heard_edits(window, area);
+  let on = Rc::clone(window);
+  app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
+  let on = Rc::clone(window);
+  app.on_terminal_focus(move |cx, focused| {
+    if focused {
+      tell(cx.app(), &on, |model| model.client.focused());
+    }
+  });
+  let on = Rc::clone(window);
+  app.on_resize(move |cx, width, height| {
+    tell(cx.app(), &on, |model| model.resized((width, height)));
+  });
+  let on = Rc::clone(window);
+  app.set_timeout(PATIENCE, move |cx| tell(cx.app(), &on, |model| model.slow = true));
+  let on = Rc::clone(window);
+  app.set_interval(AGES, move |cx| tick(cx.app(), &on));
+  if window.borrow().program.is_some() {
+    let on = Rc::clone(window);
+    app.set_interval(WATCH, move |cx| watched(cx.app(), &on));
+  }
+}
+
+/// A look at the program of the window: once a build replaced it and its size and time hold
+/// still between two looks, the window writes where it stands and ends, and the program that ran
+/// it starts the new one.
+fn watched(app: &App, window: &Shared) {
+  if !window.borrow_mut().program.as_mut().is_some_and(Watch::replaced) {
+    return;
+  }
+  let (file, stood) = {
+    let held = window.borrow();
+    (reload::file_of(&held.kept), held.screen.model.stood())
+  };
+  if let Err(fault) = kept::keep(&file, &stood) {
+    let fault = format!("The window cannot give its place to the new build: {fault}");
+    return tell(app, window, |model| model.fault = Some(fault));
+  }
+  window.borrow().reloads.set(true);
+  app.quit();
 }
 
 /// The editor of the input heard: a change of its text, which the draft takes with the place of

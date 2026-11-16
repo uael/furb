@@ -34,6 +34,7 @@ mod pick;
 mod picture;
 mod prose;
 mod question;
+mod reload;
 mod review;
 mod running;
 mod screen;
@@ -44,7 +45,8 @@ pub mod tokens;
 
 use std::{
   env, io,
-  path::PathBuf,
+  path::{Path, PathBuf},
+  process::Command,
   time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -59,6 +61,7 @@ use opentui::{
 pub use error::Error;
 pub use keys::System;
 pub use machine::Machine;
+use reload::RELOADED;
 use screen::Screen;
 
 /// What a window stands on, beside its machines.
@@ -82,6 +85,13 @@ pub struct Options {
   pub system: System,
   /// The opener of an address of a link in the browser of the client.
   pub browse: fn(&str) -> io::Result<()>,
+  /// The program of the window, which it watches: once a build replaces it, the window writes where
+  /// it stands beside its cards and ends, and the new program starts in its place. None watches
+  /// nothing.
+  pub program: Option<PathBuf>,
+  /// Whether the window before this one gave it its place, so it opens where that one stood: on its
+  /// thread, at its place of the feed, with its draft.
+  pub reloaded: bool,
 }
 
 impl Options {
@@ -104,7 +114,9 @@ impl Options {
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
     let browse = world::browse;
     let still = still().is_some();
-    Ok(Self { folder, home, kept, zone, clock, still, system, browse })
+    let program = env::current_exe().ok();
+    let reloaded = env::var_os(RELOADED).is_some();
+    Ok(Self { folder, home, kept, zone, clock, still, system, browse, program, reloaded })
   }
 }
 
@@ -123,8 +135,33 @@ pub fn run(reads: bool) -> Result<(), Error> {
     TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };
   let host = HostOptions { terminal, ..HostOptions::default() };
   let app = App::new(AppOptions { palette_size: 16, host, ..AppOptions::default() })?;
-  open(&app, vec![machine], options);
-  Ok(app.run()?)
+  let program = options.program.clone();
+  let reloads = hand::opened(&app, vec![machine], options);
+  app.run()?;
+  match program.filter(|_| reloads.get()) {
+    Some(program) => Err(Error::Reload(started(&program))),
+    None => Ok(()),
+  }
+}
+
+/// The new build of the window started in the place of this one, with its words, on the terminal
+/// that this one left: on unix it takes the place of this process, which never returns but with
+/// the fault that stopped it.
+fn started(program: &Path) -> io::Error {
+  let mut command = Command::new(program);
+  command.args(env::args_os().skip(1)).env(RELOADED, "1");
+  #[cfg(unix)]
+  {
+    use std::os::unix::process::CommandExt;
+    command.exec()
+  }
+  #[cfg(not(unix))]
+  {
+    match command.status() {
+      Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+      Err(fault) => fault,
+    }
+  }
 }
 
 /// The window drawn on an app, on the daemon of each machine, which it dials at once. The first

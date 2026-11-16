@@ -31,4 +31,6 @@ pub enum Error {
   Frame(#[from] serde_json::Error),
   #[error("the connection to the daemon failed: {0}")]
   Lines(#[from] LinesCodecError),
+  #[error("the new build of the window cannot start: {0}")]
+  Reload(io::Error),
 }

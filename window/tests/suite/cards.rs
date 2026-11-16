@@ -41,6 +41,8 @@ pub(crate) fn options(kept: &Path) -> Options {
     still: false,
     system: System::MacOs,
     browse: |_| Ok(()),
+    program: None,
+    reloaded: false,
   }
 }
 
