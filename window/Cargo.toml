@@ -34,7 +34,7 @@ furb-host = { path = "../host" }
 # tree-sitter colors the code of its widgets.
 opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72", features = ["tokio", "tree-sitter"] }
 # The connection to the daemon, on the runtime of the tasks of the app, and the process of the daemon that it starts.
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "fs", "net"] }
 # The frames of the protocol, one line of JSON each.
 tokio-util = { version = "0.7", features = ["codec"] }
 futures = "0.3"

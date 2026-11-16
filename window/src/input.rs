@@ -1053,10 +1053,13 @@ impl Model {
       Target::Session(at, _) | Target::New(at, _) => at,
     };
     let name = if at == 0 { "This computer" } else { &self.client.machines[at].name };
-    // A session with no project runs in a folder of its own, not in the folder of the window.
-    let alone =
-      self.client.target_folder().filter(|(at, one)| self.folder_named(*at, one) == NO_PROJECT);
-    let folder = alone.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
+    // A session on another machine, or with no project, runs in a folder of its own, not in the
+    // folder of the window.
+    let elsewhere = self
+      .client
+      .target_folder()
+      .filter(|(at, one)| *at != 0 || self.folder_named(*at, one) == NO_PROJECT);
+    let folder = elsewhere.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
     let folder = self.folder_shown(&folder);
     let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
     let branch = self.client.target_folder().and_then(|(at, folder)| {

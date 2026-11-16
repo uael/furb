@@ -197,6 +197,13 @@ async fn plain_tcp_listens_on_no_address_off_loopback_and_the_tailnet() {
   assert!(matches!(refused, Err(TransportError::Open { addr }) if addr == open));
 }
 
+#[tokio::test]
+async fn plain_tcp_dials_no_address_off_loopback_and_the_tailnet() {
+  let public: SocketAddr = "93.184.215.14:7860".parse().unwrap();
+  let refused = Tcp::new(public).dial().await;
+  assert!(matches!(refused, Err(TransportError::Open { addr }) if addr == public));
+}
+
 #[test]
 fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_profile() {
   let held = folder();

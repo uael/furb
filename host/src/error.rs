@@ -107,8 +107,8 @@ pub enum TransportError {
   /// Tailscale gives this machine no address on the tailnet.
   #[error("Tailscale gives this machine no address on the tailnet")]
   Tailless,
-  /// Plain TCP listens only where `WireGuard` or the machine keeps the frames.
-  #[error("plain TCP listens only on loopback or on the tailnet, not on {addr}")]
+  /// Plain TCP listens and dials only where `WireGuard` or the machine keeps the frames.
+  #[error("plain TCP runs only on loopback or on the tailnet, not on {addr}")]
   Open { addr: SocketAddr },
   #[error("the door of the windows draws no token")]
   Random(#[source] getrandom::Error),

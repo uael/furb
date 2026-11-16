@@ -6,6 +6,7 @@
 use std::{
   fs::{self, File},
   future,
+  net::SocketAddr,
   path::{Path, PathBuf},
   process,
   sync::{
@@ -17,16 +18,17 @@ use std::{
 
 use furb::{
   Object,
-  life::{Answer as Answered, Opening},
+  life::{Answer as Answered, Log, Opening},
 };
 use furb_host::{
-  GRACE, STALL, STARTING, Settings, TransportError,
+  GRACE, STALL, STARTING, Settings, Tailnet, TransportError,
+  access::{Access, Ports},
   protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Role, Verb},
   run,
-  transport::{Accepted, Dialer, Identity, Listener, Local, Who},
+  transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Who},
   upgrade,
 };
-use furb_window::Machine;
+use furb_window::{Machine, Reach};
 use futures::{SinkExt, StreamExt};
 use opentui::testing::TestApp;
 use serde_json::json;
@@ -34,11 +36,12 @@ use tokio::{
   io::{self, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
   process::Command,
   runtime::Handle,
+  sync::mpsc,
   time::{sleep, timeout},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
-use crate::yard::Yard;
+use crate::{tailscale::tailscale, yard::Yard};
 
 /// How long a test waits for a daemon, which a loaded machine cannot pass. It stays under the 60 s
 /// after which the runner ends a test, so a wait that fails prints its frame.
@@ -178,6 +181,40 @@ impl Daemon {
     drop(self.runtime.spawn(async move { run(&local, listener, settings).await }));
   }
 
+  /// The daemon served on the tailnet too, by TCP on loopback, where the fake of the local API of
+  /// Tailscale names each peer by a login that may write. The machine of the daemon there under a
+  /// name, as `machines.json` names it.
+  pub(crate) fn tailed(&mut self, name: &str, login: &str) -> Machine {
+    let listener = self.listener.take().expect("a daemon is served once");
+    let (tell, mut reported) = mpsc::unbounded_channel();
+    let log = Log(Arc::new(move |line: &str| drop(tell.send(line.to_owned()))));
+    let settings = self.settings();
+    let opening = Opening { log: Some(log), ..settings.opening };
+    let local = self.local.clone();
+    let login = login.to_owned();
+    let port = self.runtime.block_on(async move {
+      let (api, _) = tailscale(&login).await;
+      let access: Access = [(login, Role::Write)].into_iter().collect();
+      let ports = Ports { tcp: Some(0), websocket: None };
+      let tailnet = Some(Tailnet { identity: Tailscale::new(api, access), ports });
+      let settings = Settings { opening, tailnet, ..settings };
+      tokio::spawn(async move { run(&local, listener, settings).await });
+      loop {
+        let line = timeout(PATIENCE, reported.recv()).await.ok().flatten();
+        let line = line.expect("the daemon listens on the tailnet");
+        if let Some(at) = line.strip_prefix("furb host: listens on the tailnet at ") {
+          let at = at.split_once(" by ").map_or(at, |one| one.0);
+          break at.parse::<SocketAddr>().expect("an address").port();
+        }
+      }
+    });
+    Machine {
+      name: name.to_owned(),
+      reach: Reach::Tailnet(format!("127.0.0.1:{port}")),
+      reads: false,
+    }
+  }
+
   /// A daemon of a new build in the place of the daemon that runs, on the runtime of another app,
   /// as `furb host upgrade` puts it: the daemon that runs gives its lives and closes each window.
   pub(crate) fn upgraded(&mut self, app: &TestApp) {
@@ -235,8 +272,12 @@ impl Daemon {
   /// no program, so a window that dials it while no daemon listens starts nothing, and dials it
   /// again.
   pub(crate) fn machine(&self, name: &str) -> Machine {
-    let served = Command::new(self.yard.join("no-furb"));
-    Machine { name: name.to_owned(), folder: self.host.clone(), served, reads: false }
+    let served = Box::new(Command::new(self.yard.join("no-furb")));
+    Machine {
+      name: name.to_owned(),
+      reach: Reach::Here { folder: self.host.clone(), served },
+      reads: false,
+    }
   }
 
   /// The machine of the daemon as a window reaches it over a link that lags: the first frame of
@@ -252,8 +293,8 @@ impl Daemon {
         tokio::spawn(relayed(window, served, held));
       }
     });
-    let served = Command::new(self.yard.join("no-furb"));
-    Machine { name: name.to_owned(), folder, served, reads: false }
+    let served = Box::new(Command::new(self.yard.join("no-furb")));
+    Machine { name: name.to_owned(), reach: Reach::Here { folder, served }, reads: false }
   }
 
   /// A peer of the daemon, which hears each change of its cards.

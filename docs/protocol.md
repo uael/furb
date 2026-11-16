@@ -62,8 +62,11 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
-- Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
-  network encrypts the frames.
+- Plain TCP listens and dials only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no
+  other network encrypts the frames.
+- A window reaches the daemon of another machine by TCP at the address that `machines.json`, in the config folder of
+  furb on the machine of the window, names for it: `[{"name": "studio", "address": "studio:7860"}]`. It dials each
+  machine of the file beside the daemon of its own machine, in the order of the file, and starts none of them.
 
 ## Framing
 

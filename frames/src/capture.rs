@@ -17,7 +17,7 @@ use std::{
 
 use furb_host::{
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
-  transport::{Dialer, Local},
+  transport::{Dialer, Local, LocalApi},
 };
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -33,7 +33,11 @@ use crate::{
   openai,
   replay::put,
   scenario::{Act, Size, Step, Walk},
+  tailscale::tailscale,
 };
+
+/// The login that the stand-in of Tailscale gives the window on the far machine of a walk.
+const LOGIN: &str = "demo@github";
 
 /// The claude command line of the tests, which answers the Nth turn with the file `word.N`
 /// beside it.
@@ -210,6 +214,9 @@ impl Rig {
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;
+    if walk.far.is_some() {
+      rig.far_made()?;
+    }
     write(root.join("fake/browser"), BROWSER)?;
     executable(&root.join("fake/browser"))?;
     if walk.pace.is_empty() {
@@ -251,6 +258,10 @@ impl Rig {
       let into = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().subsec_nanos();
       sleep(Duration::from_secs(1).saturating_sub(Duration::from_nanos(u64::from(into)))).await;
     }
+    let mut far = match walk.far {
+      Some(name) => Some(self.far_daemon(name).await?),
+      None => None,
+    };
     let mut daemon = self.daemon().await?;
     let name =
       self.root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
@@ -262,8 +273,10 @@ impl Rig {
     // The daemon ends by its grace once the window is gone. A kill before that lets a window that
     // still dies dial again, find no daemon and start one of its own, which no peer reaches and
     // which outlives the capture: so the kill comes only when the daemon outlived its patience.
-    if timeout(PATIENCE, daemon.wait()).await.is_err() {
-      daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+    for daemon in [Some(&mut daemon), far.as_mut()].into_iter().flatten() {
+      if timeout(PATIENCE, daemon.wait()).await.is_err() {
+        daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+      }
     }
     let (shown, marks, start) = walked?;
     ended?;
@@ -276,16 +289,28 @@ impl Rig {
   async fn seeded(&self, n: usize, message: &str) -> Result<(), Error> {
     let record =
       self.project().join(format!(".furb/sessions/2026-11-{:02}T09-00-00-0000.jsonl", n + 1));
+    self.prompted(&self.environment(), &record, message).await
+  }
+
+  /// A message said to a new session of a record, with no window, in an environment, in the
+  /// project whose sessions hold the record.
+  async fn prompted(
+    &self,
+    environment: &[(&'static str, String)],
+    record: &Path,
+    message: &str,
+  ) -> Result<(), Error> {
+    let project = record.ancestors().nth(3).unwrap_or(&self.root);
     let said = Command::new(self.bin.join("furb"))
       .arg("prompt")
       .arg(message)
       .arg("--record")
-      .arg(&record)
+      .arg(record)
       .arg("--cwd")
-      .arg(self.project())
+      .arg(project)
       .env_clear()
-      .envs(self.environment())
-      .current_dir(self.project())
+      .envs(environment.iter().cloned())
+      .current_dir(project)
       .stdout(Stdio::null())
       .stderr(Stdio::piped())
       .kill_on_drop(true)
@@ -305,6 +330,69 @@ impl Rig {
     self.root.join("home/demo")
   }
 
+  /// The folders of the far machine of a walk: its home, its cache, its data and its config.
+  fn far(&self) -> PathBuf {
+    self.root.join("far")
+  }
+
+  /// The folders of the far machine of a walk: its project `lab`, and its config, which lists that
+  /// project and turns the tailnet on, by TCP on a port that the system gives.
+  fn far_made(&self) -> Result<(), Error> {
+    let lab = self.far().join("home/lab");
+    let write = |path: PathBuf, text: String| -> Result<(), Error> {
+      fs::create_dir_all(path.parent().unwrap_or(&self.root))
+        .map_err(|source| Error::Write { path: path.clone(), source })?;
+      put(&path, text.as_bytes())
+    };
+    write(lab.join("README.md"), "# lab\n".to_owned())?;
+    committed(&lab)?;
+    let config = self.far().join("config");
+    write(config.join("config.json"), r#"{"skills": {"naming": false}}"#.to_owned())?;
+    let listed = serde_json::json!({ "workspaces": [{ "directory": lab }] });
+    write(config.join("workspaces.json"), listed.to_string())?;
+    let host = serde_json::json!({ "tailnet": { "tcp": 0 }, "roles": { LOGIN: "write" } });
+    write(config.join("host.json"), host.to_string())
+  }
+
+  /// The far machine of a walk on the tailnet, whose identity a stand-in of the local API of
+  /// Tailscale gives: one session of its project said first, then its daemon, which this process
+  /// ends, and `machines.json` of the window, which names it at the address where it listens. A
+  /// release build takes no stand-in of Tailscale, so its far daemon does not start.
+  async fn far_daemon(&self, name: &str) -> Result<Child, Error> {
+    let LocalApi::Port { port, token } = tailscale(LOGIN).await.0 else {
+      return Err(Error::Listen);
+    };
+    let mut environment = self.environment_of(&self.far());
+    environment.push(("FURB_TAILSCALE_API", format!("{port}:{token}")));
+    let lab = self.far().join("home/lab");
+    let record = lab.join(".furb/sessions/2026-11-01T09-00-00-0000.jsonl");
+    self.prompted(&environment, &record, "Set up the lab.").await?;
+    let mut daemon = Command::new(self.bin.join("furb"))
+      .args(["host", "--grace", "1"])
+      .env_clear()
+      .envs(environment)
+      .stdout(Stdio::null())
+      .stderr(Stdio::piped())
+      .kill_on_drop(true)
+      .spawn()
+      .map_err(|source| Error::Process { what: "the far daemon", source })?;
+    let mut said = BufReader::new(daemon.stderr.take().ok_or(Error::Listen)?).lines();
+    let listens = async {
+      while let Ok(Some(line)) = said.next_line().await {
+        if let Some(at) = line.strip_prefix("furb host: listens on the tailnet at ") {
+          return at.split_once(" by ").map(|one| one.0.to_owned());
+        }
+      }
+      None
+    };
+    let address = timeout(PATIENCE, listens).await.ok().flatten().ok_or(Error::Listen)?;
+    // What the daemon says later goes nowhere, and never fills the pipe that it writes to.
+    drop(task::spawn(async move { while let Ok(Some(_)) = said.next_line().await {} }));
+    let machines = serde_json::json!([{ "name": name, "address": address }]);
+    put(&self.root.join("config/machines.json"), machines.to_string().as_bytes())?;
+    Ok(daemon)
+  }
+
   fn claude(&self) -> PathBuf {
     self.root.join("fake/claude")
   }
@@ -312,8 +400,14 @@ impl Rig {
   /// The environment of the window and of its daemon, and nothing of the environment of this
   /// process, so a capture is the same on each machine.
   fn environment(&self) -> Vec<(&'static str, String)> {
+    self.environment_of(&self.root)
+  }
+
+  /// The environment of a machine of the capture whose folders stand in a place, with the
+  /// programs and the stand-ins of the capture.
+  fn environment_of(&self, place: &Path) -> Vec<(&'static str, String)> {
     let path = format!("{}:/usr/bin:/bin", self.bin.display());
-    let at = |folder: &str| self.root.join(folder).display().to_string();
+    let at = |folder: &str| place.join(folder).display().to_string();
     let still = (!self.moving).then(|| ("FURB_STILL_CLOCK", STILL.to_owned()));
     let mut environment = vec![
       ("HOME", at("home")),
@@ -327,7 +421,7 @@ impl Rig {
       ("FURB_CONFIG_DIR", at("config")),
       ("FURB_CLAUDE_BIN", self.claude().display().to_string()),
       // A click on a link opens no page in front of the person at this machine.
-      ("BROWSER", at("fake/browser")),
+      ("BROWSER", self.root.join("fake/browser").display().to_string()),
       ("FURB_OPENAI_URL", self.openai.clone()),
     ];
     environment.extend(still);

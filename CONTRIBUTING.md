@@ -193,7 +193,7 @@ take the time of real ones, so the GIF plays at the speed of the window. Run it 
 | File | What it holds |
 | --- | --- |
 | `window/Cargo.toml`, `window/build.rs` | The commit of OpenTUI that the window stands on, and its native library, which the build makes with Zig from that commit into `target/opentui`, once for each commit. `.cargo/config.toml` turns off the build script of `opentui-sys`, which only links a library that stands already. |
-| `window/src/machine.rs`, `window/src/link.rs` | The client of the daemon, on the protocol and the transport of `furb-host`: a machine, how the window reaches its daemon and starts it, and the task that holds the connection. |
+| `window/src/machine.rs`, `window/src/link.rs` | The client of the daemon, on the protocol and the transport of `furb-host`: a machine, how the window reaches its daemon, here on the local transport, which it starts, or on the tailnet by TCP at the address that `machines.json` names, and the task that holds the connection. |
 | `window/src/screen.rs` | The rule from what the window knows to the widgets: a part of a screen draws only when the value that it shows changes. |
 | `window/src/tokens.rs` | The tokens of the design, which each screen reads: each color, each role of a text, and each loader. |
 | `window/src/model.rs`, `window/src/kept.rs` | What the window knows: the cards that each machine told, where the hand of the operator is, and the order of the list as it last settled. A card shows its state at once and changes its place only while the hand is away. The window keeps the cards in a file of the cache of furb, `window/cards.json`, for its next first frame. |

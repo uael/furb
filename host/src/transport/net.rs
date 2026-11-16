@@ -90,7 +90,12 @@ impl Tcp {
 impl Dialer for Tcp {
   type Stream = TcpStream;
 
+  /// The stream at the address, or refused at an address that is neither on loopback nor on the
+  /// tailnet, since no other network encrypts the frames.
   async fn dial(&self) -> Result<TcpStream, TransportError> {
+    if !reachable(self.addr.ip()) {
+      return Err(TransportError::Open { addr: self.addr });
+    }
     reached(self.addr).await
   }
 }

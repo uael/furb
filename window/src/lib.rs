@@ -60,7 +60,7 @@ use opentui::{
 
 pub use error::Error;
 pub use keys::System;
-pub use machine::Machine;
+pub use machine::{Machine, Reach};
 use reload::RELOADED;
 use screen::Screen;
 
@@ -130,13 +130,16 @@ fn still() -> Option<u64> {
 /// leaves it. The app asks the terminal for its colors, so the window stands on its background,
 /// and for each move of the pointer, so what takes a click rises under it.
 pub fn run(reads: bool) -> Result<(), Error> {
-  let (machine, options) = (Machine { reads, ..Machine::here()? }, Options::here()?);
+  let here = Machine { reads, ..Machine::here()? };
+  let machines: Vec<Machine> = [here].into_iter().chain(Machine::listed()?).collect();
+  let machines = machines.into_iter().map(|one| Machine { reads, ..one }).collect();
+  let options = Options::here()?;
   let terminal =
     TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };
   let host = HostOptions { terminal, ..HostOptions::default() };
   let app = App::new(AppOptions { palette_size: 16, host, ..AppOptions::default() })?;
   let program = options.program.clone();
-  let reloads = hand::opened(&app, vec![machine], options);
+  let reloads = hand::opened(&app, machines, options);
   app.run()?;
   match program.filter(|_| reloads.get()) {
     Some(program) => Err(Error::Reload(started(&program))),

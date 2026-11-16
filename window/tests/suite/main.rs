@@ -2,6 +2,8 @@
 //! moves, on a real daemon. The daemon serves a folder of the test on the runtime of the app, and
 //! opens each life on a model that answers from a script.
 
+#[path = "../../../tests/common/tailscale.rs"]
+mod tailscale;
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 

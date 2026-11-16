@@ -32,6 +32,7 @@ pub(crate) const CARDS: Walk = Walk {
   ],
   pace: &[],
   reads: false,
+  far: None,
   steps: &[
     step("a", &[Act::Type("Run the bench of the replay."), Act::Key("Enter")], "⎋ stop"),
     step(
@@ -106,6 +107,9 @@ pub(crate) struct Walk {
   pub(crate) pace: &'static [(&'static str, Duration)],
   /// Whether the window only reads, as `furb --read` opens it.
   pub(crate) reads: bool,
+  /// A second machine on the tailnet, by its name, which `machines.json` of the window names: a
+  /// daemon of its own, with the project `lab` and one session there.
+  pub(crate) far: Option<&'static str>,
   pub(crate) steps: &'static [Step],
 }
 
@@ -254,6 +258,7 @@ pub(crate) const README: Walk = Walk {
     ("Review the change, and make the tests pass.", Duration::from_millis(2500)),
   ],
   reads: false,
+  far: None,
   steps: &[
     step(
       "x-change",
@@ -280,6 +285,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[], READY),
         step("b", &[Act::Key("C-x"), Act::Key("?")], "each key"),
@@ -302,6 +308,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[Act::Key("C-o")], "6 sessions"),
         step("b", &[Act::Type("seed")], "Measure the seed"),
@@ -316,6 +323,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &["await bash('sleep 30')\nclose('slept')", ASKS],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-first", &[Act::Type("Run the bench."), Act::Key("Enter")], "⎋ stop"),
         step(
@@ -335,6 +343,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &LONG,
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "a",
@@ -449,6 +458,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[], READY),
         step("b", &[Act::Type("Where does the time of the open go?")], "open go?"),
@@ -465,6 +475,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-first", &[Act::Type("Read the boot of the host."), Act::Key("Enter")], "reply 1"),
         step(
@@ -490,6 +501,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step("a", &[Act::Type("/")], "Commands and skills"),
@@ -513,6 +525,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step("a", &[Act::Type("look at @")], "Files of demo"),
@@ -534,6 +547,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         // A paste of the path of an image file puts the image in as its mark.
         step("a", &[Act::Paste("shot.png")], "▣ image-1.png"),
@@ -550,6 +564,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step(
@@ -570,6 +585,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[PROSE],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "b",
@@ -593,6 +609,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &["await bash('sleep 2')\nclose('The open spends its time in the seed.')"],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "a",
@@ -617,6 +634,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ stop"),
         // The last line that the command writes shows while it still runs, so the step waits
@@ -644,6 +662,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "a",
@@ -709,6 +728,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[Act::Type("Run the check."), Act::Key("Enter")], "failed with exit 2"),
         // The provider says it is overloaded, so the window says when it asks the model again.
@@ -735,6 +755,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[ASKS],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "b",
@@ -752,6 +773,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &["await bash('sleep 20')\nclose('slept')", "await bash1\nclose('The bench ran.')"],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ stop"),
         step("b", &[Act::Type("Stop after the boot."), Act::Key("Enter")], "Stop after the boot."),
@@ -776,6 +798,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "b",
@@ -816,6 +839,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &["close('The trace holds the open of each chain, stage by stage.')"],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("b", &[Act::Type("Read the trace of the open."), Act::Key("Enter")], "3%"),
         // The share is the head of the box beside the list, or the ring of the launcher while the
@@ -834,6 +858,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         // Before any session, the models offer the sign-in of Codex, for a ChatGPT plan: in the
         // browser of this computer, or from any device with a code.
@@ -859,6 +884,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         // The settings of the session list each key with what it does, its value and its layer.
@@ -899,6 +925,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a thread"),
@@ -914,6 +941,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step("x-thread", &[Act::Type("Which skills play here?"), Act::Key("Enter")], "reply 1"),
         // Each skill of the session, the extensions that play first, each with how it plays and
@@ -933,9 +961,16 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
+      far: Some("studio"),
       steps: &[
-        step("a", &[], "This computer"),
-        step("b", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+        step("a", &[], READY),
+        step("b", &[Act::Key("C-x"), Act::Key("h")], "Search a machine"),
+        // The far machine takes a new session once it told its project, `lab`.
+        step("c", &[Act::Type("studio")], "1 / 1"),
+        step("d", &[Act::Key("Enter")], "studio ▾"),
+        // The session runs on the far machine, in its project, and the list holds the cards of both
+        // machines.
+        step("e", &[Act::Type("Where does this run?"), Act::Key("Enter")], "  reply 1"),
       ],
     }),
   },
@@ -957,6 +992,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[ASKS],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         step(
           "x-thread",
@@ -977,6 +1013,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &["await bash('sleep 60')\nclose('slept')"],
       pace: &[],
       reads: true,
+      far: None,
       steps: &[
         // Another window of the operator starts a session; this one only reads, as `furb --read`
         // opens it, and sees that session live.
@@ -996,6 +1033,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[ASKS],
       pace: &[],
       reads: false,
+      far: None,
       steps: &[
         // The projects of a new session end with no project, for work with no code.
         step("a", &[Act::Key("C-x"), Act::Key("p")], "No project"),

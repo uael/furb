@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use std::{
+  fs,
   path::{Path, PathBuf},
   time::Duration,
 };
@@ -13,7 +14,7 @@ use jiff::tz::TimeZone;
 use opentui::testing::TestApp;
 
 use crate::{
-  daemon::{ASKS, Daemon, Hold, PATIENCE, Peer, WORKS, aged},
+  daemon::{ANSWERS, ASKS, Daemon, Hold, PATIENCE, Peer, WORKS, aged},
   screens::screen,
 };
 
@@ -254,4 +255,43 @@ fn the_start_shows_what_waits_and_what_worked_while_no_window_was_open() {
   app.press("ctrl+x");
   app.press("l");
   screen("start-narrow-list", &app);
+}
+
+#[test]
+fn a_session_starts_on_a_machine_of_the_tailnet_that_the_launcher_picks() {
+  let app = app();
+  let mut here = Daemon::bound(&app);
+  here.project("furb");
+  here.served();
+  // The second machine stands on the tailnet, where Tailscale names the operator by a login.
+  let mut far = Daemon::bound(&app);
+  let lab = far.project("lab");
+  let studio = far.tailed("studio", "demo@github");
+  far.peer().rested(&lab.join("first.jsonl"), &format!("set up the lab\n{ANSWERS}"), None);
+  // The home of the window is the folder of the far machine, so its project shows as `~/lab`.
+  let home = dunce::canonicalize(far.file("")).ok();
+  let options = Options { home, ..options(&here.file("cards.json")) };
+  open(&app, vec![here.machine("mac"), studio], options);
+  shows(&app, "set up the lab");
+  app.press("ctrl+x");
+  app.press("h");
+  shows(&app, "Search a machine");
+  app.type_text("studio");
+  // The machine offers its project once it told its projects, which come after its cards.
+  let row = |line: &str| line.contains("▌studio") && line.trim_end().ends_with(" lab");
+  let offered = app.wait_until(PATIENCE, || app.text().lines().any(row));
+  assert!(offered, "{}", app.text());
+  app.press("enter");
+  shows(&app, "studio ▾   LA lab ▾");
+  app.paste(&format!("plan the week {ANSWERS}"));
+  app.press("enter");
+  let frame = shows(&app, "Two stages hold most");
+  assert!(frame.contains("lab"), "{frame}");
+  // The session runs on that machine, in its project, and the machine of the window holds none.
+  let records = fs::read_dir(&lab).unwrap().flatten();
+  let records = records.filter(|one| one.path().extension().is_some_and(|ext| ext == "jsonl"));
+  assert_eq!(records.count(), 2, "{frame}");
+  // The capture waits for the thread to rest, so it shows no loader at a moment of its turn.
+  shows(&app, "✓ Resolved");
+  screen("cards-tailnet", &app);
 }

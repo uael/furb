@@ -14,6 +14,8 @@ mod probe;
 mod raster;
 mod replay;
 mod scenario;
+#[path = "../../tests/common/tailscale.rs"]
+mod tailscale;
 
 use std::{
   env,

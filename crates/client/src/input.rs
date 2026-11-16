@@ -263,14 +263,17 @@ impl Client {
     self.restore = Some(format!("{ASIDE}{rest}"));
   }
 
-  /// The folder that the life of a record opens in when no life holds the record: the folder of
-  /// the client for a new record, else the project of its cards, else the folder whose sessions
+  /// The folder that the life of a record opens in when no life holds the record: the folder that
+  /// the client opened it in, else the folder of the client for a new record, else the project of
+  /// its cards, else the folder whose sessions
   /// hold it, as for a session with no project.
   pub fn cwd(&self, at: usize, life: &str) -> Option<String> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let held = || Path::new(life).ancestors().nth(3).map(|one| one.display().to_string());
+    // A life that the client opened before its machine told its card runs where it was opened.
+    let opened = || self.holds.get(&(at, life.to_owned())).and_then(|hold| hold.cwd.clone());
     match cards.iter().find(|card| card.life == life) {
-      None => Some(self.folder.clone()),
+      None => opened().or_else(|| Some(self.folder.clone())),
       Some(card) => card.project.clone().or_else(held),
     }
   }

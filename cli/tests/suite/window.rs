@@ -14,7 +14,7 @@ use furb_host::{
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   transport::{Dialer, Local},
 };
-use furb_window::{Error, Machine};
+use furb_window::{Error, Machine, Reach};
 use futures::{SinkExt, StreamExt};
 use tokio::{
   process::Command,
@@ -33,8 +33,8 @@ async fn a_window_starts_the_daemon_of_its_machine_when_none_listens_and_no_daem
   let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
   served.args(["host", "--grace", "0"]).env_remove("FURB_WINDOW");
   served.env("XDG_CACHE_HOME", &*yard).env("FURB_CONFIG_DIR", yard.join("config"));
-  let mut machine =
-    Machine { name: "test-machine".to_owned(), folder: folder.clone(), served, reads: false };
+  let reach = Reach::Here { folder: folder.clone(), served: Box::new(served) };
+  let mut machine = Machine { name: "test-machine".to_owned(), reach, reads: false };
 
   let stream = timeout(PATIENCE, machine.reach()).await.expect("the daemon listens in time");
   let mut lines = Framed::new(stream.expect("the window reaches its daemon"), LinesCodec::new());
@@ -62,7 +62,8 @@ async fn a_daemon_that_ends_before_it_listens_tells_the_window_the_last_line_tha
   // The command line refuses a grace that is no number, says why, and ends.
   let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
   served.args(["host", "--grace", "never"]).env_remove("FURB_WINDOW");
-  let mut machine = Machine { name: "test-machine".to_owned(), folder, served, reads: false };
+  let reach = Reach::Here { folder, served: Box::new(served) };
+  let mut machine = Machine { name: "test-machine".to_owned(), reach, reads: false };
   let ended = timeout(PATIENCE, machine.reach()).await.expect("the daemon ends in time");
   let Err(Error::Ended { status, said }) = ended else { panic!("the daemon listened") };
   assert!(!status.success() && !said.is_empty(), "{status}: {said}");
