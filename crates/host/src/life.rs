@@ -1584,9 +1584,11 @@ fn revert(
     let why = "No file that these writes wrote was known before them.";
     return Err(LifeError::Refused(why.to_owned()));
   }
+  // A path in the folder of the chain names it from there, by the separators of the system, as
+  // `notes.md` from `~\furb\notes.md` on Windows.
   let from = |path: String| {
-    let inside = cwd.as_deref().and_then(|cwd| path.strip_prefix(cwd)?.strip_prefix('/'));
-    inside.map_or_else(|| path.clone(), str::to_owned)
+    let inside = cwd.as_deref().and_then(|cwd| Path::new(&path).strip_prefix(cwd).ok());
+    inside.map_or_else(|| path.clone(), |one| one.display().to_string())
   };
   let doors =
     texts.into_iter().map(|(path, content)| Door::Write { path: from(path), content }.word());

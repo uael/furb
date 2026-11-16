@@ -162,18 +162,15 @@ impl Model {
     (place, actor)
   }
 
-  /// A folder of a machine with the home folder of its user as `~`, as its daemon told it, and `/`
-  /// between its parts on each system, so a folder of Windows shows as `~/furb` too. A folder
-  /// outside the home shows as it is.
+  /// A folder of a machine with the home folder of its user as `~`, and `/` between its parts on
+  /// each system, so a folder of Windows shows as `~/furb` too: the home of the window for this
+  /// computer, and the home that its daemon told for another. A folder outside the home shows as it
+  /// is.
   pub(crate) fn folder_shown(&self, at: usize, folder: &str) -> String {
-    let here = || self.home.as_ref().map(|one| one.display().to_string());
-    let home = if at == 0 { here() } else { self.client.machines[at].home.clone() };
-    match home.as_deref().and_then(|home| folder.strip_prefix(home)) {
-      Some("") => "~".to_owned(),
-      Some(rest) if rest.starts_with('/') => format!("~{rest}"),
-      Some(rest) if rest.starts_with('\\') => format!("~{}", rest.replace('\\', "/")),
-      _ => folder.to_owned(),
-    }
+    let told = self.client.machines.get(at).and_then(|one| one.home.as_deref());
+    let here = self.home.as_ref().map(|one| one.display().to_string());
+    let home = if at == 0 { here.as_deref() } else { told };
+    shown_folder(folder, told, home)
   }
 
   /// The row that counts the sessions whose life runs, behind the mark of their cards, and those of
@@ -228,3 +225,29 @@ impl Model {
     rows
   }
 }
+
+/// A folder as a machine told it, shown from a home: a folder that its machine told from its own
+/// home, as the files of the World tell each path, as `~\furb` on Windows, stands from the home
+/// that the machine told first, so it shows from the home of the window as any other folder.
+fn shown_folder(folder: &str, told: Option<&str>, home: Option<&str>) -> String {
+  let tilded =
+    folder.strip_prefix('~').filter(|rest| rest.is_empty() || rest.starts_with(['/', '\\']));
+  let whole = match (tilded, told) {
+    (Some(rest), Some(told)) => format!("{told}{rest}"),
+    _ => folder.to_owned(),
+  };
+  let from = |home: &str| {
+    let rest = whole.strip_prefix(home)?;
+    (rest.is_empty() || rest.starts_with(['/', '\\']))
+      .then(|| format!("~{}", rest.replace('\\', "/")))
+  };
+  match home.and_then(from) {
+    Some(shown) => shown,
+    None if whole.starts_with('~') => whole.replace('\\', "/"),
+    None => whole,
+  }
+}
+
+#[cfg(test)]
+#[path = "home.test.rs"]
+mod tests;
