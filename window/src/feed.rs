@@ -733,7 +733,8 @@ impl Feed<'_> {
         .map(|at| (code + shown[..at].width(), Loader::Light(PROMPT))),
       _ => None,
     };
-    [(PAD + gutter - 1, loader)].into_iter().chain(light).collect()
+    let wide = if let Loader::Number(number) = loader { number.to_string().len() } else { 1 };
+    [(PAD + gutter - wide, loader)].into_iter().chain(light).collect()
   }
 
   /// How a line stands: a line that the record left at work in a life that a fault ended works no
@@ -749,6 +750,11 @@ impl Feed<'_> {
   fn number(&self, line: &Code, mark: &Mark) -> (String, Color, Option<Loader>) {
     let t = &self.model.tokens;
     match mark {
+      // The line that its model writes keeps its number, which the light passes over in the beat
+      // of the word that says the model thinks or writes.
+      Mark::Runs { work: Work::Writes, .. } => {
+        (line.number.to_string(), t.accent, Some(Loader::Number(line.number)))
+      }
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
       Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
       Mark::Asks => ("◆".to_owned(), t.attention, None),

@@ -5,7 +5,7 @@
 ┃                                                             ▐ ● why is the seed…      ⠋ Working ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     1  cost = tokens(word)                                    ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ⠋  proof = await bash('pytest -q test/outside
+    2  proof = await bash('pytest -q test/outside
     …
 
   thought · I read the stages from the frames and sum…

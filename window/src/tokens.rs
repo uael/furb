@@ -281,7 +281,12 @@ pub enum Loader {
   /// `writes`: a light coasts over it from its left with a soft tail, the word goes white whole for
   /// a moment, then fades back.
   Light(&'static str),
+  /// The number of the line that a model writes, which the light passes over as over a word.
+  Number(usize),
 }
+
+/// The digits as words of one letter, which the light of a number passes over.
+const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 /// How long the pulse of a card that begins to call its operator takes, and how far of it goes to
 /// rise: it rises fast, then settles over the rest, as a tab of `OpenCode` v2 pulses.
@@ -320,7 +325,7 @@ impl Loader {
       Self::Model => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       Self::Command => &["◐", "◓", "◑", "◒"],
       Self::Agent => &["↳"],
-      Self::Light(_) => &[],
+      Self::Light(_) | Self::Number(_) => &[],
     }
   }
 
@@ -330,6 +335,9 @@ impl Loader {
     if let Self::Light(word) = self {
       return word;
     }
+    if self.frames().is_empty() {
+      return "";
+    }
     let frames = self.frames();
     let steps = after.as_millis() / self.step().as_millis();
     frames[usize::try_from(steps).unwrap_or_default() % frames.len()]
@@ -338,7 +346,7 @@ impl Loader {
   /// How long one frame stays.
   pub const fn step(self) -> Duration {
     match self {
-      Self::Model | Self::Agent | Self::Light(_) => Duration::from_millis(80),
+      Self::Model | Self::Agent | Self::Light(_) | Self::Number(_) => Duration::from_millis(80),
       Self::Command => Duration::from_millis(120),
     }
   }
@@ -358,12 +366,21 @@ impl Loader {
       }
       Self::Light(word) => {
         let letters = word.char_indices().map(|(at, one)| &word[at..at + one.len_utf8()]);
-        let lit = light(after.as_millis() % BEAT, i64::try_from(word.chars().count()).unwrap_or(0));
-        let cells = (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, lit(at) / 10)));
-        cells.collect()
+        lit(letters.collect(), after, color)
+      }
+      Self::Number(number) => {
+        let digits =
+          number.to_string().bytes().map(|one| DIGITS[usize::from(one - b'0')]).collect();
+        lit(digits, after, color)
       }
     }
   }
+}
+
+/// The letters of a word, each between a color and white as the light passes it.
+fn lit(letters: Vec<&'static str>, after: Duration, color: Color) -> Vec<(&'static str, Color)> {
+  let light = light(after.as_millis() % BEAT, i64::try_from(letters.len()).unwrap_or(0));
+  (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, light(at) / 10))).collect()
 }
 
 /// How white each letter of a word of `length` letters is, in thousandths, at `at` ms of the beat.
