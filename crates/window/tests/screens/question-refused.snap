@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · how many rows                             Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃ Refused: "many" is no int: invalid digit found in
 ┃ string
 ┃
-┃  Message  Python    → how many… ▾     opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → how many… ▾     opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⏎ answer                                      ⌃C refuse
+  ⏎ answer                                      ⌃C refuse      No answer yet

@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · what does the head say                    Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃   no
 ┃   type another answer
 ┃
-┃  Message  Python    → what does… ▾    opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → what does… ▾    opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · ⏎ answer · ⇥ next                 ⌃C refuse
+  ↑↓ choose · ⏎ answer · ⇥ next                 ⌃C refuse      No answer yet

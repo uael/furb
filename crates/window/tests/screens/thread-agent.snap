@@ -28,6 +28,6 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃ Write to this agent
 ┃
-┃  Message  Python    → Run the… ▾      opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → Run the… ▾      opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/furb-try                       ⎋ back
+  This computer · ~/furb-try                       ⎋ back      No answer yet

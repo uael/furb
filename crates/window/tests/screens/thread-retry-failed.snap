@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · the bench stalls on a cold build          Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃
 ┃ Reply to this thread
 ┃
-┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ‖ Paused · ⌃X Z or a message resumes it         ⌃P find
+  ‖ Paused · ⌃X Z or a message resumes it         ⌃P find      No answer yet

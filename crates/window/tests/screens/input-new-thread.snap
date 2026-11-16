@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb-try · where does the time go (the model…    Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃
 ┃ Ask in a new thread
 ┃
-┃  Message  Python    + furb-try… ▾     opus  high   ↩ ⌃N      Context               No answer yet
+┃  Message  Python    + furb-try… ▾     opus  high   ↩ ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ stop                              ⌃P find
+  ⠋ Working · ⎋ stop                              ⌃P find      No answer yet

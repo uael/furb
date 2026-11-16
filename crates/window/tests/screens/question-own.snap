@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · where does the list stand                 Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃   left
 ┃ › at the top
 ┃
-┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · ⏎ answer                          ⌃C refuse
+  ↑↓ choose · ⏎ answer                          ⌃C refuse      No answer yet

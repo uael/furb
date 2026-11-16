@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · which keys does the form take             Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃ › [x] tab
 ┃   type another answer
 ┃
-┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse
+  ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse      No answer yet

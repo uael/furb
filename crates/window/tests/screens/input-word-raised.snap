@@ -28,6 +28,6 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃ >>> A word of Python to run
 ┃
-┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⏎ run · ⌃X Y a message                          ⌃P find
+  ⏎ run · ⌃X Y a message                          ⌃P find      No answer yet

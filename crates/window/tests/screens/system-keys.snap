@@ -28,6 +28,6 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃   ↑↓ move · Enter run · Esc close
 ┃
-┃  Message  Python    → which keys… ▾     opus   + Ctrl+N      Context               No answer yet
+┃  Message  Python    → which keys… ▾     opus   + Ctrl+N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse
+  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      No answer yet

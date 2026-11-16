@@ -28,6 +28,6 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃ >>> answer = 41 + 1
 ┃
-┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⏎ run · ⌃X Y a message                          ⌃P find
+  ⏎ run · ⌃X Y a message                          ⌃P find      No answer yet

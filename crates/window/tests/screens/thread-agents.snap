@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb · measure the open on three chains          Resolve     All projects ▾        This computer
 ┃
@@ -28,6 +28,6 @@ source: tests/suite/screens.rs
 ┃
 ┃ Reply to this thread
 ┃
-┃  Message  Python    → measure the… ▾  opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → measure the… ▾  opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ◐ Working · ⎋ stop                          ⌃X ↓ agents
+  ◐ Working · ⎋ stop                          ⌃X ↓ agents      No answer yet

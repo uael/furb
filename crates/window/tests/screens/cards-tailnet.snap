@@ -28,6 +28,6 @@ source: crates/window/tests/suite/screens.rs
 ┃
 ┃ A reply opens this thread again
 ┃
-┃  Message  Python    → plan the… ▾     opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → plan the… ▾     opus  high   + ⌃N      Context
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  studio · ~/lab                                  ⌃P find
+  studio · ~/lab                                  ⌃P find      No answer yet
