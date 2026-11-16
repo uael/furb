@@ -17,6 +17,7 @@ use crate::{
   line::{Line, clipped, cut, run, spread, wrapped},
   list::{NO_PROJECT, project},
   model::{Key, Model, Told},
+  picture,
   review::shown_at,
   thread::{Click, Hot, Row, columns, width},
   tokens::{APART, Loader, Role, WORKS},
@@ -785,7 +786,7 @@ impl Model {
   }
 
   /// The title of the open thread: the one of its card, else the first line of its first message
-  /// that says something, as the daemon titles a card.
+  /// that says something with each image that it names as its mark, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.client.thread.as_ref()?;
     let card = self.client.card(&opened.thread.key).map(|card| &card.thread);
@@ -798,7 +799,7 @@ impl Model {
       Some(Anchor::of(text).map_or(text.as_str(), |(_, said)| said).to_owned())
     };
     let title = card.or_else(first).or_else(pending)?;
-    title.lines().find(|line| !line.trim().is_empty()).map(str::to_owned)
+    title.lines().find(|line| !line.trim().is_empty()).map(picture::shown)
   }
 
   /// The model that the target of the input speaks to, by its name alone, and its effort.
