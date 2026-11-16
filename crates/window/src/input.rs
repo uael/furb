@@ -1006,6 +1006,8 @@ impl Model {
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
     // A second press says what it does in the room that the key at the right leaves.
     let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));
+    // While his voice records, the record takes the row, over any notice.
+    let notice = notice.filter(|_| self.listening.is_none());
     let says = armed.map(|one| (one, t.attention)).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of the input go first, then the line of a file that the next message is about.

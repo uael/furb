@@ -31,6 +31,8 @@ pub(crate) fn app() -> TestApp {
 /// on each runner.
 pub(crate) fn options(kept: &Path) -> Options {
   let home = kept.parent().map(|one| dunce::canonicalize(one).unwrap_or_else(|_| one.to_owned()));
+  // No test starts the speech of the build, which would download its model.
+  let listen = home.as_ref().map(|one| one.join("no-speech"));
   Options {
     folder: home.clone().unwrap_or_default().join("furb-try"),
     home,
@@ -43,7 +45,7 @@ pub(crate) fn options(kept: &Path) -> Options {
     program: None,
     reloaded: false,
     tailnet: None,
-    listen: None,
+    listen,
   }
 }
 

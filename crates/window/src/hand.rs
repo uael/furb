@@ -30,7 +30,10 @@ use futures::StreamExt;
 use tokio::process::ChildStdout;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
-use furb::world::images;
+use furb::world::{
+  config::{KEY_VOICE, Layers},
+  images,
+};
 use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, mentioned};
 
 use crate::{
@@ -50,7 +53,7 @@ use crate::{
   review::{MARKS, NEXT, PREVIOUS},
   thread::{Boxed, Spot},
   tokens::{AWAY, Role, Tokens},
-  voice::{self, RELEASED, Record, Run, Said, Space, Stage, Voice},
+  voice::{self, RELEASED, Record, Run, STOPPED, Said, Space, Stage, Voice},
 };
 
 /// How long the window waits for a machine before it says that it waits.
@@ -84,6 +87,9 @@ const LOADERS: usize = 16;
 
 /// How each notice of the program of the speech starts, so its next notice takes its place.
 const VOICE: &str = "The voice ";
+
+/// How long the notice that the speech is ready stays.
+const READY: Duration = Duration::from_secs(5);
 
 /// How many images of the feed draw at once at most.
 const PICTURES: usize = 4;
@@ -1615,15 +1621,21 @@ fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> Option<bool> {
   };
   let space = key.code == KeyCode::Char(' ') && key.modifiers.is_empty();
   if !space || over && !recording {
+    // Any other key ends a record, with the text so far, and then goes where it goes.
+    if recording {
+      ended(app, window);
+    }
     window.borrow_mut().voice.other();
     return None;
   }
   let heard = window.borrow_mut().voice.space(app.now());
   Some(match heard {
-    // The repeat of a space that waits for its release: a hold, which the bar never hears.
-    Space::Taps(_) if window.borrow_mut().voice.waits.take().is_some() => true,
+    // The repeat of a space that waits for its release: a hold, which the bar never hears. A first
+    // space starts a new run, so a tap that waits from a run before it is gone.
+    Space::Taps(false) if window.borrow_mut().voice.waits.take().is_some() => true,
     Space::Taps(first) => {
       if first {
+        window.borrow_mut().voice.waits = None;
         let parts = window
           .borrow()
           .screen
@@ -1666,15 +1678,23 @@ fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> Option<bool> {
 /// The program of the speech started, where the window has one, and each line that it says heard.
 /// The window starts it with its first frame, so the speech is ready before the first hold.
 fn readied(app: &App, window: &Shared) -> Result<(), String> {
-  let (named, folder) = {
+  let (named, folder, project) = {
     let held = window.borrow();
-    (held.listen.clone(), held.kept.parent().map(Path::to_path_buf).unwrap_or_default())
+    let folder = held.kept.parent().map(Path::to_path_buf).unwrap_or_default();
+    (held.listen.clone(), folder, PathBuf::from(&held.screen.model.client.folder))
   };
+  // The configs say the language that he speaks and the task, read again at each start.
+  let voice = Layers::new(&project, None).values().ok().and_then(|mut all| all.remove(KEY_VOICE));
+  let said = |key: &str, unsaid: &str| {
+    voice.as_ref().and_then(|one| one.get(key)?.as_str()).unwrap_or(unsaid).to_owned()
+  };
+  let (language, task) = (said("language", "auto"), said("task", "transcribe"));
   let program = voice::program(named.as_deref(), &folder)
     .map_err(|no| format!("The program of the speech cannot be written: {no}"))?
     .ok_or_else(|| "This window has no speech on this system yet.".to_owned())?;
-  let (listener, output) = voice::started(&program, &folder.join("voice"), &app.runtime())
-    .map_err(|no| format!("The speech did not start: {no}"))?;
+  let (listener, output) =
+    voice::started(&program, &folder.join("voice"), (&language, &task), &app.runtime())
+      .map_err(|no| format!("The speech did not start: {no}"))?;
   window.borrow_mut().voice.listener = Some(listener);
   listening(app, window, FramedRead::new(output, LinesCodec::new_with_max_length(BOUND)));
   Ok(())
@@ -1700,7 +1720,11 @@ fn recorded(app: &App, window: &Shared, spaces: usize) {
   let before = text[..caret - typed].iter().collect();
   let after = text[caret..].iter().collect();
   window.borrow_mut().voice.record = Some(Record { before, after, last: app.now(), stops: false });
-  tell(app, window, |model| model.listening = Some(Vec::new()));
+  tell(app, window, |model| {
+    model.listening = Some(Vec::new());
+    // The notice of the speech said all it had to once he speaks.
+    model.client.notice.take_if(|one| one.starts_with(VOICE));
+  });
   spoken(app, window, "");
   held(app, window);
 }
@@ -1737,11 +1761,20 @@ fn listening(app: &App, window: &Shared, mut lines: FramedRead<ChildStdout, Line
       None => Err("The speech ended.".to_owned()),
     };
     match said {
-      Ok(Said::Ready { .. }) => tell(cx.app(), &on, |model| {
-        if model.client.notice.as_deref().is_some_and(|one| one.starts_with(VOICE)) {
-          model.client.notice = Some(format!("{VOICE}is ready: hold the space bar to speak."));
+      Ok(Said::Ready { .. }) => {
+        let ready = format!("{VOICE}is ready: hold the space bar to speak.");
+        let said = tell(cx.app(), &on, |model| {
+          let loading = model.client.notice.as_deref().is_some_and(|one| one.starts_with(VOICE));
+          loading.then(|| model.client.notice = Some(ready.clone())).is_some()
+        });
+        // The notice leaves by itself a few seconds later, unless another took its place.
+        if said {
+          let after = Rc::clone(&on);
+          cx.app().set_timeout(READY, move |cx| {
+            tell(cx.app(), &after, |model| drop(model.client.notice.take_if(|one| *one == ready)));
+          });
         }
-      }),
+      }
       Ok(Said::Loading { loading, done }) => tell(cx.app(), &on, |model| {
         model.client.notice = Some(match loading {
           Stage::Download => format!("{VOICE}downloads its model, once: {}%", done.unwrap_or(0)),
@@ -1788,8 +1821,34 @@ fn held(app: &App, window: &Shared) {
       return self::held(cx.app(), &on);
     }
     record.stops = true;
+    let begun = record.last;
     stop(voice);
+    drop(held);
+    // A program that gives no final text never keeps the record: the text so far stays his.
+    let on = Rc::clone(&on);
+    cx.app().set_timeout(STOPPED, move |cx| {
+      let lost =
+        on.borrow().voice.record.as_ref().is_some_and(|one| one.stops && one.last == begun);
+      if lost {
+        on.borrow_mut().voice.record = None;
+        tell(cx.app(), &on, |model| {
+          model.listening = None;
+          model.client.notice =
+            Some("The speech gave no final text: the text so far stays.".into());
+        });
+      }
+    });
   });
+}
+
+/// The record ended at once with the text so far, as a key that is no space ends it: the program
+/// stops, and its final text, which comes to no record, writes nothing.
+fn ended(app: &App, window: &Shared) {
+  let Some(record) = window.borrow_mut().voice.record.take() else { return };
+  if !record.stops {
+    stop(&window.borrow().voice);
+  }
+  tell(app, window, |model| model.listening = None);
 }
 
 /// The program told to stop the record. A program that is gone does not hear it, and its output,

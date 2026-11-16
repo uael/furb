@@ -6,14 +6,22 @@
 // microphone with no sound in and says {"ready":true}. Each line "start" on its input opens the
 // microphone and starts a record, and each line "stop" ends it. During a record it writes one line
 // of JSON for each change: the level of the microphone from 0 to 100, as {"level":12}, and the whole
-// text so far, as {"text":"..."}, then the final text as {"text":"...","final":true}. Whisper finds
-// the language of each record by itself. A fault writes {"error":"..."}. It ends once its input ends.
+// text so far, as {"text":"..."}, then the final text as {"text":"...","final":true}. Its second word
+// names the language that he speaks, auto to find it in each record, and its third the task:
+// transcribe writes in that language, translate writes in English. A fault writes {"error":"..."}.
+// It ends once its input ends.
 import AVFoundation
 import Foundation
 import WhisperKit
 
 /// The model: Whisper large-v3 turbo, quantized for the Neural Engine to 632 MB.
 let variant = "openai_whisper-large-v3-v20240930_turbo_632MB"
+
+/// The language that he speaks, none to find it in each record, and the task, from the words of
+/// the program.
+let words = CommandLine.arguments
+let spoken: String? = words.count > 2 && words[2] != "auto" ? words[2] : nil
+let task: DecodingTask = words.count > 3 && words[3] == "translate" ? .translate : .transcribe
 
 /// The samples of a second of the audio that Whisper reads.
 let second = 16000
@@ -132,7 +140,8 @@ func guessed(_ kit: WhisperKit, _ microphone: Microphone) async {
 func text(_ kit: WhisperKit, _ samples: [Float], _ spoke: Bool) async throws -> String {
   guard spoke, samples.count >= second / 4 else { return "" }
   let options = DecodingOptions(
-    task: .transcribe, language: nil, detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: true)
+    task: task, language: spoken, detectLanguage: spoken == nil, skipSpecialTokens: true,
+    withoutTimestamps: true)
   let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)
   return results.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
 }

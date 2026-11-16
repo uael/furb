@@ -172,3 +172,46 @@ fn where_the_terminal_tells_each_release_a_hold_never_plays_the_bar_and_a_tap_pl
   typed(&app, "read the engine.");
   assert_eq!(same(&app.text()), same(&bar));
 }
+
+#[test]
+fn a_speech_that_gives_no_final_text_ends_its_record_and_a_tap_types_a_space_again() {
+  // The program says its guesses and never answers the stop.
+  let mute = "#!/bin/sh\necho '{\"ready\":true}'\nwhile read -r line; do\n  case $line in\n    start) echo '{\"text\":\"read the\"}' ;;\n  esac\ndone\n";
+  let (app, _daemon) = listened_to(mute);
+  app.paste("please");
+  hold(&app);
+  typed(&app, "please read the");
+  // He let go: the record ends by itself with the text so far, and a space types again.
+  app.advance(Duration::from_millis(400));
+  app.advance(Duration::from_secs(4));
+  shows(&app, "The speech gave no final text");
+  assert!(!app.text().contains("● Listening"), "{}", app.text());
+  app.type_text(" ok");
+  typed(&app, "please read the ok");
+}
+
+#[test]
+fn a_key_that_is_no_space_ends_a_record_with_its_text_so_far() {
+  let mute = "#!/bin/sh\necho '{\"ready\":true}'\nwhile read -r line; do\n  case $line in\n    start) echo '{\"text\":\"read the\"}' ;;\n  esac\ndone\n";
+  let (app, _daemon) = listened_to(mute);
+  hold(&app);
+  typed(&app, "read the");
+  shows(&app, "● Listening");
+  app.type_text("x");
+  typed(&app, "read thex");
+  assert!(!app.text().contains("● Listening"), "{}", app.text());
+}
+
+#[test]
+fn a_bar_held_through_a_reload_records_from_its_repeats_in_the_new_window() {
+  // The new window hears no press: the terminal goes on with the repeats of the bar.
+  let (app, _daemon) = listened();
+  space(&app, KeyEventKind::Repeat);
+  app.advance(Duration::from_millis(30));
+  space(&app, KeyEventKind::Repeat);
+  typed(&app, "read the engine");
+  shows(&app, "● Listening");
+  app.advance(Duration::from_millis(400));
+  space(&app, KeyEventKind::Release);
+  typed(&app, "read the engine.");
+}

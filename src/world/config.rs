@@ -60,6 +60,9 @@ pub(crate) fn furb_key(name: &str) -> bool {
   own().iter().any(|one| one.key[0] == name)
 }
 
+/// The key of the voice of the operator, which the window reads at each start of its speech.
+pub const KEY_VOICE: &str = "voice";
+
 fn own() -> Vec<Named> {
   let one = |name: &str, kind, default, description: &str| Named {
     key: vec![name.to_owned()],
@@ -95,6 +98,14 @@ fn own() -> Vec<Named> {
        are lost.",
     ),
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
+    one(
+      KEY_VOICE,
+      Kind::Object,
+      json!({"language": "auto", "task": "transcribe"}),
+      "The voice of the operator in the window: the language that he speaks, auto to find it in \
+       each record or a code as fr or en, and the task, transcribe to write in that language or \
+       translate to write in English.",
+    ),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
     // A person turns an extension on or off for this machine, in the local config of the project,
     // which git does not keep.

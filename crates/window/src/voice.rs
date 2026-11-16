@@ -31,6 +31,9 @@ const REPEATS: Duration = Duration::from_millis(100);
 /// The longest pause of a terminal between the press of a key and its first repeat.
 const FIRST: Duration = Duration::from_secs(2);
 
+/// How long a record that stops waits for its final text before it ends with the text so far.
+pub(crate) const STOPPED: Duration = Duration::from_secs(3);
+
 /// How long the repeats of the bar stop before the record ends: he let the bar go.
 pub(crate) const RELEASED: Duration = Duration::from_millis(200);
 
@@ -127,7 +130,8 @@ pub(crate) enum Stage {
 impl Voice {
   /// A space that he pressed at a moment.
   pub(crate) fn space(&mut self, now: Instant) -> Space {
-    if let Some(record) = &mut self.record {
+    // A record that stops holds no more spaces: he let the bar go, so each space after it types.
+    if let Some(record) = self.record.as_mut().filter(|one| !one.stops) {
       record.last = now;
       return Space::Holds;
     }
@@ -200,16 +204,18 @@ pub(crate) fn program(named: Option<&Path>, folder: &Path) -> io::Result<Option<
   Ok(Some(path))
 }
 
-/// The program started on a runtime, on the folder of its models, with what tells it each line, and
-/// its output.
+/// The program started on a runtime, on the folder of its models, the language that he speaks and
+/// its task, with what tells it each line, and its output.
 pub(crate) fn started(
   program: &Path,
   models: &Path,
+  (language, task): (&str, &str),
   runtime: &Handle,
 ) -> io::Result<(Listener, ChildStdout)> {
   let _runtime = runtime.enter();
   let mut child = Command::new(program)
     .arg(models)
+    .args([language, task])
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::null())
