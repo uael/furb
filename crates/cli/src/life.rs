@@ -81,8 +81,13 @@ impl Life {
     let prompts =
       verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()), at: None };
     Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
-      let words =
-        a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
+      let words = a
+        .object()
+        .as_ref()
+        .items()?
+        .iter()
+        .map(furb::ObjectRef::as_str)
+        .collect::<Option<Vec<_>>>()?;
       (words.len() == 7 && words.get(2..) == Some(&wanted[..])).then(|| a.about().to_owned())
     }))
   }

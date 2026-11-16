@@ -670,7 +670,7 @@ impl Ear for Coroutine {
   /// nothing while the body holds what it keeps.
   fn image(&self) -> Option<Box<RawValue>> {
     let imaged = &self.imaged;
-    let flight = imaged.started.iter().filter_map(|id| imaged.asked.get(id)).map(|fact| &fact.0);
+    let flight = imaged.started.iter().filter_map(|id| imaged.asked.get(id)).map(Fact::object);
     let kept = match self.kept.as_deref() {
       Some(kept) => Some(kept.image()?),
       None if self.keeps => return None,

@@ -545,8 +545,9 @@ pub fn official() -> Vec<Skill> {
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
 pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   let words = root.into_iter().filter_map(|one| one.0);
-  let facts: Vec<Fact> =
-    words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
+  let facts: Vec<Fact> = words
+    .filter_map(|words| Fact::owned(Object::tuple(words.iter().map(Object::string))))
+    .collect();
   skill::enabled(&facts)
 }
 

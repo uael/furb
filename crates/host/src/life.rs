@@ -25,7 +25,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb::{
-  Engine, Fact, Fault, Object, checkpoint,
+  Engine, Fault, Object, checkpoint,
   engine::ROOT,
   image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
@@ -1533,7 +1533,6 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       let cwd = engine.cwd(verbs::Cwd { on: Some(root.clone()) })?;
       let of = verbs::Transcript { on: Some(root.clone()), of: Some(ENABLE.to_owned()), at: None };
       let facts = engine.transcript(of)?;
-      let facts: Vec<Fact> = facts.iter().filter_map(|one| Fact::of(one.0.as_ref())).collect();
       let places = life.configs.places();
       Ok(Reply::Skills(skills::played(&directory, &cwd, &places, &facts)))
     }
@@ -1763,7 +1762,7 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
     }
     Command::Transcript { on: chain, of } => {
       let facts = engine.transcript(verbs::Transcript { on: Some(on(chain)), of, at: None })?;
-      Reply::Values(facts.iter().map(|one| outward(one.0.as_ref())).collect())
+      Reply::Values(facts.iter().map(|one| outward(one.object().as_ref())).collect())
     }
     Command::Program { on: chain } => {
       Reply::Value(outward(engine.verb("program", vec![], named(chain))?.as_ref()))
@@ -1777,7 +1776,7 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
       Reply::Inspected { kind, repr, value: outward(value.as_ref()) }
     }
     Command::Get { id } => {
-      Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.0.as_ref())))
+      Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.object().as_ref())))
     }
     Command::Peek { id } => match engine.outcome(&id)? {
       Some(got) => Reply::Value(outward(got.as_ref())),

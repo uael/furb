@@ -185,7 +185,7 @@ async fn stepped<W: 'static>(
 pub(crate) fn json_of(a: &Fact) -> Value {
   match a.kind() {
     "module" => json!(["module", a.about(), a.by()]),
-    _ => outward(a.0.as_ref()),
+    _ => outward(a.object().as_ref()),
   }
 }
 
@@ -234,6 +234,6 @@ async fn covered<W: 'static>(
 
 /// Whether a pause or a wake covers an act, as the engine reads it.
 async fn covers<W: 'static>(co: &mut Co<W>, control: &Fact, id: &str) -> Result<bool, Fault> {
-  let got = co.call("covers", vec![control.0.clone(), Object::string(id)], vec![]).await?;
+  let got = co.call("covers", vec![control.object().clone(), Object::string(id)], vec![]).await?;
   Ok(got.as_ref().as_bool().unwrap_or_default())
 }

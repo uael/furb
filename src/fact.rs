@@ -4,14 +4,17 @@
 //! crate reads a fact as the tuple it is and nothing more: what a kind means is the engine's, and a host that
 //! hears facts reads the ones it knows by position, as the contract declares them.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::value::{Object, ObjectRef, entry};
 
-/// One fact of a life, as the tuple the engine said.
+/// One fact of a life, as the tuple the engine said. Each ear that hears a fact shares it, so a
+/// copy of a fact copies no part of it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Fact(pub Object);
+pub struct Fact(Arc<Object>);
 
 impl Fact {
   /// A saying: a kind, what it is about, and its words, with no slot for who said it, since the bus says that.
@@ -19,18 +22,23 @@ impl Fact {
   pub fn says(kind: &str, about: &str, words: impl IntoIterator<Item = Object>) -> Self {
     let mut held = vec![Object::string(kind), Object::string(about)];
     held.extend(words);
-    Self(Object::tuple(held))
+    Self(Arc::new(Object::tuple(held)))
   }
 
   /// One fact or saying from an object, which must be a tuple whose kind and about are text: a fact has who said
   /// it third, and a saying has its first word there.
   pub fn of(said: ObjectRef<'_>) -> Option<Self> {
-    fits(&said).then(|| Self(said.to_owned()))
+    fits(&said).then(|| Self(Arc::new(said.to_owned())))
   }
 
   /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.
   pub fn owned(said: Object) -> Option<Self> {
-    fits(&said.as_ref()).then_some(Self(said))
+    fits(&said.as_ref()).then(|| Self(Arc::new(said)))
+  }
+
+  /// The tuple that the engine said.
+  pub fn object(&self) -> &Object {
+    &self.0
   }
 
   /// The kind of the fact, which is its first entry.
@@ -50,7 +58,7 @@ impl Fact {
 
   /// One word of the fact, by its place after who said it.
   pub fn word(&self, at: usize) -> Option<ObjectRef<'_>> {
-    entry(&self.0.as_ref(), 3 + at)
+    entry(&self.0.as_ref().as_ref(), 3 + at)
   }
 
   /// The chain a question is on, which is its first word.
@@ -64,7 +72,7 @@ impl Fact {
   }
 
   fn at(&self, i: usize) -> &str {
-    entry(&self.0.as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
+    entry(&self.0.as_ref().as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
   }
 }
 

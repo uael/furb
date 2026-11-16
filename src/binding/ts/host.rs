@@ -351,7 +351,7 @@ impl JsEar {
     // What a verb gave is the value of the yield that called it, and what it raised is thrown in there.
     let (way, args) = match heard {
       Heard::Born => ("next", vec![]),
-      Heard::Fact(fact) => ("next", vec![outward(env, &fact.0)?]),
+      Heard::Fact(fact) => ("next", vec![outward(env, fact.object())?]),
       Heard::Answer(Ok(got)) => ("next", vec![outward(env, &got)?]),
       Heard::Answer(Err(fault)) => ("throw", vec![outward(env, &fault.object())?]),
     };

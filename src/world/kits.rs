@@ -225,7 +225,7 @@ impl Kits {
     let frame = Frame::Event {
       life: self.life.clone(),
       seq: self.seq,
-      event: Told::Fact(outward(a.0.as_ref())),
+      event: Told::Fact(outward(a.object().as_ref())),
     };
     for running in self.played.iter_mut().filter_map(|one| one.running.as_mut()) {
       running.tell(&frame);

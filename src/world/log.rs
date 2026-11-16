@@ -313,7 +313,7 @@ fn owed<'a>(held: impl Iterator<Item = &'a Object>) -> Vec<(String, Value)> {
       theirs.insert(fact.about().to_owned());
     }
     if theirs.contains(fact.about()) {
-      owed.push((fact.about().to_owned(), outward(fact.0.as_ref())));
+      owed.push((fact.about().to_owned(), outward(fact.object().as_ref())));
     }
   }
   owed
@@ -391,7 +391,7 @@ impl Log {
     let about = a.about();
     if a.question() {
       if log.tip.seen.insert(about.to_owned()) {
-        log.line(&outward(a.0.as_ref()));
+        log.line(&outward(a.object().as_ref()));
       }
       return Ok(());
     }
@@ -406,7 +406,7 @@ impl Log {
     let log = co.kept::<Self>()?;
     match a.kind() {
       "module" => log.line(&serde_json::json!(["module", about, a.by()])),
-      _ => log.line(&outward(a.0.as_ref())),
+      _ => log.line(&outward(a.object().as_ref())),
     }
     Ok(())
   }

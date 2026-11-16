@@ -344,7 +344,7 @@ impl Outside {
 
   /// One saying of an ear, said into the life.
   pub(super) fn says(&mut self, sand: &mut Sand, saying: &Fact) -> Result<(), Fault> {
-    let words = self.inward(sand, &saying.0)?;
+    let words = self.inward(sand, saying.object())?;
     let words =
       words.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
     self.named_call(sand, "say", words, vec![]).map(drop)
@@ -391,7 +391,7 @@ impl Outside {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
       (At::Waiting, Some(_)) if let Some((_, refusal)) = self.ending.take_if(|one| one.0 == on) => {
-        return self.inward(sand, &refusal.0).map_or_else(Answer::Abort, Answer::Value);
+        return self.inward(sand, refusal.object()).map_or_else(Answer::Abort, Answer::Value);
       }
       (At::Waiting, Some(a)) => match self.told(sand, a) {
         Ok(Some(fact)) => Heard::Fact(fact),
@@ -420,7 +420,7 @@ impl Outside {
     };
     let (at, answer) = match self.stepped(sand, &mut *ear, heard) {
       Stepped::Say(saying) => {
-        (At::Waiting, self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value))
+        (At::Waiting, self.inward(sand, saying.object()).map_or_else(Answer::Abort, Answer::Value))
       }
       Stepped::Wait(wait) => {
         let wait = wait.unwrap_or_else(Object::none);
@@ -482,7 +482,7 @@ impl Outside {
       _ => {
         let why = format!("the step of the word ran past the bound of a turn of {bound:?}");
         let done = Fact::says("done", &asked.0, [Fault::refused(why).object()]);
-        self.inward(sand, &done.0).map_or_else(Answer::Abort, Answer::Value)
+        self.inward(sand, done.object()).map_or_else(Answer::Abort, Answer::Value)
       }
     }
   }
@@ -519,7 +519,7 @@ impl Outside {
       self.ending = Some((on, question));
       Fact::says("done", &by, [refusal])
     };
-    Some(self.inward(sand, &ends.0).map_or_else(Answer::Abort, Answer::Value))
+    Some(self.inward(sand, ends.object()).map_or_else(Answer::Abort, Answer::Value))
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that

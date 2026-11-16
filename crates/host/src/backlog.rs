@@ -106,7 +106,7 @@ fn last_ours(engine: &mut Engine, chain: &str) -> Result<bool, Fault> {
   let word = |fact: &Value, at: usize| fact.get(at).and_then(Value::as_str).map(str::to_owned);
   let last = facts
     .iter()
-    .map(|one| outward(one.0.as_ref()))
+    .map(|one| outward(one.object().as_ref()))
     .rfind(|fact| word(fact, 1).as_deref() == Some(chain));
   Ok(last.is_some_and(|fact| {
     word(&fact, 0).as_deref() == Some("pause") && word(&fact, 3).as_deref() == Some(WHY)

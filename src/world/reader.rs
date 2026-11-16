@@ -711,7 +711,7 @@ impl Reader {
       }
       _ => {}
     }
-    self.told(&fact.0);
+    self.told(fact.object());
     self.flush();
   }
 

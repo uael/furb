@@ -447,7 +447,7 @@ impl PyEar {
     // What a verb gave is sent in as the value of the yield that called it, and what it raised is thrown in there.
     let (way, sent) = match heard {
       Heard::Born => ("send", py.None().into_bound(py)),
-      Heard::Fact(fact) => ("send", to_python(py, fact.0.as_ref())?),
+      Heard::Fact(fact) => ("send", to_python(py, fact.object().as_ref())?),
       Heard::Answer(Ok(got)) => ("send", to_python(py, got.as_ref())?),
       Heard::Answer(Err(fault)) => {
         ("throw", PyErr::from(fault).into_value(py).into_bound(py).into_any())
@@ -516,7 +516,7 @@ impl NativeEar {
         Step::Call(call) => heard = Heard::Answer(answer_of(py, &call)),
         Step::Wait(None) => return Ok(py.None()),
         Step::Wait(Some(wait)) => return Ok(to_python(py, wait.as_ref())?.unbind()),
-        Step::Say(saying) => return Ok(to_python(py, saying.0.as_ref())?.unbind()),
+        Step::Say(saying) => return Ok(to_python(py, saying.object().as_ref())?.unbind()),
         Step::Over => {
           hearing.ear = None;
           return Err(PyStopIteration::new_err(()));
@@ -542,7 +542,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   loop {
     let token = site.call_method1("set", (&name,))?;
     let said = match polled(ear) {
-      Poll::Ready(Spoken::Saying(saying)) => to_python(py, saying.0.as_ref())
+      Poll::Ready(Spoken::Saying(saying)) => to_python(py, saying.object().as_ref())
         .and_then(|saying| say.call1(saying.cast::<PyTuple>()?).map(|_| true)),
       // What the verb came to goes back to the ear, which takes it at its next poll.
       Poll::Ready(Spoken::Verb(call)) => {
