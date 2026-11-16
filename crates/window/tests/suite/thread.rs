@@ -577,14 +577,15 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   // row for each kind of content that the answer read, with its size and its share.
   clicked(&app, "Context", LEFT, 0);
   shows(&app, "Engine");
-  // The script reads 124k at its one answer: so the engine holds what its few turns do not. The
-  // turns name the folders of the test, whose length changes from run to run, so only the name of
-  // each kind and the free room are the same at each run.
+  // The script reads 124k at its one answer, which gives the tokens of a character of the system
+  // prompt and of the turns. The turns name the folders of the test, whose length changes from run
+  // to run, so only the name of each kind and the free room are the same at each run. The name of
+  // the engine gives way to its size where the box is narrow.
   let named: Vec<String> = boxed(&app)[2..6]
     .iter()
     .map(|row| row.split("  ").next().unwrap_or_default().to_owned())
     .collect();
-  assert_eq!(named, ["■ Engine", "■ Doctrine", "■ Turns", "■ Free"]);
+  assert_eq!(named, ["■ Engine (System…", "■ Doctrine", "■ Turns", "■ Free"]);
   assert_eq!(boxed(&app)[5], "■ Free                   876k   88%");
   // A click on the bar, whose cells keep their colors under the pointer, shows what came from the
   // cache, and a click on the head folds the box.

@@ -31,7 +31,7 @@ impl Content {
   /// The name of the kind, as the box writes it.
   pub const fn name(self) -> &'static str {
     match self {
-      Self::Engine => "Engine",
+      Self::Engine => "Engine (System Prompt)",
       Self::Doctrine => "Doctrine",
       Self::Kits => "Kits",
       Self::Skills => "Skills",
@@ -78,12 +78,13 @@ impl Client {
     ))
   }
 
-  /// The turns that a machine gave for the box of a thread, parted by kind; a refusal parts
-  /// nothing, so the client does not ask again until a later answer.
+  /// The turns that a machine gave for the box of a thread, parted by kind with its system
+  /// prompt; a refusal parts nothing, so the client does not ask again until a later answer.
   pub fn parted(&mut self, key: &Key, read: u64, answer: Option<Answer>) {
+    let system = self.system;
     let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key == *key) else { return };
     let kinds = match answer {
-      Some(Answer::Values(turns)) => kinds(&turns),
+      Some(Answer::Values(turns)) => kinds(&turns, system),
       _ => Vec::new(),
     };
     opened.thread.parts = Some(Parts { read, kinds });
@@ -104,10 +105,10 @@ const CHARACTERS: f64 = 3.5;
 
 /// The kinds of what the last answer of turns read, which sum to the tokens that it read. The
 /// usage of an answer counts its system prompt and the turns before it, but no kind: so the
-/// characters of each kind of turn before the last answer are counted, the first and the last
-/// answers give the tokens of a character, and the engine takes what the first answer read beyond
-/// its turns.
-fn kinds(turns: &[Value]) -> Vec<(Content, u64)> {
+/// characters of the system prompt and of each kind of turn before the last answer are counted,
+/// and the first answer, which read only them, gives the tokens of a character. The turns take
+/// the rest of what the last answer read, as the thinking that the model reads again with them.
+fn kinds(turns: &[Value], system: &str) -> Vec<(Content, u64)> {
   let answers: Vec<(usize, f64)> = turns
     .iter()
     .enumerate()
@@ -118,7 +119,8 @@ fn kinds(turns: &[Value]) -> Vec<(Content, u64)> {
     return Vec::new();
   };
   let mut characters = [0.0; Content::ALL.len()];
-  let mut before = 0.0;
+  characters[slot(Content::Engine)] = count(system);
+  let mut before = count(system);
   let mut kit = false;
   for (at, turn) in turns[..last].iter().enumerate() {
     let python = turn[1].as_str().unwrap_or_default();
@@ -136,14 +138,9 @@ fn kinds(turns: &[Value]) -> Vec<(Content, u64)> {
       before += if at < first { count(text) } else { 0.0 };
     }
   }
-  let all: f64 = characters.iter().sum();
-  let rate =
-    if all > before && read > opened { (read - opened) / (all - before) } else { 1.0 / CHARACTERS };
-  let engine = opened - rate * before;
-  let (engine, rate) = if engine < 0.0 { (0.0, read / all.max(1.0)) } else { (engine, rate) };
+  let rate = if before > 0.0 { opened / before } else { 1.0 / CHARACTERS };
   let mut kinds: Vec<(Content, u64)> =
     Content::ALL.into_iter().map(|kind| (kind, tokens(characters[slot(kind)] * rate))).collect();
-  kinds[slot(Content::Engine)].1 = tokens(engine);
   // The turns take what the rounding left, so the kinds sum to what the answer read.
   let turns = slot(Content::Turns);
   let others: u64 = kinds.iter().enumerate().filter(|one| one.0 != turns).map(|one| one.1.1).sum();
@@ -200,3 +197,7 @@ fn count(text: &str) -> f64 {
 fn tokens(count: f64) -> u64 {
   count.max(0.0).round() as u64
 }
+
+#[cfg(test)]
+#[path = "context.test.rs"]
+mod tests;

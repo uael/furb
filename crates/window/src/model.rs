@@ -102,6 +102,7 @@ impl Model {
     Self {
       client: {
         let mut client = Client::new(machines, options.folder.display().to_string());
+        client.system = furb::SYSTEM;
         client.stash = kept::kept(&kept::stash_of(&options.kept));
         client
       },

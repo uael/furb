@@ -97,6 +97,9 @@ pub struct Client {
   pub commands: Vec<Offer>,
   /// How the box of the context splits what the last answer of the open thread read.
   pub split: Split,
+  /// The system prompt of a chain, which the box of the context counts: the engine of the build of
+  /// the window, which a chain on an older engine reads with a few lines that differ.
+  pub system: &'static str,
   /// The review of the changes of a project, while the operator reads it.
   pub review: Option<Review>,
   /// The views that the client mounted, in the order that it mounted them.
