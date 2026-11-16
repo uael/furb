@@ -1786,16 +1786,30 @@ withdrawal, when a cancel ended it before anyone answered, with the reason that 
 """
 
 
-class Anchor(TypedDict):
+class Where1(TypedDict):
   """
-  A line of a file that a message is about: its path, its number in the file after the change,
-  or before it for a line that the change removed, and its text then.
+  A line of the file: its number in the file after the change, or before it for a line that the
+  change removed, and its text then.
   """
 
-  path: str
   line: int
   before: bool
   quote: str
+  kind: Literal["line"]
+
+
+class Where2(TypedDict):
+  """
+  The whole folder.
+  """
+
+  kind: Literal["folder"]
+
+
+type Where = Where1 | Where2
+"""
+Where an anchor stands in its path.
+"""
 
 
 class Context(TypedDict):
@@ -2599,6 +2613,15 @@ class Answered(TypedDict):
   reply: Reply
 
 
+class Anchor(TypedDict):
+  """
+  A place that a message is about: its path, and where it stands in it.
+  """
+
+  path: str
+  at: Where
+
+
 class Data4(TypedDict):
   chain: str
   waiting: list[FollowUp]
@@ -3229,4 +3252,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 69
+PROTOCOL = 70

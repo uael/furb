@@ -5570,25 +5570,60 @@
         "path": {
           "type": "string"
         },
-        "line": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "before": {
-          "type": "boolean"
-        },
-        "quote": {
-          "type": "string"
+        "at": {
+          "$ref": "#/definitions/Where"
         }
       },
       "required": [
         "path",
-        "line",
-        "before",
-        "quote"
+        "at"
       ],
-      "description": "A line of a file that a message is about: its path, its number in the file after the change,\nor before it for a line that the change removed, and its text then."
+      "description": "A place that a message is about: its path, and where it stands in it."
+    },
+    "Where": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "before": {
+              "type": "boolean"
+            },
+            "quote": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "line"
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "before",
+            "quote"
+          ],
+          "description": "A line of the file: its number in the file after the change, or before it for a line that the\nchange removed, and its text then."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "folder"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "description": "The whole folder."
+        }
+      ],
+      "description": "Where an anchor stands in its path."
     },
     "Context": {
       "type": "object",
@@ -6321,5 +6356,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 69
+  "x-protocol": 70
 }

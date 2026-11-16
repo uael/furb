@@ -982,6 +982,19 @@ export type Reply =
       text: string | null;
     };
 /**
+ * Where an anchor stands in its path.
+ */
+export type Where =
+  | {
+      line: number;
+      before: boolean;
+      quote: string;
+      kind: "line";
+    }
+  | {
+      kind: "folder";
+    };
+/**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
  */
 export type ProtocolError =
@@ -1759,14 +1772,11 @@ export interface Agent {
   anchor?: Anchor | null;
 }
 /**
- * A line of a file that a message is about: its path, its number in the file after the change,
- * or before it for a line that the change removed, and its text then.
+ * A place that a message is about: its path, and where it stands in it.
  */
 export interface Anchor {
   path: string;
-  line: number;
-  before: boolean;
-  quote: string;
+  at: Where;
 }
 /**
  * The context of a chain at its last answer: what that answer read, the window that the roster of
@@ -1808,4 +1818,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 69;
+export const PROTOCOL = 70;

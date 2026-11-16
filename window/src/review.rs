@@ -10,7 +10,7 @@ use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
 use furb::view::Agent;
-use furb_client::{Anchor, Opened, Review, rests};
+use furb_client::{Anchor, Opened, Review, Where, rests};
 use furb_host::protocol::{Change, Changed, Changes};
 
 use crate::{
@@ -90,10 +90,12 @@ impl Model {
       let lines: Vec<&(u64, bool, String)> =
         sides.iter().filter_map(|side| side.get(row)?.as_ref()).collect();
       let at = |agent: &&Agent| {
-        let Some(anchor) = agent.anchor.as_ref().filter(|one| one.path == path) else {
+        let Some(Anchor { at: Where::Line { line, before, .. }, .. }) =
+          agent.anchor.as_ref().filter(|one| one.path == path)
+        else {
           return false;
         };
-        lines.iter().any(|line| anchor.line == line.0 && anchor.before == line.1)
+        lines.iter().any(|one| *line == one.0 && *before == one.1)
       };
       opened.thread.agents.iter().find(at)
     };
@@ -156,17 +158,23 @@ impl Model {
     let pointed = self.pointer.filter(|(x, _)| self.on_side(*x)).map(|(_, y)| y);
     let room = usize::from(self.list_width()) - 5;
     let row = |(place, slot): (usize, Slot<'_>)| {
+      let lit = pointed.and_then(|y| y.checked_sub(ABOVE)).map(usize::from) == Some(place);
       let at = match slot {
+        // A folder takes a sub thread as a line does, and its row marks the one about it.
         Slot::Folder(folder) => {
-          let folder = if folder.is_empty() { "./".to_owned() } else { format!("{folder}/") };
-          return vec![run(format!("  {}", cut(&folder, room)), t.style(Role::Muted))];
+          let path = folder_path(folder);
+          let mark = self.sub_of(&path).map_or(run("  ", Style::new()), |agent| {
+            run("◆ ", Style::new().fg(if rests(agent) { t.muted } else { t.accent }))
+          });
+          let muted = t.style(Role::Muted);
+          let style = if lit { muted.fg(t.hover) } else { muted };
+          return vec![mark, run(cut(&format!("{path}/"), room), style)];
         }
         Slot::File(at) => at,
       };
       let one = &files[at];
       let ground = (at == chosen).then_some(t.lifted);
       let on = |style: Style| ground.map_or(style, |bg| style.bg(bg));
-      let lit = pointed.and_then(|y| y.checked_sub(ABOVE)).map(usize::from) == Some(place);
       let (mark, color) = match one.state {
         Change::Added => ("A", t.added),
         Change::Modified => ("M", t.accent),
@@ -259,19 +267,51 @@ impl Model {
     let right = usize::from(x.checked_sub(1 + MARKS)?) >= self.diff_width() / 2;
     let rows = rows(&shown.diff, shown.split.then_some(right));
     let (line, before, quote) = rows.get(row)?.clone()?;
-    Some(Anchor { path, line, before, quote })
+    Some(Anchor { path, at: Where::Line { line, before, quote } })
   }
 
   pub(crate) fn review_at(&self, x: u16, y: u16) -> Option<usize> {
-    let shown = self.reviewing()?;
+    match self.slot_at(x, y)? {
+      Slot::File(at) => Some(at),
+      Slot::Folder(_) => None,
+    }
+  }
+
+  /// The folder of the review at a cell of the window, as its path in the project, which a click
+  /// makes the place of the next message.
+  pub(crate) fn folder_at(&self, x: u16, y: u16) -> Option<String> {
+    match self.slot_at(x, y)? {
+      Slot::Folder(folder) => Some(folder_path(folder)),
+      Slot::File(_) => None,
+    }
+  }
+
+  /// The row of the panel of the review at a cell of the window.
+  fn slot_at(&self, x: u16, y: u16) -> Option<Slot<'_>> {
     let row = usize::from(y.checked_sub(ABOVE)?);
-    shown.side?;
+    self.reviewing()?.side.filter(|_| self.on_side(x))?;
     let review = self.client.review.as_ref()?;
     let files = self.client.changes(review.at, &review.folder).map(|one| &one.files[..]);
-    match slots(files.unwrap_or_default()).get(row) {
-      Some(Slot::File(at)) if self.on_side(x) => Some(*at),
-      _ => None,
+    slots(files.unwrap_or_default()).get(row).copied()
+  }
+
+  /// The sub thread of the open thread that is about a folder.
+  pub(crate) fn sub_of(&self, folder: &str) -> Option<&Agent> {
+    let opened = self.client.thread.as_ref().map(Opened::root)?;
+    let about = |one: &Anchor| one.at == Where::Folder && one.path == folder;
+    opened.thread.agents.iter().find(|agent| agent.anchor.as_ref().is_some_and(about))
+  }
+}
+
+/// Where an anchor stands, as a row names it: the name of its file and its line, as `engine.rs:12`,
+/// and a line before the change says so, or its folder, as `src/world/`.
+pub(crate) fn shown_at(anchor: &Anchor) -> String {
+  match &anchor.at {
+    Where::Line { line, before, .. } => {
+      let side = if *before { " before" } else { "" };
+      format!("{}:{line}{side}", named(&anchor.path))
     }
+    Where::Folder => format!("{}/", anchor.path),
   }
 }
 
@@ -338,6 +378,7 @@ fn rows(diff: &str, side: Option<bool>) -> Vec<Diffed> {
 
 /// A row of the files of a review: the folder of the files under it, or a file by its place among
 /// the files.
+#[derive(Clone, Copy)]
 enum Slot<'a> {
   Folder(&'a str),
   File(usize),
@@ -358,6 +399,11 @@ fn slots(files: &[Changed]) -> Vec<Slot<'_>> {
     slots.push(Slot::File(at));
   }
   slots
+}
+
+/// The path of a folder of a review in its project, `.` for the top.
+fn folder_path(folder: &str) -> String {
+  if folder.is_empty() { ".".to_owned() } else { folder.to_owned() }
 }
 
 /// The keys that move the diff to the change before and after the one at its top.

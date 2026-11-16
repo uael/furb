@@ -39,7 +39,7 @@ use furb_wire::{
 pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
-pub use furb_wire::anchor::Anchor;
+pub use furb_wire::anchor::{Anchor, Where};
 pub use history::{History, Walk};
 pub use input::{ASIDE, Draft, FOLD, FOLDED, Folded, PICTURE, Pasted};
 pub use inspect::Inspection;

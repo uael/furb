@@ -655,6 +655,50 @@ fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line()
 }
 
 #[test]
+fn a_click_on_a_folder_of_the_review_opens_a_sub_thread_about_that_folder() {
+  let (app, daemon, sessions) = started();
+  let project = daemon.file("furb-try");
+  let git = |args: &[&str]| {
+    let done = Command::new("git").arg("-C").arg(&project).args(args).status().unwrap();
+    assert!(done.success(), "git {args:?}");
+  };
+  fs::create_dir_all(project.join("lib")).unwrap();
+  fs::write(project.join("lib/b.py"), "two = 2\n").unwrap();
+  git(&["init", "-q", "-b", "trunk"]);
+  git(&["add", "lib/b.py"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(project.join("lib/b.py"), "two = 3\n").unwrap();
+  sent(&app, &format!("Change two. {ANSWERS}"));
+  shows(&app, "The open takes");
+  app.press("ctrl+x");
+  app.press("g");
+  shows(&app, "two = 3");
+  // The folder stands in the panel at the right, past the head of the diff that names its file.
+  let (x, y) = at(&app, "lib/", 60);
+  app.click(x, y);
+  shows(&app, "┃ Say what to do with the folder lib/");
+  sent(&app, "why lib");
+  // The sub thread opens with its folder in its head, and its model answers in it.
+  shows(&app, "◆ lib/ · why lib");
+  shows(&app, "✓ Resolved");
+  let parent = [format!("Change two. {ANSWERS}")];
+  let held = app.wait_until(PATIENCE, || told(&daemon, &sessions) == parent);
+  assert!(held, "{:?}", told(&daemon, &sessions));
+  app.press("escape");
+  shows(&app, "└ 1 sub thread resolved");
+  // The panel of the review marks the folder, and a click on it opens the sub thread again.
+  app.press("ctrl+x");
+  app.press("g");
+  let shown = shows(&app, "two = 3");
+  let row = shown.lines().find(|one| one.contains("lib/") && !one.contains("b.py"));
+  let row = row.unwrap_or_default();
+  assert!(row.contains("◆ lib/"), "{shown}");
+  let (x, y) = at(&app, "lib/", 60);
+  app.click(x, y);
+  shows(&app, "◆ lib/ · why lib");
+}
+
+#[test]
 fn a_file_changed_with_no_life_counts_once_the_window_takes_the_focus_again() {
   let (app, daemon, _) = started();
   let project = daemon.file("furb-try");

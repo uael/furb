@@ -28,6 +28,7 @@ use crate::{
   names::{self, Named},
   picture, prose,
   question::{closed, person},
+  review::shown_at,
   thread::{Click, Item, Items, Row, width},
   tokens::{APART, Loader, PROMPT, Role, WORKS, mixed},
 };
@@ -226,9 +227,7 @@ impl Feed<'_> {
     let sub = self.opened.sub().and_then(|one| one.anchor.as_ref());
     let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
       (Some(_), _, Some(at)) => (format!("⑂ {} · ", at + 2), title),
-      (Some(_), _, None) if let Some(one) = sub => {
-        (format!("◆ {}:{} · ", named(&one.path), one.line), title)
-      }
+      (Some(_), _, None) if let Some(one) = sub => (format!("◆ {} · ", shown_at(one)), title),
       (Some(_), Some(_), None) => ("agent · ".to_owned(), title),
       (Some(_), None, None) => (String::new(), title),
       (None, ..) if branches > 0 => {
@@ -401,8 +400,7 @@ impl Feed<'_> {
     let Some((anchor, said)) = Anchor::of(text) else {
       return self.band(text, (hue, self.style(Role::Prose)), Vec::new());
     };
-    let side = if anchor.before { " before" } else { "" };
-    let line = format!("{}:{}{side}", named(&anchor.path), anchor.line);
+    let line = shown_at(&anchor);
     // The line ends two columns in from the band, as the cross of a queued message does.
     let muted = self.style(Role::Muted).bg(t.raised);
     let right =
@@ -1092,9 +1090,9 @@ impl Feed<'_> {
     let stands = stands.or(thinks);
     let title = if rest { muted } else { self.style(Role::Prose) };
     let mut title = vec![run(agent.card.title.clone(), title)];
-    // A sub thread names the line that it is about before its title.
+    // A sub thread names the place that it is about before its title.
     if let Some(one) = &agent.anchor {
-      let line = format!("{}:{}  ", named(&one.path), one.line);
+      let line = format!("{}  ", shown_at(one));
       title.splice(0..0, [run("◆ ", Style::new().fg(self.model.tokens.accent)), run(line, muted)]);
     }
     let open = Click::Agent(agent.card.prompt.clone());

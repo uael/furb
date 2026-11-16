@@ -1,3 +1,4 @@
+use furb_wire::anchor::{Anchor, Where};
 use serde_json::{Value, json};
 
 use furb::view::{
@@ -306,10 +307,18 @@ fn a_prompt_on_a_thread_about_a_line_of_a_file_is_a_sub_thread_that_holds_its_an
   assert_eq!(cards, ["prompt1"]);
   // It stands under the thread with its anchor, and its reply opens it again.
   let [sub, model] = page.agents.as_slice() else { panic!("{page:?}") };
-  let by_model = model.anchor.as_ref().map(|one| (one.path.as_str(), one.line, one.before));
-  assert_eq!((model.card.title.as_str(), by_model), ("why y?", Some(("b.py", 1, true))));
-  let anchor = sub.anchor.as_ref().map(|one| (one.path.as_str(), one.line, one.before));
-  assert_eq!((sub.card.title.as_str(), anchor), ("why two?", Some(("a.py", 2, false))));
+  let line = |path: &str, line, before, quote: &str| {
+    let at = Where::Line { line, before, quote: quote.to_owned() };
+    Some(Anchor { path: path.to_owned(), at })
+  };
+  assert_eq!(
+    (model.card.title.as_str(), model.anchor.clone()),
+    ("why y?", line("b.py", 1, true, "y"))
+  );
+  assert_eq!(
+    (sub.card.title.as_str(), sub.anchor.clone()),
+    ("why two?", line("a.py", 2, false, "x = 2"))
+  );
   assert!(sub.card.works(), "{sub:?}");
   let own = held.page(&streams, "prompt5", Reach { before: None, limit: 10 });
   let messages: Vec<&str> = own.exchanges.iter().map(|one| one.message.as_str()).collect();

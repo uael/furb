@@ -27,7 +27,7 @@ use opentui::{
 use furb_host::protocol::Verb;
 
 use furb::world::images;
-use furb_client::{Asked, Folded, Pasted, mentioned};
+use furb_client::{Anchor, Asked, Folded, Pasted, Where, mentioned};
 
 use crate::{
   Machine, Options, Screen,
@@ -985,8 +985,8 @@ fn found(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 }
 
 /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
-/// file under it goes bright, a click on a line of the diff opens the sub thread about that line,
-/// or turns the input to a message about it, and the wheel scrolls the diff.
+/// file or the folder under it goes bright, a click on a folder or on a line of the diff opens the
+/// sub thread about it, or turns the input to a message about it, and the wheel scrolls the diff.
 fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
   let file = window.borrow().screen.model.review_at(event.x, event.y);
   // The diff stands under the two rows of the head, from the row where its box scrolled.
@@ -999,6 +999,13 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
       && let Some(review) = model.client.review.as_mut()
     {
       review.chosen = file;
+    } else if down && let Some(folder) = model.folder_at(event.x, event.y) {
+      // A folder opens the sub thread about it, or turns the input to a message about it.
+      model.client.review = None;
+      match model.sub_of(&folder).map(|one| one.card.prompt.clone()) {
+        Some(sub) => model.open_agent(sub),
+        None => model.client.draft.anchor = Some(Anchor { path: folder, at: Where::Folder }),
+      }
     } else if down
       && !model.on_side(event.x)
       && let Some(sub) = row.and_then(|row| model.sub_on(row))

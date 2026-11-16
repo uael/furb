@@ -10,13 +10,14 @@ use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Target};
+use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Target, Where};
 
 use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::{NO_PROJECT, project},
   model::{Key, Model, Told},
+  review::shown_at,
   thread::{Click, Hot, Row, columns, width},
   tokens::{APART, Loader, Role, WORKS},
 };
@@ -469,9 +470,12 @@ impl Model {
       }
       (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
       (None, _) => {
-        let anchored = self.client.draft.anchor.as_ref().map(|one| {
-          let side = if one.before { ", before the change" } else { "" };
-          format!("Say what to do with {}, line {}{side}", named(&one.path), one.line)
+        let anchored = self.client.draft.anchor.as_ref().map(|one| match &one.at {
+          Where::Line { line, before, .. } => {
+            let side = if *before { ", before the change" } else { "" };
+            format!("Say what to do with {}, line {line}{side}", named(&one.path))
+          }
+          Where::Folder => format!("Say what to do with the folder {}/", one.path),
         });
         let says = match self.client.target() {
           _ if anchored.is_some() => anchored.as_deref().unwrap_or_default(),
@@ -891,12 +895,11 @@ impl Model {
     self.client.chosen = Some(Chosen::of(&self.client.target(), actor));
   }
 
-  /// The line of a file that the next message is about, while the operator writes it, with the
-  /// key that turns it back to a plain message.
+  /// The place that the next message is about, while the operator writes it, with the key that
+  /// turns it back to a plain message.
   fn anchored(&self) -> Option<Line> {
     let t = &self.tokens;
-    let one = self.client.draft.anchor.as_ref()?;
-    let line = format!("{}:{}", named(&one.path), one.line);
+    let line = shown_at(self.client.draft.anchor.as_ref()?);
     let drop = format!("  ·  {} a plain message", self.key(Does::Close));
     let (accent, prose, muted) =
       (Style::new().fg(t.accent), t.style(Role::Prose), t.style(Role::Muted));
