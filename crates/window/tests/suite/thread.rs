@@ -830,3 +830,36 @@ fn a_command_that_wrote_past_its_tail_opens_whole_under_its_line_and_folds_again
   app.press("ctrl+o");
   shows(&app, "… 37 lines · ⌃O whole");
 }
+
+#[test]
+fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
+  let (app, ..) = crate::question::opened(
+    &format!("time of the bench\n{}", crate::daemon::DELEGATES),
+    "Count the lines",
+  );
+  // The bar stands under the status row with no click, at now.
+  let bar = |frame: &str| frame.lines().last().unwrap_or_default().to_owned();
+  let ready = app.wait_until(PATIENCE, || bar(&app.text()).contains("now"));
+  assert!(ready, "{}", app.text());
+  screen("time-out", &app);
+  // A first click on its track holds it and moves nothing in time.
+  let y = u16::try_from(app.text().lines().count() - 1).unwrap_or_default();
+  app.click(12, y);
+  assert!(bar(&app.text()).contains("now"), "{}", app.text());
+  // The next click moves the thread back, and the bar says so with the key back to now.
+  app.click(12, y);
+  let back = app.wait_until(PATIENCE, || bar(&app.text()).contains("back"));
+  assert!(back, "{}", app.text());
+  // The keys zoom its track in, and say it.
+  app.press("+");
+  let zoomed = app.wait_until(PATIENCE, || bar(&app.text()).contains("×"));
+  assert!(zoomed, "{}", app.text());
+  screen("time-in", &app);
+  // Escape goes back to now, and the track shows its whole time again.
+  app.press("escape");
+  let now = app.wait_until(PATIENCE, || {
+    let row = bar(&app.text());
+    row.contains("now") && !row.contains("×") && !row.contains("back")
+  });
+  assert!(now, "{}", app.text());
+}

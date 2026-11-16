@@ -18,7 +18,7 @@ use std::{
 };
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, ENDS, HOLD, Hold, Listing, Step, Time};
+use furb_client::{Ask, Asked, Client, ENDS, HOLD, Hold, Listing, Step};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event, ProtocolError,

@@ -72,6 +72,9 @@ impl Axis {
   }
 }
 
+/// The most acts of a chain in one column of its track that draw a thin line.
+const BUSY: usize = 2;
+
 /// The fewest columns between two marks of messages on a track, so a track that shows many
 /// messages reads as a few marks and not as a wall of them.
 const APART_MARKS: usize = 3;
@@ -155,23 +158,34 @@ impl Model {
     1 + time.chains.as_ref().map_or(0, |chains| chains.shown().len())
   }
 
+  /// Whether a cell of the window stands on the bar of the time and its chains, the last rows of
+  /// the left side.
+  pub(crate) fn on_bar(&self, x: u16, y: u16) -> bool {
+    let rows = self.time_count();
+    rows > 0 && !self.on_list(x) && usize::from(y) + rows >= usize::from(self.size.1)
+  }
+
   /// The words at the end of the bar of the time, the columns that they take, and the axis of its
   /// track. The words take the room of the farthest moment, so the track keeps its columns as the
   /// thread steps through its time.
   fn axis(&self, time: &Time) -> (String, usize, Axis) {
     let last = time.moments.len().saturating_sub(1);
-    let back_to =
-      if time.at.is_some() { format!(" · {} now", self.key(Does::Close)) } else { String::new() };
+    let (first, end) = time.shown();
+    // The words stay short, so the track keeps its room: how far back it stands, and how close a
+    // zoom shows it. The row of hints names the keys.
     let says = match time.moments.len() {
       0 if time.stale => " reading".to_owned(),
       0 | 1 => " nothing before now".to_owned(),
-      _ => format!("{}{back_to}", back(last - time.place())),
+      _ if time.at.is_none() => " now".to_owned(),
+      _ => format!(" {} back", last - time.place()),
     };
-    let zoomed = if time.zoom.is_some() { " · zoomed" } else { "" };
-    let says = format!("{says}{zoomed}");
-    let widest = format!("{}{back_to}{zoomed}", back(last)).width();
-    let said = says.width().max(widest);
-    let (first, end) = time.shown();
+    let zoom = |length: usize| {
+      let ratio = last.max(1) as f64 / length.max(1) as f64;
+      if ratio < 10.0 { format!(" ×{ratio:.1}") } else { format!(" ×{ratio:.0}") }
+    };
+    let says = if time.zoom.is_some() { format!("{says}{}", zoom(end - first)) } else { says };
+    let widest = format!(" {last} back{}", zoom(1)).width();
+    let said = says.width().max(widest.min(" nothing before now".width()));
     // The toggle of the chains ends at the column of the text, as each label at the right of the
     // feed.
     let room = self.wide().saturating_sub(BEFORE + said + TOGGLE + 2);
@@ -301,10 +315,10 @@ impl Model {
         // Each column of the track once, so a row costs its moments and its columns, not their
         // product.
         let marked = |moments: &mut dyn Iterator<Item = &u64>| {
-          let mut cells = vec![false; axis.room];
+          let mut cells = vec![0usize; axis.room];
           for one in moments {
             if let Some(cell) = cells.get_mut(column(one)) {
-              *cell = true;
+              *cell += 1;
             }
           }
           cells
@@ -316,13 +330,16 @@ impl Model {
         let mut hot: Vec<Hot> = Vec::new();
         for one in 0..axis.room {
           let flow = flows.at(row, one);
-          let (sign, style) = match (began[one], acted[one], one == mark) {
+          // A column reads by how much the chain did there: a thin line for a few acts, a heavy
+          // one where it did much, so a track zoomed out shows where its work gathers.
+          let (sign, style) = match (began[one] > 0, acted[one], one == mark) {
             _ if one == 0 && before => ("‹", ink),
             _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender, holder)),
             (true, ..) => ("◆", ink),
-            (false, true, _) => ("━", ink),
-            (false, false, true) => ("│", Style::new().fg(t.text)),
-            (false, false, false) => ("─", Style::new().fg(t.border)),
+            (false, 1..=BUSY, _) => ("─", ink),
+            (false, 1.., _) => ("━", ink),
+            (false, 0, true) => ("│", Style::new().fg(t.text)),
+            (false, 0, false) => ("─", Style::new().fg(t.border)),
           };
           line.push(run(sign, style));
           let click = match flow {

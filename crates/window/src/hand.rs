@@ -135,6 +135,9 @@ struct Window {
   voice: Voice,
   /// The program of the speech that the window was given, else the one that the build carries.
   listen: Option<PathBuf>,
+  /// Whether the last press of the pointer fell on the bar of the time, whose drag moves in time
+  /// and selects no text.
+  on_bar: bool,
 }
 
 type Shared = Rc<RefCell<Window>>;
@@ -209,6 +212,7 @@ fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
     reloads: Rc::new(Cell::new(false)),
     voice: Voice::default(),
     listen: options.listen,
+    on_bar: false,
   };
   let window = Rc::new(RefCell::new(window));
   listened(app, &window, &area);
@@ -243,6 +247,12 @@ fn listened(app: &App, window: &Shared, area: &Textarea) {
   let on = Rc::clone(window);
   app.on_selection(move |cx, text| {
     cx.prevent_default();
+    // A drag on the bar of the time moves in time, and a click there goes back to now: neither
+    // selects what it passes.
+    if on.borrow().on_bar {
+      cx.app().clear_selection();
+      return;
+    }
     let text = text.lines().map(str::trim_end).collect::<Vec<_>>().join("\n");
     let notice = if cx.app().copy_to_clipboard(&text) { COPIED_SELECTION } else { TAKES_NO_COPY };
     tell(cx.app(), &on, |model| model.client.notice = Some(notice.to_owned()));
@@ -1719,6 +1729,10 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   }
   if let Some(by) = over_feed(window, event) {
     return wheeled(app, window, event, by);
+  }
+  if matches!(event.kind, MouseEventKind::Down(_)) {
+    let bar = window.borrow().screen.model.on_bar(event.x, event.y);
+    window.borrow_mut().on_bar = bar;
   }
   let change = |model: &mut Model| pointed(model, event);
   let (on, does) = if event.kind == MouseEventKind::Moved {
