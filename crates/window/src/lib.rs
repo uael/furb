@@ -43,6 +43,7 @@ mod screen;
 mod settings;
 mod thread;
 mod time;
+mod transcript;
 pub mod tokens;
 mod voice;
 

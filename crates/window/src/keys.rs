@@ -67,6 +67,7 @@ pub(crate) enum Does {
   Model,
   Effort,
   Changes,
+  Transcript,
   Context,
   Running,
   Rewind,
@@ -269,6 +270,12 @@ const INPUT: &[Bound] = &[
   ),
   bound(Does::Effort, "the efforts of the model", Some("effort"), &[&led('e')]),
   bound(Does::Changes, "the changes of the project and their diff", Some("changes"), &[&led('g')]),
+  bound(
+    Does::Transcript,
+    "the transcript of the chain of the thread",
+    Some("transcript"),
+    &[&led('.')],
+  ),
   bound(Does::Settings, "the settings of the session", Some("config"), &[&led(',')]),
   bound(Does::Skills, "the extensions, on or off", Some("extensions"), &[&led('x')]),
   bound(

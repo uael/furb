@@ -127,6 +127,8 @@ struct Window {
   scroll: ScrollBox,
   /// The diff of the review, whose changes the keys of a change scroll to.
   diff: Diff,
+  /// The box of the transcript of the chain of the open thread, which the keys of a page scroll.
+  pages: ScrollBox,
   /// The watch of the program of the window, which a build replaces.
   program: Option<Watch>,
   /// Whether the window ended to give its place to a new build of its program.
@@ -191,9 +193,9 @@ fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
     fs::remove_file(file).ok();
   }
   let area = edited(app, &tokens);
-  let (scroll, diff) = (ScrollBox::new(app), Diff::new(app));
+  let (scroll, diff, pages) = (ScrollBox::new(app), Diff::new(app), ScrollBox::new(app));
   let window = Window {
-    screen: drawn(app, model, &area, (&scroll, &diff)),
+    screen: drawn(app, model, &area, (&scroll, &diff), &pages),
     clock: options.clock,
     still: options.still,
     kept: options.kept,
@@ -208,6 +210,7 @@ fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
     askers: Vec::new(),
     scroll,
     diff,
+    pages,
     program: options.program.map(Watch::new),
     reloads: Rc::new(Cell::new(false)),
     voice: Voice::default(),
@@ -244,7 +247,8 @@ fn listened(app: &App, window: &Shared, area: &Textarea) {
     // A press in the review would give the focus to its box of the diff, which takes no key, so
     // the comment that a press on the number of a line starts would take none of his letters: the
     // editor of the input keeps the focus, which writes that comment.
-    let reviews = on.borrow().screen.model.client.review.is_some();
+    let client = &on.borrow().screen.model.client;
+    let reviews = client.review.is_some() || client.transcript.is_some();
     if reviews && matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
       cx.prevent_default();
     }
@@ -360,7 +364,13 @@ fn edited(app: &App, tokens: &Tokens) -> Textarea {
 
 /// The widgets of the window on a model: the left side, the editor of the input over it, and the
 /// list at its right. Each side is one text, which is written only when a row of it changes.
-fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) -> Screen<Model> {
+fn drawn(
+  app: &App,
+  model: Model,
+  area: &Textarea,
+  review: (&ScrollBox, &Diff),
+  pages: &ScrollBox,
+) -> Screen<Model> {
   let (scroll, diff) = review;
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
@@ -401,7 +411,73 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
   completion(app, &stage, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
   reviewed(app, &mut screen, &tokens, (scroll, diff));
+  transcribed(app, &mut screen, &tokens, pages);
   screen
+}
+
+/// The transcript of the chain of the open thread over the whole window, while one stands, in the
+/// frame of the review: its head, its rows in a box that scrolls, and its foot.
+fn transcribed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, pages: &ScrollBox) {
+  let text = || Text::new(app, "").wrap(WrapMode::None);
+  let (head, body, foot) = (text(), text(), text());
+  let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
+  let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
+  let head = head.absolute().position(Edge::Top, 0).position(Edge::Left, 0);
+  let pages = pages.child(&body).absolute().position(Edge::Top, 2).position(Edge::Left, 0);
+  let pages = pages.position(Edge::Right, 0).position(Edge::Bottom, 2);
+  let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 0);
+  app.root().child(&page.child(&head).child(&pages).child(&foot).z_index(4).visible(false));
+  screen.part(Model::transcribing, move |shown| {
+    page.visible(shown.is_some());
+    if let Some(shown) = shown {
+      head.set_text(shown.head.clone());
+      body.set_text(written(&shown.body));
+      foot.set_text(shown.foot.clone());
+    }
+  });
+}
+
+/// A key while the transcript stands: the keys of a page scroll it, its own key and escape close
+/// it, and it takes each other key, so no letter goes to the input under it. Whether it took the
+/// key.
+fn read_through(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  if window.borrow().screen.model.client.transcript.is_none() {
+    return false;
+  }
+  match key.code {
+    KeyCode::Escape => tell(app, window, |model| model.client.transcript = None),
+    KeyCode::PageUp | KeyCode::PageDown => {
+      let rows = f64::from(window.borrow().screen.model.size.1.saturating_sub(6));
+      let by = if key.code == KeyCode::PageUp { -rows } else { rows };
+      window.borrow().pages.scroll_by(0.0, by);
+    }
+    _ if keys::pressed(key, false) == Some(Does::Transcript) => {
+      tell(app, window, |model| model.client.transcript(None));
+    }
+    _ => {}
+  }
+  true
+}
+
+/// The pointer while the transcript stands: the wheel scrolls it, and a click on the row under a
+/// long piece folds it or opens it whole.
+fn read_at(app: &App, window: &Shared, event: MouseEvent) {
+  let scrolled = window.borrow().pages.scroll_position().1;
+  let rows = f64::from(WHEEL);
+  match event.kind {
+    MouseEventKind::ScrollUp => {
+      window.borrow().pages.scroll_by(0.0, -rows);
+    }
+    MouseEventKind::ScrollDown => {
+      window.borrow().pages.scroll_by(0.0, rows);
+    }
+    MouseEventKind::Down(MouseButton::Left) => {
+      if let Some(row) = event.y.checked_sub(2).map(|y| whole(f64::from(y) + scrolled)) {
+        tell(app, window, |model| model.transcript_clicked(row));
+      }
+    }
+    _ => {}
+  }
 }
 
 /// What the left side shows, read from the model in one build of its rows for each change: the
@@ -1077,7 +1153,8 @@ fn keyed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     return true;
   }
   // A key after the leader is a key of the window, which no text that finds a chain takes.
-  if completing(app, window, key) || looked(app, window, key) || !led && timed(app, window, key) {
+  let over = read_through(app, window, key) || looked(app, window, key);
+  if completing(app, window, key) || over || !led && timed(app, window, key) {
     return true;
   }
   let does = keys::pressed(key, led);
@@ -1494,6 +1571,7 @@ fn change_of(does: Does) -> Option<fn(&mut Model)> {
     Does::Jump => Model::jump,
     Does::NewThread => |model| model.client.turn(),
     Does::Changes => |model| model.client.review(),
+    Does::Transcript => |model| model.client.transcript(None),
     Does::Views => Model::reach_views,
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
@@ -1725,6 +1803,10 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     if let Some(does) = does {
       act(app, window, does);
     }
+    return;
+  }
+  if window.borrow().screen.model.client.transcript.is_some() {
+    read_at(app, window, event);
     return;
   }
   if window.borrow().screen.model.client.review.is_some() {

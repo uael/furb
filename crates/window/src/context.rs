@@ -160,18 +160,33 @@ impl Model {
     match does.1 {
       Boxing::Fold => self.fold_context(),
       Boxing::Kinds(kinds) => self.client.split = if kinds { Split::Kinds } else { Split::Cache },
-      Boxing::Part(part) => self.client.notice = self.part_said(part),
+      Boxing::Part(part) => self.open_part(part),
     }
   }
 
-  /// What the status row says of a part of the kinds that he took: its size and its share, and that
-  /// the turns of that part open from it once their view stands.
-  fn part_said(&self, part: usize) -> Option<String> {
-    let context = self.client.thread.as_ref()?.thread.context.as_ref()?;
-    let kind = self.kinds(context).into_iter().nth(part)?;
-    let share = share(kind.tokens, context.whole());
-    let said = "a click here opens the transcript of this part, once its view stands";
-    Some(format!("{} · {} · {share} of the window · {said}", kind.name, tokens(kind.tokens)))
+  /// The transcript of the chain of the thread opened on a part of the kinds that he took, that
+  /// part alone; the free room has no turn, so the status row says what it is.
+  fn open_part(&mut self, part: usize) {
+    let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
+    match parts.and_then(|one| one.kinds.get(part)).map(|one| one.0) {
+      Some(content) => self.client.transcript(Some(content)),
+      None => self.client.notice = Some("The free room of the window holds no turn.".to_owned()),
+    }
+  }
+
+  /// The color of a kind of content, in the bar of the box and in the transcript.
+  pub(crate) fn kind_color(&self, content: Content) -> Color {
+    let t = &self.tokens;
+    let [purple, rose, gold] = t.hues;
+    match content {
+      Content::Turns => t.accent,
+      Content::Kits => purple,
+      Content::Skills => gold,
+      Content::Mcp => t.projects[0].letters,
+      Content::Memory => rose,
+      Content::Doctrine => t.text,
+      Content::Engine => t.muted,
+    }
   }
 
   /// Whether the open box shows the kinds of content, once the client parted the turns.
@@ -239,17 +254,10 @@ impl Model {
     if let Some(parts) =
       parts.filter(|one| self.client.split == Split::Kinds && !one.kinds.is_empty())
     {
-      let kind = |&(content, tokens): &(Content, u64)| {
-        let color = match content {
-          Content::Turns => t.accent,
-          Content::Kits => purple,
-          Content::Skills => gold,
-          Content::Mcp => t.projects[0].letters,
-          Content::Memory => rose,
-          Content::Doctrine => t.text,
-          Content::Engine => t.muted,
-        };
-        Kind { name: content.name(), tokens, color }
+      let kind = |&(content, tokens): &(Content, u64)| Kind {
+        name: content.name(),
+        tokens,
+        color: self.kind_color(content),
       };
       let mut kinds: Vec<Kind> = parts.kinds.iter().map(kind).collect();
       let free = context.window.map(|window| window.saturating_sub(context.read.tokens));
