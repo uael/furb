@@ -256,20 +256,16 @@ class Loop:
       callback(*args)
 
   def enter(self) -> object:
-    """The loop set as the running loop of asyncio for a step of a word, where the engine lets a program set one, and
-    the loop that ran before it, which leave sets again."""
-    setting = getattr(asyncio, "_set_running_loop", None)
-    if setting is None:
-      return None
+    """The loop set as the running loop of asyncio for a step of a word, and the loop that ran before it, which leave
+    sets again."""
     outer = getattr(asyncio, "_get_running_loop")()  # noqa: B009
     if outer is not self:
       self.outer = outer
-    setting(self)
+    getattr(asyncio, "_set_running_loop")(self)  # noqa: B009
     return outer
 
   def leave(self, outer: object) -> None:
-    if (setting := getattr(asyncio, "_set_running_loop", None)) is not None:
-      setting(outer)
+    getattr(asyncio, "_set_running_loop")(outer)  # noqa: B009
 
 
 class Running:
@@ -604,12 +600,17 @@ class Running:
       return self.ended(run, None)
     module = verb(self.names, "module")(chain)
     assert isinstance(module, dict)
+    # A word that awaits nothing runs whole here, so the loop of the words is its running loop here too, and a task
+    # that it makes is a job of its rung.
+    outer = self.loop.enter()
     try:
       with self.site.set(rung):
         # The part keeps the line it stands on in the word, so a traceback of it names the line its model wrote.
         ran = ran_in("\n" * held.count("\n") + part, rung, module)
     except BaseException as raised:
       return self.ended(run, raised)
+    finally:
+      self.loop.leave(outer)
     if not isinstance(ran, Coroutine):
       return self.ended(run, None)
     self.frames[run] = ran
