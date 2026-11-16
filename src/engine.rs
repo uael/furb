@@ -496,6 +496,16 @@ fn fields(value: ObjectRef<'_>, depth: usize) -> String {
     });
     return format!("{class}({})", shown.collect::<Vec<_>>().join(", "));
   }
+  // A map that holds the key `is` goes out as its pairs, under the mark `dict`.
+  if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("dict") {
+    let held = at("args").and_then(|one| one.items()?.first()?.items()).unwrap_or_default();
+    let pairs = held.iter().filter_map(|pair| {
+      let items = pair.items()?;
+      let [key, one] = items[..] else { return None };
+      Some(format!("{}: {}", fields(key, depth + 1), fields(one, depth + 1)))
+    });
+    return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
+  }
   let shown = |items: Vec<ObjectRef<'_>>| -> Vec<String> {
     items.into_iter().map(|one| fields(one, depth + 1)).collect()
   };
@@ -514,12 +524,15 @@ fn fields(value: ObjectRef<'_>, depth: usize) -> String {
   value.py_repr()
 }
 
-/// The read of a name of a module, which gives the name of the type of its value, its representation when no code of
-/// the life makes it, and the value. A value of the builtins or of the engine, or a list, a tuple, a set or a dict of
-/// them, has a representation that no model wrote.
-const INSPECT: &str = "(lambda x, plain: (type(x).__name__, repr(x) if plain(x) or type(x) in (list, tuple, set, \
-frozenset) and all(plain(one) for one in x) or type(x) is dict and all(plain(k) and plain(v) for k, v in x.items()) \
-else '', x))(module(__chain)[__name], lambda one: type(one) in (str, int, float, bool, bytes, type(None), Act, Text))";
+/// The read of a name of a module, which gives the name of the type of its value, its
+/// representation when no code of the life makes it, and the value. A value of the builtins or of
+/// the engine, or a list, a tuple, a set or a dict of them at any depth, has a representation that
+/// no model wrote. The walk stops 64 levels down, so a container that holds itself takes the
+/// representation of its fields.
+const INSPECT: &str = "(lambda x, plain: (type(x).__name__, repr(x) if plain(x, plain, 0) else '', x))(\
+module(__chain)[__name], lambda one, plain, depth: depth < 64 and (type(one) in (str, int, float, bool, bytes, \
+type(None), Act, Text) or type(one) in (list, tuple, set, frozenset) and all(plain(x, plain, depth + 1) for x in one) \
+or type(one) is dict and all(plain(k, plain, depth + 1) and plain(v, plain, depth + 1) for k, v in one.items())))";
 
 /// One life of the engine, as a host holds it.
 ///

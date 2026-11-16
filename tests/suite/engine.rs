@@ -1842,7 +1842,8 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
 fn a_read_of_a_name_runs_no_code_of_the_life_and_shows_a_value_of_the_life_by_its_fields() {
   let word = "from dataclasses import dataclass\n@dataclass\nclass P:\n  x: int\nseen = []\nclass Loud:\n  def \
               __init__(self):\n    self.a = 1\n    self.p = P(2)\n  def __repr__(self):\n    seen.append(1)\n    \
-              return 'loud'\nloud = Loud()\nmany = [P(3), 'four']\nnumbers = [1, 'two']\nclose(0)";
+              return 'loud'\nloud = Loud()\nmany = [P(3), 'four']\nnumbers = [1, 'two']\nnested = [2.0, {'is': 'str', 'args': [[1.0]]}]\n\
+              marked = [P(5), {'is': 1}]\nclose(0)";
   let mut lived = Lived::new("inspected", &[word], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
@@ -1857,6 +1858,16 @@ fn a_read_of_a_name_runs_no_code_of_the_life_and_shows_a_value_of_the_life_by_it
     format!("{kind} {shown}")
   };
   assert_eq!(read("numbers"), "list [1, 'two']");
+  assert_eq!(
+    read("nested"),
+    "list [2.0, {'is': 'str', 'args': [[1.0]]}]",
+    "a value of the builtins at any depth keeps the representation of Python"
+  );
+  assert_eq!(
+    read("marked"),
+    "list [P(x=5), {'is': 1}]",
+    "a map that holds the key is shows as a map"
+  );
   // The representation of a value of a class of the life is code of the life, which a read never
   // runs: the read shows its fields, as a debugger does.
   assert_eq!(read("loud"), "Loud Loud(a=1, p=P(x=2))");
