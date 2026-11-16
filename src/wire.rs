@@ -311,7 +311,3 @@ fn mapped(
   }
   Value::Object(result)
 }
-
-#[cfg(test)]
-#[path = "wire.test.rs"]
-mod test;

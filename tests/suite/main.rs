@@ -38,4 +38,5 @@ mod promise;
 mod skill;
 mod tip;
 mod view;
+mod wire;
 mod world;
