@@ -36,7 +36,7 @@ use crate::wire;
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
-  engine::{Life, handed, lending},
+  engine::{Hands, Life},
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
   world::{Members, Roster},
@@ -158,7 +158,9 @@ fn fault_of(py: Python<'_>, no: &PyErr) -> Fault {
   let value = no.value(py);
   let name = value.get_type().name().map_or("Exception".to_owned(), |one| one.to_string());
   let args = value.getattr("args").ok().and_then(|args| {
-    args.try_iter().ok()?.map(|one| of_python(&one.ok()?).ok()).collect::<Option<Vec<_>>>()
+    // A fault is data: what its words name of python goes nowhere.
+    let hands = &mut Hands::default();
+    args.try_iter().ok()?.map(|one| of_python(&one.ok()?, hands).ok()).collect::<Option<Vec<_>>>()
   });
   Fault::new(name, args.unwrap_or_else(|| vec![Object::string(no.to_string())]))
 }
@@ -167,7 +169,9 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Value {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    of_python(&value).map(Value)
+    let mut hands = Hands::default();
+    let object = of_python(&value, &mut hands)?;
+    Ok(Self { object, hands })
   }
 }
 
@@ -179,7 +183,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Maybe {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    of_python(&value).map(|one| Self(Some(Value(one))))
+    Value::extract(value).map(|one| Self(Some(one)))
   }
 }
 
@@ -189,7 +193,7 @@ impl<'py> IntoPyObject<'py> for Value {
   type Error = PyErr;
 
   fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    to_python(py, self.0.as_ref())
+    to_python(py, self.object().as_ref())
   }
 }
 
@@ -364,14 +368,20 @@ struct PyEar {
 }
 
 impl Ear for PyEar {
+  /// With no life lent, what the step names of python goes nowhere.
   fn resume(&mut self, heard: Heard, _: &mut Context<'_>) -> Step {
-    Python::attach(|py| self.step(py, heard).unwrap_or_else(|no| Step::Raised(fault_of(py, &no))))
+    Python::attach(|py| {
+      let hands = &mut Hands::default();
+      self.step(py, heard, hands).unwrap_or_else(|no| Step::Raised(fault_of(py, &no)))
+    })
   }
 
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+  fn lent(&mut self, heard: Heard, _: &mut Context<'_>, life: Life) -> (Step, Life) {
     Python::attach(|py| {
-      let (step, life) = with_life(py, life, || self.resume(heard, cx));
-      (step.unwrap_or_else(|no| Step::Raised(fault_of(py, &no))), life)
+      let mut hands = Hands::default();
+      let (step, mut life) = with_life(py, life, || self.step(py, heard, &mut hands));
+      life.hand(hands);
+      (step.and_then(|step| step).unwrap_or_else(|no| Step::Raised(fault_of(py, &no))), life)
     })
   }
 }
@@ -397,20 +407,18 @@ impl PyLife {
   /// One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
   /// `spoken`, and a callable the engine made is the verb `made`, with its number and its words.
   #[pyo3(signature = (verb, args = None, kwargs = None))]
-  #[expect(
-    clippy::needless_pass_by_value,
-    reason = "pyo3 extracts the kwargs of a call as an owned map"
-  )]
   fn call(
     &mut self,
     verb: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let refused = || Fault::refused(format!("{verb} is called after the life went back"));
     let life = self.life.as_mut().ok_or_else(refused)?;
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    life.call(verb, args, kwargs).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    life.hand(hands);
+    life.call(verb, args, kwargs).map(Value::of)
   }
 }
 
@@ -438,7 +446,7 @@ fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResu
 }
 
 impl PyEar {
-  fn step(&mut self, py: Python<'_>, heard: Heard) -> PyResult<Step> {
+  fn step(&mut self, py: Python<'_>, heard: Heard, hands: &mut Hands) -> PyResult<Step> {
     let ear = self.ear.as_ref().ok_or_else(|| PyTypeError::new_err("the ear is over"))?.bind(py);
     // What a verb gave is sent in as the value of the yield that called it, and what it raised is thrown in there.
     let (way, sent) = match heard {
@@ -457,7 +465,7 @@ impl PyEar {
       }
       Err(no) => return Ok(Step::Raised(fault_of(py, &no))),
     };
-    Ok(Step::of(&of_python(&got)?).unwrap_or_else(Step::Raised))
+    Ok(Step::of(&of_python(&got, hands)?).unwrap_or_else(Step::Raised))
   }
 }
 
@@ -570,7 +578,9 @@ fn polled(ear: &Bound<'_, NativeEar>) -> Poll<Spoken> {
 
 /// What a verb that an ear of the crate called came to in the engine of this interpreter.
 fn answer_of(py: Python<'_>, call: &Call) -> Result<Object, Fault> {
-  verb_said(py, call).and_then(|got| of_python(&got)).map_err(|no| fault_of(py, &no))
+  // The engine of this interpreter answers with data alone, which names nothing of python.
+  let hands = &mut Hands::default();
+  verb_said(py, call).and_then(|got| of_python(&got, hands)).map_err(|no| fault_of(py, &no))
 }
 
 /// One verb that an ear of the crate said, said to the engine of this interpreter with its words, and what it gave.
@@ -719,8 +729,12 @@ impl PyEngine {
     name: &str,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
+    hands: Hands,
   ) -> Result<Object, Fault> {
-    self.call(|engine| engine.verb(name, args, kwargs))
+    self.call(|engine| {
+      engine.hand(hands);
+      engine.verb(name, args, kwargs)
+    })
   }
 
   /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and whoever awaits
@@ -740,7 +754,9 @@ impl PyEngine {
   #[staticmethod]
   fn boot(py: Python<'_>, record: Vec<Value>, ears: Vec<(String, Given)>) -> PyResult<Py<Self>> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
-    let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
+    // A record is data: what its entries name of python goes nowhere.
+    let hands = &mut Hands::default();
+    let engine = Engine::boot(record.into_iter().map(|one| one.handed(hands)), ears)?;
     Self::held(py, engine, Vec::new())
   }
 
@@ -768,7 +784,7 @@ impl PyEngine {
   /// with nothing kept.
   #[getter]
   fn raised(&self) -> Option<Value> {
-    self.raised.as_ref().map(|fault| Value(fault.object()))
+    self.raised.as_ref().map(|fault| Value::of(fault.object()))
   }
 
   /// The record the life opened on, which the journal said again whole before boot returned.
@@ -792,55 +808,64 @@ impl PyEngine {
 
   /// One name of the engine, said by its name with these words, and what it gave.
   #[pyo3(signature = (name, args = None, kwargs = None))]
-  #[expect(
-    clippy::needless_pass_by_value,
-    reason = "pyo3 extracts the kwargs of a call as an owned map"
-  )]
   fn verb(
     &mut self,
     name: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    self.said(name, args, kwargs).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    self.said(name, args, kwargs, hands).map(Value::of)
   }
 
   /// A function of the checkpointer of the engine, `seed` or `gathered`, said by its name with
   /// these words, and what it gave.
   #[pyo3(signature = (name, args = None))]
   fn checkpointed(&mut self, name: &str, args: Option<Vec<Value>>) -> Result<Value, Fault> {
-    let (args, _) = words(args, None);
-    self.call(|engine| engine.checkpointed(name, args)).map(Value)
+    let mut hands = Hands::default();
+    let (args, _) = words(args, None, &mut hands);
+    self
+      .call(|engine| {
+        engine.hand(hands);
+        engine.checkpointed(name, args)
+      })
+      .map(Value::of)
   }
 
   /// The entries that follow the tip of the life, which its journal says again at once.
   fn feed(&mut self, tail: Vec<Value>) -> Result<(), Fault> {
-    let tail: Vec<Object> = tail.into_iter().map(|one| one.0).collect();
-    self.call(|engine| engine.feed(&tail))
+    let mut hands = Hands::default();
+    let tail: Vec<Object> = tail.into_iter().map(|one| one.handed(&mut hands)).collect();
+    self.call(|engine| {
+      engine.hand(hands);
+      engine.feed(&tail)
+    })
   }
 
   /// The names of the acts that the journal of the life holds, each that an ear of the outside
   /// took and that is not done.
   #[pyo3(name = "held")]
   fn journal_held(&mut self) -> Result<Value, Fault> {
-    self.call(Engine::held).map(Value)
+    self.call(Engine::held).map(Value::of)
   }
 
   /// One callable the engine made, called back by the number it went out under, with these words.
   #[pyo3(signature = (n, args = None, kwargs = None))]
-  #[expect(
-    clippy::needless_pass_by_value,
-    reason = "pyo3 extracts the kwargs of a call as an owned map"
-  )]
   fn made(
     &mut self,
     n: i64,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    self.call(|engine| engine.made(n, args, kwargs)).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    self
+      .call(|engine| {
+        engine.hand(hands);
+        engine.made(n, args, kwargs)
+      })
+      .map(Value::of)
   }
 
   /// A callable the engine made, forgotten: the host holds its number no more.
@@ -873,19 +898,19 @@ impl PyEngine {
   /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
   /// the act that the key made before, or a new act, as the engine of the crate finds it.
   #[pyo3(signature = (key, kind, args = None, kwargs = None))]
-  #[expect(
-    clippy::needless_pass_by_value,
-    reason = "pyo3 extracts the kwargs of a call as an owned map"
-  )]
   fn keyed(
     &mut self,
     key: &str,
     kind: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<String, Fault> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    self.call(|engine| engine.keyed(key, kind, args, kwargs))
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    self.call(|engine| {
+      engine.hand(hands);
+      engine.keyed(key, kind, args, kwargs)
+    })
   }
 
   /// What an act comes to, which python awaits: its value, or the exception it completed with, raised.
@@ -908,14 +933,14 @@ impl PyEngine {
   /// What an act came to, and whether it is done.
   fn outcome(&mut self, act: &str) -> Result<super::Outcome, Fault> {
     let got = self.call(|engine| engine.outcome(act))?;
-    Ok(super::Outcome { done: got.is_some(), value: Value(got.unwrap_or_else(Object::none)) })
+    Ok(super::Outcome { done: got.is_some(), value: Value::of(got.unwrap_or_else(Object::none)) })
   }
 
   /// One name of a chain, the root when none is given, read without calling it.
   #[pyo3(signature = (name, chain = None))]
   fn inspect(&mut self, name: &str, chain: Option<&str>) -> Result<super::Inspection, Fault> {
     let (kind, representation, value) = self.call(|engine| engine.inspect(name, chain))?;
-    Ok(super::Inspection { name: name.to_owned(), kind, representation, value: Value(value) })
+    Ok(super::Inspection { name: name.to_owned(), kind, representation, value: Value::of(value) })
   }
 
   /// Every name the module of a chain binds, the root when none is given, in the order it bound them.
@@ -1178,9 +1203,9 @@ fn dict<'py, 'a>(
 /// engine as its name; an ear of the crate and a generator as an ear, and a function as one the sandbox calls back,
 /// each handed over to the life it comes into; a template string as its parts; plain data as it is, each
 /// entry as it crosses; an instance of a class or an exception as its name and its fields; and nothing else.
-fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
+fn of_python(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Object> {
   for crossing in CROSSINGS {
-    if let Some(held) = crossing(value)? {
+    if let Some(held) = crossing(value, hands)? {
       return Ok(held);
     }
   }
@@ -1188,7 +1213,7 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
 }
 
 /// How a value of python crosses to the sandbox by one of its marks: its object when it bears it.
-type Crossing = fn(&Bound<'_, PyAny>) -> PyResult<Option<Object>>;
+type Crossing = fn(&Bound<'_, PyAny>, &mut Hands) -> PyResult<Option<Object>>;
 
 /// The marks of a value of python, in the order they are tried.
 const CROSSINGS: [Crossing; 10] = [
@@ -1210,12 +1235,12 @@ fn kind(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// Each entry of a value of python, as it crosses.
-fn of_each(held: &Bound<'_, PyAny>) -> PyResult<Vec<Object>> {
-  held.try_iter()?.map(|one| of_python(&one?)).collect()
+fn of_each(held: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Vec<Object>> {
+  held.try_iter()?.map(|one| of_python(&one?, hands)).collect()
 }
 
 /// Nothing, an ellipsis, a bool, a number or a string.
-fn of_plain(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_plain(value: &Bound<'_, PyAny>, _: &mut Hands) -> PyResult<Option<Object>> {
   if value.is_none() {
     return Ok(Some(Object::none()));
   }
@@ -1239,7 +1264,7 @@ fn of_plain(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 
 /// A class a word defined and a callable the engine made go back in by their number.
 #[expect(clippy::unnecessary_wraps, reason = "each reader of the table gives a PyResult")]
-fn of_made(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_made(value: &Bound<'_, PyAny>, _: &mut Hands) -> PyResult<Option<Object>> {
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
     && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
   {
@@ -1249,23 +1274,23 @@ fn of_made(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// An instance of a class a word defined goes in by the number of its class and its fields.
-fn of_instance(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_instance(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   let Ok(n) = value.get_type().getattr("__monty__").and_then(|n| n.extract::<i64>()) else {
     return Ok(None);
   };
   let mut fields = Vec::new();
   for (key, one) in value.getattr("__dict__")?.cast::<PyDict>()?.iter() {
-    fields.push((of_python(&key)?, of_python(&one)?));
+    fields.push((of_python(&key, hands)?, of_python(&one, hands)?));
   }
   // An exception holds what it was made with apart from its fields.
   if value.is_instance_of::<PyBaseException>() {
-    fields.push((Object::string("args"), of_python(&value.getattr("args")?)?));
+    fields.push((Object::string("args"), of_python(&value.getattr("args")?, hands)?));
   }
   Ok(Some(marked("instance", [("class", Object::int(n)), ("fields", Object::dict(fields))])))
 }
 
 /// Any other type goes in as its name, which is how a shape is said; so does a name of the engine.
-fn of_shape(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_shape(value: &Bound<'_, PyAny>, _: &mut Hands) -> PyResult<Option<Object>> {
   let py = value.py();
   if value.is_instance_of::<PyType>() {
     return Ok(Some(Object::string(value.getattr("__name__")?.extract::<String>()?)));
@@ -1284,21 +1309,23 @@ fn of_shape(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 
 /// An ear of the crate and a generator go in as an ear, and a function as one the sandbox calls
 /// back.
-fn of_host(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_host(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   let py = value.py();
   if let Ok(held) = value.cast::<NativeEar>() {
-    return Ok(Some(handed(held.borrow_mut().taken()?, false)));
+    return Ok(Some(hands.ear(held.borrow_mut().taken()?, false)));
   }
   if generator(value)? {
     let state = py.import("inspect")?.call_method1("getgeneratorstate", (value,))?;
     let started = state.extract::<String>()? != "GEN_CREATED";
-    return Ok(Some(handed(Box::new(PyEar { ear: Some(value.clone().unbind()) }), started)));
+    return Ok(Some(hands.ear(Box::new(PyEar { ear: Some(value.clone().unbind()) }), started)));
   }
   if value.is_callable() {
     let f = value.clone().unbind();
-    return Ok(Some(lending(move |args, life| {
+    return Ok(Some(hands.lending(move |args, life| {
       Python::attach(|py| {
-        let (got, life) = with_life(py, life, || called(&f, &args));
+        let mut gave = Hands::default();
+        let (got, mut life) = with_life(py, life, || called(&f, &args, &mut gave));
+        life.hand(gave);
         (got.map_err(|no| fault_of(py, &no)).and_then(|got| got), life)
       })
     })));
@@ -1307,7 +1334,7 @@ fn of_host(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// A template string goes in as its parts.
-fn of_template(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_template(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   if kind(value)? != "Template" {
     return Ok(None);
   }
@@ -1315,10 +1342,10 @@ fn of_template(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
   for one in value.try_iter()? {
     let one = one?;
     if one.is_instance_of::<PyString>() {
-      parts.push(of_python(&one)?);
+      parts.push(of_python(&one, hands)?);
       continue;
     }
-    let at = |name: &str| one.getattr(name).and_then(|held| of_python(&held));
+    let mut at = |name: &str| one.getattr(name).and_then(|held| of_python(&held, hands));
     parts.push(Object::list([
       at("value")?,
       at("expression")?,
@@ -1330,30 +1357,30 @@ fn of_template(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// A list, a tuple, a set or a frozenset, each entry as it crosses.
-fn of_collection(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_collection(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   if value.is_instance_of::<PyList>() {
-    return of_each(value).map(|held| Some(Object::list(held)));
+    return of_each(value, hands).map(|held| Some(Object::list(held)));
   }
   if value.is_instance_of::<PyTuple>() {
-    return of_each(value).map(|held| Some(Object::tuple(held)));
+    return of_each(value, hands).map(|held| Some(Object::tuple(held)));
   }
   if value.is_instance_of::<PySet>() {
-    return of_each(value).map(|held| Some(Object::set(held)));
+    return of_each(value, hands).map(|held| Some(Object::set(held)));
   }
   if value.is_instance_of::<PyFrozenSet>() {
-    return of_each(value).map(|held| Some(Object::frozenset(held)));
+    return of_each(value, hands).map(|held| Some(Object::frozenset(held)));
   }
   Ok(None)
 }
 
 /// A dict, each key and each value as it crosses.
-fn of_dict(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_dict(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   let Ok(held) = value.cast::<PyDict>() else {
     return Ok(None);
   };
   let mut pairs = Vec::new();
   for (key, one) in held.iter() {
-    pairs.push((of_python(&key)?, of_python(&one)?));
+    pairs.push((of_python(&key, hands)?, of_python(&one, hands)?));
   }
   // A map that holds the key of the mark goes in as its pairs, so the engine never reads it as a
   // mark.
@@ -1365,23 +1392,23 @@ fn of_dict(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// An exception goes in as its name and what it was made with.
-fn of_exception(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_exception(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   if !value.is_instance_of::<PyBaseException>() {
     return Ok(None);
   }
-  let args = of_each(&value.getattr("args")?)?;
+  let args = of_each(&value.getattr("args")?, hands)?;
   Ok(Some(marked(&kind(value)?, [("args", Object::list(args))])))
 }
 
 /// A dataclass goes in as its name and its fields.
-fn of_dataclass(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+fn of_dataclass(value: &Bound<'_, PyAny>, hands: &mut Hands) -> PyResult<Option<Object>> {
   let Ok(fields) = value.getattr("__dataclass_fields__") else {
     return Ok(None);
   };
   let mut held = Vec::new();
   for (key, _) in fields.cast::<PyDict>()?.iter() {
     let key = key.extract::<String>()?;
-    held.push((key.clone(), of_python(&value.getattr(key.as_str())?)?));
+    held.push((key.clone(), of_python(&value.getattr(key.as_str())?, hands)?));
   }
   Ok(Some(marked(&kind(value)?, held.iter().map(|(key, one)| (key.as_str(), one.clone())))))
 }
@@ -1411,7 +1438,7 @@ fn heard(value: &Bound<'_, PyAny>) -> PyResult<Object> {
   if !taken
     && !value.is_instance_of::<NativeEar>()
     && !generator(value)?
-    && let Ok(held) = of_python(value)
+    && let Ok(held) = of_python(value, &mut Hands::default())
   {
     return Ok(held);
   }
@@ -1419,12 +1446,13 @@ fn heard(value: &Bound<'_, PyAny>) -> PyResult<Object> {
 }
 
 /// A function of python, called back by the sandbox with what the word gave it, and what it gave.
-fn called(f: &Py<PyAny>, args: &[Object]) -> Result<Object, Fault> {
+/// What it gave names functions and ears of python, which `hands` takes.
+fn called(f: &Py<PyAny>, args: &[Object], hands: &mut Hands) -> Result<Object, Fault> {
   Python::attach(|py| {
     let got = (|| {
       let args =
         args.iter().map(|one| to_python(py, one.as_ref())).collect::<PyResult<Vec<_>>>()?;
-      of_python(&f.bind(py).call1(PyTuple::new(py, args)?)?)
+      of_python(&f.bind(py).call1(PyTuple::new(py, args)?)?, hands)
     })();
     got.map_err(|no| fault_of(py, &no))
   })

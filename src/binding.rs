@@ -29,6 +29,7 @@ use indexmap::IndexMap;
 use std::{
   any::Any,
   cell::RefCell,
+  mem,
   ops::{Deref, DerefMut},
   rc::{Rc, Weak},
   sync::{Arc, Mutex, PoisonError},
@@ -44,7 +45,7 @@ use pyo3::pyfunction;
 use serde::Serialize;
 
 use crate::{
-  Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
+  Ear, Fact, Fault, Hands, Heard, Life, Object, Spoken, Step,
   life::Opening,
   skill::{self, Skill},
   view::{
@@ -56,8 +57,30 @@ use crate::{
 };
 use std::{env, path};
 
-/// A value of the engine, as a host language holds it, both ways.
-pub struct Value(pub Object);
+/// A value of the engine, as a host language holds it, both ways. A value that comes in from a host
+/// holds the ears and the functions of the host that it names, which go to the life with it.
+pub struct Value {
+  object: Object,
+  hands: Hands,
+}
+
+impl Value {
+  /// A value of the engine that names nothing of a host.
+  pub(crate) fn of(object: Object) -> Self {
+    Self { object, hands: Hands::default() }
+  }
+
+  /// The value, read where it stands.
+  pub(crate) const fn object(&self) -> &Object {
+    &self.object
+  }
+
+  /// The value, as it goes to the engine, with what it names of the host joined to `hands`.
+  pub(crate) fn handed(self, hands: &mut Hands) -> Object {
+    hands.join(self.hands);
+    self.object
+  }
+}
 
 /// A value as the record keeps it, which a later life reads the same: in TypeScript a whole float keeps its mark.
 pub struct Record(pub Object);
@@ -84,7 +107,44 @@ pub struct NativeEar {
 }
 
 /// The ear that a [`Lent`] lends, which is gone once the ear is given back.
-type Loan = RefCell<Option<Box<dyn Ear>>>;
+type Loan = Shared<Option<Box<dyn Ear>>>;
+
+/// A value that an object of a host and the engine that it was handed to both reach: a native ear
+/// that the host lets go while the engine holds it, and the engine of JavaScript, which code of
+/// JavaScript that it runs calls again. Python holds such a value in its object, which pyo3 checks,
+/// and N-API checks nothing, so this is the one value of the doors that is checked at each reach:
+/// a reach that comes back into a reach that runs is refused, and no type of rust can rule it out,
+/// since the code of the host decides it.
+#[expect(
+  clippy::disallowed_types,
+  reason = "code of a host reaches the value again while the engine runs it, which only a check at each reach \
+            refuses"
+)]
+pub(crate) struct Shared<T>(RefCell<T>);
+
+#[expect(
+  clippy::disallowed_types,
+  reason = "the check of a reach is the borrow of a RefCell, as the type says"
+)]
+impl<T> Shared<T> {
+  pub(crate) fn new(value: T) -> Self {
+    Self(RefCell::new(value))
+  }
+
+  /// What a change of the value gives, or nothing while another reach of it runs.
+  pub(crate) fn reach<R>(&self, change: impl FnOnce(&mut T) -> R) -> Option<R> {
+    self.lend((), |held, ()| change(held)).ok()
+  }
+
+  /// What a change of the value with what it is given gives, or what it was given back while
+  /// another reach of the value runs.
+  pub(crate) fn lend<A, R>(&self, given: A, change: impl FnOnce(&mut T, A) -> R) -> Result<R, A> {
+    match self.0.try_borrow_mut() {
+      Ok(mut held) => Ok(change(&mut held, given)),
+      Err(_) => Err(given),
+    }
+  }
+}
 /// The ear, and what the engine of python steps it with once it is born there.
 struct Hearing {
   ear: Option<Box<dyn Ear>>,
@@ -210,7 +270,7 @@ impl NativeEar {
     let ear = hearing.ear.take().ok_or_else(|| {
       Fault::refused("an ear of the crate hears in one engine, and this one hears")
     })?;
-    let shared = Rc::new(RefCell::new(Some(ear)));
+    let shared = Rc::new(Shared::new(Some(ear)));
     hearing.lent = Some(Rc::downgrade(&shared));
     Ok(Box::new(Lent(shared)))
   }
@@ -219,36 +279,35 @@ impl NativeEar {
 /// An ear of the crate as an engine holds it, which its [`NativeEar`] lets go at a dispose: from then on it is over.
 struct Lent(Rc<Loan>);
 
+/// Each reach of a lent ear comes from the engine that holds it, one at a time, and a dispose that
+/// came while one ran is refused, so a reach that is refused finds an ear that is gone.
 impl Ear for Lent {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    match self.0.borrow_mut().as_mut() {
-      Some(ear) => ear.resume(heard, cx),
-      None => Step::Over,
-    }
+    self
+      .0
+      .reach(|ear| ear.as_mut().map(|ear| ear.resume(heard, cx)))
+      .flatten()
+      .unwrap_or(Step::Over)
   }
 
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    match self.0.borrow_mut().as_mut() {
-      Some(ear) => ear.poll(cx),
-      None => Poll::Pending,
-    }
+    self.0.reach(|ear| ear.as_mut().map(|ear| ear.poll(cx))).flatten().unwrap_or(Poll::Pending)
   }
 
   fn answered(&mut self, got: Result<Object, Fault>) {
-    if let Some(ear) = self.0.borrow_mut().as_mut() {
-      ear.answered(got);
-    }
+    self.0.reach(|ear| ear.as_mut().map(|ear| ear.answered(got)));
   }
 
   fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    match self.0.borrow_mut().as_mut() {
+    let lent = self.0.lend(life, |ear, life| match ear {
       Some(ear) => ear.lent(heard, cx, life),
       None => (Step::Over, life),
-    }
+    });
+    lent.unwrap_or_else(|life| (Step::Over, life))
   }
 
   fn ran(&mut self) -> Result<(), Fault> {
-    self.0.borrow_mut().as_mut().map_or(Ok(()), |ear| ear.ran())
+    self.0.reach(|ear| ear.as_mut().map_or(Ok(()), |ear| ear.ran())).unwrap_or(Ok(()))
   }
 }
 
@@ -263,9 +322,8 @@ impl NativeEar {
     hearing.ear.take();
     if let Some(shared) = hearing.lent.take().and_then(|one| one.upgrade()) {
       let ear = shared
-        .try_borrow_mut()
-        .map_err(|no| Fault::refused(format!("the ear hears, and cannot be let go now: {no}")))?
-        .take();
+        .reach(Option::take)
+        .ok_or_else(|| Fault::refused("the ear hears, and cannot be let go now"))?;
       drop(ear);
     }
     Ok(())
@@ -420,7 +478,7 @@ pub fn log(path: String) -> Result<NativeEar, Fault> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown[] | null"))]
 pub fn logged(path: String) -> Result<Option<Value>, Fault> {
-  Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
+  Ok(world::logged(&path)?.map(|facts| Value::of(Object::list(facts))))
 }
 
 /// What the record at a path tells, read with no life, so no word runs again and a record of any
@@ -443,7 +501,7 @@ pub fn retold(path: String) -> Result<Value, Fault> {
   let told = world::retold(&path)?;
   let name = told.name().map_or_else(Object::none, Object::string);
   let world::Retold { made, logged, file, said, .. } = told;
-  Ok(Value(Object::dict([
+  Ok(Value::of(Object::dict([
     (Object::string("made"), made.map_or_else(Object::none, Object::string)),
     (Object::string("name"), name),
     (Object::string("said"), said.map_or_else(Object::none, Object::string)),
@@ -766,13 +824,19 @@ pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
   Ok(ImageType { mime_type: media.to_owned(), suffix: suffix.to_owned() })
 }
 
-/// The words of a call that a host gave, by position and by name, as the engine takes them.
-fn words(
+/// The words of a call that a host gave, by position and by name, as the engine takes them, with
+/// what they name of the host joined to `hands`.
+fn words<'a>(
   args: Option<Vec<Value>>,
-  kwargs: Option<&IndexMap<String, Value>>,
-) -> (Vec<Object>, Vec<(&str, Object)>) {
-  let args = args.unwrap_or_default().into_iter().map(|one| one.0).collect();
-  (args, kwargs.into_iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
+  kwargs: Option<&'a mut IndexMap<String, Value>>,
+  hands: &mut Hands,
+) -> (Vec<Object>, Vec<(&'a str, Object)>) {
+  let args = args.unwrap_or_default().into_iter().map(|one| one.handed(hands)).collect();
+  let kwargs = kwargs
+    .into_iter()
+    .flatten()
+    .map(|(key, one)| (key.as_str(), mem::replace(one, Value::of(Object::none())).handed(hands)));
+  (args, kwargs.collect())
 }
 
 /// The meaning of a life that each window draws, folded in the crate from the facts of the life in
@@ -811,11 +875,11 @@ impl Meaning {
     covered: Option<Vec<String>>,
     born: Option<Value>,
   ) -> Result<Value, Fault> {
-    let fact = wire::outward(fact.0.as_ref());
+    let fact = wire::outward(fact.object().as_ref());
     let acts = match (covered, born) {
       (None, None) => self.fold.recorded(&fact),
       (covered, born) => {
-        let born = born.and_then(|one| Pause::of(&wire::outward(one.0.as_ref())));
+        let born = born.and_then(|one| Pause::of(&wire::outward(one.object().as_ref())));
         self.fold.hear(&fact, &covered.unwrap_or_default(), born)
       }
     };
@@ -953,7 +1017,7 @@ pub fn writing(text: String, thinking: String) -> Result<Value, Fault> {
   )
 )]
 pub fn restated(acts: Value) -> Result<Value, Fault> {
-  let json = wire::outward(acts.0.as_ref());
+  let json = wire::outward(acts.object().as_ref());
   let mut acts: Vec<ViewAct> = serde_json::from_value(json)
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
   restate(&mut acts);
@@ -963,7 +1027,7 @@ pub fn restated(acts: Value) -> Result<Value, Fault> {
 /// How many last steps of each level a ladder shows: the count given, or [`SHOWN`].
 fn counted(shown: Option<Value>) -> Result<Shown, Fault> {
   shown.map_or(Ok(SHOWN), |shown| {
-    serde_json::from_value(wire::outward(shown.0.as_ref()))
+    serde_json::from_value(wire::outward(shown.object().as_ref()))
       .map_err(|no| Fault::refused(format!("this is no count of steps: {no}")))
   })
 }
@@ -972,7 +1036,7 @@ fn counted(shown: Option<Value>) -> Result<Shown, Fault> {
 fn meant(meaning: &impl Serialize) -> Result<Value, Fault> {
   let json = serde_json::to_value(meaning)
     .map_err(|no| Fault::refused(format!("the meaning is no JSON: {no}")))?;
-  wire::inward(&json).map(Value)
+  wire::inward(&json).map(Value::of)
 }
 
 /// A moment of a life, which counts the facts that the meaning heard before it.

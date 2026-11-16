@@ -176,7 +176,7 @@ impl Kind {
   fn word(self, name: &str) -> String {
     match self {
       Self::Fielded(one) => one.word(name),
-      Self::Ear => format!("handed({name}, false)"),
+      Self::Ear => format!("self.handed({name}, false)"),
       Self::Template => format!("templated({name})"),
     }
   }
@@ -690,9 +690,13 @@ fn python_words(verb: &Verb) -> Python {
     Fielded::MaybeStr => format!("{}: Maybe", one.name),
     _ => format!("{}: Option<Value>", one.name),
   }));
-  let mut words: Vec<String> = verb.needed.iter().map(|one| format!("{}.0", one.name)).collect();
+  let mut words: Vec<String> =
+    verb.needed.iter().map(|one| format!("{}.handed(&mut hands)", one.name)).collect();
   words.extend(placed.iter().filter_map(|one| {
-    one.placed.as_ref().map(|value| format!("{}.map_or_else(|| {value}, |one| one.0)", one.name))
+    one
+      .placed
+      .as_ref()
+      .map(|value| format!("{}.map_or_else(|| {value}, |one| one.handed(&mut hands))", one.name))
   }));
   let keys: Vec<String> = named
     .iter()
@@ -709,7 +713,7 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
   let Python { signature, given, words, keys } = python_words(verb);
   let (answer, made) = match verb.answer {
     Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
-    _ => ("Value", "Value(got)"),
+    _ => ("Value", "Value::of(got)"),
   };
   out!(out, "  /// {}", verb.doc);
   out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
@@ -726,16 +730,18 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
     verb.name,
     given.join(", ")
   );
+  out!(out, "    let mut hands = Hands::default();");
   let mutable = if verb.rest.is_some() { "mut " } else { "" };
   out!(out, "    let {mutable}args: Vec<Object> = vec![{}];", words.join(", "));
   if let Some(rest) = &verb.rest {
-    out!(out, "    args.extend({}.into_iter().map(|one| one.0));", rest.name);
+    out!(out, "    args.extend({}.into_iter().map(|one| one.handed(&mut hands)));", rest.name);
   }
   out!(out, "    let kwargs: [(&str, Option<Value>); {}] = [{}];", keys.len(), keys.join(", "));
   out!(
     out,
-    "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
+    "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, \
+     one?.handed(&mut hands)))).collect();"
   );
-  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, args, kwargs)?;", verb.name);
+  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, args, kwargs, hands)?;", verb.name);
   out!(out, "    Ok({made})\n  }}\n");
 }

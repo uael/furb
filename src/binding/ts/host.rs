@@ -6,7 +6,7 @@
 //! was made with, or an error by its message.
 
 use std::{
-  cell::RefCell,
+  cell::OnceCell,
   ptr,
   rc::{Rc, Weak},
   sync::Arc,
@@ -26,9 +26,9 @@ use serde_json::Value as Json;
 use unsync::oneshot;
 
 use super::{JsAct, native, refused};
+use crate::binding::Shared;
 use crate::{
-  Ear, Engine, Fault, Heard, Object, Step,
-  engine::{callable, handed},
+  Ear, Engine, Fault, Hands, Heard, Life, Object, Step,
   value::{field, paired},
   wire,
 };
@@ -95,7 +95,8 @@ fn call<'env>(
 /// What JavaScript threw, as the fault it is: a map that names its class under `is` with what it was made with,
 /// or an error by its message.
 fn fault(env: Env, no: Unknown<'_>) -> Fault {
-  if let Ok(held) = inward(&env, no, Word::Plain, 0)
+  // A fault is data: what its words name of JavaScript goes nowhere.
+  if let Ok(held) = inward(env, no, Word::Plain, &mut Hands::default())
     && let Some(fault) = marked(&held)
   {
     return fault;
@@ -127,15 +128,26 @@ fn marked(held: &Object) -> Option<Fault> {
 /// A value of JavaScript, as the engine takes it: a function as a function of the host, a generator as an ear, an
 /// ear of the crate as itself, each handed over to the life it comes into, an act as its name, and plain data as the
 /// wire reads it, each entry the same way.
+pub(crate) fn inward(
+  env: Env,
+  value: Unknown<'_>,
+  word: Word,
+  hands: &mut Hands,
+) -> Result<Object, Fault> {
+  deeper(&env, value, word, 0, hands)
+}
+
+/// A value of JavaScript at a depth, as [`inward`] takes it.
 #[expect(
   unsafe_code,
   reason = "napi reads a raw value as JSON, its numbers kept, only through an unsafe call"
 )]
-pub(crate) fn inward(
+fn deeper(
   env: &Env,
   value: Unknown<'_>,
   word: Word,
   depth: usize,
+  hands: &mut Hands,
 ) -> Result<Object, Fault> {
   if depth > DEEPEST {
     return Err(Fault::refused(format!("a value deeper than {DEEPEST} does not go in")));
@@ -146,7 +158,12 @@ pub(crate) fn inward(
       let held =
         value.coerce_to_object().and_then(|one| one.create_ref::<false>()).map_err(refused)?;
       let called = Called { env: *env, held: Some(held) };
-      return Ok(callable(move |args| called.call(&args)));
+      return Ok(hands.lending(move |args, mut life| {
+        let mut gave = Hands::default();
+        let got = called.call(&args, &mut gave);
+        life.hand(gave);
+        (got, life)
+      }));
     }
     ValueType::Object => {}
     _ => {
@@ -158,7 +175,7 @@ pub(crate) fn inward(
   }
   let object = value.coerce_to_object().map_err(refused)?;
   if let Some(ear) = native(env, &object)? {
-    return Ok(handed(ear, false));
+    return Ok(hands.ear(ear, false));
   }
   if let Some(id) = JsAct::named(env, &object)? {
     return Ok(Object::string(id));
@@ -173,21 +190,27 @@ pub(crate) fn inward(
   };
   if callable("next") && callable("throw") {
     // JavaScript tells no one whether a generator was started, so one that crosses was not.
-    return Ok(handed(ear(*env, &object)?, false));
+    return Ok(hands.ear(ear(*env, &object)?, false));
   }
   if object.is_array().map_err(refused)? {
-    return listed(*env, &object, word, depth);
+    return listed(*env, &object, word, depth, hands);
   }
-  mapped(*env, &object, word, depth)
+  mapped(*env, &object, word, depth, hands)
 }
 
 /// An array of JavaScript, each entry as the engine takes it, and a template as the pairs of its
 /// expressions and their values.
-fn listed(env: Env, object: &JsObject<'_>, word: Word, depth: usize) -> Result<Object, Fault> {
+fn listed(
+  env: Env,
+  object: &JsObject<'_>,
+  word: Word,
+  depth: usize,
+  hands: &mut Hands,
+) -> Result<Object, Fault> {
   let mut held = Vec::new();
   for i in 0..object.get_array_length().map_err(refused)? {
     let one: Unknown = object.get_element(i).map_err(refused)?;
-    held.push(inward(&env, one, Word::Plain, depth + 1)?);
+    held.push(deeper(&env, one, Word::Plain, depth + 1, hands)?);
   }
   if let Word::Template = word {
     let pairs = held.into_iter().map(|pair| {
@@ -203,7 +226,13 @@ fn listed(env: Env, object: &JsObject<'_>, word: Word, depth: usize) -> Result<O
 
 /// An object of JavaScript as a map of the engine, each entry that is not undefined as the engine
 /// takes it, and a text marked as one.
-fn mapped(env: Env, object: &JsObject<'_>, word: Word, depth: usize) -> Result<Object, Fault> {
+fn mapped(
+  env: Env,
+  object: &JsObject<'_>,
+  word: Word,
+  depth: usize,
+  hands: &mut Hands,
+) -> Result<Object, Fault> {
   let names = object.get_property_names().map_err(refused)?;
   let mut pairs = Vec::new();
   if let Word::Text = word
@@ -217,7 +246,7 @@ fn mapped(env: Env, object: &JsObject<'_>, word: Word, depth: usize) -> Result<O
     if one.get_type().map_err(refused)? == ValueType::Undefined {
       continue;
     }
-    pairs.push((Object::string(key), inward(&env, one, Word::Plain, depth + 1)?));
+    pairs.push((Object::string(key), deeper(&env, one, Word::Plain, depth + 1, hands)?));
   }
   Ok(Object::dict(pairs))
 }
@@ -228,6 +257,7 @@ pub(crate) fn named(
   env: Env,
   options: JsObject<'_>,
   keys: &[(&str, Word)],
+  hands: &mut Hands,
 ) -> Result<Vec<(String, Object)>, Fault> {
   let names = options.get_property_names().map_err(refused)?;
   let mut taken = Vec::new();
@@ -243,7 +273,7 @@ pub(crate) fn named(
     {
       continue;
     }
-    taken.push((key, inward(&env, one, *word, 0)?));
+    taken.push((key, inward(env, one, *word, hands)?));
   }
   Ok(taken)
 }
@@ -260,12 +290,13 @@ struct Called {
 }
 
 impl Called {
-  fn call(&self, args: &[Object]) -> Result<Object, Fault> {
+  /// What it gave names functions and ears of JavaScript, which `hands` takes.
+  fn call(&self, args: &[Object], hands: &mut Hands) -> Result<Object, Fault> {
     let env = &self.env;
     let held = self.held.as_ref().ok_or_else(|| Fault::refused("the function is gone"))?;
     let f = held.get_value(env).map_err(refused)?.to_unknown();
     let args = args.iter().map(|one| outward(env, one)).collect::<Result<Vec<_>, _>>()?;
-    inward(env, call(env, f, None, &args)?, Word::Plain, 0)
+    inward(*env, call(env, f, None, &args)?, Word::Plain, hands)
   }
 }
 
@@ -299,13 +330,21 @@ impl Drop for JsEar {
 }
 
 impl Ear for JsEar {
+  /// With no life lent, what the step names of JavaScript goes nowhere.
   fn resume(&mut self, heard: Heard, _: &mut Context<'_>) -> Step {
-    self.stepped(heard).unwrap_or_else(Step::Raised)
+    self.stepped(heard, &mut Hands::default()).unwrap_or_else(Step::Raised)
+  }
+
+  fn lent(&mut self, heard: Heard, _: &mut Context<'_>, mut life: Life) -> (Step, Life) {
+    let mut hands = Hands::default();
+    let step = self.stepped(heard, &mut hands).unwrap_or_else(Step::Raised);
+    life.hand(hands);
+    (step, life)
   }
 }
 
 impl JsEar {
-  fn stepped(&mut self, heard: Heard) -> Result<Step, Fault> {
+  fn stepped(&mut self, heard: Heard, hands: &mut Hands) -> Result<Step, Fault> {
     let env = &self.env;
     let held = self.generator.as_ref().ok_or_else(|| Fault::refused("the ear is over"))?;
     let generator = held.get_value(env).map_err(refused)?;
@@ -325,7 +364,7 @@ impl JsEar {
       return Ok(Step::Over);
     }
     let value: Unknown = got.get_named_property("value").map_err(refused)?;
-    Ok(Step::of(&inward(env, value, Word::Plain, 0)?).unwrap_or_else(Step::Raised))
+    Ok(Step::of(&inward(*env, value, Word::Plain, hands)?).unwrap_or_else(Step::Raised))
   }
 }
 
@@ -353,42 +392,45 @@ impl Wake for Wakes {
 /// One engine, held on the thread of JavaScript, the results that JavaScript awaits of it, and what wakes the thread
 /// when an ear can go on.
 pub(crate) struct Held {
-  pub(crate) engine: RefCell<Option<Engine>>,
+  /// Code of JavaScript that the engine runs may call the engine again, which the reach refuses.
+  state: Shared<State>,
   env: Env,
-  pending: RefCell<Vec<Pending>>,
   wakes: Arc<Wakes>,
   /// The function that drives the engine, from which the one that keeps JavaScript alive is made.
   drives: FunctionRef<(), ()>,
+}
+
+/// What a [`Held`] changes as JavaScript calls it.
+struct State {
+  engine: Option<Engine>,
+  pending: Vec<Pending>,
   /// What keeps JavaScript alive while it awaits a result, which only an ear that waits may give.
-  alive: RefCell<Option<Waking<false>>>,
+  alive: Option<Waking<false>>,
   /// The function of JavaScript that hears why the life stopped, which hears it once.
-  pub(crate) listener: RefCell<Option<FunctionRef<String, ()>>>,
+  listener: Option<FunctionRef<String, ()>>,
 }
 
 impl Held {
   pub(crate) fn new(env: Env, engine: Engine) -> napi::Result<Rc<Self>> {
     // The function that drives the engine is made before what it drives, which it is given once that stands.
-    let slot: Rc<RefCell<Weak<Self>>> = Rc::default();
+    let slot: Rc<OnceCell<Weak<Self>>> = Rc::default();
     let driven = Rc::clone(&slot);
     let drive = env.create_function_from_closure("drive", move |_| {
-      let held = driven.borrow().upgrade();
-      if let Some(held) = held {
+      if let Some(held) = driven.get().and_then(Weak::upgrade) {
         held.drive();
       }
       Ok(())
     })?;
     let wakes =
       drive.build_threadsafe_function::<()>().callee_handled::<false>().weak::<true>().build()?;
+    let state = State { engine: Some(engine), pending: Vec::new(), alive: None, listener: None };
     let held = Rc::new(Self {
-      engine: RefCell::new(Some(engine)),
+      state: Shared::new(state),
       env,
-      pending: RefCell::default(),
       wakes: Arc::new(Wakes(wakes)),
       drives: drive.create_ref()?,
-      alive: RefCell::default(),
-      listener: RefCell::default(),
     });
-    *slot.borrow_mut() = Rc::downgrade(&held);
+    slot.set(Rc::downgrade(&held)).ok();
     held.drive();
     Ok(held)
   }
@@ -404,10 +446,11 @@ impl Held {
   /// Each awaited result that came settles its promise, and JavaScript is kept alive while it awaits a result, and
   /// let go when it awaits none.
   fn kept(&self) {
-    let pending = mem::take(&mut *self.pending.borrow_mut());
+    let Some(pending) = self.state.reach(|state| mem::take(&mut state.pending)) else { return };
+    let mut waiting = Vec::new();
     for mut one in pending {
       match (&mut one.came).now_or_never() {
-        None => self.pending.borrow_mut().push(one),
+        None => waiting.push(one),
         Some(Some(value)) => {
           if let Some(fault) = Fault::of(value.as_ref()) {
             one.deferred.reject(fault.into());
@@ -426,19 +469,24 @@ impl Held {
         },
       }
     }
-    let awaited = !self.pending.borrow().is_empty();
-    let mut alive = self.alive.borrow_mut();
-    if !awaited {
-      alive.take();
-    } else if alive.is_none() {
-      *alive = self
-        .drives
-        .borrow_back(&self.env)
-        .and_then(|drive| {
-          drive.build_threadsafe_function::<()>().callee_handled::<false>().weak::<false>().build()
-        })
-        .ok();
-    }
+    self.state.reach(|state| {
+      state.pending.extend(waiting);
+      if state.pending.is_empty() {
+        state.alive.take();
+      } else if state.alive.is_none() {
+        state.alive = self
+          .drives
+          .borrow_back(&self.env)
+          .and_then(|drive| {
+            drive
+              .build_threadsafe_function::<()>()
+              .callee_handled::<false>()
+              .weak::<false>()
+              .build()
+          })
+          .ok();
+      }
+    });
   }
 
   /// One call of the engine, which JavaScript makes only while the engine runs none of its code.
@@ -446,17 +494,14 @@ impl Held {
     &self,
     call: impl FnOnce(&mut Engine) -> Result<T, Fault>,
   ) -> napi::Result<T> {
-    // A borrow fails only while the engine runs, which is all that its error says.
-    let Ok(mut held) = self.engine.try_borrow_mut() else {
+    // A reach fails only while the engine runs, which is all that its error says.
+    let Some(got) = self.state.reach(|state| state.engine.as_mut().map(call)) else {
       return Err(napi::Error::from_reason(
         "The engine runs code of JavaScript now: an ear calls a verb by yielding call(verb, args, kwargs), and a \
          function answers from its words alone.",
       ));
     };
-    let engine =
-      held.as_mut().ok_or_else(|| napi::Error::from_reason("The engine is disposed."))?;
-    let got = call(engine);
-    drop(held);
+    let got = got.ok_or_else(|| napi::Error::from_reason("The engine is disposed."))?;
     self.kept();
     if got.is_err() {
       self.stops();
@@ -466,14 +511,25 @@ impl Held {
 
   /// The fault that stopped the life, when one did.
   pub(crate) fn stopped(&self) -> Option<Fault> {
-    self.engine.try_borrow().ok()?.as_ref()?.stopped().cloned()
+    self.state.reach(|state| state.engine.as_ref()?.stopped().cloned()).flatten()
+  }
+
+  /// Whether the engine is gone.
+  pub(crate) fn disposed(&self) -> bool {
+    self.state.reach(|state| state.engine.is_none()).unwrap_or_default()
+  }
+
+  /// The listener hears why the life stopped, once, when it stopped, or at once when it stopped already.
+  pub(crate) fn listen(&self, listener: FunctionRef<String, ()>) {
+    self.state.reach(|state| state.listener = Some(listener));
+    self.stops();
   }
 
   /// The listener of JavaScript hears why the life stopped, once, when it stopped: no call of the engine tells it
   /// when the fault came while the engine was driven.
   pub(crate) fn stops(&self) {
     let Some(fault) = self.stopped() else { return };
-    let listener = self.listener.borrow_mut().take();
+    let listener = self.state.reach(|state| state.listener.take()).flatten();
     if let Some(listener) = listener
       && let Ok(heard) = listener.borrow_back(&self.env)
     {
@@ -498,8 +554,14 @@ impl Held {
     });
     match watched {
       Ok(()) => {
-        self.pending.borrow_mut().push(Pending { came, deferred });
-        self.kept();
+        match self.state.lend(Pending { came, deferred }, |state, one| state.pending.push(one)) {
+          Ok(()) => self.kept(),
+          Err(one) => {
+            one
+              .deferred
+              .reject(napi::Error::from_reason("The engine runs code of JavaScript now."));
+          }
+        }
       }
       Err(error) => deferred.reject(error),
     }
@@ -507,10 +569,9 @@ impl Held {
   }
 
   pub(crate) fn dispose(&self) -> napi::Result<()> {
-    let Ok(mut engine) = self.engine.try_borrow_mut() else {
+    let Some(engine) = self.state.reach(|state| state.engine.take()) else {
       return Err(napi::Error::from_reason("The engine is in a call of the host."));
     };
-    engine.take();
     drop(engine);
     self.kept();
     Ok(())

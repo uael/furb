@@ -6,7 +6,6 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  cell::RefCell,
   collections::{HashMap, HashSet, VecDeque},
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
@@ -64,38 +63,51 @@ impl Handed {
   }
 }
 
-thread_local! {
-  /// What a host of this thread handed over and no life took yet. A life takes each the first time
-  /// a value that names it comes into its sandbox, and holds it from then on, so each is the life's
-  /// that was given it.
-  static HANDED: RefCell<Handed> = RefCell::default();
-}
-
 /// How many ears and functions the hosts of this process handed over, which names the next.
 static HANDS: AtomicI64 = AtomicI64::new(1);
 
-/// An ear of the host, handed over as the value a verb is given: the object that stands in for it
-/// in the sandbox, which stands at a yield when the host started the ear before it crossed.
-pub fn handed(ear: Box<dyn Ear>, started: bool) -> Object {
-  let name = format!("{EAR}{}", HANDS.fetch_add(1, Ordering::Relaxed));
-  HANDED.with_borrow_mut(|held| held.ears.insert(name.clone(), ear));
-  marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
-}
+/// The ears and the functions of a host that the values of a call name, which [`Engine::hand`]
+/// gives the life with the call. The life takes each the first time a value that names it comes
+/// into its sandbox, and holds it from then on.
+///
+/// [`Engine::hand`]: crate::Engine::hand
+#[derive(Default)]
+pub struct Hands(pub(super) Handed);
 
-/// A function of the host, handed over as a value a verb may be given: a show, a filter. The
-/// sandbox calls it back, and what it gives is what the call gave.
-pub fn callable(mut call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static) -> Object {
-  lending(move |args, life| (call(args), life))
-}
+impl Hands {
+  /// An ear of the host, as the value a verb is given: the object that stands in for it in the
+  /// sandbox, which stands at a yield when the host started the ear before it crossed.
+  pub fn ear(&mut self, ear: Box<dyn Ear>, started: bool) -> Object {
+    let name = format!("{EAR}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+    self.0.ears.insert(name.clone(), ear);
+    marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
+  }
 
-/// A function of the host that calls verbs of the life, handed over as [`callable`] hands one: the
-/// life is lent to it while it runs, and it gives the life back with what the call gave.
-pub fn lending(
-  call: impl FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life) + 'static,
-) -> Object {
-  let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
-  HANDED.with_borrow_mut(|held| held.calls.insert(name.clone(), Box::new(call)));
-  Object::function(name, None)
+  /// A function of the host, as a value a verb may be given: a show, a filter. The sandbox calls
+  /// it back, and what it gives is what the call gave.
+  pub fn callable(
+    &mut self,
+    mut call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static,
+  ) -> Object {
+    self.lending(move |args, life| (call(args), life))
+  }
+
+  /// A function of the host that calls verbs of the life, as [`Hands::callable`] gives one: the
+  /// life is lent to it while it runs, and it gives the life back with what the call gave.
+  pub fn lending(
+    &mut self,
+    call: impl FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life) + 'static,
+  ) -> Object {
+    let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+    self.0.calls.insert(name.clone(), Box::new(call));
+    Object::function(name, None)
+  }
+
+  /// These hands, with each ear and each function that `other` holds beside them.
+  pub fn join(&mut self, other: Self) {
+    self.0.ears.extend(other.0.ears);
+    self.0.calls.extend(other.0.calls);
+  }
 }
 
 /// The life, lent by value to code of a host while the life hears it, since every frame of the life
@@ -118,6 +130,14 @@ impl Life {
   ) -> Result<Object, Fault> {
     let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
     self.outside.asked(&mut self.sand, Call { verb: verb.to_owned(), args, kwargs })
+  }
+
+  /// The ears and the functions of the host that the values of the next calls name, as
+  /// [`Engine::hand`] takes them.
+  ///
+  /// [`Engine::hand`]: crate::Engine::hand
+  pub fn hand(&mut self, hands: Hands) {
+    self.outside.hosted.given.join(hands);
   }
 }
 
@@ -147,6 +167,8 @@ enum Stepped {
 /// The ears that a host gave a life and where each stands, which the sandbox steps as generators.
 pub(super) struct Hosted {
   pub(super) handed: Handed,
+  /// What the host gave with its calls that no value that came into the sandbox named yet.
+  pub(super) given: Hands,
   /// The waker of whoever drives the engine, which each ear is polled with.
   pub(super) waker: Waker,
   /// Each ear of the host, by the id of its object in the sandbox: its name and where it stands.
@@ -228,6 +250,7 @@ impl Default for Hosted {
   fn default() -> Self {
     Self {
       handed: Handed::default(),
+      given: Hands::default(),
       waker: Waker::noop().clone(),
       standing: HashMap::new(),
       waits: HashMap::new(),
@@ -505,13 +528,12 @@ impl Outside {
 
   /// What the host handed over under this name, which this life holds from now on.
   pub(super) fn take(&mut self, name: &str) {
-    HANDED.with_borrow_mut(|held| {
-      if let Some(ear) = held.ears.remove(name) {
-        self.hosted.handed.ears.insert(name.to_owned(), ear);
-      }
-      if let Some(call) = held.calls.remove(name) {
-        self.hosted.handed.calls.insert(name.to_owned(), call);
-      }
-    });
+    let Hosted { handed, given, .. } = &mut self.hosted;
+    if let Some(ear) = given.0.ears.remove(name) {
+      handed.ears.insert(name.to_owned(), ear);
+    }
+    if let Some(call) = given.0.calls.remove(name) {
+      handed.calls.insert(name.to_owned(), call);
+    }
   }
 }

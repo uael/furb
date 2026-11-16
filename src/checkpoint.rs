@@ -37,7 +37,7 @@ use similar::TextDiff;
 
 use crate::{
   Engine,
-  engine::{OPERATOR, ROOT, callable},
+  engine::{Hands, OPERATOR, ROOT},
   fact::Fact,
   minify::minified,
   skill::definitions,
@@ -56,10 +56,12 @@ pub const CHECKPOINT: &str = "checkpoint";
 /// turns end with one paragraph that tells it the change, the lines of the minified engine that
 /// differ.
 pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Fault> {
-  let define = callable(|args: Vec<Object>| {
+  let mut hands = Hands::default();
+  let define = hands.callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
+  engine.hand(hands);
   let floor = engine.taken().clone();
   // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
   let (_, _, by) = world::texts(slice::from_ref(next))?;

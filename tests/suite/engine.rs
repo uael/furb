@@ -52,9 +52,9 @@ use rustix::{
 
 use furb::skill::Places;
 use furb::{
-  Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
+  Act, Ear, Engine, Exit, Fact, Fault, Hands, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
-  engine::{CRASHES, callable},
+  engine::CRASHES,
   verbs, world,
 };
 
@@ -654,15 +654,19 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_it() {
   let mut lived = Lived::new("callables", &[], true).unwrap();
   let (tell, seen) = mpsc::channel();
-  let show = callable(move |args| {
+  let mut hands = Hands::default();
+  let show = hands.callable(move |args| {
     let lines = args.first().and_then(|one| one.as_ref().items()).map_or(0, |lines| lines.len());
     tell.send(lines).unwrap();
     Ok(Object::list([Object::int(2)]))
   });
+  lived.engine.hand(hands);
   let got = lived.engine.word("show(['one', 'two', 'three'])", vec![("show", show)]).unwrap();
   assert_eq!(seen.try_iter().collect::<Vec<_>>(), [3], "the function was given the lines");
   assert_eq!(got.py_repr(), "[2]", "the word got what the function gave");
-  let bad = callable(|_| Err(Fault::refused("not lines")));
+  let mut hands = Hands::default();
+  let bad = hands.callable(|_| Err(Fault::refused("not lines")));
+  lived.engine.hand(hands);
   let no = lived.engine.word("show(1)", vec![("show", bad)]);
   assert_eq!(
     no.unwrap_err().name,

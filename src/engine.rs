@@ -53,7 +53,7 @@ use self::{
   opening::OPENING,
 };
 pub use self::{
-  hosted::{Life, callable, handed, lending},
+  hosted::{Hands, Life},
   plain::{Act, Plain},
   record::CRASHES,
 };
@@ -846,6 +846,20 @@ impl Engine {
   /// an end of the life before that loses them.
   pub fn unkept(&self) -> usize {
     self.outside.hosted.handed.ears.values().map(|ear| ear.unkept()).sum()
+  }
+
+  /// The ears and the functions of the host that the values of the next calls name, which the
+  /// life takes as each value comes into its sandbox.
+  pub fn hand(&mut self, hands: Hands) {
+    self.outside.hosted.given.join(hands);
+  }
+
+  /// An ear of the host, as the value a verb is given, which [`Hands::ear`] says.
+  pub(crate) fn handed(&mut self, ear: Box<dyn Ear>, started: bool) -> Object {
+    let mut hands = Hands::default();
+    let handed = hands.ear(ear, started);
+    self.hand(hands);
+    handed
   }
 
   /// The root chain of the life, which is the first act of any record.
