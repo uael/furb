@@ -61,14 +61,20 @@ jobs:
           hashed: crates/typescript/build.ts
       # The native library of OpenTUI, which the build of the window makes with Zig in minutes and keeps in
       # target/opentui, under the commit that crates/window/Cargo.toml pins. The cache of rust keeps no file of a
-      # package of the workspace, so the folder has a cache of its own, restored after that one. A build that finds the
-      # library runs no Zig, so only a miss installs it: the Zig that the build.zig.zon of that commit names, and no
-      # other.
+      # package of the workspace, so the folder has a cache of its own, restored after that one, and named by that
+      # commit and the build script alone: a key of the whole manifest missed at each new dependency of the window, and
+      # the build of Zig then took 10 to 13 minutes of each build. A build that finds the library runs no Zig, so only a
+      # miss installs it: the Zig that the build.zig.zon of that commit names, and no other.
+      - id: pin
+        run: |
+          commit=$(sed -n 's/^opentui = .*rev = "\([0-9a-f]*\)".*/\1/p' crates/window/Cargo.toml)
+          test -n "$commit" || { echo "::error::crates/window/Cargo.toml pins no commit of opentui"; exit 1; }
+          echo "opentui=$commit" >> "$GITHUB_OUTPUT"
       - id: opentui
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/opentui
-          key: opentui-${{ inputs.os }}-${{ hashFiles('crates/window/Cargo.toml', 'crates/window/build.rs') }}
+          key: opentui-${{ inputs.os }}-${{ steps.pin.outputs.opentui }}-${{ hashFiles('crates/window/build.rs') }}
       - if: steps.opentui.outputs.cache-hit != 'true'
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
