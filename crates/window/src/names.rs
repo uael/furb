@@ -2,7 +2,7 @@
 //! whether its line binds it, and what the contract says of each verb of the engine. The pointer on
 //! a name shows what it holds, and a click on it goes to the line that bound it.
 
-use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
+use std::{collections::HashMap, ops::Range, rc::Rc};
 
 use crate::cells::Cells;
 use opentui::syntax::tree_sitter::{Node, Parser};
@@ -22,22 +22,21 @@ const KEPT: usize = 256;
 /// reads no grammar.
 #[derive(Default)]
 pub(crate) struct Names {
-  kept: RefCell<HashMap<String, Rc<Vec<Vec<Named>>>>>,
+  kept: HashMap<String, Rc<Vec<Vec<Named>>>>,
 }
 
 impl Names {
   /// The names of each line of a text of python. A text that the grammar cannot read names what
   /// it reads.
-  pub(crate) fn of(&self, text: &str) -> Rc<Vec<Vec<Named>>> {
-    if let Some(kept) = self.kept.borrow().get(text) {
+  pub(crate) fn of(&mut self, text: &str) -> Rc<Vec<Vec<Named>>> {
+    if let Some(kept) = self.kept.get(text) {
       return Rc::clone(kept);
     }
     let names = Rc::new(read(text));
-    let mut kept = self.kept.borrow_mut();
-    if kept.len() >= KEPT {
-      kept.clear();
+    if self.kept.len() >= KEPT {
+      self.kept.clear();
     }
-    kept.insert(text.to_owned(), Rc::clone(&names));
+    self.kept.insert(text.to_owned(), Rc::clone(&names));
     names
   }
 }

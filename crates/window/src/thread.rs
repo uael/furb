@@ -25,11 +25,10 @@ use opentui::style::{Color, Span, Style};
 use furb_client::{Filled, Fold, Hold, Opened, Place, Thread};
 
 use crate::{
-  feed::Feed,
   keys::Does,
   line::{Line, styled},
   list::hash,
-  model::{Key, Model},
+  model::{Kept, Key, Model},
   opens::QUIET,
   tokens::Loader,
 };
@@ -481,8 +480,9 @@ impl Model {
     if self.left_rows().iter().any(|one| one.code == Some(number)) {
       return;
     }
-    let Some(feed) = self.feed() else { return };
-    let row = feed.rows(Item::At(at)).iter().position(|one| one.code == Some(number));
+    let rows = self.laying(|model, kept| Some(model.feed(kept)?.rows(Item::At(at))));
+    let Some(rows) = rows else { return };
+    let row = rows.iter().position(|one| one.code == Some(number));
     let row = isize::try_from(row.unwrap_or_default()).unwrap_or_default() - 3;
     if let Some(opened) = self.client.thread.as_mut() {
       opened.top = Some(Place { at, row });
@@ -576,39 +576,21 @@ impl Model {
     true
   }
 
-  /// The rows of a part of the feed, laid out once for what it shows, so a scroll lays out only the
-  /// parts that come into sight.
-  fn part_rows(&self, feed: &Feed<'_>, item: Item) -> Vec<Row> {
-    let stamp = Some((self.shows, self.clock()));
-    {
-      let kept = self.parts.borrow();
-      if kept.0 == stamp
-        && let Some(rows) = kept.1.get(&item)
-      {
-        return rows.clone();
-      }
-    }
-    let rows = feed.rows(item);
-    let mut parts = self.parts.borrow_mut();
-    if parts.0 != stamp {
-      *parts = (stamp, HashMap::new());
-    }
-    parts.1.insert(item, rows.clone());
-    rows
-  }
-
   /// The feed moved by a count of rows, up for a negative count: at its end it follows its end,
   /// and when less than a screen of it stands above, it asks the page before.
   pub(crate) fn scroll_feed(&mut self, by: isize) -> Option<Verb> {
     self.scrolled = true;
-    let room = self.feed_room();
-    let feed = self.feed()?;
-    let items = feed.items();
-    let now = items.shown(feed.opened.top, room, |item| self.part_rows(&feed, item));
-    let moved = now.top.map(|top| Place { at: top.at, row: top.row + by });
-    let then = items.shown(moved, room, |item| self.part_rows(&feed, item));
-    let near =
-      then.top.is_none_or(|top| items.above(top, room, |item| self.part_rows(&feed, item)) < room);
+    let (then, near) = self.laying(|model, kept| {
+      let mut feed = model.feed(kept)?;
+      let room = model.feed_room(feed.dock().len());
+      let (items, top) = (feed.items(), feed.opened.top);
+      let mut rows_of = |item| feed.part_rows(item);
+      let now = items.shown(top, room, &mut rows_of);
+      let moved = now.top.map(|top| Place { at: top.at, row: top.row + by });
+      let then = items.shown(moved, room, &mut rows_of);
+      let near = then.top.is_none_or(|top| items.above(top, room, &mut rows_of) < room);
+      Some((then, near))
+    })?;
     let opened = self.client.thread.as_mut()?;
     opened.top = then.top.filter(|_| !then.end);
     let older = opened.thread.asked.values().any(Option::is_some);
@@ -621,15 +603,18 @@ impl Model {
   /// there, or to the start of the next message, and to its end after the last. The verb of an
   /// older page once the top nears the first message that the window holds.
   pub(crate) fn step_message(&mut self, back: bool) -> Option<Verb> {
-    let room = self.feed_room();
-    let feed = self.feed()?;
-    let top = feed.items().shown(feed.opened.top, room, |item| self.part_rows(&feed, item)).top?;
-    let held = &feed.opened.thread.exchanges;
-    let to = match back {
-      true if top.row > 0 => Some(top.at),
-      true => held.range(..top.at).next_back().map(|one| *one.0),
-      false => held.range(top.at + 1..).next().map(|one| *one.0),
-    };
+    let to = self.laying(|model, kept| {
+      let mut feed = model.feed(kept)?;
+      let room = model.feed_room(feed.dock().len());
+      let items = feed.items();
+      let top = items.shown(feed.opened.top, room, |item| feed.part_rows(item)).top?;
+      let held = &feed.opened.thread.exchanges;
+      Some(match back {
+        true if top.row > 0 => Some(top.at),
+        true => held.range(..top.at).next_back().map(|one| *one.0),
+        false => held.range(top.at + 1..).next().map(|one| *one.0),
+      })
+    })?;
     let Some(at) = to else {
       if !back {
         self.jump();
@@ -721,16 +706,17 @@ impl Model {
   /// under the pointer that awaits agents lights the row of each, so the eye goes from the await to
   /// what it waits for, and a name under the pointer shows what it holds on the head of its block,
   /// which covers no code.
-  pub(crate) fn left(&self) -> Left {
+  pub(crate) fn left(&mut self) -> Left {
     let mut rows = self.left_rows();
     let named = self.pointed().and_then(|at| Self::named(&rows, at));
     if let Some((_, y)) = self.pointed()
       && let Some(name) = &named
-      && let Some(head) =
-        rows[..usize::from(y)].iter_mut().rev().find(|one| one.inspector.is_some())
-      && let Some(feed) = self.feed()
+      && let Some(above) = rows.get_mut(..usize::from(y))
+      && let Some(head) = above.iter_mut().rev().find(|one| one.inspector.is_some())
     {
-      head.line = feed.inspector(name, head.inspector.take().unwrap_or_default());
+      let inspector = head.inspector.take().unwrap_or_default();
+      let line = self.laying(|model, kept| Some(model.feed(kept)?.inspector(name, inspector)));
+      head.line = line.unwrap_or_else(|| mem::take(&mut head.line));
     }
     if let Some((x, y)) = self.pointed()
       && let Some(row) = rows.get_mut(usize::from(y))
@@ -795,42 +781,48 @@ impl Model {
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
   /// the dock; then the input.
-  pub(crate) fn left_rows(&self) -> Vec<Row> {
+  pub(crate) fn left_rows(&mut self) -> Vec<Row> {
     // The bar of the time says what the pointer is on, so its rows show the place of the pointer.
     let bar = self.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some());
     let stamp = (self.changes, self.clock(), self.pointed().filter(|_| bar));
-    if let Some((at, rows)) = &mut *self.laid.borrow_mut()
+    let hints = self.hints();
+    let below = 1 + self.time_count();
+    if let Some((at, rows)) = &mut self.laid
       && (at.0, at.1) == (stamp.0, stamp.1)
     {
       // A move of the pointer over the bar changes only what the row of hints says it is on.
       if at.2 != stamp.2
-        && let Some(hints) = rows.len().checked_sub(1 + self.time_count())
+        && let Some(row) = rows.len().checked_sub(below).and_then(|one| rows.get_mut(one))
       {
-        rows[hints] = self.hints();
+        *row = hints;
         at.2 = stamp.2;
       }
       return rows.clone();
     }
-    let rows = self.laid_rows();
+    let rows = self.laying(Self::laid_rows);
     #[cfg(test)]
-    self.layouts.set(self.layouts.get() + 1);
-    self.laid.replace(Some((stamp, rows.clone())));
+    {
+      self.layouts += 1;
+    }
+    self.laid = Some((stamp, rows.clone()));
     rows
   }
 
   /// The clock that the rows of the left side show: the second of each timer, or the moment
   /// itself while they change with each moment, as [`Model::steps`] says.
-  fn clock(&self) -> Duration {
+  pub(crate) fn clock(&self) -> Duration {
     if self.steps() { self.client.moved } else { Duration::from_secs(self.second()) }
   }
 
   /// Each row of the left side, laid out again.
-  fn laid_rows(&self) -> Vec<Row> {
-    let mut rows = match self.feed() {
+  fn laid_rows(&self, kept: &mut Kept) -> Vec<Row> {
+    let mut rows = match self.feed(kept) {
       None => self.home(),
-      Some(feed) => {
-        let room = self.feed_room();
-        let shown = feed.items().shown(feed.opened.top, room, |item| self.part_rows(&feed, item));
+      Some(mut feed) => {
+        let dock = feed.dock();
+        let room = self.feed_room(dock.len());
+        let items = feed.items();
+        let shown = items.shown(feed.opened.top, room, |item| feed.part_rows(item));
         let mut rows = vec![feed.head()];
         rows.extend(self.open_rows());
         let above = rows.len();
@@ -846,7 +838,7 @@ impl Model {
         for (y, row) in rows.iter_mut().enumerate().skip(above) {
           row.picture.take_if(|one| y + usize::from(one.high) > bottom);
         }
-        rows.extend(feed.dock());
+        rows.extend(dock);
         rows.extend(self.kit_rows());
         rows
       }
@@ -856,11 +848,10 @@ impl Model {
     rows
   }
 
-  /// How many rows the feed takes: the window less the head, the rows of an open, the dock and the
-  /// input.
-  pub(crate) fn feed_room(&self) -> usize {
-    let docked = self.feed().map_or(0, |feed| feed.dock().len() + self.kit_rows().len());
-    let taken = 1 + self.open_rows().len() + docked + self.input_rows();
+  /// How many rows the feed takes beside a dock of a count of rows: the window less the head, the
+  /// rows of an open, the dock, the rows of the kits and the input.
+  pub(crate) fn feed_room(&self, dock: usize) -> usize {
+    let taken = 1 + self.open_rows().len() + dock + self.kit_rows().len() + self.input_rows();
     usize::from(self.size.1).saturating_sub(taken)
   }
 

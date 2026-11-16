@@ -6,12 +6,9 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-#[cfg(test)]
-use std::cell::Cell;
 use std::{
-  cell::RefCell,
   collections::HashMap,
-  io,
+  io, mem,
   path::{Path, PathBuf},
   rc::Rc,
   time::Duration,
@@ -48,6 +45,18 @@ const PINNED: usize = 2;
 /// The rows of the left side, with the count of changes, the clock and the place of the pointer
 /// that they show.
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
+
+/// What the window keeps of each layout, so the next layout reads again only what changed: the
+/// colors and the names of each text of python, the code of each block by the message of its
+/// answer, and the rows of each part of the feed that it laid out, so a scroll lays out only the
+/// parts that come into sight.
+#[derive(Default)]
+pub(crate) struct Kept {
+  pub(crate) colors: Colors,
+  pub(crate) names: Names,
+  pub(crate) read: HashMap<String, Rc<Read>>,
+  pub(crate) parts: Parts,
+}
 
 /// The rows of each part of the feed, with the count of changes and the clock that they show.
 pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, Vec<thread::Row>>);
@@ -95,32 +104,25 @@ pub(crate) struct Model {
   pub(crate) fault: Option<String>,
   /// The last levels of the microphone while his voice records, from 0 to 100, the newest last.
   pub(crate) listening: Option<Vec<u8>>,
-  /// The colors of each text of python that the window drew.
-  pub(crate) colors: Colors,
-  /// The names of each text of python that the window read.
-  pub(crate) names: Names,
-  /// The code of each block that the window read, by the message of its answer.
-  pub(crate) read: RefCell<HashMap<String, Rc<Read>>>,
+  /// What the window keeps of each layout, which the next layout reads again.
+  pub(crate) kept: Kept,
   /// How many changes of what the left side shows the model heard: each change but a step of the
   /// clocks and a move of the pointer, which change no row of it but through the clock.
   pub(crate) changes: u64,
   /// The rows of the left side, with what they show: a layout costs the most of what the window
   /// does, and a step of the loaders or a move of the pointer takes them again.
-  pub(crate) laid: RefCell<Option<Laid>>,
+  pub(crate) laid: Option<Laid>,
   /// How many changes of what the parts of the feed show the model heard: each change of the left
   /// side but one that only scrolls the feed, which moves it and changes no part of it.
   pub(crate) shows: u64,
   /// Whether the change that the model hears only scrolled the feed.
   pub(crate) scrolled: bool,
-  /// The rows of each part of the feed that the window laid out, with what they show, so a scroll
-  /// lays out only the parts that come into sight.
-  pub(crate) parts: RefCell<Parts>,
   /// The count of changes for which the window last told the images and the whole outputs of the
   /// open thread.
   pub(crate) pictured: u64,
   /// How many times the left side was laid out, which a test of speed counts.
   #[cfg(test)]
-  pub(crate) layouts: Cell<u64>,
+  pub(crate) layouts: u64,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
@@ -173,23 +175,30 @@ impl Model {
       tokens,
       fault: None,
       listening: None,
-      colors: Colors::new(),
-      names: Names::default(),
-      read: RefCell::default(),
+      kept: Kept::default(),
       changes: 0,
-      laid: RefCell::default(),
+      laid: None,
       shows: 0,
       scrolled: false,
-      parts: RefCell::default(),
       pictured: 0,
       #[cfg(test)]
-      layouts: Cell::default(),
+      layouts: 0,
       armed: None,
       picker: None,
       review_top: 0,
       word: None,
       acts: None,
     }
+  }
+
+  /// A layout, on what the window keeps of the layouts before, which the next layout reads again.
+  pub(crate) fn laying<T>(&mut self, lay: impl FnOnce(&Self, &mut Kept) -> T) -> T {
+    // An empty `Kept` holds no allocation, so its place costs nothing while the layout reads the
+    // model whole.
+    let mut kept = mem::take(&mut self.kept);
+    let laid = lay(self, &mut kept);
+    self.kept = kept;
+    laid
   }
 
   /// One frame of the daemon of a machine, or the end of its connection: whether what the machine

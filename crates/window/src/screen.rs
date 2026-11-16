@@ -2,13 +2,14 @@
 //!
 //! A screen keeps a model: what the daemons told the window, and where the hand of the operator
 //! is. A part of the screen is two functions: one reads from the model the value that the part
-//! shows, and one puts a value on the widgets of the part. The second runs only when the value
+//! shows, which may keep in the model what the next read reads again, and one puts a value on the
+//! widgets of the part. The second runs only when the value
 //! changes. So a frame of a daemon that a part does not show costs that part one comparison: it
 //! touches no widget, and OpenTUI paints only the cells of the widgets that changed.
 
 /// A part of a screen as the screen keeps it: it reads the model, and draws when the value that
 /// it shows changed.
-type Part<M> = Box<dyn FnMut(&M)>;
+type Part<M> = Box<dyn FnMut(&mut M)>;
 
 /// A model, and the parts that show it.
 pub(crate) struct Screen<M> {
@@ -26,30 +27,34 @@ impl<M: 'static> Screen<M> {
   /// a value that differs from the one before.
   pub(crate) fn part<S: PartialEq + 'static>(
     &mut self,
-    shown: impl Fn(&M) -> S + 'static,
+    shown: impl Fn(&mut M) -> S + 'static,
     mut draw: impl FnMut(&S) + 'static,
   ) {
     let mut last = None;
-    let mut part = move |model: &M| {
+    let mut part = move |model: &mut M| {
       let now = shown(model);
       if last.as_ref() != Some(&now) {
         draw(&now);
         last = Some(now);
       }
     };
-    part(&self.model);
+    part(&mut self.model);
     self.parts.push(Box::new(part));
   }
 
   /// Parts that show one value, which `shown` reads from the model once for each change, as one
   /// part does: each part of `of` then reads its own value from it, by the same rule. A value that
   /// costs its parts much to read stands here once, not once for each part.
-  pub(crate) fn split<S: 'static>(&mut self, shown: impl Fn(&M) -> S + 'static, mut of: Screen<S>) {
-    let mut part = move |model: &M| {
+  pub(crate) fn split<S: 'static>(
+    &mut self,
+    shown: impl Fn(&mut M) -> S + 'static,
+    mut of: Screen<S>,
+  ) {
+    let mut part = move |model: &mut M| {
       let now = shown(model);
       of.tell(|value| *value = now);
     };
-    part(&self.model);
+    part(&mut self.model);
     self.parts.push(Box::new(part));
   }
 
@@ -57,7 +62,7 @@ impl<M: 'static> Screen<M> {
   pub(crate) fn tell<T>(&mut self, change: impl FnOnce(&mut M) -> T) -> T {
     let given = change(&mut self.model);
     for part in &mut self.parts {
-      part(&self.model);
+      part(&mut self.model);
     }
     given
   }

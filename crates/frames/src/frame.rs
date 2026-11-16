@@ -1,7 +1,7 @@
 //! A frame: the grid of a terminal at one moment, as rows of runs of one look. Its JSON is the one
 //! that each frame of the window and of another program takes, so one reader reads both.
 
-use std::{array, cell::RefCell, fs, path::Path};
+use std::{array, fs, path::Path};
 
 use opentui::{
   native::{Capture, Context, ContextOptions, WidthMethod},
@@ -31,8 +31,9 @@ pub(crate) const PALETTE: [u32; 16] = [
 ];
 
 thread_local! {
-  /// The native context that measures each character, made once for each thread that reads cells.
-  static MEASURE: RefCell<Option<Context>> = const { RefCell::new(None) };
+  /// The native context that measures each character, made at the first read of cells of each
+  /// thread. A thread where no native context stands measures each character as one cell.
+  static MEASURE: Option<Context> = Context::new(ContextOptions::default()).ok();
 }
 
 /// The cells that a text takes in a row: each character, a grapheme cluster, as the terminal of
@@ -46,10 +47,7 @@ fn cells_of(character: &str) -> usize {
   if character.is_ascii() {
     return character.len();
   }
-  MEASURE.with_borrow_mut(|measure| {
-    if measure.is_none() {
-      *measure = Context::new(ContextOptions::default()).ok();
-    }
+  MEASURE.with(|measure| {
     let measured =
       measure.as_ref().and_then(|one| one.text_width(character, WidthMethod::Unicode).ok());
     measured.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX))

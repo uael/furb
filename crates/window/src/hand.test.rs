@@ -109,7 +109,7 @@ fn card() -> Card {
 }
 
 fn layouts(window: &Window) -> u64 {
-  window.screen.model.layouts.get()
+  window.screen.model.layouts
 }
 
 /// A speed law: each change of what the window shows lays it out once, also the change that marks

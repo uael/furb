@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// The lines of a text of markdown in a count of columns, each from the column of the prose.
-pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -> Vec<Line> {
+pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &mut Colors) -> Vec<Line> {
   let mut prose = Prose {
     room,
     tokens,
@@ -57,7 +57,7 @@ pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -
 struct Prose<'a> {
   room: usize,
   tokens: &'a Tokens,
-  colors: &'a Colors,
+  colors: &'a mut Colors,
   out: Vec<Line>,
   words: Vec<Span<'static>>,
   styles: Vec<Style>,

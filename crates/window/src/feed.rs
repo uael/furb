@@ -4,12 +4,12 @@
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
 
-use std::{cell::OnceCell, collections::HashMap, mem, path::Path, rc::Rc};
+use std::{collections::HashMap, mem, path::Path, rc::Rc};
 
 use crate::cells::Cells;
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Retrying, Said, Saying, Standing,
-  Thought, Work, Written, homed, lines, operator, timer,
+  Thought, Work, homed, lines, operator, timer,
 };
 use furb::world::images;
 use furb_client::{
@@ -23,13 +23,13 @@ use opentui::style::{Color, Span, Style};
 
 use crate::{
   code::Gutter,
-  input::{Armed, named},
+  input::{Armed, named, writes},
   keys::Does,
   line::{
     self, BARRED, Line, barred, capital, clipped, marked, run, sliced, spread, styled, wrapped,
   },
   list::project,
-  model::Model,
+  model::{Kept, Model},
   names::{self, Named},
   picture, prose,
   question::{closed, person},
@@ -52,18 +52,20 @@ pub(crate) struct Feed<'a> {
   pub(crate) model: &'a Model,
   pub(crate) opened: &'a Opened,
   wide: usize,
+  /// What the window keeps of each layout, which this one reads and adds to.
+  kept: &'a mut Kept,
   /// The code of each block of the thread, once a row asks for the line that binds a name.
-  blocks: OnceCell<Vec<Rc<Read>>>,
+  blocks: Option<Vec<Rc<Read>>>,
   /// The last answer that wrote a file that furb knew before, once a row asks for it.
-  reverts: OnceCell<Option<(&'a str, Vec<&'a Written>)>>,
+  reverting: Option<&'a str>,
 }
 
 impl Model {
   /// The rows of the open thread.
-  pub(crate) fn feed(&self) -> Option<Feed<'_>> {
+  pub(crate) fn feed<'a>(&'a self, kept: &'a mut Kept) -> Option<Feed<'a>> {
     let opened = self.client.thread.as_ref()?;
-    let (wide, blocks, reverts) = (self.wide(), OnceCell::new(), OnceCell::new());
-    Some(Feed { model: self, opened, wide, blocks, reverts })
+    let reverting = self.reverting().map(|one| one.message.as_str());
+    Some(Feed { model: self, opened, wide: self.wide(), kept, blocks: None, reverting })
   }
 }
 
@@ -80,11 +82,28 @@ pub(crate) struct Read {
   binds: HashMap<String, Vec<usize>>,
 }
 
-impl Feed<'_> {
+impl<'a> Feed<'a> {
+  /// The rows of a part of the feed, laid out once for what it shows, so a scroll lays out only the
+  /// parts that come into sight.
+  pub(crate) fn part_rows(&mut self, item: Item) -> Vec<Row> {
+    let stamp = Some((self.model.shows, self.model.clock()));
+    if self.kept.parts.0 == stamp
+      && let Some(rows) = self.kept.parts.1.get(&item)
+    {
+      return rows.clone();
+    }
+    let rows = self.rows(item);
+    if self.kept.parts.0 != stamp {
+      self.kept.parts = (stamp, HashMap::new());
+    }
+    self.kept.parts.1.insert(item, rows.clone());
+    rows
+  }
+
   /// The rows of one part of the feed. The last part holds the way out of a pause that holds the
   /// thread, then each message of the operator that the thread does not show yet, then each
   /// follow-up that waits on the thread.
-  pub(crate) fn rows(&self, item: Item) -> Vec<Row> {
+  pub(crate) fn rows(&mut self, item: Item) -> Vec<Row> {
     let mut rows = match item {
       Item::Head => self.before(),
       Item::At(at) => {
@@ -172,7 +191,7 @@ impl Feed<'_> {
   /// The parts of the feed. The head shows until the first exchange of the thread is held, and
   /// holds the messages of a thread that the daemon did not make yet, and why a fault ended the
   /// life of the thread.
-  pub(crate) fn items(&self) -> Items<'_, Exchange> {
+  pub(crate) fn items(&self) -> Items<'a, Exchange> {
     let opened = self.opened;
     let head = self.ended() || opened.thread.fault.is_some() || opened.thread.above != Some(0);
     Items { held: &opened.thread.exchanges, head: head || opened.thread.exchanges.is_empty() }
@@ -381,7 +400,7 @@ impl Feed<'_> {
   /// The rows of one exchange: the message of the operator on its band, the block, the thought,
   /// and what the answer said. A word of Python that he ran is his message as code: its block on
   /// the band of his messages, with no head.
-  fn exchange(&self, at: usize, exchange: &Exchange) -> Vec<Row> {
+  fn exchange(&mut self, at: usize, exchange: &Exchange) -> Vec<Row> {
     let his = matches!(exchange.by, Maker::Operator | Maker::Member { .. });
     let mut rows = Vec::new();
     match &exchange.block {
@@ -404,12 +423,9 @@ impl Feed<'_> {
     // under its block or the band of his word, before the blank row that ends the block, to a
     // window that may write.
     let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
-    if let Some((message, writes)) = self.reverts.get_or_init(|| self.model.reverts())
-      && *message == exchange.message
-      && !reads
-    {
+    if self.reverting == Some(exchange.message.as_str()) && !reads {
       let mut files: Vec<&str> =
-        writes.iter().filter(|one| one.known).map(|one| &*one.path).collect();
+        writes(exchange).filter(|one| one.known).map(|one| &*one.path).collect();
       files.sort_unstable();
       files.dedup();
       let said = match files.as_slice() {
@@ -596,7 +612,7 @@ impl Feed<'_> {
   /// A word of Python that the operator ran: the lines of its block on the band of his messages,
   /// with the bar in the color of the thread and a blank row of the band above and under them, so
   /// his code reads as a message of his, and its numbers stand in the column of those of a model.
-  fn word(&self, message: &str, block: &Block) -> Vec<Row> {
+  fn word(&mut self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let bar = run("┃", Style::new().fg(self.model.hue(&self.opened.thread.key)).bg(t.raised));
     let blank = Row::of(self.boxed(Vec::new(), t.raised));
@@ -614,7 +630,7 @@ impl Feed<'_> {
   /// named, on the row above the box at its right, where the times of its lines end, then the
   /// window of seven rows that rolls, or each line once the operator opened it, each with its
   /// number in the thread, close to the left of the box. The thought stands under it.
-  fn block(&self, message: &str, block: &Block, named: bool) -> Vec<Row> {
+  fn block(&mut self, message: &str, block: &Block, named: bool) -> Vec<Row> {
     let maker =
       if named { vec![run(block.maker.shown(), self.style(Role::Muted))] } else { Vec::new() };
     let mut head = spread(Vec::new(), maker.clone(), Gutter::inside(self.inner()), Style::new());
@@ -635,7 +651,7 @@ impl Feed<'_> {
   /// its word stands, or each line once the operator opened it. A row above says how many lines
   /// stand above, and a row below how many follow, each a click that opens the block, or that
   /// more comes.
-  fn lines(&self, message: &str, block: &Block) -> Vec<Row> {
+  fn lines(&mut self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
     let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
@@ -647,14 +663,14 @@ impl Feed<'_> {
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
     let shown = block.shown(open);
-    let counted = |mark: &str, count: usize| {
+    let counted = |feed: &Self, mark: &str, count: usize| {
       let line = vec![run(format!("{mark:>gutter$}  {}", lines(count)), muted)];
-      Row::clicked(self.boxed(line, t.raised), Click::Fold(fold.clone()))
+      Row::clicked(feed.boxed(line, t.raised), Click::Fold(fold.clone()))
     };
     if open && block.rolls() {
-      rows.push(counted("▴", all));
+      rows.push(counted(self, "▴", all));
     } else if shown.start > 0 {
-      rows.push(counted("…", shown.start));
+      rows.push(counted(self, "…", shown.start));
     }
     let (follow, end) = (all - shown.end, shown.end);
     // A stop ends the answer, so each line under the line that it ended never ran: its code reads
@@ -675,7 +691,7 @@ impl Feed<'_> {
       rows.extend(self.agents(Some((line, numbers))));
     }
     if follow > 0 {
-      rows.push(counted("…", follow));
+      rows.push(counted(self, "…", follow));
     } else if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
@@ -684,10 +700,10 @@ impl Feed<'_> {
 
   /// The colors and the names of the code of a block, which a layout reads again only once a line
   /// of the block changed, so a layout of a long block costs a compare of its texts.
-  fn read(&self, message: &str, block: &Block) -> Rc<Read> {
+  fn read(&mut self, message: &str, block: &Block) -> Rc<Read> {
     let style = self.style(Role::Prose).bg(self.model.tokens.raised);
     let texts = || block.lines.iter().map(|one| one.text.as_str());
-    if let Some(read) = self.model.read.borrow().get(message)
+    if let Some(read) = self.kept.read.get(message)
       && read.style == style
       && read.lines.len() == block.lines.len()
       && read.lines.iter().map(String::as_str).eq(texts())
@@ -697,7 +713,7 @@ impl Feed<'_> {
     let lines: Vec<String> = texts().map(str::to_owned).collect();
     let text = lines.join("\n");
     let homed = self.model.homed(&text);
-    let (colors, names) = (self.model.colors.lines(&homed, style), self.model.names.of(&homed));
+    let (colors, names) = (self.kept.colors.lines(&homed, style), self.kept.names.of(&homed));
     let mut binds: HashMap<String, Vec<usize>> = HashMap::new();
     for (line, named) in block.lines.iter().zip(names.iter()) {
       for one in named.iter().filter(|one| one.binds) {
@@ -705,13 +721,12 @@ impl Feed<'_> {
       }
     }
     let read = Rc::new(Read { lines, style, colors, names, binds });
-    let mut kept = self.model.read.borrow_mut();
     // A name of a line asks for the code of each block of the thread, so the window forgets none of
     // them while it holds more blocks than its bound: else each layout would read them all again.
-    if kept.len() >= READ.max(self.opened.thread.exchanges.len()) {
-      kept.clear();
+    if self.kept.read.len() >= READ.max(self.opened.thread.exchanges.len()) {
+      self.kept.read.clear();
     }
-    kept.insert(message.to_owned(), Rc::clone(&read));
+    self.kept.read.insert(message.to_owned(), Rc::clone(&read));
     read
   }
 
@@ -722,7 +737,7 @@ impl Feed<'_> {
   /// stands under it, and the time that the command took at its right, from one second on. Why a
   /// line failed, or why its model is asked again, stands under it, or in its place when its model
   /// wrote none of it.
-  fn code(&self, line: &Code, (colors, names): (Line, &[Named]), numbers: Gutter) -> Vec<Row> {
+  fn code(&mut self, line: &Code, (colors, names): (Line, &[Named]), numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, Gutter::inside(self.inner()));
     let mark = self.mark(line);
@@ -793,7 +808,7 @@ impl Feed<'_> {
   /// a click on it does: a call of `prompt` that made an agent opens the thread of that agent, as a
   /// change to the chain that runs it, and a name that an earlier line of the thread binds goes to
   /// that line. The terminal keeps the command key for itself, so the click needs none.
-  fn name(&self, row: &mut Row, (line, names): (&Code, &[Named]), gutter: usize) {
+  fn name(&mut self, row: &mut Row, (line, names): (&Code, &[Named]), gutter: usize) {
     let code = PAD + gutter + 2;
     let end = marked(&row.line).map_or(width(&row.line), |one| one.start);
     let agents: Vec<&Agent> =
@@ -830,12 +845,13 @@ impl Feed<'_> {
   }
 
   /// The last line of the thread before a line that binds a name.
-  fn bound(&self, name: &str, before: usize) -> Option<usize> {
-    let blocks = self.blocks.get_or_init(|| {
+  fn bound(&mut self, name: &str, before: usize) -> Option<usize> {
+    if self.blocks.is_none() {
       let exchanges = self.opened.thread.exchanges.values();
-      exchanges.filter_map(|one| Some(self.read(&one.message, one.block.as_ref()?))).collect()
-    });
-    let binds = blocks.iter().filter_map(|one| one.binds.get(name));
+      let read = exchanges.filter_map(|one| Some(self.read(&one.message, one.block.as_ref()?)));
+      self.blocks = Some(read.collect());
+    }
+    let binds = self.blocks.iter().flatten().filter_map(|one| one.binds.get(name));
     binds.flatten().copied().filter(|one| *one < before).max()
   }
 
@@ -901,7 +917,7 @@ impl Feed<'_> {
 
   /// How a line stands: a line that the record left at work in a life that a fault ended works no
   /// more.
-  fn mark<'a>(&self, line: &'a Code) -> &'a Mark {
+  fn mark<'c>(&self, line: &'c Code) -> &'c Mark {
     match &line.mark {
       Mark::Runs { .. } | Mark::Retries(_) if self.ended() => &Mark::Ran,
       mark => mark,
@@ -1022,7 +1038,7 @@ impl Feed<'_> {
   /// diff of the last file, each line in the color of what it does on the ground of its change,
   /// and how many lines follow. A write of a file that the life did not know says how many lines it
   /// wrote. A block that rolls keeps a row for each file, so a diff never takes its rows.
-  fn writes(&self, line: &Code, numbers: Gutter, (fold, open): (&Fold, bool)) -> Vec<Row> {
+  fn writes(&mut self, line: &Code, numbers: Gutter, (fold, open): (&Fold, bool)) -> Vec<Row> {
     let (gutter, inner) = (numbers.width, Gutter::inside(self.inner()));
     // A file stands under the line as each other row under a line, after its lead, and its diff
     // under the file, in the column of its path.
@@ -1064,7 +1080,7 @@ impl Feed<'_> {
       .map(|one| one.get(1..).unwrap_or_default())
       .collect();
     let prose = self.style(Role::Prose);
-    let colored = python.then(|| self.model.colors.lines(&code.join("\n"), prose));
+    let colored = python.then(|| self.kept.colors.lines(&code.join("\n"), prose));
     let mut at = 0;
     for text in &last.diff {
       let (sign, ground) = match text.as_bytes().first() {
@@ -1160,7 +1176,7 @@ impl Feed<'_> {
   /// mark: its first line while it waits, then what closed it. While its form shows it whole, the
   /// form is its one place, and the feed shows none of it. A resolve by a person is one quiet row
   /// that says who resolved it, as a question says who closed it.
-  fn said(&self, said: &Said) -> Vec<Row> {
+  fn said(&mut self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
     let login = &self.model.client.machines[self.opened.thread.key.0].login;
     if let Saying::Resolved { by } = &said.kind {
@@ -1194,7 +1210,7 @@ impl Feed<'_> {
       &self.model.homed(&said.text),
       self.wide.saturating_sub(4),
       t,
-      &self.model.colors,
+      &mut self.kept.colors,
     );
     let mut rows: Vec<Row> = lines
       .into_iter()
@@ -1209,7 +1225,7 @@ impl Feed<'_> {
 
   /// The dock of the agents of the thread that no line of a block made, with a blank row above
   /// and under them.
-  pub(crate) fn dock(&self) -> Vec<Row> {
+  pub(crate) fn dock(&mut self) -> Vec<Row> {
     let mut rows = self.agents(None);
     if !rows.is_empty() {
       rows.insert(0, Row::default());
@@ -1222,7 +1238,7 @@ impl Feed<'_> {
   /// the dock across the thread: from the first that does not rest to the last, so an agent that
   /// ends among others that work keeps its row with its mark, and one row that counts the agents
   /// before them. A click on an agent opens its thread in place.
-  fn agents(&self, under: Option<(&Code, Gutter)>) -> Vec<Row> {
+  fn agents(&mut self, under: Option<(&Code, Gutter)>) -> Vec<Row> {
     let (done, shown) = self.opened.made(under.map(|(line, _)| line.number));
     // A line whose acts are its agents alone says what each came to in their order.
     let gave = under
@@ -1271,7 +1287,7 @@ impl Feed<'_> {
   /// the line that made it, which says its prompt already, the row stands in the box at the column
   /// of the code, and says the line where the agent stands while it has one, the last line of its
   /// thought while its model only thinks, the value that it gave once it rests, and else its title.
-  fn agent(&self, agent: &Agent, under: Option<(Gutter, Option<&str>)>) -> Row {
+  fn agent(&mut self, agent: &Agent, under: Option<(Gutter, Option<&str>)>) -> Row {
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
     let (mark, right) = self.status(agent);
     // The line that its model has not begun to write says nothing that its state does not say.
@@ -1308,7 +1324,7 @@ impl Feed<'_> {
     let room = Gutter::inside(self.inner());
     let gave = value
       .filter(|_| rest)
-      .and_then(|value| self.model.colors.lines(value, muted).first().cloned());
+      .and_then(|value| self.kept.colors.lines(value, muted).first().cloned());
     let text = stands.or(gave).unwrap_or(title);
     let left = lead.into_iter().chain(clipped(text, room, muted)).collect();
     let line = spread(left, right.clone(), room, Style::new());

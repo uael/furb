@@ -30,7 +30,7 @@ pub(crate) struct Transcribed {
 
 impl Model {
   /// The transcript, while one stands.
-  pub(crate) fn transcribing(&self) -> Option<Transcribed> {
+  pub(crate) fn transcribing(&mut self) -> Option<Transcribed> {
     let transcript = self.client.transcript.as_ref()?;
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
@@ -60,7 +60,7 @@ impl Model {
         ],
         None,
       );
-      let lines = self.colors.lines(&self.homed(&piece.text), prose);
+      let lines = self.kept.colors.lines(&self.homed(&piece.text), prose);
       let open = transcript.unfolded.contains(at);
       let folds_here = lines.len() > FOLDS;
       let count = if folds_here && !open { SHOWS } else { lines.len() };

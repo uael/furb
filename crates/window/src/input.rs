@@ -5,7 +5,9 @@
 use std::{mem, ops::Range, path::Path};
 
 use crate::cells::Cells;
-use furb::view::{Act, Maker, RunState, Standing, Written, operator, reason, said, timer};
+use furb::view::{
+  Act, Exchange, Maker, RunState, Standing, Written, operator, reason, said, timer,
+};
 use furb_host::protocol::{Answer, Card, Frame, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
@@ -94,6 +96,11 @@ pub(crate) struct Area {
 
 /// The columns of a prompt of the interpreter before a line of a word of Python: `>>> ` or `... `.
 const PROMPT_WIDTH: usize = 4;
+
+/// Each file that the lines of an answer wrote.
+pub(crate) fn writes(exchange: &Exchange) -> impl Iterator<Item = &Written> {
+  exchange.block.iter().flat_map(|block| &block.lines).flat_map(|line| &line.writes)
+}
 
 impl Model {
   /// The text of the input sent to its target, as the client sends it: whether it went, and else
@@ -227,21 +234,17 @@ impl Model {
     Some((at, Verb::Resolve { life, thread }))
   }
 
-  /// The writes of the last answer of the open thread that wrote a file that the life knew before
-  /// it, with the message of that answer: what a revert writes back.
-  pub(crate) fn reverts(&self) -> Option<(&str, Vec<&Written>)> {
+  /// The last answer of the open thread that wrote a file that the life knew before it: what a
+  /// revert writes back.
+  pub(crate) fn reverting(&self) -> Option<&Exchange> {
     let opened = self.client.thread.as_ref()?;
-    opened.thread.exchanges.values().rev().find_map(|exchange| {
-      let lines = exchange.block.iter().flat_map(|block| &block.lines);
-      let writes: Vec<&Written> = lines.flat_map(|line| &line.writes).collect();
-      writes.iter().any(|one| one.known).then_some((exchange.message.as_str(), writes))
-    })
+    opened.thread.exchanges.values().rev().find(|one| writes(one).any(|one| one.known))
   }
 
   /// The revert of the files that the last answer of the open thread wrote, as a word of his on the
   /// thread. A file that furb knew before none of its writes stays, and the window says so.
   pub(crate) fn revert(&mut self) -> Option<(usize, Verb)> {
-    let Some((_, writes)) = self.reverts() else {
+    let Some(writes) = self.reverting().map(|one| writes(one).collect::<Vec<_>>()) else {
       self.client.notice = Some("No answer here wrote a file that furb knew before.".to_owned());
       return None;
     };

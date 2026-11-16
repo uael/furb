@@ -40,7 +40,7 @@ use furb_client::{ASIDE, Anchor, Asked, CD, Folded, Pasted, Picture, Where, ment
 
 use crate::{
   Machine, Options, Screen, cells,
-  code::syntax,
+  code::theme,
   input::{Armed, LEVELS},
   kept,
   keys::{self, Does},
@@ -362,9 +362,9 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
 
   let mut screen = Screen::new(model);
   staged(&mut screen, &stage);
-  let mut left = Screen::new(sides(&screen.model));
+  let mut left = Screen::new(sides(&mut screen.model));
   left.part(
-    |sides: &Sides| sides.rows.clone(),
+    |sides: &mut Sides| sides.rows.clone(),
     move |lines| {
       home.set_text(written(lines));
     },
@@ -373,18 +373,24 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   loaded(app, &stage, &mut left);
   imaged(app, &stage, &mut left);
   screen.split(sides, left);
-  screen.part(Model::list, move |lines| {
-    list.set_text(written(lines));
-  });
-  screen.part(Model::listed, {
+  screen.part(
+    |model| model.list(),
+    move |lines| {
+      list.set_text(written(lines));
+    },
+  );
+  screen.part(|model| model.listed(), {
     let side = side.clone();
     move |listed| {
       side.visible(*listed);
     }
   });
-  screen.part(Model::panel_width, move |width| {
-    side.width(*width);
-  });
+  screen.part(
+    |model| model.panel_width(),
+    move |width| {
+      side.width(*width);
+    },
+  );
   completion(app, &stage, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
   reviewed(app, &mut screen, &tokens, (scroll, diff));
@@ -422,7 +428,7 @@ struct Sides {
   pictures: Vec<Drawn>,
 }
 
-fn sides(model: &Model) -> Sides {
+fn sides(model: &mut Model) -> Sides {
   let left = model.left();
   let frame = |spot: Spot| {
     let color = spot.style.fg.unwrap_or(model.tokens.accent);
@@ -451,7 +457,7 @@ fn loaded(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   for cell in &cells {
     stage.child(cell);
   }
-  let frames = |sides: &Sides| sides.loaders.clone();
+  let frames = |sides: &mut Sides| sides.loaders.clone();
   screen.part(frames, move |shown| {
     for (at, cell) in cells.iter().enumerate() {
       match shown.get(at) {
@@ -489,7 +495,7 @@ fn imaged(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   for (view, _) in &views {
     stage.child(view);
   }
-  let shown = |sides: &Sides| sides.pictures.clone();
+  let shown = |sides: &mut Sides| sides.pictures.clone();
   screen.part(shown, move |shown| {
     for (at, (view, loaded)) in views.iter_mut().enumerate() {
       let Some(Drawn(boxed, bytes)) = shown.get(at) else {
@@ -509,9 +515,12 @@ fn imaged(app: &App, stage: &View, screen: &mut Screen<Sides>) {
 /// leaves it.
 fn staged(screen: &mut Screen<Model>, stage: &View) {
   let stage = stage.position(Edge::Left, 0);
-  screen.part(Model::wide, move |wide| {
-    stage.width(u16::try_from(*wide).unwrap_or(u16::MAX));
-  });
+  screen.part(
+    |model| model.wide(),
+    move |wide| {
+      stage.width(u16::try_from(*wide).unwrap_or(u16::MAX));
+    },
+  );
 }
 
 /// The review of the changes of a project over the whole window, while one stands, in the frame of
@@ -521,7 +530,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let (scroll, diff) = shown;
   let text = || Text::new(app, "").wrap(WrapMode::None);
   let (head, side, foot) = (text(), text(), text());
-  let diff = diff.line_numbers(true).colors(tokens.diff()).syntax_theme(syntax());
+  let diff = diff.line_numbers(true).colors(tokens.diff()).syntax_theme(theme().clone());
   // The marks of the sub threads stand in a column beside the diff, so they scroll with it.
   let marks = Text::new(app, "").wrap(WrapMode::None).width(u32::from(MARKS)).shrink(0.0);
   let rows = View::new(app).row().child(&marks).child(&diff.grow(1.0));
@@ -529,13 +538,16 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let note = Text::new(app, "").absolute().wrap(WrapMode::None).z_index(1).visible(false);
   let note = note.position(Edge::Left, MARKS).position(Edge::Right, 0);
   let scroll = scroll.child(&View::new(app).child(&rows).child(&note));
-  screen.part(Model::commenting, move |shown| {
-    note.visible(shown.is_some());
-    if let Some((row, lines)) = shown {
-      note.position(Edge::Top, *row);
-      note.set_text(written(lines));
-    }
-  });
+  screen.part(
+    |model| model.commenting(),
+    move |shown| {
+      note.visible(shown.is_some());
+      if let Some((row, lines)) = shown {
+        note.position(Edge::Top, *row);
+        note.set_text(written(lines));
+      }
+    },
+  );
   let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
   let panel = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
@@ -547,7 +559,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 0);
   let page = page.child(&head).child(&scroll).child(&foot).child(&panel);
   app.root().child(&page.z_index(3).visible(false));
-  let reviewing = |model: &Model| (model.reviewing(), model.panel_width());
+  let reviewing = |model: &mut Model| (model.reviewing(), model.panel_width());
   screen.part(reviewing, move |(shown, width)| {
     page.visible(shown.is_some());
     panel.width(*width);
@@ -570,14 +582,17 @@ fn completion(app: &App, stage: &View, screen: &mut Screen<Model>, tokens: &Toke
   let rows = Text::new(app, "").wrap(WrapMode::None);
   let part = View::new(app).absolute().bg(tokens.raised).child(&rows);
   stage.child(&part.z_index(1).visible(false));
-  screen.part(Model::drawn_completion, move |shown| {
-    part.visible(shown.is_some());
-    if let Some((x, y, width, lines)) = shown {
-      let height = u16::try_from(lines.len()).unwrap_or_default();
-      part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
-      rows.set_text(written(lines));
-    }
-  });
+  screen.part(
+    |model| model.drawn_completion(),
+    move |shown| {
+      part.visible(shown.is_some());
+      if let Some((x, y, width, lines)) = shown {
+        let height = u16::try_from(lines.len()).unwrap_or_default();
+        part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
+        rows.set_text(written(lines));
+      }
+    },
+  );
 }
 
 /// The list part over each other widget, on a veil that dims the whole window, while one is open.
@@ -587,15 +602,18 @@ fn veiled(app: &App, screen: &mut Screen<Model>, tokens: &Tokens) {
   let rows = Text::new(app, "").wrap(WrapMode::None);
   let part = View::new(app).absolute().bg(tokens.raised).child(&rows);
   app.root().child(&veil.z_index(1).visible(false)).child(&part.z_index(2).visible(false));
-  screen.part(Model::drawn_over, move |over| {
-    veil.visible(over.is_some());
-    part.visible(over.is_some());
-    if let Some((x, y, width, lines)) = over {
-      let height = u16::try_from(lines.len()).unwrap_or_default();
-      part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
-      rows.set_text(written(lines));
-    }
-  });
+  screen.part(
+    |model| model.drawn_over(),
+    move |over| {
+      veil.visible(over.is_some());
+      part.visible(over.is_some());
+      if let Some((x, y, width, lines)) = over {
+        let height = u16::try_from(lines.len()).unwrap_or_default();
+        part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
+        rows.set_text(written(lines));
+      }
+    },
+  );
 }
 
 /// The lines of a text widget, one row each.
@@ -613,24 +631,31 @@ fn placed(app: &App, stage: &View, screen: &mut Screen<Model>, area: &Textarea) 
   let tokens = screen.model.tokens;
   let ghost = Text::new(app, "").absolute().wrap(WrapMode::None).z_index(1).visible(false);
   stage.child(&ghost);
-  screen.part(Model::ghost, move |shown| match shown {
-    Some((x, y, rest)) => {
-      let ghost = ghost.position(Edge::Left, *x).position(Edge::Top, *y);
-      ghost.set_text(vec![Span::styled(rest.clone(), tokens.style(Role::Muted).bg(tokens.raised))]);
-      ghost.visible(true);
-    }
-    None => {
-      ghost.visible(false);
-    }
-  });
+  screen.part(
+    |model| model.ghost(),
+    move |shown| match shown {
+      Some((x, y, rest)) => {
+        let ghost = ghost.position(Edge::Left, *x).position(Edge::Top, *y);
+        ghost
+          .set_text(vec![Span::styled(rest.clone(), tokens.style(Role::Muted).bg(tokens.raised))]);
+        ghost.visible(true);
+      }
+      None => {
+        ghost.visible(false);
+      }
+    },
+  );
   let (area, focus) = (area.clone(), app.clone());
-  screen.part(Model::area, move |shown| {
-    let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
-    let area = area.width(shown.width).height(shown.height).placeholder(&shown.placeholder);
-    if area.visible(shown.shown).is_visible() {
-      focus.focus(&area);
-    }
-  });
+  screen.part(
+    |model| model.area(),
+    move |shown| {
+      let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
+      let area = area.width(shown.width).height(shown.height).placeholder(&shown.placeholder);
+      if area.visible(shown.shown).is_visible() {
+        focus.focus(&area);
+      }
+    },
+  );
 }
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
@@ -705,9 +730,11 @@ fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
 /// The images and the whole outputs of commands that the open thread shows, which the client asks
 /// of their machine.
 fn shown(model: &mut Model) {
-  let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
+  let shown = model.laying(|model, kept| {
+    model.feed(kept).map(|feed| (feed.pictures(), feed.wholes())).unwrap_or_default()
+  });
+  let (pictures, wholes) = shown;
   model.client.show_pictures(pictures);
-  let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
   model.client.show_wholes(&wholes);
 }
 
@@ -1722,7 +1749,9 @@ impl Window {
   /// The feed a page up or down. A page keeps two rows of the screen before it in view.
   fn paged(&mut self, app: &App, up: bool) {
     let verb = self.tell(app, |model| {
-      let rows = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
+      let room =
+        model.laying(|model, kept| Some(model.feed_room(model.feed(kept)?.dock().len())))?;
+      let rows = isize::try_from(room).unwrap_or_default() - 2;
       model.scroll_feed(if up { -rows } else { rows })
     });
     self.older(verb);
@@ -1947,7 +1976,9 @@ impl Window {
     }
     let plain = model.tokens.style(Role::Prose);
     let mut offset = 0;
-    for (row, line) in model.colors.lines(&model.client.draft.text, plain).iter().enumerate() {
+    let model = &mut self.screen.model;
+    let lines = model.kept.colors.lines(&model.client.draft.text, plain);
+    for (row, line) in lines.iter().enumerate() {
       offset += u32::from(row > 0);
       for one in line {
         let wide = u32::try_from(one.content.width()).unwrap_or_default();
@@ -2306,8 +2337,7 @@ impl Window {
     };
     // The wheel with a modifier zooms the bar of the time, where the pointer stands on its track.
     let zooms = !event.modifiers.is_empty() && {
-      let model = &self.screen.model;
-      let row = model.left_rows().into_iter().nth(usize::from(event.y));
+      let row = self.screen.model.left_rows().into_iter().nth(usize::from(event.y));
       matches!(row.and_then(|one| one.click(usize::from(event.x))), Some(Click::Time(_)))
     };
     (!zooms && !self.screen.model.on_list(event.x)).then_some(by)

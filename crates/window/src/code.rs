@@ -1,7 +1,7 @@
 //! The colors of the code of a thread: the grammar of python reads each block whole, so each
 //! statement takes its colors from its whole text and not from the line that a window shows.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc, sync::LazyLock};
 
 use opentui::{
   prelude::Span,
@@ -38,52 +38,55 @@ impl Gutter {
 /// How many texts the colors keep before they forget them all.
 const KEPT: usize = 256;
 
+/// The colors of code by the name of a capture of its grammar, from [`SYNTAX`]: a name that it
+/// does not hold takes the color of its longest part that it holds, or the text. The grammar of
+/// python, which each widget of the window reads too, as the diff of a review, stands first.
+static THEME: LazyLock<SyntaxTheme> = LazyLock::new(|| {
+  let python = Grammar::new(tree_sitter_python::LANGUAGE, tree_sitter_python::HIGHLIGHTS_QUERY);
+  // A grammar that does not compile leaves each text of python in the color of the text, as a
+  // text that the grammar cannot read.
+  register("python", python).ok();
+  SYNTAX.iter().map(|&(name, color)| (name, Style::new().fg(Color::hex(color)))).collect()
+});
+
+/// The theme of the code of the window, with the grammar of python registered.
+pub(crate) fn theme() -> &'static SyntaxTheme {
+  &THEME
+}
+
 /// The colors of each text of python that the window read, so a frame that shows a block again
 /// reads no grammar.
+#[derive(Default)]
 pub(crate) struct Colors {
-  theme: SyntaxTheme,
-  kept: RefCell<HashMap<String, Rc<Vec<Line>>>>,
+  kept: HashMap<String, Rc<Vec<Line>>>,
 }
 
 impl Colors {
-  /// The colors, with the grammar of python that each widget of the window reads too, as the diff
-  /// of a review.
-  #[expect(
-    clippy::expect_used,
-    reason = "the grammar of python of the build compiles, as each colored block of a test shows"
-  )]
-  pub(crate) fn new() -> Self {
-    let python = Grammar::new(tree_sitter_python::LANGUAGE, tree_sitter_python::HIGHLIGHTS_QUERY);
-    register("python", python).expect("the grammar of python that the build holds compiles");
-    Self { theme: syntax(), kept: RefCell::default() }
-  }
-
   /// The lines of a text of python, each as its runs on a ground. A text that the grammar cannot
   /// read shows in the color of the text.
-  pub(crate) fn lines(&self, text: &str, plain: Style) -> Rc<Vec<Line>> {
+  pub(crate) fn lines(&mut self, text: &str, plain: Style) -> Rc<Vec<Line>> {
     self.coded(text, "python", plain)
   }
 
   /// The lines of a text of a language that the grammars of the window read, as a name of a file
   /// type, `python` or `rust`, each as its runs on a ground. A text of a language that no grammar
   /// reads shows in the color of the text.
-  pub(crate) fn coded(&self, text: &str, language: &str, plain: Style) -> Rc<Vec<Line>> {
+  pub(crate) fn coded(&mut self, text: &str, language: &str, plain: Style) -> Rc<Vec<Line>> {
     let key = format!("{language}{plain:?}{text}");
-    if let Some(kept) = self.kept.borrow().get(&key) {
+    if let Some(kept) = self.kept.get(&key) {
       return Rc::clone(kept);
     }
-    let lines = Rc::new(self.read(text, language, plain));
-    let mut kept = self.kept.borrow_mut();
-    if kept.len() >= KEPT {
-      kept.clear();
+    let lines = Rc::new(Self::read(text, language, plain));
+    if self.kept.len() >= KEPT {
+      self.kept.clear();
     }
-    kept.insert(key, Rc::clone(&lines));
+    self.kept.insert(key, Rc::clone(&lines));
     lines
   }
 
-  fn read(&self, text: &str, language: &str, plain: Style) -> Vec<Line> {
+  fn read(text: &str, language: &str, plain: Style) -> Vec<Line> {
     let spans =
-      highlight(text, language, &self.theme).unwrap_or_else(|| vec![Span::raw(text.to_owned())]);
+      highlight(text, language, theme()).unwrap_or_else(|| vec![Span::raw(text.to_owned())]);
     let mut lines: Vec<Line> = vec![Vec::new()];
     for span in spans {
       // `prompt` is the one call that a model answers, where all else runs as written, so it
@@ -103,10 +106,4 @@ impl Colors {
     }
     lines
   }
-}
-
-/// The colors of code by the name of a capture of its grammar, from [`SYNTAX`]: a name that it
-/// does not hold takes the color of its longest part that it holds, or the text.
-pub(crate) fn syntax() -> SyntaxTheme {
-  SYNTAX.iter().map(|&(name, color)| (name, Style::new().fg(Color::hex(color)))).collect()
 }
