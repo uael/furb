@@ -17,16 +17,19 @@ use crate::protocol::{Change, Changed, Changes};
 /// How long git may take to answer, past which the daemon says that it did not.
 const BOUND: Duration = Duration::from_secs(10);
 
-/// The changes of the checkout that holds a folder, with the diff of the file at a path from its
-/// top when one is named: none in a folder that no checkout holds.
+/// The changes of the checkout that holds a folder, in that folder alone, with the diff of the file
+/// at a path from its top when one is named: none in a folder that no checkout holds. A folder deep
+/// in a large checkout names none of the files of the rest of it, as a project in a folder that a
+/// checkout of many other projects holds.
 pub(crate) async fn changes(folder: &Path, path: Option<&str>) -> Result<Changes, String> {
-  let status = ["status", "--porcelain=v1", "-z", "--branch", "--untracked-files=all"];
+  let status = ["status", "--porcelain=v1", "-z", "--branch", "--untracked-files=all", "--", "."];
   let Some(status) = git(folder, &status).await? else {
     return Ok(Changes::default());
   };
   let (branch, mut files) = statused(&status);
   // A checkout with no commit has no head to count against: each file is new there.
-  let counts = git(folder, &["diff", "HEAD", "--numstat", "-z"]).await?.unwrap_or_default();
+  let counts =
+    git(folder, &["diff", "HEAD", "--numstat", "-z", "--", "."]).await?.unwrap_or_default();
   let top = git(folder, &["rev-parse", "--show-toplevel"]).await?.unwrap_or_default();
   let top = PathBuf::from(top.trim());
   for (path, added, removed) in counted(&counts) {

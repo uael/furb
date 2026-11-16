@@ -310,12 +310,20 @@ async fn told<W: AsyncWrite + Unpin>(
   }
 }
 
-/// One frame written to a peer, as one line.
+/// One frame written to a peer, as one line. An answer past [`BOUND`] goes as its refusal, since
+/// the peer reads no line past it and closes the connection.
 async fn send<W: AsyncWrite + Unpin>(
   out: &mut FramedWrite<W, LinesCodec>,
   frame: &Frame,
 ) -> Result<(), TransportError> {
-  Ok(out.send(serde_json::to_string(frame)?).await?)
+  let line = serde_json::to_string(frame)?;
+  let line = match frame {
+    Frame::Reply { id, .. } if line.len() > BOUND => {
+      serde_json::to_string(&Frame::refused(Some(*id), ProtocolError::Large { bound: BOUND }))?
+    }
+    _ => line,
+  };
+  Ok(out.send(line).await?)
 }
 
 /// The refusal that closes a peer, written before its stream closes.

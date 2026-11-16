@@ -625,8 +625,10 @@ fn keep(app: &App, window: &Shared) {
       held.keeps = false;
       kept::keep(&held.kept, &held.screen.model.client.machines)
     };
-    let fault = written.err().map(|fault| format!("The cards are not kept: {fault}"));
-    tell(cx.app(), &on, |model| model.fault = fault);
+    // A write that works leaves a fault that the window shows, until he reads it.
+    if let Err(fault) = written {
+      tell(cx.app(), &on, |model| model.fault = Some(format!("The cards are not kept: {fault}")));
+    }
   });
 }
 
@@ -647,8 +649,11 @@ fn stashed(app: &App, window: &Shared, does: Does) {
     let held = window.borrow();
     kept::keep(&kept::stash_of(&held.kept), &held.screen.model.client.stash)
   };
-  let fault = written.err().map(|fault| format!("The emptied drafts are not kept: {fault}"));
-  tell(app, window, |model| model.fault = fault);
+  if let Err(fault) = written {
+    tell(app, window, |model| {
+      model.fault = Some(format!("The emptied drafts are not kept: {fault}"));
+    });
+  }
 }
 
 /// What the open thread said last, copied to the clipboard of the system or of the terminal, with

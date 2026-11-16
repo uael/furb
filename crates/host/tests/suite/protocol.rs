@@ -753,6 +753,33 @@ async fn a_kit_of_the_first_version_reads_a_page_as_its_version_said_it() {
   }
 }
 
+/// A daemon that answers each verb with an act whose name holds more than a peer reads in a line.
+struct Huge;
+
+impl Host for Huge {
+  fn answer(
+    &self,
+    _: &Peer,
+    _: Verb,
+    _: &Outbox,
+  ) -> impl Future<Output = Result<Answer, ProtocolError>> + Send {
+    future::ready(Ok(Answer::Act("x".repeat(BOUND))))
+  }
+}
+
+#[tokio::test]
+async fn an_answer_past_the_bound_goes_as_its_refusal_and_the_peer_stays() {
+  let (ours, theirs) = duplex(1 << 16);
+  let who = Who { operator: "uael".to_owned(), role: Role::Read };
+  tokio::spawn(async move { serve(&Huge, theirs, who, fixed(Role::Read)).await });
+  let mut client = Client { lines: BufReader::new(ours) };
+  client.hello_as(PROTOCOL, Kind::Window, None).await;
+  for id in [1, 2] {
+    let refused = Frame::refused(Some(id), ProtocolError::Large { bound: BOUND });
+    assert_eq!(client.ask(id, Verb::List { config: None }).await, refused);
+  }
+}
+
 /// Each value of the protocol of now that a kit of the first version did not know, with what the
 /// daemon does for that kit: `Frame::told_to` maps each value that a kit can read, and the rest
 /// never reaches a kit of that version.

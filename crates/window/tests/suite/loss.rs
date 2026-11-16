@@ -4,7 +4,7 @@
 
 #![cfg(all(test, unix))]
 
-use std::fs::File;
+use std::{fs::File, time::Duration};
 
 use furb_window::open;
 
@@ -43,6 +43,10 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_before_his_draft_and_a
   daemon.back(&again);
   daemon.served();
   shows(&app, "This computer");
+  // The window keeps the cards that the machine tells again, and his notice stays until he acts.
+  app.advance(Duration::from_secs(2));
+  let kept = shows(&app, "This computer");
+  assert!(kept.contains("mac went away before it took your message."), "{kept}");
 }
 
 #[test]

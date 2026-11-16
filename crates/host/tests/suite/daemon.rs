@@ -3417,6 +3417,27 @@ async fn the_changes_of_a_checkout_give_its_branch_its_files_with_their_counts_a
 }
 
 #[tokio::test]
+async fn the_changes_of_a_folder_deep_in_a_checkout_name_the_files_of_that_folder_alone() {
+  use furb_host::protocol::{Change, Changed, Changes};
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let top = at.join("projects");
+  fs::create_dir_all(top.join("life")).unwrap();
+  fs::create_dir_all(top.join("target")).unwrap();
+  let done = process::Command::new("git").arg("-C").arg(&top).args(["init", "-q"]).output();
+  assert!(done.unwrap().status.success());
+  fs::write(top.join("life/notes.txt"), "one\ntwo\n").unwrap();
+  fs::write(top.join("target/build.o"), "a build of another project\n").unwrap();
+  let cwd = top.join("life").display().to_string();
+  let asked = window.ask(Verb::Changes { cwd, path: None }).await;
+  let Ok(Answer::Changes(Changes { files, .. })) = asked else { panic!("{asked:?}") };
+  let notes =
+    Changed { path: "life/notes.txt".to_owned(), added: 2, removed: 0, state: Change::Untracked };
+  assert_eq!(files, [notes]);
+}
+
+#[tokio::test]
 async fn the_changes_name_a_branch_with_no_commit_and_none_when_detached_and_count_a_rename_and_a_binary()
  {
   use furb_host::protocol::{Change, Changed, Changes};
