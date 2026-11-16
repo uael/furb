@@ -2305,6 +2305,24 @@ async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears
     assert await asyncio.wait_for(engine.prompt(int, "n", on=root), 2) == 3
     return repr(engine.peek(engine.module(root)["r"])), [repr(x) for x in log[at:] if x[0] != "keep"]
 
+  class Raw(Sand):
+    def standing(self) -> list | Refused:
+      return self.stands
+
+  async def stood(first: list, *standings: list) -> tuple[list[str], list[str]]:
+    sand = Raw(files=dict(TAUGHT_FILES), stands=first)
+    log, root = life(sand)
+    await settle()
+    at = len(log)
+    for one in [*standings, TAUGHT]:
+      sand.stands = one
+      await engine.stand(root)
+      await settle()
+    told = [repr(x) for x in log[at:] if x[0] != "keep" and not x[1].startswith("stand")]
+    return [one[1] for one in engine.turns(on=root) if one[0] == "assistant"], told
+
+  assert await stood(TAUGHT, [TAUGHT[0], None, *TAUGHT[2:]]) == await stood(TAUGHT)
+  assert (await stood([*TAUGHT[:4], 5]))[0] == (await stood(TAUGHT))[0]
   why, then = await strayed(5)
   assert why == repr(Refused("chain1 raised TypeError(\"unsupported operand type(s) for +: 'int' and 'str'\")"))
   assert (await strayed("nobody"))[1] == then

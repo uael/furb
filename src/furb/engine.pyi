@@ -346,6 +346,7 @@ def jump(drop: list[str] = [], word: str = "", on: str = "") -> Act[str]:
   Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled.
   The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it.
   A word that jumps its own chain ends first, so no word runs across a jump.
+  A jump whose word is no str is refused, since no chain takes it, so the chain does not jump.
   """
 
 def close(value: object, id: str = "") -> None:

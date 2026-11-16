@@ -105,3 +105,12 @@ async def test_a_word_that_jumps_its_own_chain_ends_first() -> None:
   await settle()
   new = engine.scope(root)
   assert new != root and engine.module(new)["z"] == 3
+
+
+async def test_a_jump_whose_word_is_no_str_is_refused() -> None:
+  """A jump whose word is no str is refused, since no chain takes it, so the chain does not jump."""
+  _, log, root = born("close(3)")
+  await engine.rung("j = jump(word=5)", on=root)
+  assert repr(engine.peek(engine.module(root)["j"])) == repr(engine.Refused("nothing takes jump"))
+  assert await engine.prompt(int, "n", on=root) == 3
+  assert engine.scope(root) == root and [x[1] for x in said(log, "chain")] == [root]

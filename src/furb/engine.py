@@ -298,16 +298,19 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     leaps, dropped, plan = [], [], []
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
-    def stands(prior):
-      went = last[1] * (prior[1:2] != last[1:2]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
+    def stands(prior, given):
+      went = (
+        given[1] * (prior[1:2] != given[1:2]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
+      )
       return "stand()" + (went and f"\ncd({went!r})")
 
-    def setup():
-      e = last[4:] and last[4]
+    def setup(given):
+      e = given[4:] and given[4]
       files = [[f"rung(read({x[1]!r}, HIDDEN).content)" for x in e if x[1] and x[3] == k] for k in (0, 1)]
       lives = [[x[2] for x in e if x[2] and x[3] == k] for k in (0, 1)]
       return [
-        ['debug(t"{standing()[4]=}")'] * bool(last[4:]) + [f"read({last[3]!r})", *files[0], stands([]), *lives[0]],
+        ['debug(t"{standing()[4]=}")'] * bool(given[4:])
+        + [f"read({given[3]!r})", *files[0], stands([], given), *lives[0]],
         *[("setup", id), files[1] + lives[1]] * (id == ROOT),
         None,
       ]
@@ -389,22 +392,26 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
 
     if last:
       was = answer("stand", id, [])
-      plan = [[stands(was)]] * (copied and was != last) + [None] if source or copied or not last[3:] else setup()
+      plan = (
+        [[stands(was, last)]] * (copied and was != last) + [None] if source or copied or not last[3:] else setup(last)
+      )
     yield from staged()
     yield from replay()
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       try:
         match a:
-          case ("done", *_) if r[0] == "stand" and standing() != last:
-            was, last = last, standing()
-            if last[2:3] != was[2:3]:
-              stood = module()["actor"] = last[2]
-            if was:
-              last[3:] and not plan and rung(stands(was), to=stood)
-            elif plan is not None:
+          case ("done", *_) if r[0] == "stand" and (now := standing()) != last:
+            word = last and now[3:] and not plan and stands(last, now)
+            made = not last and plan is not None and (setup(now) if now[3:] else [None])
+            if now[2:3] != last[2:3]:
+              stood = module()["actor"] = now[2]
+            last = now
+            if word:
+              rung(word, to=stood)
+            elif made:
               last[3:] and (yield "tell", id, ["chain()"])
-              plan = setup() if last[3:] else [None]
+              plan = made
               yield from staged()
           case ("done", _, by, Refused() as why) if (
             r[0] == "reply"
@@ -463,7 +470,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           elif broke or waited or "tell" in did[a[1]] or not busy:
             due.add(p)
         match a:
-          case ("jump", leap, _, _, out, *_):
+          case ("jump", leap, _, _, list(out), str()):
             leaps.append(leap)
             dropped += out
             yield "started", leap
