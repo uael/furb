@@ -506,7 +506,8 @@ impl Model {
     };
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
-    pulses || self.steps() || self.client.settled.iter().any(works)
+    let views = || self.kit_rows().iter().any(|row| !row.loaders.is_empty());
+    pulses || self.steps() || self.client.settled.iter().any(works) || views()
   }
 
   /// Whether the rows of the left side change with each moment, past the cells of its loaders: a

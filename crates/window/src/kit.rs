@@ -13,7 +13,7 @@ use crate::{
   line::{Line, run},
   model::Model,
   thread::{Click, Row},
-  tokens::Role,
+  tokens::{Loader, Role},
 };
 
 /// The cells of the bar of a progress.
@@ -100,6 +100,12 @@ impl Model {
         vec![self.view_input((view, node), (value, hint, *inert), 0)]
       }
       Shape::Button { label, inert } => vec![self.button((view, node), (label, *inert), 0)],
+      // A share that is not known moves as a model that writes does, while its work runs.
+      Shape::Progress { done: None } => {
+        let (accent, muted) = (Style::new().fg(self.tokens.accent), self.tokens.style(Role::Muted));
+        let line = vec![run(Loader::Model.frames()[0], accent), run(" working", muted)];
+        vec![Row { loaders: vec![(0, Loader::Model)], ..Row::of(line) }]
+      }
       Shape::Progress { done } => vec![Row::of(self.progress(*done))],
       Shape::Code { text, .. } | Shape::Markdown { text } => {
         text.lines().map(|line| Row::of(vec![run(line.to_owned(), prose)])).collect()
@@ -334,8 +340,5 @@ const MARGIN: usize = 2;
 
 /// A row of a view moved into the left margin of the feed, with the columns that take a click.
 fn inset(row: Row) -> Row {
-  let mut line = vec![run(" ".repeat(MARGIN), Style::new())];
-  line.extend(row.line);
-  let hot = row.hot.into_iter().map(|(at, click)| (at.start + MARGIN..at.end + MARGIN, click));
-  Row { line, hot: hot.collect(), ..row }
+  row.shifted(MARGIN).with_head(vec![run(" ".repeat(MARGIN), Style::new())])
 }
