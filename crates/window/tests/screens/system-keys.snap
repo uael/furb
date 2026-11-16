@@ -7,10 +7,10 @@ assertion_line: 34
   ┃ which keys does the form take                              Needs you 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
     Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
-    ▌Search a key                                 1 / 43      ▐   FU furb                    opus ▌
+    ▌Search a key                                 1 / 39      ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
-    ▌Ctrl+P or Ctrl+O    go to anything, or run a…        ┃
+    ▌Ctrl+P              go to anything, or run a…        ┃
      Ctrl+X ? or F1      each key                         ┃
      F5                  reload on the newest build       ┃
      Alt+A or Ctrl+X A   the next thread that needs…      ┃

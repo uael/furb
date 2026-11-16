@@ -1,6 +1,8 @@
 //! The whole of what a command wrote, which the window opens under its line once the operator asks
 //! for it: the machine gives the exit of the act, and the client keeps the text of its streams.
 
+use std::mem;
+
 use furb_wire::protocol::{Answer, Frame, Verb};
 use serde_json::Value;
 
@@ -35,7 +37,7 @@ impl Client {
 
   /// The read of each command whose whole the window shows and the client holds nothing of.
   pub(crate) fn wholes_due(&mut self) -> Vec<(usize, Verb, Asked)> {
-    let wanted = std::mem::take(&mut self.wanted);
+    let wanted = mem::take(&mut self.wanted);
     let mut due = Vec::new();
     for (at, life, act) in wanted {
       self.wholes.insert((at, life.clone(), act.clone()), Whole::Asked);

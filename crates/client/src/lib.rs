@@ -58,9 +58,9 @@ pub use settings::Settings;
 pub use sign_in::SignIn;
 pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
-pub use whole::{Command, Whole};
 pub use trail::Trail;
 pub use views::{Filled, View, ViewControl};
+pub use whole::{Command, Whole};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
 /// each with the part that it had then and with its state as its machine last told it, each life

@@ -796,7 +796,7 @@ fn go_to_names_each_session_that_runs_and_a_pause_ends_its_life() {
   let (app, _daemon, _) = started();
   sent(&app, &format!("work on it {WORKS}"));
   paged(&app);
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   shows(&app, "working · here");
   app.press("escape");
   app.press("ctrl+x");
@@ -804,10 +804,10 @@ fn go_to_names_each_session_that_runs_and_a_pause_ends_its_life() {
   shows(&app, "Kill it: its work stops");
   app.type_text("pause");
   app.press("enter");
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   let ended = app.wait_until(PATIENCE, || {
     app.press("escape");
-    app.press("ctrl+o");
+    app.press("ctrl+p");
     !app.text().contains("working · here") && app.text().contains("Go to")
   });
   assert!(ended, "{}", app.text());
@@ -818,7 +818,7 @@ fn a_session_of_go_to_takes_a_kill_which_stops_its_work() {
   let (app, _daemon, _) = started();
   sent(&app, &format!("work on it {WORKS}"));
   paged(&app);
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   shows(&app, "working · here");
   app.type_text("working here");
   app.press("enter");
@@ -827,7 +827,7 @@ fn a_session_of_go_to_takes_a_kill_which_stops_its_work() {
   app.press("enter");
   let stopped = app.wait_until(PATIENCE, || {
     app.press("escape");
-    app.press("ctrl+o");
+    app.press("ctrl+p");
     !app.text().contains("working · here") && app.text().contains("Go to")
   });
   assert!(stopped, "{}", app.text());

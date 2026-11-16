@@ -8,8 +8,8 @@ use std::{cell::OnceCell, collections::HashMap, mem, path::Path, rc::Rc};
 
 use crate::cells::Cells;
 use furb::view::{
-  Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
-  Standing, Thought, Work, Written, homed, lines, operator, timer,
+  Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Retrying, Said, Saying, Standing,
+  Thought, Work, Written, homed, lines, operator, timer,
 };
 use furb::world::images;
 use furb_client::{
@@ -730,7 +730,7 @@ impl Feed<'_> {
     let room = inner.saturating_sub(gutter + 2);
     let ground = if loader.is_some() { t.lifted } else { t.raised };
     // What the command of a line at work writes stands in the band of the line, as one work.
-    let output = line.output.as_ref().map(|one| self.output(line, one, (gutter, room), ground));
+    let output = self.output(line, (gutter, room), ground);
     let (mut under, look) = match mark {
       Mark::Failed { why } => (wrapped(why, room), Style::new().fg(t.danger)),
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
@@ -781,7 +781,7 @@ impl Feed<'_> {
         self.name(first, (line, names), gutter);
       }
     }
-    rows.extend(output.into_iter().flatten());
+    rows.extend(output);
     let under = under
       .iter()
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
@@ -974,13 +974,8 @@ impl Feed<'_> {
   /// last ones, which a click or the key of the whole opens on the whole of what each wrote, its
   /// last `WHOLE` lines once its machine gave it, and folds again; then its last lines. A command
   /// that runs shows its last lines alone, since its whole comes once it ended.
-  fn output(
-    &self,
-    line: &Code,
-    output: &Output,
-    (gutter, room): (usize, usize),
-    ground: Color,
-  ) -> Vec<Row> {
+  fn output(&self, line: &Code, (gutter, room): (usize, usize), ground: Color) -> Vec<Row> {
+    let Some(output) = &line.output else { return Vec::new() };
     let muted = self.style(Role::Muted);
     let fold = Fold::Output(line.number);
     let runs = matches!(line.mark, Mark::Runs { .. });
@@ -993,17 +988,20 @@ impl Feed<'_> {
     let key = self.model.key(Does::Output);
     let clicked = |text: String| Row::clicked(row(text), Click::Fold(fold.clone()));
     if !open {
-      let more = (output.more > 0).then(|| match runs || output.acts.is_empty() {
-        true => Row::of(row(format!("… {}", lines(output.more)))),
-        false => clicked(format!("… {} · {key} whole", lines(output.more))),
+      let more = (output.more > 0).then(|| {
+        if runs || output.acts.is_empty() {
+          Row::of(row(format!("… {}", lines(output.more))))
+        } else {
+          clicked(format!("… {} · {key} whole", lines(output.more)))
+        }
       });
       let tail = output.tail.iter().map(|one| Row::of(row(self.model.homed(one))));
       return more.into_iter().chain(tail).collect();
     }
-    let (at, life, _) = &self.opened.thread.key;
+    let (at, record, _) = &self.opened.thread.key;
     let mut whole: Vec<String> = Vec::new();
     for act in &output.acts {
-      match self.model.client.whole(&(*at, life.clone(), act.clone())) {
+      match self.model.client.whole(&(*at, record.clone(), act.clone())) {
         Some(Ok(text)) => whole.extend(text.lines().map(|one| self.model.homed(&plain(one)))),
         Some(Err(why)) => whole.push(why.clone()),
         None => whole.push("Reading…".to_owned()),
@@ -1391,7 +1389,10 @@ const WHOLE: usize = 1000;
 /// control, and a tab as a space.
 fn plain(line: &str) -> String {
   let line = line.rsplit('\r').find(|part| !part.is_empty()).unwrap_or_default();
-  line.chars().filter_map(|one| if one == '\t' { Some(' ') } else { (!one.is_control()).then_some(one) }).collect()
+  line
+    .chars()
+    .filter_map(|one| if one == '\t' { Some(' ') } else { (!one.is_control()).then_some(one) })
+    .collect()
 }
 
 impl Model {
@@ -1400,12 +1401,17 @@ impl Model {
   pub(crate) fn whole_output(&mut self) {
     let thread = self.client.thread.as_ref().map(|one| &one.thread);
     let blocks = thread.into_iter().flat_map(|one| one.exchanges.values().rev());
-    let lines = blocks.filter_map(|one| one.block.as_ref()).flat_map(|block| block.lines.iter().rev());
-    let cut = |line: &&Code| line.output.as_ref().is_some_and(|one| one.more > 0 && !one.acts.is_empty());
+    let lines =
+      blocks.filter_map(|one| one.block.as_ref()).flat_map(|block| block.lines.iter().rev());
+    let cut =
+      |line: &&Code| line.output.as_ref().is_some_and(|one| one.more > 0 && !one.acts.is_empty());
     let last = lines.filter(cut).map(|line| line.number).next();
     match (last, self.client.thread.as_mut()) {
       (Some(number), Some(opened)) => opened.fold(Fold::Output(number)),
-      _ => self.client.notice = Some("No command of this thread wrote more than its last lines.".to_owned()),
+      _ => {
+        self.client.notice =
+          Some("No command of this thread wrote more than its last lines.".to_owned());
+      }
     }
   }
 }

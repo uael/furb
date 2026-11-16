@@ -810,3 +810,24 @@ fn a_line_that_awaits_more_than_one_act_says_how_many_ended() {
   let (app, _daemon, _peer) = opened(&format!("Run both checks\n{FANS}"), "1 agent done");
   shows(&app, "1 of 2 ended");
 }
+
+#[test]
+fn a_command_that_wrote_past_its_tail_opens_whole_under_its_line_and_folds_again() {
+  let (app, ..) = crate::question::opened(
+    &format!("count to forty\n{}", crate::daemon::PRINTS),
+    "It printed 40 lines.",
+  );
+  // The tail of the command, under a row that says how many lines came before it.
+  let tail = shows(&app, "… 37 lines · ⌃O whole");
+  assert!(tail.contains("  40") && !tail.contains("▴ 40 lines"), "{tail}");
+  // A click on that row opens the whole of what it wrote, which its machine gives.
+  app.click(30, row(&app, "… 37 lines · ⌃O whole"));
+  let whole = app.wait_until(crate::daemon::PATIENCE, || {
+    let text = app.text();
+    !text.contains("… 37 lines") && text.lines().any(|one| one.trim().starts_with("25"))
+  });
+  assert!(whole, "{}", app.text());
+  // The key folds it again.
+  app.press("ctrl+o");
+  shows(&app, "… 37 lines · ⌃O whole");
+}

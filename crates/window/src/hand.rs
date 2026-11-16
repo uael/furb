@@ -913,10 +913,7 @@ fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
   // read again only when what the feed shows changed, and not at each scroll.
   if model.pictured != model.shows {
     model.pictured = model.shows;
-    let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
-    model.client.show_pictures(pictures);
-    let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
-    model.client.show_wholes(&wholes);
+    shown(model);
   }
   let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
   for (at, verb, asked) in model.client.asks_due(listing) {
@@ -954,6 +951,15 @@ fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
     model.client.asked.insert((at, id), Asked::Ended(word.life.clone(), word.rung.clone()));
   }
   saw
+}
+
+/// The images and the whole outputs of commands that the open thread shows, which the client asks
+/// of their machine.
+fn shown(model: &mut Model) {
+  let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
+  model.client.show_pictures(pictures);
+  let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
+  model.client.show_wholes(&wholes);
 }
 
 /// The first message of the queue of the input, then the wake of its thread when a pause holds

@@ -580,6 +580,9 @@ pub(crate) const TABLES: &str = "(the model answers a table)";
 /// GitHub.
 pub(crate) const MARKDOWN: &str = "(the model answers markdown)";
 
+/// The words of a message of a test that make the model run a command that writes forty lines.
+pub(crate) const PRINTS: &str = "(the model prints much)";
+
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
@@ -598,8 +601,9 @@ pub(crate) const DRAWS: &str = "(the model draws a view)";
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
 /// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
 /// and the second waits on its chain.
-const ANSWERED: [(&str, &str); 11] = [
+const ANSWERED: [(&str, &str); 12] = [
   (MARKDOWN, GFM),
+  (PRINTS, "out = await bash('seq 1 40')\nclose('It printed 40 lines.')"),
   (
     DRAWS,
     r#"todo = prompt(str, '{"view": 1, "slot": "footer", "tree": {"id": "todo", "node": "text", "runs": [{"text": "buy milk"}]}}', to=OPERATOR, on=chain('todo'))"#,
