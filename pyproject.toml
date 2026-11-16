@@ -50,7 +50,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["bind/python", "cli"]
+members = ["crates/python", "crates/cli"]
 
 [tool.uv]
 # uv builds the two wheels of the workspace again each time a file of their cache-keys changes, and it keeps each old
@@ -73,7 +73,7 @@ furb-cli = { workspace = true }
 line-length = 120
 indent-width = 2
 target-version = "py314"
-src = ["src", "test", "bind/python"]
+src = ["src", "tests", "crates/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
 # A word of the project reads the names that a word before it in .furb/config.json defines as builtins. A test holds each
@@ -82,7 +82,7 @@ builtins = []
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
-"xtask/src/deepswe/pytest_ids.py" = "py38"
+"crates/xtask/src/deepswe/pytest_ids.py" = "py38"
 
 [tool.ruff.lint]
 select = [
@@ -94,7 +94,7 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"{test,.agents/skills/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
+"{tests,.agents/skills/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
@@ -152,13 +152,13 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
-include = ["src", "test", "script", "xtask/python", "bind/python", ".agents/skills", ".furb/skills/*/*.py"]
+include = ["src", "tests", "script", "crates/xtask/python", "crates/python", ".agents/skills", ".furb/skills/*/*.py"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from skills.conftest. The package furb_monty is read from its source and the stub of its
 # extension, so the check needs no build of the crate.
 [tool.ty.environment]
-extra-paths = ["test", "bind/python", ".agents"]
+extra-paths = ["tests", "crates/python", ".agents"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
@@ -175,7 +175,7 @@ unresolved-global = "ignore"
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.
 [[tool.ty.overrides]]
-include = ["bind/python/furb_monty/engine.py"]
+include = ["crates/python/furb_monty/engine.py"]
 
 [tool.ty.overrides.rules]
 unresolved-attribute = "ignore"
@@ -188,8 +188,8 @@ include = [".furb/skills/*/*.py"]
 redundant-condition = "ignore"
 
 [tool.pytest.ini_options]
-testpaths = ["test", ".agents/skills", ".furb/skills"]
-pythonpath = [".", ".agents", "test"]
+testpaths = ["tests", ".agents/skills", ".furb/skills"]
+pythonpath = [".", ".agents", "tests"]
 consider_namespace_packages = true
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 # A worker that is idle takes the tests that another worker has not started, so no core waits on a run of slow tests

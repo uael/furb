@@ -42,11 +42,14 @@ include = [
 ]
 
 [workspace]
-# The command line is a program of its own on this crate, so the library takes none of its dependencies. The host
-# holds each life of a machine, on the public API of the crate alone. The window draws the daemon of the host, and
-# only the frames of the window depend on it, so only a build of those two needs Zig. `bind/typescript` is the addon of
-# N-API of the npm package, and `xtask` the tasks of a developer, which `cargo xtask` runs.
-members = ["bind/typescript", "cli", "crates/client", "crates/wire", "frames", "host", "window", "xtask"]
+# Each other crate stands in `crates/`. The command line is a program of its own on this crate, so the library takes
+# none of its dependencies. The host holds each life of a machine, on the public API of the crate alone. The window
+# draws the daemon of the host, and only the frames of the window depend on it, so only a build of those two needs Zig.
+# `crates/typescript` is the addon of N-API of the npm package, and `crates/xtask` the tasks of a developer, which
+# `cargo xtask` runs. `crates/python` is the package of python that maturin builds from this crate, and
+# `crates/reserve` a workspace of its own.
+members = ["crates/*"]
+exclude = ["crates/python", "crates/reserve"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]

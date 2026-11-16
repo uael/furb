@@ -47,7 +47,7 @@ as an operator does.
   in the hooks and in `corpus.yml`, and each change of a file of a folder `record-<major>` once it stands.
 - `docs/promise.md` says what the corpus promises and which test proves each part. The test
   `test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus` in
-  `test/outside/test_promise_rollback.py` installs the program furb of the last release of the major of the build that
+  `tests/outside/test_promise_rollback.py` installs the program furb of the last release of the major of the build that
   holds a folder, and opens each record of `next` there with no refusal and no drift. It skips a major with no such
   release: 0.4.2 refuses each record of `next` as made by a later version of the record.
 - Before 1.0.0, a change with `!` in its title may make `next` again and delete the

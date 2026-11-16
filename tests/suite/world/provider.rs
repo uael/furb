@@ -1564,7 +1564,7 @@ fn the_mark_that_ends_a_fence_or_a_tool_call_starts_no_statement() {
 #[test]
 fn a_line_of_three_backticks_at_the_end_of_a_word_stays_while_a_quote_stands_open_before_it() {
   let rows: Vec<Value> =
-    serde_json::from_str(include_str!("../../../test/quotes.json")).expect("the table of quotes");
+    serde_json::from_str(include_str!("../../quotes.json")).expect("the table of quotes");
   for (at, row) in rows.iter().enumerate() {
     let word = row["word"].as_str().expect("a word");
     let text = format!("{word}\n```");

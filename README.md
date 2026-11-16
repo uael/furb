@@ -163,8 +163,8 @@ same program in TypeScript and in Rust, and four more.
 | --- | --- |
 | Use the window | [The window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window): its keys, and how to build it |
 | Choose a model, or use a local one | [Models](https://github.com/uael/furb/blob/main/docs/models.md) |
-| Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/bind/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/bind/typescript/README.md) |
-| Use the command line | [The command line](https://github.com/uael/furb/blob/main/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
+| Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/crates/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/crates/typescript/README.md) |
+| Use the command line | [The command line](https://github.com/uael/furb/blob/main/crates/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
 | Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) |
 | See what may come | [Ideas for later](https://github.com/uael/furb/blob/main/docs/ideas.md) |
 | Check a record that someone gave you | [The audit](https://github.com/uael/furb/blob/main/docs/audit.md) |

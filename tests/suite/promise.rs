@@ -365,12 +365,13 @@ fn scrubbed(record: &Path, at: &Path) {
 }
 
 /// Puts each trace of the machine that made a record, the paths of its home and the name of its
-/// account, to the stand-ins of `xtask/python/private.py`, which holds the rule of each record.
+/// account, to the stand-ins of `crates/xtask/python/private.py`, which holds the rule of each
+/// record.
 fn private(record: &Path) {
   let script =
     Path::new(env!("CARGO_MANIFEST_DIR")).join("xtask").join("python").join("private.py");
   let status = Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
-  assert!(status.success(), "xtask/python/private.py scrubs {}", record.display());
+  assert!(status.success(), "crates/xtask/python/private.py scrubs {}", record.display());
 }
 
 /// Each record of each folder of the corpus, as its folder and its name.

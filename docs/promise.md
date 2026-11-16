@@ -36,8 +36,8 @@ only grows.
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
 | The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 3.0 |
 | The schema of the carry of a crossing, which an open makes in memory: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
-| The protocol of the daemon | `PROTOCOL` in `crates/wire/src/protocol.rs`, `host/protocol.schema.json` | 49 |
-| The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
+| The protocol of the daemon | `PROTOCOL` in `crates/wire/src/protocol.rs`, `crates/host/protocol.schema.json` | 49 |
+| The nodes of a view, a closed set that only grows (P5) | `crates/host/protocol.schema.json` | with the protocol |
 
 A schema only adds within a major, and each reader skips each kind of fact and each field that it does not know. So a
 record that a later build of the major made opens on an earlier build of it (P8).
@@ -54,9 +54,9 @@ that no adapter holds. What holds across majors is decided at the first major af
 
 R1, no drift on the same engine:
 
-- `test/test_boot.py::test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the_same_ids`
-- `test/test_boot.py::test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds`
-- `test/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
+- `tests/test_boot.py::test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the_same_ids`
+- `tests/test_boot.py::test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds`
+- `tests/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
 - `tests/suite/engine.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
 - `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_at_a_crossing_opens_as_the_entries_written_whole`, at a
   random byte of a random line, of the done of the stand of the first word of the root and of the last fact made,
@@ -73,8 +73,8 @@ R2, the exact tip, by the image and by the record, across each crossing (resume 
 - `tests/suite/life.rs::an_image_of_a_build_of_other_texts_does_not_load`
 - `tests/suite/life.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_carried_across_three_crossings_opens_at_its_tip`
-- `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_at_the_tip_of_its_record`
-- `test/checkpoint/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
+- `crates/host/tests/suite/daemon.rs::a_life_that_ended_opens_again_at_the_tip_of_its_record`
+- `tests/checkpoint/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
 - `tests/suite/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_across_its_crossings_and_goes_on`, a
   kill of the process of the life at or after a fact that a seed draws, which it prints with the length of
   the record at the kill, so the torn test plays that kill again as a cut
@@ -93,23 +93,23 @@ The schemas (P7, P8):
 - `tests/suite/life.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
 - `tests/suite/world/schema.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
 - `tests/suite/life.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
-- `host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
+- `crates/host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
 
 The protocol, the nodes of a view and the contract (P2, P5):
 
-- `host/tests/suite/protocol.rs::the_schema_on_disk_is_the_schema_of_the_protocol`
-- `host/tests/suite/protocol.rs::each_change_of_the_schema_raises_the_protocol`
-- `test/outside/test_contract_diff.py::test_a_node_of_a_view_that_goes_is_a_break`
-- `test/outside/test_contract_diff.py::test_a_break_that_the_page_of_the_promise_does_not_name_fails_whatever_the_title`
-- `host/tests/suite/daemon.rs::a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passes`
-- `host/tests/suite/daemon.rs::a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon`
+- `crates/host/tests/suite/protocol.rs::the_schema_on_disk_is_the_schema_of_the_protocol`
+- `crates/host/tests/suite/protocol.rs::each_change_of_the_schema_raises_the_protocol`
+- `tests/outside/test_contract_diff.py::test_a_node_of_a_view_that_goes_is_a_break`
+- `tests/outside/test_contract_diff.py::test_a_break_that_the_page_of_the_promise_does_not_name_fails_whatever_the_title`
+- `crates/host/tests/suite/daemon.rs::a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passes`
+- `crates/host/tests/suite/daemon.rs::a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon`
 
 `tests/suite/promise.rs::each_proof_that_the_page_of_the_promise_names_stands_in_its_file` fails when a test that this page
 names is gone. `cargo xtask contract` fails on a break of the contract that this page does not list below.
 
 What no machine proves yet, so the promise does not hold there until a proof lands:
 
-- A rollback: `test/outside/test_promise_rollback.py::test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
+- A rollback: `tests/outside/test_promise_rollback.py::test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
   opens each record of the corpus on the last release of its major, but it skips until a release of the major holds a
   folder of the corpus (P8).
 - A replay with random delays of the bus and of each ear, and with ears that raise (replay-chaos).

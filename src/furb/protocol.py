@@ -1,4 +1,4 @@
-"""The types of the one protocol of the host, made from host/protocol.schema.json by xtask/python/protocol.py.
+"""The types of the one protocol of the host, made from crates/host/protocol.schema.json by crates/xtask/python/protocol.py.
 
 Run `cargo xtask protocol` after a change of the protocol.
 """

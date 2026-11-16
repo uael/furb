@@ -58,16 +58,17 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: tools
-          hashed: bind/typescript/build.ts
+          hashed: crates/typescript/build.ts
       # The native library of OpenTUI, which the build of the window makes with Zig in minutes and keeps in
-      # target/opentui, under the commit that window/Cargo.toml pins. The cache of rust keeps no file of a package of
-      # the workspace, so the folder has a cache of its own, restored after that one. A build that finds the library
-      # runs no Zig, so only a miss installs it: the Zig that the build.zig.zon of that commit names, and no other.
+      # target/opentui, under the commit that crates/window/Cargo.toml pins. The cache of rust keeps no file of a
+      # package of the workspace, so the folder has a cache of its own, restored after that one. A build that finds the
+      # library runs no Zig, so only a miss installs it: the Zig that the build.zig.zon of that commit names, and no
+      # other.
       - id: opentui
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/opentui
-          key: opentui-${{ inputs.os }}-${{ hashFiles('window/Cargo.toml', 'window/build.rs') }}
+          key: opentui-${{ inputs.os }}-${{ hashFiles('crates/window/Cargo.toml', 'crates/window/build.rs') }}
       - if: steps.opentui.outputs.cache-hit != 'true'
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
@@ -112,9 +113,9 @@ jobs:
               cp target/opentui/*/opentui.dll "$copy/$(dirname "$one")/"
             done
           fi
-          mkdir -p "$copy/bind/typescript"
-          cp bind/typescript/furb.*.node bind/typescript/index.cjs bind/typescript/index.d.cts "$copy/bind/typescript/"
-          cp -R bind/typescript/dist "$copy/bind/typescript/dist"
+          mkdir -p "$copy/crates/typescript"
+          cp crates/typescript/furb.*.node crates/typescript/index.cjs crates/typescript/index.d.cts "$copy/crates/typescript/"
+          cp -R crates/typescript/dist "$copy/crates/typescript/dist"
           du -sh "$copy"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -190,7 +191,7 @@ jobs:
           UV_NO_SYNC: "1"
         run: |
           mkdir -p "$RUNNER_TEMP/measures"
-          uv run python xtask/python/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+          uv run python crates/xtask/python/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
       - if: always() && runner.os == 'Linux'
         uses: ./.github/actions/measures
         with:
@@ -269,12 +270,12 @@ jobs:
         with:
           name: build-${{ inputs.os }}
           path: ${{ runner.temp }}/build
-      - run: cp -R "$RUNNER_TEMP/build/bind/typescript/." bind/typescript/
+      - run: cp -R "$RUNNER_TEMP/build/crates/typescript/." crates/typescript/
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      - run: git diff --exit-code -- bind/typescript/index.d.cts
+      - run: git diff --exit-code -- crates/typescript/index.d.cts
       - run: bun run check
       - run: bun run lint
       - run: bun run test

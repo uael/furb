@@ -15,16 +15,16 @@ tests.
 
 `AGENTS.md` gives the laws of each suite. Read it first, and read `src/furb/AGENTS.md` for the laws of the engine.
 
-- The contract suite, `test/`, holds one test for each sentence of `src/furb/engine.pyi`, and the suite of each
-  extension, `.agents/skills/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
+- The contract suite, `tests/`, holds one test for each sentence of `src/furb/engine.pyi`, and the suite of each
+  extension, `.agents/skills/<name>/test/`, does the same for its contract. `tests/test_hygiene.py` holds each suite to
   its laws. A test of these suites is owned by its sentence: you never delete it alone. When its assertions do not
   prove its sentence, repair them. When the sentence is wrong, the owner decides, and the sentence and its test
   change together.
-- `test/outside/` proves the World, the Kernel, the door to python, the switch of the package, the harness, the
+- `tests/outside/` proves the World, the Kernel, the door to python, the switch of the package, the harness, the
   examples and the life as a program. The hygiene laws do not hold these tests, so this gate holds them.
 - The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/suite/examples.rs` runs the examples, and
-  `cli/tests/suite/furb.rs` runs the command line as a process.
-- The TypeScript tests stand in `bind/typescript/test/`, and the tests of the window in `window/tests/suite/`.
+  `crates/cli/tests/suite/furb.rs` runs the command line as a process.
+- The TypeScript tests stand in `crates/typescript/test/`, and the tests of the window in `crates/window/tests/suite/`.
 
 Each contract has one primary test at its strongest boundary. A sentence of the contract is proved once, by the
 contract suite, on both engines. A test of a door proves what the door carries that no sentence says. A test of
@@ -38,7 +38,7 @@ Before you add a test, answer these four questions. When an answer is missing, d
 2. What regression that can occur makes it fail?
 3. Why does the coverage that exists not catch that regression? A second layer needs a risk of its own, such as a
    value that only the door carries, or a process that only the command line starts. Extend a case or a shared
-   helper of `test/conftest.py` before you write a near copy of a test.
+   helper of `tests/conftest.py` before you write a near copy of a test.
 4. Does it need a seam in the product, such as an export, a flag, a wrapper or a hook, that no product caller needs?
    If it does, move the test to the real boundary.
 
@@ -91,11 +91,11 @@ claims a behavior of a dependency, such as monty, rig or napi, read that depende
 
 Keep discovery read-only, and report the evidence before you edit. For a wide scope, split the work into lanes:
 
-- the engine and its contract suite, `src/furb/` and `test/`;
+- the engine and its contract suite, `src/furb/` and `tests/`;
 - the extensions, `.agents/skills/`;
-- the crate and the command line, `src/*.rs` and `cli/`;
-- the doors, `src/binding*`, `bind/python` and `bind/typescript`;
-- the window, `window/`;
+- the crate and the command line, `src/*.rs` and `crates/cli/`;
+- the doors, `src/binding*`, `crates/python` and `crates/typescript`;
+- the window, `crates/window/`;
 - one sweep across all of them for one pattern.
 
 Outside a campaign, prefer a few candidates you are sure of to a long list of guesses.
@@ -145,7 +145,7 @@ The commands are in `AGENTS.md`, and the `testing` skill says which one proves w
    `bun run test <filter>`.
 2. When you remove a check of the source, run the command that owns the real contract.
 3. Format, then run `git diff --check`.
-4. Run the gates that the change needs, and `uv run pytest -q test/test_hygiene.py --no-cov` for any change of a suite.
+4. Run the gates that the change needs, and `uv run pytest -q tests/test_hygiene.py --no-cov` for any change of a suite.
 5. Read `git diff --numstat`, and count the product apart from the tests and their support.
 
 ## Landing

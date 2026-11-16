@@ -486,8 +486,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "furb-cli", editable = "cli" },
-    { name = "furb-monty", editable = "bind/python" },
+    { name = "furb-cli", editable = "crates/cli" },
+    { name = "furb-monty", editable = "crates/python" },
 ]
 
 [package.metadata.requires-dev]
@@ -509,11 +509,11 @@ dev = [
 
 [[package]]
 name = "furb-cli"
-source = { editable = "cli" }
+source = { editable = "crates/cli" }
 
 [[package]]
 name = "furb-monty"
-source = { editable = "bind/python" }
+source = { editable = "crates/python" }
 dependencies = [
     { name = "furb" },
 ]

@@ -54,7 +54,7 @@ repos:
         language: system
         types_or: [python, pyi]
         # The files that the suite and the checker read: a python file or a manifest elsewhere changes neither.
-        files: ^(src/furb/|test/|\.agents/skills/|\.furb/|bind/python/|script/|xtask/python/|tests/|docs/examples/python/)|^pyproject\.toml$
+        files: ^(src/furb/|tests/|\.agents/skills/|\.furb/|crates/python/|script/|crates/xtask/python/|docs/examples/python/)|^pyproject\.toml$
         pass_filenames: false
       - id: pytest
         name: pytest
@@ -64,7 +64,7 @@ repos:
         stages: [manual]
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]
-        files: ^(src/|build/|test/|\.agents/skills/|\.furb/|bind/python/|script/|xtask/python/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
+        files: ^(src/|build/|tests/|\.agents/skills/|\.furb/|crates/python/|script/|crates/xtask/python/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
         require_serial: true
       - id: fmt
         name: fmt
@@ -115,7 +115,7 @@ repos:
         name: the names that nothing but a test names
         entry: cargo xtask unused
         language: system
-        files: ^(bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|xtask/src/unused\.rs$)
+        files: ^(crates/typescript/(src/|README\.md$)|src/|crates/cli/src/|crates/host/src/|crates/window/src/|build/|crates/xtask/src/unused\.rs$)
         pass_filenames: false
       - id: biome
         name: biome
@@ -125,7 +125,7 @@ repos:
         entry: bun run lint
         language: system
         stages: [manual]
-        files: ^(bind/typescript/|docs/examples/)|^(package|tsconfig|biome)\.json$
+        files: ^(crates/typescript/|docs/examples/)|^(package|tsconfig|biome)\.json$
         pass_filenames: false
       - id: corpus
         name: no file of a folder of the corpus that a tag holds changes

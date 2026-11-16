@@ -4,16 +4,16 @@
 # docs/examples/typescript there, on a claude command line that answers from a script. The first argument is the folder
 # of the packs, uael-furb-<version>.tgz and uael-furb-<system>-<version>.tgz, as npm pack names them. npm installs
 # the package under the name furb, as its README says, which the examples import. The fake claude is
-# bind/typescript/test/programs/claude.ts, which bun compiles to a program, since Windows runs no script by its shebang.
-# It stays a shell script, and not a task of the crate xtask: it proves the package as a user of npm installs it,
-# with no cargo, and its job in .github/workflows/publish.yml sets up bun and node alone. A toolchain of Rust in that
-# job would make the proof false.
+# crates/typescript/test/programs/claude.ts, which bun compiles to a program, since Windows runs no script by its
+# shebang. It stays a shell script, and not a task of the crate xtask: it proves the package as a user of npm installs
+# it, with no cargo, and its job in .github/workflows/publish.yml sets up bun and node alone. A toolchain of Rust in
+# that job would make the proof false.
 set -eu
 packs=$(cd "$1" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
 yard=$(mktemp -d)
 mkdir "$yard/app" "$yard/fake"
-(cd "$yard/fake" && bun build --compile "$root/bind/typescript/test/programs/claude.ts" --outfile claude >/dev/null)
+(cd "$yard/fake" && bun build --compile "$root/crates/typescript/test/programs/claude.ts" --outfile claude >/dev/null)
 claude=$yard/fake/claude
 [ -f "$claude.exe" ] && claude=$claude.exe
 printf '%s' '"close(\"Login is twice as fast.\")"' > "$yard/fake/word.1"

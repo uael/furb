@@ -2,8 +2,8 @@
 //! that it is written, so the daemon takes each kit from [`KITS`] on, and says each value that a
 //! later version added in the form of the version of the kit, as Zed keeps the interface of each
 //! version of its extensions. Each value that a version added has its line here, with the version
-//! that added it, and `host/tests/kits` holds the schema of the first version, against which a test
-//! finds each value of the protocol of now that no line here maps.
+//! that added it, and `crates/host/tests/kits` holds the schema of the first version, against which
+//! a test finds each value of the protocol of now that no line here maps.
 
 use crate::{
   Agent, Answered, Exchange, Line, Mark, Page, Reply, Saying,

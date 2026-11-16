@@ -2,16 +2,16 @@
   "name": "furb-workspace",
   "private": true,
   "workspaces": [
-    "bind/typescript",
+    "crates/typescript",
     "docs/examples"
   ],
   "scripts": {
-    "build": "bun run bind/typescript/build.ts",
+    "build": "bun run crates/typescript/build.ts",
     "check": "tsc --noEmit",
-    "test": "bun run bind/typescript/script/test.ts",
-    "protocol": "bun run bind/typescript/script/protocol.ts && cargo xtask protocol",
-    "format": "biome format --write bind/typescript docs/examples package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript docs/examples package.json tsconfig.json biome.json --error-on-warnings"
+    "test": "bun run crates/typescript/script/test.ts",
+    "protocol": "bun run crates/typescript/script/protocol.ts && cargo xtask protocol",
+    "format": "biome format --write crates/typescript docs/examples package.json tsconfig.json biome.json",
+    "lint": "biome check crates/typescript docs/examples package.json tsconfig.json biome.json --error-on-warnings"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

@@ -36,7 +36,7 @@ LANE_CHECKS = {
   "the format of the Rust": "cargo fmt --all --check",
   "a comment past 100 columns": "cargo xtask comment-width --base BASE",
   "the walls of the engine and the doctrine": "cargo xtask tokens",
-  "the hygiene laws": ".venv/bin/python -m pytest -q test/test_hygiene.py -p no:cacheprovider --no-cov",
+  "the hygiene laws": ".venv/bin/python -m pytest -q tests/test_hygiene.py -p no:cacheprovider --no-cov",
 }
 lane_runners: dict[str, tuple[str, str]] = globals().setdefault("lane_runners", {})
 lane_jobs: dict[str, tuple[str, float, float]] = globals().setdefault("lane_jobs", {})

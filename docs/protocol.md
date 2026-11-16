@@ -2,8 +2,9 @@
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
 page says that protocol. Its version is `PROTOCOL`. The crate gives its JSON Schema in
-`host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
-that schema, with `src/furb/protocol.py` for Python, which it makes through `cargo xtask protocol`. A test of each side fails when the schema or the types do not agree with the code.
+`crates/host/protocol.schema.json`, and `crates/typescript/src/protocol.ts` holds the types that `bun run protocol`
+makes from that schema, with `src/furb/protocol.py` for Python, which it makes through `cargo xtask protocol`. A test of
+each side fails when the schema or the types do not agree with the code.
 
 ## Transports
 
@@ -103,17 +104,17 @@ The first frame of a peer is its hello:
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A skill is the
   exception: a kit works from the moment that it is written, so the daemon takes a skill of each version from `KITS`
   to its own. What a skill says keeps its meaning across those versions, or the daemon maps it, and
-  `host/tests/kits/<version>.jsonl` holds the lines that a skill of each version says, which a test of the crate
-  replays on each later daemon. `host/tests/kits/<version>.heard.jsonl` holds the frames that a skill of each version
+  `crates/host/tests/kits/<version>.jsonl` holds the lines that a skill of each version says, which a test of the crate
+  replays on each later daemon. `crates/host/tests/kits/<version>.heard.jsonl` holds the frames that a skill of each version
   reads, and the test holds each later daemon to tell a frame of each with each key of it, of the same type, and the
   same name for a variant. A change of the protocol that breaks one of those lines adds its mapping. The daemon tells
   each frame to a skill in the form of the version of its hello: a value that a later version added reads as its
   version said it, as the mark `waits` reads `ran` before 66, and a frame that its version did not have, as `granted`
-  before 60, does not reach it. `host/tests/kits/<version>.schema.json` holds the schema of the first version, and a
-  test fails on each value of the schema of now that it lacks, until the change maps it or says why no skill of that
-  version reads it. A first frame
+  before 60, does not reach it. `crates/host/tests/kits/<version>.schema.json` holds the schema of the first version,
+  and a test fails on each value of the schema of now that it lacks, until the change maps it or says why no skill of
+  that version reads it. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
-- The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
+- The version rises with each change of the schema, `crates/host/protocol.schema.json`: a test of the crate keeps the digest
   of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
   so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
   once its last window quits and its grace passes, and the next window starts one of its own build.
@@ -601,5 +602,6 @@ the other kind is refused with `speaker`, and a frame of a viewer that the peer 
 
 Each node has an `id`, and its `node` names one of a closed set: `box` (a row or a column, with a gap and a border),
 `text` (runs, each in a tone), `list`, `table`, `input`, `button`, `progress`, `code`, `diff` and `markdown`. A window
-that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture. The set and the fields of each node only grow within a major: `cargo xtask contract` reads them from
-host/protocol.schema.json, and a node or a field that goes is a break.
+that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture. The set and
+the fields of each node only grow within a major: `cargo xtask contract` reads them from
+crates/host/protocol.schema.json, and a node or a field that goes is a break.

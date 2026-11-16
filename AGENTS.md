@@ -2,7 +2,7 @@
 
 The engine is `src/furb/engine.py`, one file. It depends only on the Python interpreter and on the ears of the outside
 that boot is given: the ears of the World and the Kernel. The contract, `src/furb/engine.pyi`, defines it, and
-the suite in `test/` proves it. `src/furb/AGENTS.md` holds the technical names of the engine and the laws that no test
+the suite in `tests/` proves it. `src/furb/AGENTS.md` holds the technical names of the engine and the laws that no test
 can hold. `DOCTRINE.md` tells a model how to work in furb, and the entries doctrine and setup of `src/furb/AGENTS.md`
 say how a life reads it. `cargo xtask deepswe --help` says how to run the DeepSWE rig. Claude Code reads each
 `AGENTS.md` through a `CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through
@@ -93,23 +93,23 @@ API of its own:
   opening of a life, the catalog, the extensions and the images. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same
   methods, one for each verb of the contract, which the build makes from the contract.
-- `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package `furb-monty`,
+- `src/binding/py.rs`, behind the `python` feature, is the door to python. `crates/python` is the package `furb-monty`,
   whose module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
   `FURB_ENGINE=monty` makes `from furb import engine` give it. On the engine of this interpreter,
   `src/furb/awaits.py` holds the await of an act from outside a run: the package binds its `Act` in the engine, so the
   engine says only the await of a word, which the Kernel steps.
-- `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
-  command it hands the terminal to the window, `furb-window`, which it finds in `FURB_WINDOW`, beside itself, on PATH,
-  or in the target of the checkout it was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
-  `turns`, `run` and `skills` each open one life on a record, but `prompt` says its message through the daemon, as a
-  window says it, when the daemon holds the life of the record, and with `--hold <task>` first opens the life in the
-  daemon, pinned by the name of the task, so an agent runs a life with no window and each window lists it with what
-  holds it, which `end` ends, and `lives` lists each life that the daemon holds with what holds it; `facts` prints
-  each fact of a record with no life,
+- `crates/cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With
+  no command it hands the terminal to the window, `furb-window`, which it finds in `FURB_WINDOW`, beside itself, on
+  PATH, or in the target of the checkout it was built from. A program that wants a life dials the daemon, as
+  `docs/protocol.md` says. `prompt`, `turns`, `run` and `skills` each open one life on a record, but `prompt` says its
+  message through the daemon, as a window says it, when the daemon holds the life of the record, and with `--hold
+  <task>` first opens the life in the daemon, pinned by the name of the task, so an agent runs a life with no window and
+  each window lists it with what holds it, which `end` ends, and `lives` lists each life that the daemon holds with what
+  holds it; `facts` prints each fact of a record with no life,
   `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
-- `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
+- `crates/host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
   log of a life that opens by its record lets go of each fact of its past once it told it, since the record holds
@@ -132,12 +132,12 @@ API of its own:
   the open of each life stands, which each window of the life hears as frames while the life opens, and `daemon` the
   daemon of the machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
-  protocol, and `bun run protocol` makes again from `host/protocol.schema.json` the types of each client of the daemon:
-  `bind/typescript/src/protocol.ts`, and `src/furb/protocol.py`, the types of `furb.skill`, the client of the process
-  of a skill in Python, which it makes through `cargo xtask protocol`.
+  protocol, and `bun run protocol` makes again from `crates/host/protocol.schema.json` the types of each client of the
+  daemon: `crates/typescript/src/protocol.ts`, and `src/furb/protocol.py`, the types of `furb.skill`, the client of the
+  process of a skill in Python, which it makes through `cargo xtask protocol`.
 
-- `window/` is `furb-window`, the fourth package of the workspace of the crate: the window of furb, in Rust on the Rust
-  package of OpenTUI, which grows screen by screen. Today it holds the client of the daemon on
+- `crates/window/` is `furb-window`, the fourth package of the workspace of the crate: the window of furb, in Rust on
+  the Rust package of OpenTUI, which grows screen by screen. Today it holds the client of the daemon on
   the protocol and the transport of `furb-host`, the rule by which a part of a screen draws only when the value that
   it shows changes, the tokens of the design, and the list of the cards of each machine beside the home, which shows
   what waits for the operator: the verb `cards` of the daemon gives each card, with its state, its part and its
@@ -146,48 +146,49 @@ API of its own:
   the launcher under it says. It does not yet choose a model, show the chains or reach another machine.
   `cargo run -p furb-window` starts it, and so does `furb` with no command. The packages of PyPI and npm do not carry
   it yet.
-  `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
-  `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
-  at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
-  the library runs no Zig, as a tree of `cargo xtask tree new` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
-  capture of a frame as text, a snapshot of insta, and `INSTA_UPDATE=always cargo test -p furb-window` draws each
-  capture again. `FURB_CELLS=<folder>`
-  writes the cells of each capture there as JSON, with the colors of the frame.
+  `crates/window/Cargo.toml` pins OpenTUI at one commit, and `crates/window/build.rs` makes its native library with Zig
+  into `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on
+  PATH at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui`
+  holds the library runs no Zig, as a tree of `cargo xtask tree new` does, and `uv sync` and `bun run build` need none.
+  Its tests drive a headless app on a real daemon. `crates/window/tests/screens` holds each capture of a frame as text,
+  a snapshot of insta, and `INSTA_UPDATE=always cargo test -p furb-window` draws each capture again.
+  `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with the colors of the frame.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
-- `frames/` is `furb-frames`, the fifth package of the workspace: the frames of the window, in the one format that a
-  model reads for the window and for any other program in a terminal. `furb-frames capture` runs the real
+- `crates/frames/` is `furb-frames`, the fifth package of the workspace: the frames of the window, in the one format
+  that a model reads for the window and for any other program in a terminal. `furb-frames capture` runs the real
   `furb-window` in tmux at 120 by 40, 80 by 24 and 200 by 60, on a daemon whose claude command line answers each turn
-  from the words of the walk, so it asks no model and no network, and walks each scenario of `frames/src/scenario.rs`
-  that the window has. It writes in `target/frames/<cols>x<rows>/` the recording of each walk in the format 3 of
-  asciinema, and the key frames that its replay through the terminal of asciinema gives: at each step a text, the
-  cells as JSON and an image, and every 200 ms where the screen changed, a text and the cells. It then writes the
-  findings of the probes, which hold each frame to the tokens of the window, and the compare of each scenario with
-  the two winner frames of the other programs that `FURB_RIVALS` names, which stay out of the repository.
+  from the words of the walk, so it asks no model and no network, and walks each scenario of
+  `crates/frames/src/scenario.rs` that the window has. It writes in `target/frames/<cols>x<rows>/` the recording of each
+  walk in the format 3 of asciinema, and the key frames that its replay through the terminal of asciinema gives: at each
+  step a text, the cells as JSON and an image, and every 200 ms where the screen changed, a text and the cells. It then
+  writes the findings of the probes, which hold each frame to the tokens of the window, and the compare of each scenario
+  with the two winner frames of the other programs that `FURB_RIVALS` names, which stay out of the repository.
   `furb-frames replay <cast>` gives the key frames of any recording, `probe` the findings of each frame and across
   the sizes of a step, `motion` the measures of a span, and `compare` the compare of a scenario. Its tests run the
-  program on recordings and frames that they write, in `frames/tests/suite`.
+  program on recordings and frames that they write, in `crates/frames/tests/suite`.
 
-The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
-of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs
-on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the hooks of the harness and the helpers that
-only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
-the contract says.
+The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `tests/conftest.py` names: these boot on a
+Kernel of this interpreter, and the engine of monty holds its own. The suite of each extension,
+`.agents/skills/<name>/test/`, runs on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the
+hooks of the harness and the helpers that only the suites of the extensions need. `tests/outside/test_monty.py` proves
+what the door carries that no sentence of the contract says.
 
 The TypeScript side is a bun workspace at the root, whose packages are the door below and the examples of
 `docs/examples`:
 
-- `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
+- `crates/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
-  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
+  provider among them, and on a console of the operator. `crates/typescript/README.md` says how to use it. Its
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
   code. `furb/skill`, in `src/skill.ts`, is the client of the process of a kit, which speaks to its life on its stdin
-  and its stdout as the protocol says. `bun run build` makes its build in `bind/typescript/dist` again, which its tests read.
+  and its stdout as the protocol says. `bun run build` makes its build in `crates/typescript/dist` again, which its
+  tests read.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
 a life as a program holds it, which each door gives with the same names: `src/furb/life.py`, which `furb.open`
-gives, `bind/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
-`bind/typescript/test/examples.test.ts` and `tests/suite/examples.rs` run each example as a process, on a claude command
+gives, `crates/typescript/src/framework.ts`, and `src/life/host.rs`. `tests/outside/test_examples.py`,
+`crates/typescript/test/examples.test.ts` and `tests/suite/examples.rs` run each example as a process, on a claude command
 line that answers from a script.
 
 `CONTRIBUTING.md` is the guide for a person who changes the repository: the tools to install, how to set up a clone,
@@ -267,7 +268,7 @@ the fix and its proof. An answer that only explains is not done.
 
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
 
-- `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
+- `tests/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
   it performed, the entries it kept, and what it fed its commands. It stands on `STANDS`, and a World of one test
   overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
   asks the chain where it stands at every path. `Py` is the Kernel of `furb.kernel` on the engine of this
@@ -286,17 +287,17 @@ The suite drives the engine through its public API alone, end to end, from the m
   better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
   A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
-  `test/conftest.py`, and one that only the suites of the extensions need lives in `.agents/skills/conftest.py`.
+  `tests/conftest.py`, and one that only the suites of the extensions need lives in `.agents/skills/conftest.py`.
   A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `.agents/skills/conftest.py`
   imports by name, and breaks the main suite. `test_words.py` fails on it. Put its fixtures in
   `.furb/skills/conftest.py`.
-- `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
+- `tests/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
   `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
-`test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, the contract of each official extension, `.agents/skills/<name>/<name>.pyi`, and
+`tests/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
+`engine.pyi`, whose suite is `tests/`, the contract of each official extension, `.agents/skills/<name>/<name>.pyi`, and
 the contract of each extension of the project, `.furb/skills/<name>/<name>.pyi`, each with the folder `test`
 beside it as its suite.
 
@@ -306,7 +307,7 @@ beside it as its suite.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
 5. `engine.py`, minified with its program kept as it is, costs fewer tokens of `o200k_base`, the tokenizer of OpenAI,
-   than `BUDGET` of `xtask/python/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
+   than `BUDGET` of `crates/xtask/python/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
@@ -323,10 +324,10 @@ beside it as its suite.
 `cargo xtask` lists each task of a developer, and runs it from any folder of the tree: `check` runs the checks that the
 changed files reach, `test <suite>` runs a suite, and `test` alone runs every suite at once, each into
 `target/xtask/<suite>.log`, in about a minute; `frames` the frames of the window, `search <words>` finds a task or an
-option, and each script of `xtask/python/` and of `script/` that runs on its own is a task of its name, whose help is
+option, and each script of `crates/xtask/python/` and of `script/` that runs on its own is a task of its name, whose help is
 its docstring. The commands below are the ones it routes to. Three agents share one machine with its owner, so each task runs at the
 lowest priority, which each build and each runner of tests that it starts inherits, at the width of the machine; the
-suite of Python (`pytest_configure` of `test/conftest.py`) and the runner of the TypeScript tests lower their own
+suite of Python (`pytest_configure` of `tests/conftest.py`) and the runner of the TypeScript tests lower their own
 priority the same way. A plain `cargo nextest run` keeps the priority of its shell: start it with `nice -n 19`, or run
 it as `cargo xtask test rust`.
 
@@ -400,7 +401,7 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask memwatch [--once]`: the one guard of memory, a watcher that runs beside the work. No step of the work waits on memory: a hook, a build, a test run and a capture start at once. While the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux less than 20% of the memory is available), the watcher ends the largest test process (a test binary of cargo, pytest, bun test) only when the work can be the cause: that process holds `FURB_WATCH_MIN` KB (4 GB), or the work holds `FURB_WATCH_LANE` KB (8 GB). The work is each test process, and each process of the user whose command names a tree of the clone, as `git worktree list` gives the trees, less a daemon of furb, whose memory no end of a test process frees. The watcher prints the pid, the size and the command of the process that it ends, and says so when the work is not the cause. It ends no other process: not a daemon of furb, not a window, not a process of the owner. The desk of the conductor starts it, and `cargo xtask memwatch --once` looks one time.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
-- `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
+- `uv run pytest -q tests/test_hygiene.py`: the hygiene laws alone.
   `addopts` in `pyproject.toml` holds `-n auto`, so `-p no:xdist` fails with an unrecognized argument. Run the
   suite in one process with `-n0`, as `uv run pytest -q -n0 <path>`.
 - `cargo xtask tokens`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`,
@@ -409,7 +410,7 @@ fix what your change broke, and report what was broken before.
   names `cargo check` to make one. `--doctrine` or `--engine` prints that one count alone, and `--stdin` counts a draft
   of the doctrine from stdin, so `cargo xtask tokens --stdin < draft.md` checks it against the wall with no
   write. Each exits 1 over its wall.
-- `uv run ruff format src test script xtask/python .agents/skills` then `uv run ruff check src test script xtask/python
+- `uv run ruff format src tests script crates/xtask/python .agents/skills` then `uv run ruff check src tests script crates/xtask/python
   .agents/skills`: format
   and lint. Two spaces of indentation, 120 columns.
 - `.furb` is outside the formatter, even for a path that you give it: its words keep the form of the engine. Ruff
@@ -434,7 +435,7 @@ fix what your change broke, and report what was broken before.
   --workspace`: the gates of the crate and of the command line. cargo-nextest runs each test in a process of its own,
   as `.config/nextest.toml` sets it, so a test that leans on what another left in its process fails alone, and one past
   60 s ends and fails. The tests of a package stand in its `tests/suite`, one binary, and reach it through its public
-  API as a host does: `tests/suite/engine.rs` drives the real engine on ears in rust, and `cli/tests/suite/furb.rs`
+  API as a host does: `tests/suite/engine.rs` drives the real engine on ears in rust, and `crates/cli/tests/suite/furb.rs`
   runs `furb` as a process, on a claude command line that answers from a script. A test that no door reaches stands
   beside its module, as `src/engine.test.rs`, and its module doc says why.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
@@ -446,7 +447,7 @@ fix what your change broke, and report what was broken before.
   commit runs a test, a type check, a format of Rust or a check that reads the whole repository: run the one or two
   tests of your change while you work, as the skill `testing` says, and the two commands below run the rest outside the
   commit, on a period. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of
-  `xtask/python/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. A merge commit,
+  `crates/xtask/python/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. A merge commit,
   which `git merge` makes or `git commit` ends after a conflict, runs the hooks of a commit only on each file whose
   content differs from its version in every parent: a file that it takes whole from one parent passed the hooks of that
   parent, and the gates check the whole tree. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
@@ -483,7 +484,7 @@ fix what your change broke, and report what was broken before.
   skill compaction and condenses the chain, and the task prints the share of the window that the chain read before
   the cut and after it. It asks the model of the chain for its choice, and for one answer after the cut unless `--dry`.
 - `cargo xtask deepswe`: the DeepSWE rig, whose `--help` says its verbs and its one law, and whose module doc,
-  `xtask/src/deepswe.rs`, says where each thing stands. `run --kills <n>` is the bench of a crash: it kills the life
+  `crates/xtask/src/deepswe.rs`, says where each thing stands. `run --kills <n>` is the bench of a crash: it kills the life
   at random points and opens it again on its record. `baseline <task>` puts the task to the claude command line, the
   baseline of a bench. A later life on the record of a run is `turns <task>`, a life that only inspects its record:
   it asks no model, and its ears that do work are silent.
@@ -528,9 +529,9 @@ fix what your change broke, and report what was broken before.
   fails on a break, and on a sentence that changes, unless the title holds `!`, and unless `--wording` says that the
   pull request holds the label wording for the sentence. A change that stands already at the ref of `--since`, the base of
   the pull request, is known and fails nothing. `.github/workflows/contract.yml` runs its python,
-  `xtask/python/contract.py`, on each pull request, with no toolchain of Rust.
-- `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `xtask/src/`, of
-  `xtask/python/` or of `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
+  `crates/xtask/python/contract.py`, on each pull request, with no toolchain of Rust.
+- `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `crates/xtask/src/`, of
+  `crates/xtask/python/` or of `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
 - `cargo xtask unused [--tests]`: list each exported name of the TypeScript side and each public item of the
   crates that no file but a test names, its own file included. It fails on a name, and the hooks run it. A name that a
@@ -543,7 +544,7 @@ fix what your change broke, and report what was broken before.
   that a commit stages, and `--all-files` on each one.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
-  `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
+  `crates/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
   seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
   word after `bun run test` filters the files by their path or by `typescript/file`, as `typescript/engine`, and a filter
   that matches no file fails. Use it, and not a plain
@@ -561,14 +562,14 @@ fix what your change broke, and report what was broken before.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - A change of the types of the N-API door runs `bun run build` before its commit: the CI fails when
-  `bind/typescript/index.d.cts` is not what the build makes. No hook of pre-commit runs it, since the job of the hooks
+  `crates/typescript/index.d.cts` is not what the build makes. No hook of pre-commit runs it, since the job of the hooks
   has no bun.
-- `cargo test -p furb-host --test suite memory::bench -- --ignored`: the memory of a life, the measure of the bench. A scripted life
-  grows to the sizes of `LARGE` in `host/tests/suite/memory.rs`, and the test prints its heap, its footprint and what a window
-  that attaches reads at each size. It fails when the log keeps each part of each reply or each state of each act, and
-  over its budget, `memory_heap_mib` of `xtask/budgets.toml`. It takes a few minutes and holds about 2 GB at its
-  peak. The suite runs the same test at the sizes of `SMALL`, with no argument, and a slow window on a life of 10k
-  facts, in seconds.
+- `cargo test -p furb-host --test suite memory::bench -- --ignored`: the memory of a life, the measure of the bench. A
+  scripted life grows to the sizes of `LARGE` in `crates/host/tests/suite/memory.rs`, and the test prints its heap, its
+  footprint and what a window that attaches reads at each size. It fails when the log keeps each part of each reply or
+  each state of each act, and over its budget, `memory_heap_mib` of `crates/xtask/budgets.toml`. It takes a few minutes
+  and holds about 2 GB at its peak. The suite runs the same test at the sizes of `SMALL`, with no argument, and a slow
+  window on a life of 10k facts, in seconds.
 - `cargo xtask job-budgets [--runs <n>]`: set the budget of time of each job of the gates in `.github/budgets.json`, from its last
   green runs on `main`.
 
@@ -613,7 +614,7 @@ Prose here uses no em dash and no en dash. A docstring is a document.
 Read `.github/pull_request_template.md` whole and apply it strictly.
 
 It is the one home of the rules of a pull request: its scope, its title, which release-please reads, and its body. The
-check `the title`, in `.github/workflows/titles.yml`, runs `xtask/python/title.py`, which `cargo xtask title` runs too, on each title, at each change of the pull
+check `the title`, in `.github/workflows/titles.yml`, runs `crates/xtask/python/title.py`, which `cargo xtask title` runs too, on each title, at each change of the pull
 request and at each edit of its title, and reads the types from their one home, the `changelog-sections` of
 `release-please-config.json`.
 
@@ -622,7 +623,7 @@ request and at each edit of its title, and reads the types from their one home, 
 A comment says what the code cannot tell by itself. It is a disclaimer: the code does not behave as a reader would
 assume, and one sentence spares them a debugging session. Documentation adds edges to symbols and enumerates the
 invariants; a public type of furb always gets it, because a client developer reads it: a type of the contract
-`src/furb/engine.pyi`, and a type of a door, the crate in `src/lib.rs`, `bind/python` or `bind/typescript`. The code,
+`src/furb/engine.pyi`, and a type of a door, the crate in `src/lib.rs`, `crates/python` or `crates/typescript`. The code,
 its names, the module tree and `git log` say the rest.
 
 A comment older than your change is not yours to remove. `TODO` and `FIXME` go with the change that completes the work

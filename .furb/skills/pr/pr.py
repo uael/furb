@@ -23,9 +23,9 @@ def entered(where: str) -> str:
 
 
 async def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None = None, where: str = "") -> int:
-  said = await bash(f"{entered(where)}python3 xtask/python/title.py {shq(title)}", show=HIDDEN, show_err=HIDDEN, ok=True, timeout=60)
+  said = await bash(f"{entered(where)}python3 crates/xtask/python/title.py {shq(title)}", show=HIDDEN, show_err=HIDDEN, ok=True, timeout=60)
   if said.code != 0:
-    raise Refused(" ".join(said.stderr.content.split()) or f"xtask/python/title.py exited {said.code}")
+    raise Refused(" ".join(said.stderr.content.split()) or f"crates/xtask/python/title.py exited {said.code}")
   if not why.strip() or not outcome:
     raise Refused("a PR needs a why and at least one outcome")
   if breaking and ")!:" not in title:
