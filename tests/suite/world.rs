@@ -8,6 +8,7 @@ mod claude;
 mod codex;
 mod config;
 mod disk;
+mod files;
 mod images;
 mod kits;
 mod local;

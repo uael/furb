@@ -72,7 +72,7 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
 /// there, as [`tilded`] writes it.
 async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-  let path = native(&path, cfg!(windows));
+  let path = native(&path);
   if let Some(scheme) =
     [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
   {
@@ -103,7 +103,7 @@ async fn served(
       a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
     (text.path, Some(text.content))
   };
-  let path = native(&path, cfg!(windows));
+  let path = native(&path);
   if let Some(path) = path.strip_prefix(SCRATCH) {
     return scratch.served(path, content, gallery);
   }
@@ -164,8 +164,8 @@ fn ended(at: &Path, content: String) -> String {
 /// A path as Windows names it, from the form of the sh of Git for Windows, which names `C:\\x` as `/c/x` and the
 /// scratch directory, its temporary directory, as `/tmp`: on Windows, `/c` and `/c/x` are `C:/` and `C:/x`, and `/tmp`
 /// and `/tmp/x` are `scratch://` and `scratch://x`. Any other path, and every path on another machine, stands as it is.
-pub(super) fn native(path: &str, windows: bool) -> String {
-  if !windows {
+pub(super) fn native(path: &str) -> String {
+  if !cfg!(windows) {
     return path.to_owned();
   }
   if let Some(rest) =
