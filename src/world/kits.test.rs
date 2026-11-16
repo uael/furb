@@ -78,9 +78,12 @@ fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
   block_on(engine.rung(rung).unwrap()).map_err(|no| no.to_string())
 }
 
-/// The acts that a run awaits, so a hop is a part of the difference of two runs: the acts of a
-/// kit and the acts of an ear of this process, which each answer later through the same facts.
-const HOPS: u32 = 10;
+/// The runs of one awaited act of each kind: the least of each is the run that no other work of
+/// the machine cut, so a hop is the difference of the least run of an act of a kit and the least
+/// run of an act of an ear of this process, which each answer later through the same facts. A run
+/// of ten acts was cut far more often than a run of one, and the gates on a loaded runner of Linux
+/// read a hop of 671 µs where the hop costs about 40 µs.
+const RUNS: usize = 50;
 
 /// The least time of each of `runs` runs of a step.
 fn least(runs: usize, mut step: impl FnMut()) -> Duration {
@@ -135,18 +138,17 @@ fn the_hop_to_the_process_of_a_kit_costs_less_than_the_start_of_the_least_progra
   let words = ["note", "", "", "", "", "", &program.display().to_string()].map(Object::string);
   engine.say("enable", "chain1", words.into()).unwrap();
   let mut ran = |kind: &str| {
-    let word =
-      format!("for _ in range({HOPS}):\n  await act('{kind}', '', None, 'milk')\nclose(None)");
-    least(10, || drop(closed(&mut engine, &word).unwrap()))
+    let word = format!("await act('{kind}', '', None, 'milk')\nclose(None)");
+    least(RUNS, || drop(closed(&mut engine, &word).unwrap()))
   };
   ran("note_add");
   let (kit, here) = (ran("note_add"), ran("note_later"));
-  let start = least(10, || {
+  let start = least(RUNS, || {
     least_program().status().unwrap();
   });
-  let hop = kit.saturating_sub(here) / HOPS;
+  let hop = kit.saturating_sub(here);
   assert!(
     hop < start,
-    "the hop took {hop:?} ({kit:?} less {here:?}, over {HOPS}), and the start of the least program {start:?}"
+    "the hop took {hop:?} ({kit:?} less {here:?}), and the start of the least program {start:?}"
   );
 }
