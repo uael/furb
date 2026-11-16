@@ -841,6 +841,15 @@ fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
   let bar = |frame: &str| frame.lines().last().unwrap_or_default().to_owned();
   let ready = app.wait_until(PATIENCE, || bar(&app.text()).contains("now"));
   assert!(ready, "{}", app.text());
+  // The agents of the thread still add moments for a while: the bar rests once two looks a
+  // second apart show the same track.
+  let mut before = String::new();
+  let rests = app.wait_until(PATIENCE, || {
+    app.advance(std::time::Duration::from_secs(1));
+    let now = bar(&app.text());
+    std::mem::replace(&mut before, now.clone()) == now
+  });
+  assert!(rests, "{}", app.text());
   screen("time-out", &app);
   // A first click on its track holds it and moves nothing in time.
   let y = u16::try_from(app.text().lines().count() - 1).unwrap_or_default();
