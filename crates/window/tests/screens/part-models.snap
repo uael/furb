@@ -1,5 +1,5 @@
 ---
-source: crates/window/tests/suite/screens.rs
+source: tests/suite/screens.rs
 ---
   furb                                                         furb-try ▾            This computer
 
@@ -17,17 +17,17 @@ source: crates/window/tests/suite/screens.rs
     Codex
      Sign in with ChatGPT  your ChatGPT plan, no key
      Sign in with a code   from any device
+
+    ←→ effort · ⏎ take it for the new session · ⎋ close
+
+  with sonnet at high effort.
+
+  ⌃P          go to anything, or run a command
+  ⌃X ?        each key
+
 ┃
-┃   ←→ effort · ⏎ take it for the new session · ⎋ close
+┃ Ask for a change, a review or an answer
 ┃
 ┃  Message  Python    This… ▾   FT furb-… ▾  sonnet  high
 ┃
-
-
-
-
-
-
-
-
   ~/furb-try                                      ⌃P find

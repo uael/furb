@@ -57,13 +57,10 @@ pub(crate) fn sent(app: &TestApp, text: &str) {
   app.press("enter");
 }
 
-/// The color of the bar of the input on the row of its launcher, which holds the switch of its
-/// mode, wherever the input stands.
+/// The color of the bar of the input of one row, which stands above the launcher and the hints.
 fn bar(app: &TestApp) -> Color {
   let frame = app.render();
-  let text = app.text();
-  let row = text.lines().position(|line| line.contains(" Message  Python ")).expect("a launcher");
-  frame.cells[row * frame.width as usize].fg
+  frame.cells[(frame.height as usize - 3) * frame.width as usize].fg
 }
 
 /// The texts of the messages of the thread of the one session of a project, as its daemon holds
