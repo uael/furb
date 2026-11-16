@@ -13,6 +13,7 @@ use rig_core::{
     AssistantContent, DocumentSourceKind, Message, MimeType, ReasoningContent, UserContent,
   },
 };
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -178,26 +179,35 @@ impl Conversation {
       cwd.chars().map(|one| if one.is_ascii_alphanumeric() { one } else { '-' }).collect();
     let now = jiff::Timestamp::now().to_string();
     self.resumes(past)?;
-    let mut lines = String::new();
-    let mut parent = Value::Null;
+    let mut lines = Vec::new();
+    let mut parent = None;
     for Said { role, content, .. } in &self.said {
       if content.is_empty() {
         continue;
       }
       let id = uuid()?;
-      let message = json!({"role": role, "content": content});
-      let entry = json!({"type": role, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
-        "isSidechain": false, "userType": "external", "timestamp": now, "message": message});
-      lines.push_str(&entry.to_string());
-      lines.push('\n');
-      parent = json!(id);
+      let entry = Entry {
+        kind: role,
+        uuid: &id,
+        parent: parent.as_deref(),
+        session: &self.id,
+        cwd: &cwd,
+        sidechain: false,
+        user: "external",
+        timestamp: &now,
+        message: Turn { role, content },
+      };
+      // A value writes to a Vec with no fault.
+      serde_json::to_writer(&mut lines, &entry).ok();
+      lines.push(b'\n');
+      parent = Some(id);
     }
     if lines.is_empty() {
       return Ok(false);
     }
     let folder = store.join("projects").join(name);
     let file = folder.join(format!("{}.jsonl", self.id));
-    disk::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
+    disk::write(&file, &lines, Access::Shared).map_err(|no| failed(no.to_string()))?;
     self.resumed = true;
     Ok(true)
   }
@@ -639,6 +649,33 @@ impl<'a> Outcome<'a> {
   fn new(incoming: &'a [String], asked: Option<&'a Message>, again: bool) -> Self {
     Self { incoming, asked, again, unheard: None, restored: None, replied: None, read: None }
   }
+}
+
+/// A turn of a conversation as the command line keeps it, under the names that it reads.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Entry<'a> {
+  #[serde(rename = "type")]
+  kind: &'a str,
+  uuid: &'a str,
+  #[serde(rename = "parentUuid")]
+  parent: Option<&'a str>,
+  #[serde(rename = "sessionId")]
+  session: &'a str,
+  cwd: &'a str,
+  #[serde(rename = "isSidechain")]
+  sidechain: bool,
+  #[serde(rename = "userType")]
+  user: &'a str,
+  timestamp: &'a str,
+  message: Turn<'a>,
+}
+
+/// The message of a turn: its role and what it holds.
+#[derive(Serialize)]
+struct Turn<'a> {
+  role: &'a str,
+  content: &'a [Value],
 }
 
 /// An entry of a conversation as the command line holds it: its role, its blocks, and the messages

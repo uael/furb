@@ -743,13 +743,12 @@ impl Reader {
     if !self.asks_kept {
       self.inferred(kind, by, on);
     }
-    let chain = self.scope(on);
-    let scope = if kind == "chain" { about.to_owned() } else { chain.clone() };
-    self.scopes.insert(about.to_owned(), scope);
+    let scope = if kind == "chain" { about.to_owned() } else { self.scope(on).to_owned() };
     if kind == "prompt" {
-      let operator = text(fact, 3) == "operator";
+      let (operator, chain) = (text(fact, 3) == "operator", scope.clone());
       self.prompts.push(Open { id: about.to_owned(), chain, maker: by.to_owned(), operator });
     }
+    self.scopes.insert(about.to_owned(), scope);
   }
 
   /// In a segment that keeps only what the outside said, the chain and the rung that a question
@@ -764,7 +763,8 @@ impl Reader {
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     if kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
-      let chain = self.scope(on);
+      // The rung changes what the reader holds, so it takes its chain apart from them.
+      let chain = self.scope(on).to_owned();
       self.rung(by, &chain);
     }
     if named(by, "rung") && kind != "reply" {
@@ -773,8 +773,8 @@ impl Reader {
   }
 
   /// The chain that a name stands in: itself for a chain, and the chain of the act that it names for a thread.
-  fn scope(&self, on: &str) -> String {
-    self.scopes.get(on).cloned().unwrap_or_else(|| on.to_owned())
+  fn scope<'a>(&'a self, on: &'a str) -> &'a str {
+    self.scopes.get(on).map_or(on, String::as_str)
   }
 
   /// A rung that the record names as the maker of an act and does not hold, on the open prompt of its chain that is

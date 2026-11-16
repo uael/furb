@@ -254,7 +254,9 @@ impl Images {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
       let opens = fact::named(name, "prompt")
-        && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
+        && paragraph.lines().last().is_some_and(|last| {
+          last.strip_prefix(name).is_some_and(|rest| rest.starts_with(": Act["))
+        });
       let reads = fact::named(name, "read");
       if !opens && !reads {
         continue;

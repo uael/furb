@@ -13,6 +13,8 @@ mod ladder;
 mod named;
 mod page;
 mod quote;
+
+pub(crate) use quote::closes;
 mod threads;
 mod time;
 

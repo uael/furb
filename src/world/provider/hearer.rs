@@ -216,13 +216,20 @@ impl Hearer {
   /// and asks again at once, on the models that stand now.
   pub(super) async fn answer(&mut self, co: &mut Co<Replied>) -> Result<(), Fault> {
     let Some((about, word)) = self.stands.take() else { return Ok(()) };
+    let here;
+    let places = if let Some(one) = &self.places {
+      one
+    } else {
+      here = skill::Places::here();
+      &here
+    };
     let given = standing(
       &self.models.read().unwrap_or_else(PoisonError::into_inner),
       &self.directory,
       &self.actor,
       self.skills.as_deref(),
       &self.members.get(),
-      &self.places.clone().unwrap_or_else(skill::Places::here),
+      places,
     );
     say(co, Fact::says("done", &about, [given]));
     if word {

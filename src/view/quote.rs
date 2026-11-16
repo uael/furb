@@ -29,6 +29,20 @@ fn opening(line: &str) -> Option<(&str, &str)> {
   Some((name, after.strip_prefix('>')?))
 }
 
+/// Whether a line closes a quote of a name: it ends with the close mark of that name.
+fn closing(line: &str, name: &str) -> bool {
+  line
+    .strip_suffix('>')
+    .and_then(|one| one.strip_suffix(name))
+    .is_some_and(|one| one.ends_with("</s:"))
+}
+
+/// Whether a line of a text closes a quote of a name, so a quote of that name could not hold the
+/// text.
+pub(crate) fn closes(text: &str, name: &str) -> bool {
+  text.split('\n').any(|line| closing(line, name))
+}
+
 /// The quote that opens at a line of a word. A quote with no close mark is none, but in a word that
 /// a model still writes, `open`, where it runs to the end of what came, less the part of its close
 /// mark that came.

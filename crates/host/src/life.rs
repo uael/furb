@@ -13,7 +13,7 @@ use std::{
   fs::File,
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
-  io::{BufRead, BufReader},
+  io::{self, BufRead, BufReader},
   iter, mem,
   ops::Range,
   path::{Path, PathBuf},
@@ -1058,9 +1058,29 @@ fn kept_kind(fact: &Value) -> Option<&str> {
   (fact.get(0).and_then(Value::as_str) == Some("keep")).then(|| entry?.as_str()).flatten()
 }
 
-/// The digest of a fact, by which the log knows a fact that it told.
+/// The digest of a fact, by which the log knows a fact that it told: the digest of the text that
+/// JSON writes of it, hashed as JSON writes it, with no copy of that text.
 fn digest(fact: &Value) -> u64 {
-  digested(&fact.to_string())
+  let mut hashing = Hashing(DefaultHasher::new());
+  // A value writes to a writer that takes each byte with no fault, so no write fails.
+  serde_json::to_writer(&mut hashing, fact).ok();
+  // The end of a text, as the hash of a str adds it, so the digest is that of `digested`.
+  hashing.0.write_u8(0xff);
+  hashing.0.finish()
+}
+
+/// A writer that hashes each byte that it takes.
+struct Hashing(DefaultHasher);
+
+impl io::Write for Hashing {
+  fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+    self.0.write(bytes);
+    Ok(bytes.len())
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    Ok(())
+  }
 }
 
 /// The digest of a fact as JSON writes it.

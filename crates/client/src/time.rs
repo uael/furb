@@ -167,7 +167,8 @@ const REWIND: &str = "rewind";
 
 /// Whether the text of a line is the word of a rewind, which branches its thread.
 pub(crate) fn rewinds(line: &str) -> bool {
-  line.contains(&format!("on=chain('{REWIND}'"))
+  let labeled = |rest: &str| rest.strip_prefix(REWIND).is_some_and(|rest| rest.starts_with('\''));
+  line.split("on=chain('").skip(1).any(labeled)
 }
 
 /// The place among a count of moments that a column of a track of a count of columns stands for:

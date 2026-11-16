@@ -42,6 +42,7 @@ use crate::{
   minify::minified,
   skill::definitions,
   value::{Fault, Object, ObjectRef, entry, field},
+  view::closes,
   wire,
   world::{self, CHECKPOINT_SCHEMA, Systems},
 };
@@ -139,7 +140,7 @@ impl Next {
     }
     let Some(diff) = &self.diff else { return Ok(chain.to_owned()) };
     let mut name = format!("{id}_diff");
-    while format!("{diff}\n").contains(&format!("</s:{name}>\n")) {
+    while closes(diff, &name) {
       name.push('_');
     }
     let note =

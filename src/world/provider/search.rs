@@ -107,7 +107,11 @@ pub(crate) fn sourced(text: &str, sources: &[(String, String)]) -> String {
   let mut lines: Vec<String> = Vec::new();
   for (title, url) in sources {
     let line = format!("- [{}]({url})", if title.is_empty() { url } else { title });
-    if !url.is_empty() && !lines.iter().any(|one| one.ends_with(&format!("({url})"))) {
+    let cites = |one: &String| {
+      let head = one.strip_suffix(')').and_then(|one| one.strip_suffix(url.as_str()));
+      head.is_some_and(|head| head.ends_with('('))
+    };
+    if !url.is_empty() && !lines.iter().any(cites) {
       lines.push(line);
     }
   }

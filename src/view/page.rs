@@ -772,7 +772,7 @@ impl<'a> Reader<'a> {
 /// the act that the line made, which the line shows as code.
 fn readable(why: &str, made: &[(&Act, Option<usize>)]) -> String {
   let why = reason(why);
-  let named = made.iter().find_map(|(act, _)| why.strip_prefix(&format!("{} ", act.id)));
+  let named = made.iter().find_map(|(act, _)| why.strip_prefix(act.id.as_str())?.strip_prefix(' '));
   named.map_or_else(|| why.clone(), str::to_owned)
 }
 

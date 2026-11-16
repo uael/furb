@@ -15,6 +15,7 @@ use super::{
 use crate::fact;
 use crate::{
   value::{ObjectRef, entry},
+  view::closes,
   wire,
 };
 use std::mem;
@@ -194,7 +195,7 @@ pub(super) fn refused(python: &str, place: usize, word: &str) -> String {
   let start = head.rfind("\n\n").map_or(0, |one| one + 2);
   let rung = python.get(start + 1..).and_then(|rest| rest.split(' ').next()).unwrap_or_default();
   let mut name = format!("{rung}_word");
-  while format!("{word}\n").contains(&format!("</s:{name}>\n")) {
+  while closes(word, &name) {
     name.push('_');
   }
   let word = word.trim_end_matches('\n');
