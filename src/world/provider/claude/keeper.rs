@@ -64,7 +64,10 @@ pub(super) struct Lent {
 }
 
 impl Lent {
-  #[expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+  #[expect(
+    clippy::expect_used,
+    reason = "only `taken` and the drop empty it, and each consumes the lent conversation"
+  )]
   pub(super) fn conversation(&mut self) -> &mut Conversation {
     self.conversation.as_mut().expect("a lent conversation is held until it goes back")
   }

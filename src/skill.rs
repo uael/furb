@@ -417,7 +417,7 @@ pub fn official() -> Vec<Skill> {
 /// places.
 #[expect(
   clippy::expect_used,
-  reason = "the crate carries the manifest of each official extension, which its tests read whole"
+  reason = "the manifests are files of the build, which `the_crate_holds_each_official_skill` reads whole"
 )]
 fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";

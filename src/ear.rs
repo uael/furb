@@ -883,7 +883,7 @@ pub(crate) fn spawned<T: Send + 'static>(
 /// thread of its own, while every ear runs on the thread of its life.
 #[expect(
   clippy::expect_used,
-  reason = "no life runs without a reactor, and the machine gives the process one or none"
+  reason = "the process asks the system once for the thread and the poll of the reactor, as for memory"
 )]
 #[expect(
   clippy::disallowed_methods,

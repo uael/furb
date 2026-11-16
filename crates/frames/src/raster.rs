@@ -32,7 +32,10 @@ const EMOJI: usize = 4;
 ///   face of this rasterizer draws, and a joined emoji or a flag shows as its first part.
 ///
 /// No hint and no rule of layout is read by this rasterizer, so each cut draws as its face.
-#[expect(clippy::expect_used, reason = "the faces that the program carries parse")]
+#[expect(
+  clippy::expect_used,
+  reason = "the faces are files of the build, which each test of `image` draws"
+)]
 static FACES: LazyLock<[Font; 5]> = LazyLock::new(|| {
   let face = |bytes: &[u8]| {
     Font::from_bytes(bytes, FontSettings { scale: PX, ..FontSettings::default() })
@@ -49,7 +52,10 @@ static FACES: LazyLock<[Font; 5]> = LazyLock::new(|| {
 
 /// The height of a cell and the row of its base line, from the face: a line of box drawing then
 /// meets the line above and the line below.
-#[expect(clippy::expect_used, reason = "the regular face that the program carries has its metrics")]
+#[expect(
+  clippy::expect_used,
+  reason = "the regular face of the build has its metrics, as each test of `image` draws"
+)]
 fn rows(density: usize) -> (usize, usize) {
   let line = FACES.first().and_then(|one| one.horizontal_line_metrics(px(density)));
   let line = line.expect("the regular face has horizontal metrics");

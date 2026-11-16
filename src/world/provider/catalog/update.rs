@@ -126,7 +126,10 @@ struct PiCache {
   providers: HashMap<String, Cached>,
 }
 
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
+#[expect(
+  clippy::expect_used,
+  reason = "the sources are a file of the build, which the tests of `world::offered` parse whole"
+)]
 fn bundled() -> &'static Bundled {
   static BUNDLED: OnceLock<Bundled> = OnceLock::new();
   BUNDLED

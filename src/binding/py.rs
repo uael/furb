@@ -426,7 +426,7 @@ impl PyLife {
 /// and the life, taken back once `step` is done.
 #[expect(
   clippy::expect_used,
-  reason = "the step is over, so no call of python holds the lent life, and the life comes back"
+  reason = "this function alone sets and takes the life of the handle that it made, and python only borrows it"
 )]
 fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResult<T>, Life) {
   let handle = match Py::new(py, PyLife { life: Homed::new(None) }) {

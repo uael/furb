@@ -1010,7 +1010,10 @@ fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
 
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
 /// of the snapshot or newer. The last day that a model of a list changed says how new the list is.
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
+#[expect(
+  clippy::expect_used,
+  reason = "the snapshot is a file of the build, which each test of `world::offered` parses whole"
+)]
 pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, Listed> {
   let entries: IndexMap<String, Value> = serde_json::from_str(snapshot)
     .expect("the snapshot of the catalog is the JSON of its providers");
@@ -1062,7 +1065,10 @@ pub(super) fn priced(name: &str, model: &str) -> Option<[f64; 4]> {
 }
 
 /// The models of each provider and of each family of the snapshot, by its name.
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
+#[expect(
+  clippy::expect_used,
+  reason = "the snapshot is a file of the build, which each test of `world::offered` parses whole"
+)]
 fn snapshot() -> &'static HashMap<String, Cached> {
   static PROVIDERS: OnceLock<HashMap<String, Cached>> = OnceLock::new();
   PROVIDERS.get_or_init(|| {

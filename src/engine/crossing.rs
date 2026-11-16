@@ -119,14 +119,14 @@ impl Outside {
       {
         let mut held = Vec::new();
         for (one, value) in pairs {
-          held.push(Object::tuple([key(one), self.goes(sand, graph, *value, shown)?]));
+          held.push(Object::tuple([key(one)?, self.goes(sand, graph, *value, shown)?]));
         }
         marked("dict", [("args", Object::list([Object::list(held)]))])
       }
       MontyNode::Dict(pairs) => {
         let mut held = Vec::new();
         for (one, value) in pairs {
-          held.push((key(one), self.goes(sand, graph, *value, shown)?));
+          held.push((key(one)?, self.goes(sand, graph, *value, shown)?));
         }
         Object::dict(held)
       }
@@ -153,18 +153,18 @@ impl Outside {
         marked("made", [("id", Object::int(self.number(*handle, &held)))])
       }
       MontyNode::ClassType(class) if !class.host_defined => {
-        self.class(sand, whole(graph, id), class.id, &class.name)?
+        self.class(sand, whole(graph, id)?, class.id, &class.name)?
       }
       MontyNode::ClassInstance { class_type, .. } => match graph.node(*class_type) {
         MontyNode::ClassType(class)
           if !class.host_defined && !self.crossing.named.contains_key(&class.id) =>
         {
-          let class = self.class(sand, whole(graph, *class_type), class.id, &class.name)?;
-          marked("instance", [("class", class), ("value", whole(graph, id))])
+          let class = self.class(sand, whole(graph, *class_type)?, class.id, &class.name)?;
+          marked("instance", [("class", class), ("value", whole(graph, id)?)])
         }
-        _ => whole(graph, id),
+        _ => whole(graph, id)?,
       },
-      _ => whole(graph, id),
+      _ => whole(graph, id)?,
     })
   }
 
@@ -367,14 +367,11 @@ impl Outside {
 /// each instance of it, one time in the arena of a value, and the copy that the interpreter makes
 /// of a part walks that arena down to the lowest part that it holds. So the copy of each instance
 /// of a long fact would walk the fact, and this copy walks the part alone.
-#[expect(
-  clippy::expect_used,
-  reason = "a push gives the place of its node, which stands in the arena, and no type holds that"
-)]
-fn whole(graph: &MontyGraph, id: NodeId) -> Object {
+fn whole(graph: &MontyGraph, id: NodeId) -> Result<Object, Fault> {
   let mut arena = MontyGraph::new();
   let root = copied(graph, id, &mut arena, &mut HashMap::new());
-  unstable::object_from_graph(arena, root).expect("the root of a copy stands in its arena")
+  unstable::object_from_graph(arena, root)
+    .map_err(|no| Fault::refused(format!("a part does not copy: {no}")))
 }
 
 /// One part of a value copied into an arena after the parts that it holds, and where it stands

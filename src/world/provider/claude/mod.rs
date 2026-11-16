@@ -48,7 +48,7 @@ pub use accounts::{Account, Source, Switch, Token};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
-use futures::stream;
+use futures::{future, stream};
 use keeper::Kept;
 use locate::PROGRAM;
 pub(super) use locate::located;
@@ -402,11 +402,10 @@ impl CompletionModel for Completion {
     self.claude.turn(&self.name, request, None).await
   }
 
-  #[expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
-  async fn stream(
+  fn stream(
     &self,
     request: CompletionRequest,
-  ) -> Result<StreamingCompletionResponse, CompletionError> {
+  ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> + Send {
     let (claude, name) = (self.claude.clone(), self.name.clone());
     let (deltas, mut heard) = mpsc::unbounded_channel();
     let turn = async move {
@@ -429,7 +428,7 @@ impl CompletionModel for Completion {
     // ends it.
     let told = stream::poll_fn(move |cx| heard.poll_recv(cx));
     let stream = stream::select(told, stream::once(turn).filter_map(async |one| one));
-    Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
+    future::ready(Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream))))
   }
 }
 
