@@ -1,7 +1,6 @@
 //! The operator, as the console of a host puts a prompt to it: the shapes it answers, and a line it writes back, read
 //! as a value of the shape the prompt wants. Every console reads a line by these rules, so an answer means the same at
 //! every host.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::fmt::Display;
 
@@ -108,13 +107,13 @@ fn parts(text: &str, mark: char) -> Vec<&str> {
       (None, '[' | '(' | '{') => depth += 1,
       (None, ']' | ')' | '}') => depth -= 1,
       (None, c) if c == mark && depth == 0 => {
-        found.push(&text[start..at]);
+        found.push(text.get(start..at).unwrap_or_default());
         start = at + c.len_utf8();
       }
       _ => {}
     }
   }
-  found.push(&text[start..]);
+  found.push(text.get(start..).unwrap_or_default());
   found
 }
 
@@ -208,13 +207,14 @@ fn literal(shape: &str) -> Option<Vec<Object>> {
 fn choice(text: &str) -> Option<(Object, &str)> {
   let Some(quote) = text.chars().next().filter(|c| *c == '\'' || *c == '"') else {
     let end = text.find(|c: char| c == ',' || c.is_whitespace()).unwrap_or(text.len());
-    let value = match &text[..end] {
+    let (word, rest) = text.split_at_checked(end)?;
+    let value = match word {
       "None" => Object::none(),
       "True" => Object::bool(true),
       "False" => Object::bool(false),
       word => Object::int(word.parse().ok()?),
     };
-    return Some((value, &text[end..]));
+    return Some((value, rest));
   };
   let mut value = String::new();
   let mut chars = text.char_indices().skip(1);
@@ -241,7 +241,7 @@ fn choice(text: &str) -> Option<(Object, &str)> {
           value.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
         }
       }
-      c if c == quote => return Some((Object::string(value), &text[at + 1..])),
+      c if c == quote => return Some((Object::string(value), text.get(at + c.len_utf8()..)?)),
       c => value.push(c),
     }
   }

@@ -1,5 +1,4 @@
 //! The store of a record as a file of lines: one fact per line, in JSON.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fs::{File, OpenOptions},
@@ -20,7 +19,7 @@ use super::{
   error::{At, StoreError},
   leased, now,
 };
-use std::str;
+use std::str::{self, Utf8Error};
 
 /// The record at a path as a file of lines, under its lease.
 ///
@@ -192,7 +191,7 @@ fn start(path: &Path, head: &[u8], before: u64) -> Result<Option<u64>, StoreErro
   while end > 0 {
     let size = block.len().min(usize::try_from(end).unwrap_or(usize::MAX));
     let from = end - size as u64;
-    let read = &mut block[..size];
+    let Some(read) = block.get_mut(..size) else { break };
     file.seek(SeekFrom::Start(from)).map_err(StoreError::io(path))?;
     file.read_exact(read).map_err(StoreError::io(path))?;
     // A line starts after each end of line, and the line at byte 0 after no end of line.
@@ -261,9 +260,9 @@ pub(super) fn heads(
   loop {
     let read = lines.fill_buf().map_err(StoreError::io(path))?;
     let (end, last) = (memchr(b'\n', read), read.is_empty());
-    let part = &read[..end.unwrap_or(read.len())];
+    let part = end.and_then(|end| read.get(..end)).unwrap_or(read);
     blank = blank && part.iter().all(u8::is_ascii_whitespace);
-    head.extend_from_slice(&part[..part.len().min(HEAD - head.len())]);
+    head.extend(part.iter().take(HEAD.saturating_sub(head.len())));
     let over = end.is_some() || last;
     if !given && !blank && (over || head.len() == HEAD) {
       given = true;
@@ -291,7 +290,8 @@ pub(super) fn heads(
 /// line alone: nothing when the start ends before them, or when one of them holds an escape, as no
 /// name of an act does.
 pub(crate) fn spoken(line: &[u8]) -> Option<[&str; 3]> {
-  let text = str::from_utf8(line).or_else(|cut| str::from_utf8(&line[..cut.valid_up_to()])).ok()?;
+  let whole = |cut: Utf8Error| str::from_utf8(line.get(..cut.valid_up_to()).unwrap_or_default());
+  let text = str::from_utf8(line).or_else(whole).ok()?;
   let mut rest = text.strip_prefix("[[\"")?;
   let mut words = [""; 3];
   for (at, word) in words.iter_mut().enumerate() {
@@ -373,7 +373,8 @@ fn read(
     }
     let ended = line.last() == Some(&b'\n');
     let next = start + read;
-    let Ok(text) = str::from_utf8(&line[..read - usize::from(ended)]) else {
+    let body = line.get(..read.saturating_sub(usize::from(ended))).unwrap_or_default();
+    let Ok(text) = str::from_utf8(body) else {
       return Err(invalid(start));
     };
     if text.trim().is_empty() {
@@ -388,8 +389,10 @@ fn read(
       return Err(invalid(start));
     };
     let Some(entry) = untimed(&held) else { return Err(invalid(start)) };
-    if unparsed.is_some_and(|head| text.as_bytes().starts_with(head)) {
-      take(Taken::Fact(entry[0].get().to_owned()), next as u64);
+    if let Some(fact) =
+      entry.first().filter(|_| unparsed.is_some_and(|head| text.as_bytes().starts_with(head)))
+    {
+      take(Taken::Fact(fact.get().to_owned()), next as u64);
     } else {
       take(Taken::Entry(entry_of(entry).ok_or_else(|| invalid(start))?), next as u64);
     }

@@ -1,7 +1,5 @@
 //! What a command writes: each stream kept at its head and its tail, and read to its end as it
 //! comes.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -67,13 +65,11 @@ impl Kept {
     let mut said = String::new();
     let mut rest = text;
     if !self.full {
-      let mut at = (self.caps.0 - self.head.len()).min(text.len());
-      while !text.is_char_boundary(at) {
-        at -= 1;
-      }
-      self.head.push_str(&text[..at]);
-      said.push_str(&text[..at]);
-      rest = &text[at..];
+      let at = text.floor_char_boundary(self.caps.0.saturating_sub(self.head.len()));
+      let (head, after) = text.split_at_checked(at).unwrap_or((text, ""));
+      self.head.push_str(head);
+      said.push_str(head);
+      rest = after;
       if rest.is_empty() {
         return said;
       }
@@ -172,7 +168,7 @@ pub(super) async fn read(
         return Err(Unread { stream: name, source });
       }
     };
-    held.extend_from_slice(&chunk[..n]);
+    held.extend_from_slice(chunk.get(..n).unwrap_or(&chunk));
     let text = whole(&mut held, n == 0);
     if !text.is_empty() {
       gathered.push_str(&all.push(&text));
@@ -201,7 +197,8 @@ fn whole(held: &mut Vec<u8>, over: bool) -> String {
       }
       Err(no) => {
         let good = no.valid_up_to();
-        text.push_str(str::from_utf8(&held[..good]).unwrap_or_default());
+        text
+          .push_str(held.get(..good).and_then(|one| str::from_utf8(one).ok()).unwrap_or_default());
         match no.error_len() {
           Some(bad) => {
             text.push(char::REPLACEMENT_CHARACTER);

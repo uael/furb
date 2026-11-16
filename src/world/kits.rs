@@ -19,7 +19,6 @@
 //! process that ends before its life tells the operator once, with its exit and the last lines of
 //! its stderr, and each act that it held is refused with the same reason. The end of the life ends
 //! each process with each process that it started.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, VecDeque},
@@ -209,12 +208,13 @@ impl Kits {
   fn heard(&mut self, co: &mut Co<Worked>, a: &Fact) {
     if a.question()
       && a.by() != JOURNAL
-      && let Some(at) = self.answering(a.kind())
+      && let Some(one) = self.answering(a.kind()).and_then(|at| self.played.get_mut(at))
     {
       say(co, Fact::says("started", a.about(), []));
-      self.held.insert(a.about().to_owned(), self.played[at].name.clone());
-      if self.played[at].running.is_none() {
-        self.played[at].running = Some(self.started(co, at));
+      self.held.insert(a.about().to_owned(), one.name.clone());
+      if one.running.is_none() {
+        let running = Self::started(&self.life, co, one);
+        one.running = Some(running);
       }
     }
     if a.kind() == "done" {
@@ -231,14 +231,14 @@ impl Kits {
     }
   }
 
-  /// The process of the kit at a place of the list, started, or its process that ends at once
-  /// with why it did not start.
-  fn started(&self, co: &mut Co<Worked>, at: usize) -> Running {
-    let Played { name, kit, .. } = &self.played[at];
+  /// The process of a kit of a life, started, or its process that ends at once with why it did not
+  /// start.
+  fn started(life: &str, co: &mut Co<Worked>, played: &Played) -> Running {
+    let Played { name, kit, .. } = played;
     let program = kit.as_ref().map(|one| one.program.clone()).unwrap_or_default();
     let (stdin, lines) = mpsc::unbounded_channel();
     let (stop, stopped) = oneshot::channel();
-    let (life, name, stopped) = (self.life.clone(), name.clone(), stopped.shared());
+    let (life, name, stopped) = (life.to_owned(), name.clone(), stopped.shared());
     let ending = stopped.clone();
     let work = stream::once(async move {
       match spawned(&life, &name, &program).await {
@@ -256,6 +256,11 @@ impl Kits {
     Running { stdin, waiting: Some(Vec::new()), _stop: stop }
   }
 
+  /// The process of the kit at a place of the list, while it runs.
+  fn running(&mut self, at: usize) -> Option<&mut Running> {
+    self.played.get_mut(at).and_then(|one| one.running.as_mut())
+  }
+
   /// One line that the process of a kit wrote, answered as a verb of the protocol.
   async fn said(&mut self, co: &mut Co<Worked>, name: &str, line: &str) {
     let Some(at) = self.played.iter().position(|one| one.name == name) else { return };
@@ -263,7 +268,7 @@ impl Kits {
       Ok(request) => request,
       Err(no) => {
         let why = format!("The kit {name} wrote a line that is no verb: {no}");
-        if let Some(running) = &self.played[at].running {
+        if let Some(running) = self.running(at) {
           let frame = Frame::refused(None, ProtocolError::Refused { why });
           drop(running.stdin.send(serde_json::to_string(&frame).unwrap_or_default()));
         }
@@ -271,7 +276,7 @@ impl Kits {
       }
     };
     let answer = self.answered(co, name, request.verb).await;
-    if let Some(running) = self.played[at].running.as_mut() {
+    if let Some(running) = self.running(at) {
       running.reply(request.id, answer);
       if running.waiting.is_some() && attached(line) {
         for line in running.waiting.take().unwrap_or_default() {
@@ -391,7 +396,7 @@ impl Kits {
 
 /// Whether a line of a process is its attach, after which it hears the facts of the life.
 fn attached(line: &str) -> bool {
-  serde_json::from_str::<Value>(line).is_ok_and(|one| one["verb"] == json!("attach"))
+  serde_json::from_str::<Value>(line).is_ok_and(|one| one.get("verb") == Some(&json!("attach")))
 }
 
 /// The process of a kit, in the folder of its program, with the variables that name its kit and

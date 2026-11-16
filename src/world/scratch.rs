@@ -1,7 +1,5 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -113,7 +111,11 @@ impl Scratch {
       _ => path,
     };
     let digest = Sha256::digest(path.to_string_lossy().as_bytes());
-    Ok(cache().map(|cache| Self::kept(cache.join("scratch").join(hex(&digest[..8])))))
+    Ok(
+      cache().map(|cache| {
+        Self::kept(cache.join("scratch").join(hex(digest.get(..8).unwrap_or(&digest))))
+      }),
+    )
   }
 
   /// A scratch directory of its own, in the temporary directory of the machine under a short name, which goes when
@@ -292,7 +294,7 @@ pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathB
   for entry in entries.flatten() {
     let name = entry.file_name().to_string_lossy().into_owned();
     let digest = name.get(..16).is_some_and(|one| one.bytes().all(|b| b.is_ascii_hexdigit()));
-    if !digest || !matches!(&name[16..], "" | ".new") {
+    if !digest || !matches!(name.get(16..), Some("" | ".new")) {
       continue;
     }
     let at = entry.path();

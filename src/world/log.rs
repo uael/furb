@@ -29,7 +29,6 @@
 //!
 //! [`Line`] reads a line of a log from its head, and [`keep`] writes the line of keep, so the
 //! format of the log has this one home, which the reader of a record with no life shares.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -325,7 +324,8 @@ impl Log {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
     let earlier = tip.and_then(|at| {
-      let facts = held[..at].iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+      let facts =
+        held.iter().take(at).filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
       let asked = facts.filter(Fact::question).map(|one| one.about().to_owned()).collect();
       earlier(&path, at, asked).map(|(text, seen)| (at, text, seen))
     });
@@ -341,7 +341,7 @@ impl Log {
       sink: Self::sink(file),
       fresh: Some(fresh),
       tip: Tip { entries, ..Tip::default() },
-      owed: owed(held[from..].iter()),
+      owed: owed(held.iter().skip(from)),
     };
     match earlier {
       Some((at, mut text, seen)) => {

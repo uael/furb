@@ -8,7 +8,6 @@
 //! each extension that the configs turn on adds the keys of the file that its manifest names under
 //! `furb-config`, each under the name of the extension. The writer refuses a value that the
 //! property of its key does not take, and keeps each key that no schema names as it is.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   fs, io,
@@ -58,7 +57,7 @@ const PROVIDERS: &str = "providers";
 /// Whether a name is a key of furb at the top of the configs, which no skill that gives keys of
 /// its own takes as its name, since the configs hold those keys under its name.
 pub(crate) fn furb_key(name: &str) -> bool {
-  own().iter().any(|one| one.key[0] == name)
+  own().iter().any(|one| one.key.first().is_some_and(|one| one == name))
 }
 
 /// The key of the voice of the operator, which the window reads at each start of its speech.
@@ -213,10 +212,12 @@ impl Layers {
     for Named { key, property, skill } in self.schema()? {
       let (value, layer, within) = if property.kind == Kind::Object && skill.is_none() {
         let (within, rest) =
-          won.into_iter().partition(|(one, _)| one.len() == 2 && one[0] == key[0]);
+          won.into_iter().partition(|(one, _)| one.len() == 2 && one.first() == key.first());
         won = rest;
         let within: Vec<Setting> = settings(within);
-        let names = within.iter().map(|one| (one.key[1].clone(), one.value.clone()));
+        // Each setting within holds two words, as the partition above took them.
+        let names =
+          within.iter().filter_map(|one| Some((one.key.get(1)?.clone(), one.value.clone())));
         let value =
           if within.is_empty() { property.default.clone() } else { Value::Object(names.collect()) };
         (value, None, within)
@@ -378,7 +379,9 @@ fn changed(
     (None, _) => {
       held.shift_remove(name);
     }
-    (Some(Value::Bool(on)), Some(Value::Object(fields))) if key[0] == PROVIDERS => {
+    (Some(Value::Bool(on)), Some(Value::Object(fields)))
+      if key.first().is_some_and(|one| one == PROVIDERS) =>
+    {
       switched(fields, on);
     }
     (Some(value), _) => {

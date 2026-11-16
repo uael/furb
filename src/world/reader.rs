@@ -23,7 +23,6 @@
 //!
 //! A question that the reader says names its maker, as the engine names it, and each other fact
 //! that it says is said by [`READER`].
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
@@ -519,7 +518,7 @@ fn text(fact: &Fact, at: usize) -> String {
 fn titled(message: &str) -> String {
   let line = message.lines().map(str::trim).find(|one| !one.is_empty()).unwrap_or_default();
   match line.char_indices().nth(80) {
-    Some((at, _)) => format!("{}…", line[..at].trim_end()),
+    Some((at, _)) => format!("{}…", line.get(..at).unwrap_or(line).trim_end()),
     None => line.to_owned(),
   }
 }

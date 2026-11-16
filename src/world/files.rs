@@ -1,6 +1,4 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -74,9 +72,7 @@ pub fn files(scratch: Scratch, places: Places, gallery: Option<PathBuf>) -> Box<
 async fn moved(co: &mut Co, a: &Fact, home: Option<&Path>) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
   let path = native(&path);
-  if let Some(scheme) =
-    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
-  {
+  if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one))) {
     return Err(Fault::refused(format!(
       "A chain cannot stand in {path}, since {scheme} has no path to stand in."
     )));
@@ -112,9 +108,7 @@ async fn served(
     let dir = Beneath { root: &places.config, scheme: CONFIG, place: "the config directory" };
     return beneath(dir, path, content, gallery, || Ok(()));
   }
-  if let Some(scheme) =
-    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
-  {
+  if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one))) {
     return Err(Fault::refused(format!(
       "{path} is no path of {scheme}, which starts with two slashes."
     )));
@@ -147,10 +141,17 @@ pub(super) fn filed(at: &Path, content: String, name: impl fmt::Display) -> Resu
     .map_err(|no| failed(&no.source, &name))
 }
 
+/// The scheme of a path of a scheme, as `scratch:` of `scratch://`, which a path that names its
+/// folder alone starts with too.
+fn scheme_of(full: &str) -> &str {
+  full.strip_suffix("//").unwrap_or(full)
+}
+
 /// Whether bytes end each of their lines with CRLF: they hold a line break, and a CR comes before each one.
 fn crlf(bytes: &[u8]) -> bool {
   let mut breaks = memchr::memchr_iter(b'\n', bytes).peekable();
-  breaks.peek().is_some() && breaks.all(|at| at > 0 && bytes[at - 1] == b'\r')
+  breaks.peek().is_some()
+    && breaks.all(|at| at.checked_sub(1).and_then(|at| bytes.get(at)) == Some(&b'\r'))
 }
 
 /// The content of a write as the file at a path takes it: with CRLF at the end of each line when every line of the
@@ -176,10 +177,9 @@ pub(super) fn native(path: &str) -> String {
     return format!("{SCRATCH}{}", rest.trim_start_matches('/'));
   }
   match path.as_bytes() {
-    [b'/', drive, rest @ ..]
-      if drive.is_ascii_alphabetic() && (rest.is_empty() || rest[0] == b'/') =>
-    {
-      format!("{}:/{}", char::from(*drive).to_ascii_uppercase(), path[2..].trim_start_matches('/'))
+    [b'/', drive, rest @ ..] if drive.is_ascii_alphabetic() && matches!(rest, [] | [b'/', ..]) => {
+      let rest = path.get(2..).unwrap_or_default().trim_start_matches('/');
+      format!("{}:/{rest}", char::from(*drive).to_ascii_uppercase())
     }
     _ => path.to_owned(),
   }
