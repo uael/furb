@@ -54,6 +54,8 @@ class Pages(BaseHTTPRequestHandler):
         while True:
           self.wfile.write(chunk)
       except OSError:
+        # The client is gone: the connection takes no next request, whose read Windows refuses with a reset.
+        self.close_connection = True
         return
     status, kind, body = PAGES.get(self.path, ("404 Not Found", "text/plain", b"none"))
     self.send_response(int(status.split()[0]))
