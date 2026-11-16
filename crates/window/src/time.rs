@@ -46,9 +46,12 @@ impl Flows {
   }
 }
 
-/// The columns of the track of a bar, each the moment nearest to its share of the track.
+/// The columns of the track of a bar, each the moment nearest to its share of the track: the first
+/// place among the moments that the track shows, how many places after it the track shows, the
+/// columns from the first to the last, and the columns of the track.
 struct Axis {
-  last: usize,
+  first: usize,
+  length: usize,
   span: usize,
   room: usize,
 }
@@ -56,14 +59,22 @@ struct Axis {
 impl Axis {
   /// The place among the moments that a column of the track stands for.
   fn place(&self, column: usize) -> usize {
-    (column * self.last + self.span / 2) / self.span
+    self.first + (column * self.length + self.span / 2) / self.span
   }
 
-  /// The column of the track that a place among the moments takes.
+  /// The column of the track that a place among the moments takes, past each column for a place
+  /// that a zoom leaves out of the track.
   fn column(&self, at: usize) -> usize {
-    (at * self.span + self.last / 2).checked_div(self.last).unwrap_or(self.room)
+    match at.checked_sub(self.first).filter(|one| *one <= self.length) {
+      Some(at) => (at * self.span + self.length / 2).checked_div(self.length).unwrap_or(self.room),
+      None => usize::MAX,
+    }
   }
 }
+
+/// The fewest columns between two marks of messages on a track, so a track that shows many
+/// messages reads as a few marks and not as a wall of them.
+const APART_MARKS: usize = 3;
 
 impl Model {
   /// The rows of the bar of the time of the open thread, which always stands: the calm bar at now,
@@ -91,11 +102,13 @@ impl Model {
     let mut hot: Vec<Hot> = vec![(2..4, Some(Click::Play))];
     // The column of the moment that shows holds the mark, and the column of each message a
     // diamond, so the track reads as the history of the thread.
-    let told: Vec<usize> = time
-      .messages
-      .keys()
-      .map(|moment| axis.column(time.moments.partition_point(|one| one < moment)))
-      .collect();
+    let mut told: Vec<usize> = Vec::new();
+    for moment in time.messages.keys() {
+      let column = axis.column(time.moments.partition_point(|one| one < moment));
+      if column < axis.room && told.last().is_none_or(|last| column >= last + APART_MARKS) {
+        told.push(column);
+      }
+    }
     let mark = axis.column(at);
     for one in 0..axis.room {
       let past = one < mark;
@@ -110,7 +123,14 @@ impl Model {
         hot.push((BEFORE + one..BEFORE + one + 1, Some(Click::Time(axis.place(one)))));
       }
     }
-    line.push(run(format!("{says:>said$}"), muted));
+    // In the past the words say so in the attention color, and a click on them goes back to now.
+    let past = time.at.is_some();
+    let words = if past { Style::new().fg(t.attention) } else { muted };
+    if past {
+      let start = BEFORE + axis.room;
+      hot.push((start..start + said, Some(Click::Key(Does::Rewind))));
+    }
+    line.push(run(format!("{says:>said$}"), words));
     let (toggle, start) = (self.chains_toggle(time.chains.is_some()), BEFORE + axis.room + said);
     hot.push((start..start + width(&toggle), Some(Click::Key(Does::Chains))));
     line.extend(toggle);
@@ -140,16 +160,22 @@ impl Model {
   /// thread steps through its time.
   fn axis(&self, time: &Time) -> (String, usize, Axis) {
     let last = time.moments.len().saturating_sub(1);
+    let back_to =
+      if time.at.is_some() { format!(" · {} now", self.key(Does::Close)) } else { String::new() };
     let says = match time.moments.len() {
       0 if time.stale => " reading".to_owned(),
       0 | 1 => " nothing before now".to_owned(),
-      _ => back(last - time.place()),
+      _ => format!("{}{back_to}", back(last - time.place())),
     };
-    let said = says.width().max(back(last).width());
+    let zoomed = if time.zoom.is_some() { " · zoomed" } else { "" };
+    let says = format!("{says}{zoomed}");
+    let widest = format!("{}{back_to}{zoomed}", back(last)).width();
+    let said = says.width().max(widest);
+    let (first, end) = time.shown();
     // The toggle of the chains ends at the column of the text, as each label at the right of the
     // feed.
     let room = self.wide().saturating_sub(BEFORE + said + TOGGLE + 2);
-    (says, said, Axis { last, span: room.max(2) - 1, room })
+    (says, said, Axis { first, length: end - first, span: room.max(2) - 1, room })
   }
 
   /// The toggle of the chains at the end of each bar of the time: it says that the tracks of the
@@ -321,7 +347,7 @@ impl Model {
   /// The keys of the bar of the time while it shows, for the row of hints.
   pub(crate) fn time_hints(&self) -> Option<Line> {
     let thread = &self.client.thread.as_ref()?.thread;
-    let time = thread.time.as_ref()?;
+    let time = thread.time.as_ref().filter(|one| one.engaged())?;
     let keys = if time.chains.is_some() {
       "  type to find a chain · ⏎ open it at this moment · ⎋ close".to_owned()
     } else {
@@ -331,7 +357,8 @@ impl Model {
         String::new()
       };
       let chains = self.key(Does::Chains);
-      format!("  ←→ a moment · Space play{send} · {chains} chains · {} now", self.key(Does::Close))
+      let close = self.key(Does::Close);
+      format!("  ←→ a moment · + − zoom · Space play{send} · {chains} chains · {close} now")
     };
     Some(vec![run(keys, self.tokens.style(Role::Muted))])
   }
@@ -344,6 +371,18 @@ impl Model {
       Some(Click::Time(at)) => self.client.reach(at),
       Some(Click::Aim(column, span)) => self.client.aim(column, span),
       _ => {}
+    }
+  }
+
+  /// The track zoomed in or out around the moment under the pointer, as the wheel with a modifier
+  /// turns over the bar. Whether the pointer stood on the track.
+  pub(crate) fn zoomed_left(&mut self, x: u16, y: usize, closer: bool) -> bool {
+    match self.left_rows().into_iter().nth(y).and_then(|row| row.click(usize::from(x))) {
+      Some(Click::Time(at)) => {
+        self.client.zoom(closer, Some(at));
+        true
+      }
+      _ => false,
     }
   }
 

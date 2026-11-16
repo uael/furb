@@ -206,6 +206,8 @@ impl Thread {
     }
     if let Some(time) = self.time.as_mut() {
       time.heard(&page.exchanges);
+      // At now the thread grows, so the bar asks its moments again, one ask at a time.
+      time.stale |= time.at.is_none() && !page.exchanges.is_empty();
     }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
     (self.agents, self.context, self.sub, self.folder, self.views) =

@@ -193,6 +193,7 @@ impl Client {
   /// while the client lists everything that the operator can go to, the files and the skills of
   /// the target of the input.
   pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
+    self.bar_due();
     let mut due = self.views_due();
     due.extend(self.controls_due());
     due.extend(self.changes_due());

@@ -25,8 +25,10 @@ const STEP: Duration = Duration::from_millis(120);
 /// shows, none for now, whether they changed since the machine gave them, when the play last
 /// stepped while it plays, the first line of each message that a page of the thread gave, by the
 /// moment that it was said, which the track marks, the chains of the life while they show, when
-/// the bar opened, on the clock of the loaders, and the share of its track that a click on the calm
-/// bar aimed at, a column and the count of columns, until the moments come.
+/// the bar opened, on the clock of the loaders, the share of its track that a click on the calm
+/// bar aimed at, a column and the count of columns, until the moments come, whether the operator
+/// holds the bar, so its keys and its clicks move the thread in time, and the places among the
+/// moments that its track shows while he zooms in, none for each of them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Time {
   pub since: Duration,
@@ -37,7 +39,12 @@ pub struct Time {
   pub messages: BTreeMap<u64, String>,
   pub chains: Option<Chains>,
   pub aimed: Option<(usize, usize)>,
+  pub held: bool,
+  pub zoom: Option<(usize, usize)>,
 }
+
+/// The fewest moments that a track shows once zoomed in.
+const CLOSEST: usize = 8;
 
 /// The chains of a life under the bar of the time of a thread: what its machine gave, whether the
 /// life changed since, and the text that finds a chain by its label.
@@ -168,6 +175,37 @@ pub fn resting(state: State) -> bool {
 }
 
 impl Time {
+  /// Whether the keys and the clicks of the bar move the thread in time: he holds it, it shows the
+  /// past or plays, or its chains show.
+  pub fn engaged(&self) -> bool {
+    self.held || self.at.is_some() || self.played.is_some() || self.chains.is_some()
+  }
+
+  /// The places among the moments that the track shows: each of them, or the span that he zoomed
+  /// in on.
+  pub fn shown(&self) -> (usize, usize) {
+    let last = self.moments.len().saturating_sub(1);
+    self.zoom.map_or((0, last), |(first, end)| (first.min(last), end.min(last)))
+  }
+
+  /// The track zoomed in by half around a place among the moments, or out by twice, back to each
+  /// moment once it shows them all.
+  pub fn zoomed(&mut self, closer: bool, around: usize) {
+    let last = self.moments.len().saturating_sub(1);
+    let (first, end) = self.shown();
+    let length = end - first;
+    let length = if closer { (length / 2).max(CLOSEST) } else { length.saturating_mul(2) };
+    if length >= last {
+      self.zoom = None;
+      return;
+    }
+    // The place keeps its share of the track, so what stood under the pointer stays there.
+    let share = (around.saturating_sub(first)) as f64 / length.max(1) as f64;
+    let wanted = around.saturating_sub((share.min(1.0) * length as f64) as usize);
+    let first = wanted.min(last - length);
+    self.zoom = Some((first, first + length));
+  }
+
   /// Whether the bar waits for what its machine gives: its moments, or the chains that it shows.
   pub fn reads(&self) -> bool {
     self.stale || self.chains.as_ref().is_some_and(|one| one.stale && one.tracks.is_empty())
@@ -211,17 +249,40 @@ impl Time {
 }
 
 impl Client {
-  /// The bar of the time of the open thread opened at now, or closed back to now.
+  /// The bar of the time of the open thread, which stands under each thread: from the past back to
+  /// now, held at now so its keys step through its time, or let go.
   pub fn time(&mut self) {
-    let Some(opened) = self.thread.as_mut() else { return };
-    let thread = &mut opened.thread;
-    if thread.time.take().is_some_and(|time| time.at.is_some()) {
+    self.bar_due();
+    let Some(thread) = self.thread.as_mut().map(|one| &mut one.thread) else { return };
+    let Some(time) = thread.time.as_mut() else { return };
+    time.played = None;
+    if time.at.take().is_some() {
+      (time.held, time.zoom) = (false, None);
       thread.moved();
-    } else if !thread.key.2.is_empty() {
-      let mut time = Time { stale: true, since: self.moved, ..Time::default() };
-      time.heard(thread.exchanges.values());
-      thread.time = Some(time);
+    } else {
+      time.held = !time.held;
     }
+  }
+
+  /// The bar of the time of the open thread made, at now, once the thread has a prompt: it stands
+  /// under each thread, and asks its moments.
+  pub fn bar_due(&mut self) {
+    let moved = self.moved;
+    let Some(thread) = self.thread.as_mut().map(|one| &mut one.thread) else { return };
+    if thread.time.is_some() || thread.key.2.is_empty() {
+      return;
+    }
+    let mut time = Time { stale: true, since: moved, ..Time::default() };
+    time.heard(thread.exchanges.values());
+    thread.time = Some(time);
+  }
+
+  /// The track of the bar of the open thread zoomed in or out around a place among its moments.
+  pub fn zoom(&mut self, closer: bool, around: Option<usize>) {
+    let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else { return };
+    let around = around.unwrap_or_else(|| time.place());
+    time.zoomed(closer, around);
+    time.held = true;
   }
 
   /// The open thread a count of moments later, back for a negative count. The play stops.
@@ -239,10 +300,22 @@ impl Client {
     let Some(thread) = self.thread.as_mut().map(|one| &mut one.thread) else { return };
     let Some(time) = thread.time.as_mut() else { return };
     let at = to(time);
-    time.played = None;
+    (time.played, time.held) = (None, true);
     if at != time.at {
       time.at = at;
       thread.moved();
+    }
+  }
+
+  /// A click on the track of the bar at a place among its moments: the thread goes there once he
+  /// holds the bar, and a first click only holds it, so a click that he did not mean never moves
+  /// him in time.
+  pub fn touched(&mut self, at: usize) {
+    let time = self.thread.as_mut().and_then(|one| one.thread.time.as_mut());
+    match time {
+      Some(time) if !time.engaged() => time.held = true,
+      Some(_) => self.reach(at),
+      None => {}
     }
   }
 
@@ -250,11 +323,11 @@ impl Client {
   /// track and the count of its columns. The bar opens, and the thread goes there once its moments
   /// come.
   pub fn aim(&mut self, column: usize, span: usize) {
-    if self.thread.as_ref().is_some_and(|one| one.thread.time.is_none()) {
-      self.time();
-    }
+    self.bar_due();
     let place = {
-      let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else { return };
+      let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else {
+        return;
+      };
       if time.stale {
         time.aimed = Some((column, span));
         return;
@@ -270,6 +343,7 @@ impl Client {
     let moved = self.moved;
     let Some(thread) = self.thread.as_mut().map(|one| &mut one.thread) else { return };
     let Some(time) = thread.time.as_mut() else { return };
+    time.held = true;
     if time.played.take().is_some() {
       return;
     }
@@ -361,9 +435,7 @@ impl Client {
   /// The chains of the life under the bar of the time of the open thread shown, with the bar,
   /// or hidden. The text that finds a chain starts empty.
   pub fn chains(&mut self) {
-    if self.thread.as_ref().is_some_and(|one| one.thread.time.is_none()) {
-      self.time();
-    }
+    self.bar_due();
     let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else { return };
     time.chains = match time.chains.take() {
       Some(_) => None,

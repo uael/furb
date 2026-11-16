@@ -681,7 +681,7 @@ impl Model {
         None
       }
       Click::Time(at) => {
-        self.client.reach(at);
+        self.client.touched(at);
         None
       }
       Click::Play => {

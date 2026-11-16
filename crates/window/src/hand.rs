@@ -1039,7 +1039,7 @@ fn plays(window: &Shared) -> bool {
   let held = window.borrow();
   let thread = held.screen.model.client.thread.as_ref();
   let time = thread.and_then(|one| one.thread.time.as_ref());
-  time.is_some_and(|time| time.chains.is_none())
+  time.is_some_and(|time| time.engaged() && time.chains.is_none())
     && held.led.is_none()
     && held.area.text().is_empty()
 }
@@ -1218,7 +1218,8 @@ fn looked(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 fn timed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   let shows = {
     let model = &window.borrow().screen.model;
-    model.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some())
+    let time = model.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
+    time.is_some_and(furb_client::Time::engaged)
   };
   let finds = window
     .borrow()
@@ -1240,6 +1241,8 @@ fn timed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     KeyCode::Left if empty => tell(app, window, |model| model.client.step(-1)),
     KeyCode::Right if empty => tell(app, window, |model| model.client.step(1)),
     KeyCode::Char(' ') if empty => tell(app, window, |model| model.client.play()),
+    KeyCode::Char('+' | '=') if empty => tell(app, window, |model| model.client.zoom(true, None)),
+    KeyCode::Char('-') if empty => tell(app, window, |model| model.client.zoom(false, None)),
     _ => return false,
   }
   true
@@ -2030,6 +2033,12 @@ fn pointed(model: &mut Model, event: MouseEvent) -> (bool, Option<Does>) {
       model.dragged_left(event.x, y);
       None
     }
+    (MouseEventKind::ScrollUp | MouseEventKind::ScrollDown, false)
+      if !event.modifiers.is_empty() =>
+    {
+      model.zoomed_left(event.x, y, event.kind == MouseEventKind::ScrollUp);
+      None
+    }
     (MouseEventKind::ScrollUp, true) => {
       model.scrolled(-isize::from(WHEEL));
       None
@@ -2051,7 +2060,16 @@ fn over_feed(window: &Shared, event: MouseEvent) -> Option<isize> {
     MouseEventKind::ScrollDown => rows,
     _ => return None,
   };
-  (!window.borrow().screen.model.on_list(event.x)).then_some(by)
+  // The wheel with a modifier zooms the bar of the time, where the pointer stands on its track.
+  let zooms = !event.modifiers.is_empty() && {
+    let model = &window.borrow().screen.model;
+    let row = model.left_rows().into_iter().nth(usize::from(event.y));
+    matches!(
+      row.and_then(|one| one.click(usize::from(event.x))),
+      Some(crate::thread::Click::Time(_))
+    )
+  };
+  (!zooms && !window.borrow().screen.model.on_list(event.x)).then_some(by)
 }
 
 /// A step of the wheel over the feed, which waits for the end of the input that the terminal sent
