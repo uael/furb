@@ -269,7 +269,10 @@ fn surveyed(path: &Path, passed: &mut dyn FnMut(u64)) -> Result<Surveyed, Fault>
     last = Some(Taken::Entry(entry));
   })?;
   let logged = agrees(path, entries, &asked, ends);
-  let last = last.and_then(Taken::entry).as_ref().map(digest);
+  let unread =
+    |why| Fault::refused(format!("the last entry of {} is unread: {why}", path.display()));
+  let last = last.map(Taken::entry).transpose().map_err(unread)?;
+  let last = last.as_ref().map(digest);
   Ok(Surveyed { maker, entries, last, makers, logged })
 }
 

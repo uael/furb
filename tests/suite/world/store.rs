@@ -310,7 +310,10 @@ fn a_row_of_the_database_that_holds_no_fact_is_refused_with_its_number() {
   drop(db);
   assert_eq!(
     kept(&path).err().unwrap().to_string(),
-    format!("Refused: Invalid record entry at row 4 in {}.", path.display())
+    format!(
+      "Refused: Invalid record entry at row 4 in {}: its fact is no list of three words whose first is a kind.",
+      path.display()
+    )
   );
 }
 
@@ -601,14 +604,34 @@ fn the_store_reads_past_a_torn_last_line_and_a_whole_one_that_no_keep_mends_and_
   let at = "[[\"done\",\"x\",\"world\",null]]\n".len();
   assert_eq!(
     refused.to_string(),
-    format!("Refused: Invalid record entry at byte {at} in {}.", path.display())
+    format!("Refused: Invalid record entry at byte {at} in {}: it is no list.", path.display())
   );
   // An entry is one fact, so an entry that holds a fact and an answer is no entry.
   fs::write(&path, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],[[],\"/w\",\"m/low\"]]\n")
     .unwrap();
   assert_eq!(
     store(&path).err().unwrap().to_string(),
-    format!("Refused: Invalid record entry at byte 0 in {}.", path.display())
+    format!(
+      "Refused: Invalid record entry at byte 0 in {}: a word after its fact is not of its kind.",
+      path.display()
+    )
+  );
+  // An entry holds its fact alone, or its fact, its place, whether the life rested and each word
+  // that a minor adds after them, which goes to the engine as it stands, and a line its time after
+  // them: a line of three is no entry.
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null],1,false,2,[3],7]\n").unwrap();
+  let read = kept(&path).unwrap();
+  assert_eq!(
+    read.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>(),
+    ["[['done', 'x', 'world', None], 1, False, 2, [3]]"]
+  );
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null],1,7]\n").unwrap();
+  assert_eq!(
+    store(&path).err().unwrap().to_string(),
+    format!(
+      "Refused: Invalid record entry at byte 0 in {}: it holds 3 words, which no entry holds.",
+      path.display()
+    )
   );
   fs::write(&path, "[\"torn\"").unwrap();
   assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());

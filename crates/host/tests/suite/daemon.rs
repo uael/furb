@@ -1138,7 +1138,10 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   let mut read = Vec::new();
   read_until(&mut window, &mut read, refused).await;
   let Some(Frame::Refused { why, .. }) = read.pop() else { unreachable!("the wait ends on it") };
-  assert_eq!(why, format!("Refused: Invalid record entry at byte {at_byte} in {life}."));
+  assert_eq!(
+    why,
+    format!("Refused: Invalid record entry at byte {at_byte} in {life}: it is no list.")
+  );
 }
 
 #[cfg(unix)]
@@ -1156,7 +1159,7 @@ async fn a_verb_said_after_an_open_failed_hears_why_until_the_next_open() {
   // the answer to its open.
   window.gone(&life).await;
   let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
-  let why = format!("Refused: Invalid record entry at byte 0 in {life}.");
+  let why = format!("Refused: Invalid record entry at byte 0 in {life}: it is no list.");
   assert_eq!(window.ask(inspect).await, Err(ProtocolError::Refused { why }));
   fs::remove_file(&life).unwrap();
   open(&mut window, &at, "a.jsonl", None).await;

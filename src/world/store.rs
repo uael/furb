@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
-use self::error::StoreError;
+use self::error::{StoreError, Unread};
 use super::{beside, free};
 use crate::{
   CHECKPOINTER, ENGINE, KERNEL,
@@ -284,12 +284,10 @@ pub(crate) enum Taken {
 impl Taken {
   /// The value of the entry, which a fact given as its text is parsed into, as a read of the
   /// record parses it.
-  pub(crate) fn entry(self) -> Option<Object> {
+  pub(crate) fn entry(self) -> Result<Object, Unread> {
     match self {
-      Self::Entry(entry) => Some(entry),
-      Self::Fact(text) => {
-        serde_json::from_str::<&RawValue>(&text).ok().and_then(|fact| entry_of(&[fact]))
-      }
+      Self::Entry(entry) => Ok(entry),
+      Self::Fact(text) => entry_of(&[serde_json::from_str(&text).map_err(|_no| Unread::Fact)?]),
     }
   }
 }
@@ -774,32 +772,34 @@ impl Format {
   }
 }
 
-/// The entry of one fact, from the JSON that the record holds of the fact, of its place and of
-/// whether the life rested as it said the fact, or nothing when it is no entry: a fact is a list of
-/// three words at least, whose first word is its kind, and its place, when the entry has one, is
-/// the count of the facts that the life said before it. The end that a stop gave a run has no
-/// place, which is null.
-fn entry_of(held: &[&RawValue]) -> Option<Object> {
-  let placed = match held {
+/// The entry of one fact, from the JSON that the record holds of the fact, of its place, of whether
+/// the life rested as it said the fact, and of each word after them that a minor of the schema
+/// adds, or why it is no entry: a fact is a list of three words at least, whose first word is its
+/// kind, and its place, when the entry has one, is the count of the facts that the life said before
+/// it. The end that a stop gave a run has no place, which is null. The engine of the segment that
+/// holds the entry reads each word after whether the life rested, as the minor 1 holds the count of
+/// the facts that waited for their ears as the life said the fact, so each word goes to it as it
+/// stands.
+fn entry_of(held: &[&RawValue]) -> Result<Object, Unread> {
+  let fits = match held {
     [_] => true,
-    [_, place, rest] => {
+    [_, place, rest, ..] => {
       serde_json::from_str::<Option<u64>>(place.get()).is_ok()
         && serde_json::from_str::<bool>(rest.get()).is_ok()
     }
-    _ => false,
+    _ => return Err(Unread::Words(held.len())),
   };
-  if !placed {
-    return None;
+  if !fits {
+    return Err(Unread::Word);
   }
   let mut graph = MontyGraph::new();
-  let nodes =
-    held.iter().map(|one| built(&mut graph, one, 1)).collect::<Result<Vec<_>, _>>().ok()?;
-  let root = graph.push(MontyNode::List(nodes));
-  let entry = whole(graph, root).ok()?;
+  let nodes = held.iter().map(|one| built(&mut graph, one, 1)).collect::<Result<Vec<_>, _>>();
+  let root = graph.push(MontyNode::List(nodes.map_err(|_no| Unread::Fact)?));
+  let entry = whole(graph, root).map_err(|_no| Unread::Fact)?;
   let fact = entry.as_ref().items().and_then(|held| held.first().and_then(ObjectRef::items));
   let holds = fact
     .is_some_and(|fact| fact.len() >= 3 && fact.first().is_some_and(|one| one.as_str().is_some()));
-  holds.then_some(entry)
+  holds.then_some(entry).ok_or(Unread::Fact)
 }
 
 /// The time now, in milliseconds since the start of 1970.

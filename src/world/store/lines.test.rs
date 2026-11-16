@@ -85,7 +85,14 @@ fn the_heads_of_a_record_are_the_start_of_each_line_before_a_byte_and_only_a_wan
     "a long line gives its start alone, and a last line needs no end"
   );
   assert_eq!(parsed.len(), 2, "and a wanted line is parsed whole");
-  assert_eq!(read(u64::MAX, "done").1, [""; 0], "a wanted line that does not parse gives no entry");
+  let mut wanted = |line: &[u8]| line.starts_with(b"[[\"done\"");
+  let unread = heads(&at, u64::MAX, &mut wanted, &mut |_| {}).unwrap_err().to_string();
+  let byte = text.find("[[\"done\"").unwrap();
+  assert_eq!(
+    unread,
+    format!("Invalid record entry at byte {byte} in {}: it is no list.", at.display()),
+    "a wanted line that is no entry is an error that names its byte and why"
+  );
   let mut none = 0;
   heads(&place("gone"), u64::MAX, &mut |_| true, &mut |_| none += 1).unwrap();
   assert_eq!(none, 0, "a record that stands not holds none");
