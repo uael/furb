@@ -7,7 +7,7 @@ from furb import engine
 from skills.conftest import todo
 
 
-async def test_todo_is_the_doctrine_of_the_extension(tmp_path: Path) -> None:
+async def test_todo_is_the_doctrine_of_the_skill(tmp_path: Path) -> None:
   """todo is the doctrine of the extension, a quote that says what it does."""
   sand, root = todo(tmp_path)
   await settle(300)
