@@ -4,7 +4,7 @@
 //! many cells as they add up to. The window lays out each row with this measure alone, so a row
 //! never ends in another column than the cells that the renderer draws for it.
 
-use std::{cell::RefCell, collections::HashMap};
+use std::cell::{Cell, OnceCell};
 
 use opentui::{
   App,
@@ -13,8 +13,13 @@ use opentui::{
 use unicode_segmentation::UnicodeSegmentation;
 
 thread_local! {
-  /// The measure of the thread of the app, which is the one thread that lays out rows.
-  static MEASURE: RefCell<Measure> = RefCell::new(Measure::default());
+  /// The method that the terminal of the app measures by, which the app tells once it knows it.
+  static METHOD: Cell<WidthMethod> = const { Cell::new(WidthMethod::Unicode) };
+  /// The native context of the renderer, which measures each character: the context of the app,
+  /// or, for a layout before the window has an app, as a test of a row, a context of its own. A
+  /// character that no context measures, which no renderer then draws either, takes one cell, as
+  /// the cell that the renderer leaves for what it cannot draw.
+  static CONTEXT: OnceCell<Option<Context>> = const { OnceCell::new() };
 }
 
 /// The cells of a text.
@@ -25,11 +30,7 @@ pub(crate) trait Cells {
 
 impl Cells for str {
   fn width(&self) -> usize {
-    if printable(self) {
-      self.len()
-    } else {
-      MEASURE.with_borrow_mut(|measure| measure.width(self))
-    }
+    if printable(self) { self.len() } else { self.graphemes(true).map(of).sum() }
   }
 }
 
@@ -41,17 +42,10 @@ pub(crate) fn characters(text: &str) -> impl Iterator<Item = (&str, usize)> {
 /// The method of the renderer of an app, which the terminal tells some time after the window
 /// opens, so the window reads it again at each change of what it shows.
 pub(crate) fn follow(app: &App) {
-  let method = app.width_method();
-  MEASURE.with_borrow_mut(|measure| {
-    if measure.context.is_none() {
-      measure.context = Some(app.session().context().clone());
-    }
-    if measure.method != method {
-      measure.method = method;
-      measure.known.clear();
-      measure.widths.clear();
-    }
+  CONTEXT.with(|context| {
+    context.get_or_init(|| Some(app.session().context().clone()));
   });
+  METHOD.with(|method| method.set(app.width_method()));
 }
 
 /// Whether each character of a text is one printable ASCII character, which takes one cell under
@@ -60,59 +54,17 @@ fn printable(text: &str) -> bool {
   text.bytes().all(|byte| (0x20..0x7f).contains(&byte))
 }
 
-/// The cells of one character.
+/// The cells of one character, as the renderer measures it by the method of the terminal.
 fn of(character: &str) -> usize {
   if printable(character) {
     return character.len();
   }
-  MEASURE.with_borrow_mut(|measure| measure.of(character))
-}
-
-/// How many texts the measure keeps the cells of before it forgets them all.
-const WIDTHS: usize = 4096;
-
-/// The context of the renderer, the method that it measures by, the cells of each character that
-/// it measured and of each text, which a change of the method forgets. A layout measures the same
-/// rows again at each change, so a text that it measured once costs a lookup, not a split into
-/// characters.
-#[derive(Default)]
-struct Measure {
-  context: Option<Context>,
-  method: WidthMethod,
-  known: HashMap<String, usize>,
-  widths: HashMap<String, usize>,
-}
-
-impl Measure {
-  fn width(&mut self, text: &str) -> usize {
-    if let Some(known) = self.widths.get(text) {
-      return *known;
-    }
-    let cells =
-      text.graphemes(true).map(|one| if printable(one) { one.len() } else { self.of(one) }).sum();
-    if self.widths.len() >= WIDTHS {
-      self.widths.clear();
-    }
-    self.widths.insert(text.to_owned(), cells);
-    cells
-  }
-
-  fn of(&mut self, character: &str) -> usize {
-    if let Some(known) = self.known.get(character) {
-      return *known;
-    }
-    // A layout before the window has an app, as a test of a row, measures in a context of its own.
-    if self.context.is_none() {
-      self.context = Context::new(ContextOptions::default()).ok();
-    }
-    // A character that no native context measures, which no renderer then draws either, takes one
-    // cell, as the cell that the renderer leaves for what it cannot draw.
-    let measured =
-      self.context.as_ref().and_then(|one| one.text_width(character, self.method).ok());
-    let cells = measured.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX));
-    self.known.insert(character.to_owned(), cells);
-    cells
-  }
+  let method = METHOD.with(Cell::get);
+  let measured = CONTEXT.with(|context| {
+    let context = context.get_or_init(|| Context::new(ContextOptions::default()).ok());
+    context.as_ref().and_then(|one| one.text_width(character, method).ok())
+  });
+  measured.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX))
 }
 
 #[cfg(test)]
