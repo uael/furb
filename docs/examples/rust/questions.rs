@@ -1,5 +1,3 @@
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 use std::{error::Error, io::Write};
 
 use furb::life::Life;
@@ -16,9 +14,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
   while let Some(question) = life.question(&deploy).await? {
     print!("{} ", question.message);
     io::stdout().flush()?;
-    let mut line = String::new();
-    io::stdin().read_line(&mut line)?;
-    question.answer(&mut life, line.trim())?;
+    let mut reply = String::new();
+    io::stdin().read_line(&mut reply)?;
+    question.answer(&mut life, reply.trim())?;
   }
   println!("{}", life.wait(deploy).await?);
   Ok(())

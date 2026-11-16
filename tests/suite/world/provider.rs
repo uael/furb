@@ -3,22 +3,6 @@
 //! command line of the tests. The laws that no door reaches stand beside the module, in
 //! `src/world/provider.test.rs`, each family with its reason.
 #![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
-#![cfg_attr(
-  unix,
-  expect(
-    clippy::format_collect,
-    reason = "debt: a format! for each item, collected into a String"
-  )
-)]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
 
 use std::{
   collections::HashMap,
@@ -67,6 +51,8 @@ use futures::stream;
 use rig_core::http_client;
 use rig_core::message;
 use std::env;
+#[cfg(unix)]
+use std::fmt::Write as _;
 use std::future as std_future;
 use std::process;
 use std::sync::mpsc;
@@ -120,15 +106,11 @@ fn streaming(turns: &[(&str, Usage)]) -> MockCompletionModel {
   }))
 }
 
-pub(super) fn on(root: &str) -> Option<String> {
-  Some(root.to_owned())
-}
-
 /// A prompt on the root that wants an int.
 pub(super) fn asked(engine: &mut Engine) -> String {
   let root = engine.root().to_owned();
   let with =
-    verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
+    verbs::Prompt { message: Some("count".to_owned()), on: Some(root), ..Default::default() };
   engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
 }
 
@@ -139,7 +121,7 @@ pub(super) fn asked(engine: &mut Engine) -> String {
 pub(super) fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let mut names: HashMap<String, String> = HashMap::new();
   let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -170,7 +152,7 @@ pub(super) fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
 pub(super) fn taken(engine: &mut Engine) -> (String, String) {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let id = facts
     .iter()
@@ -552,7 +534,7 @@ impl CompletionModel for Halting {
 fn told_of(engine: &mut Engine, texts: &[&str]) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   facts.iter().any(|one| {
     let all = one.word(0).map(|word| word.py_repr()).unwrap_or_default();
@@ -748,7 +730,8 @@ fn a_triple_quote_whose_paragraph_starts_at_the_left_edge_runs_once_its_word_is_
   let at = yard("triple");
   let mut engine = lived(Provider::new(at.display().to_string(), vec![scripted(&model)]));
   let root = engine.root().to_owned();
-  let with = verbs::Prompt { message: Some("say".to_owned()), on: on(&root), ..Default::default() };
+  let with =
+    verbs::Prompt { message: Some("say".to_owned()), on: Some(root), ..Default::default() };
   let id = engine.prompt(Object::string("str"), with).expect("a prompt is made").id().to_owned();
   assert!(
     until(&mut engine, |engine| ran(engine, "What I like")),
@@ -838,7 +821,8 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   let (mut engine, _) = life("claude", on_reactor(claude.models()));
   let root = engine.root().to_owned();
   let mut answer = |message: &str| {
-    let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
+    let with =
+      verbs::Prompt { message: Some(message.into()), on: Some(root.clone()), ..Default::default() };
     let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
     block_on(act).map(|got| got.py_repr())
   };
@@ -857,8 +841,11 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   // The ids of chains repeat in every life, and a life on the same command line keeps a
   // conversation of its own.
   let (mut other, _) = life("claude-other", on_reactor(claude.models()));
-  let with =
-    verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt {
+    message: Some("first task".into()),
+    on: Some(root.clone()),
+    ..Default::default()
+  };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
     .expect("an answer");
   // The first process of a conversation starts it, or resumes the turns of the setup of its chain
@@ -886,7 +873,7 @@ fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_e
     let provider = Provider::new(yard(name).display().to_string(), on_reactor(claude.models()));
     let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
     let root = engine.root().to_owned();
-    let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
+    let with = verbs::Prompt { message: Some("task".into()), on: Some(root), ..Default::default() };
     block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
       .expect("an answer");
   }
@@ -910,7 +897,7 @@ fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_
   // The command line streams the text of its reply less its first part, and then says the text
   // whole.
   let with =
-    verbs::Prompt { message: Some("GAP task".into()), on: on(&root), ..Default::default() };
+    verbs::Prompt { message: Some("GAP task".into()), on: Some(root), ..Default::default() };
   let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
   assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'reply 1'");
   assert_eq!(yard.heard().len(), 1, "the first reply answered the prompt");
@@ -936,7 +923,7 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let prompted = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let with =
-      verbs::Prompt { message: Some(message.clone()), on: on(&root), ..Default::default() };
+      verbs::Prompt { message: Some(message.clone()), on: Some(root), ..Default::default() };
     engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
   };
   let model = streaming(&[("close(1)", Usage::new())]);
@@ -990,7 +977,7 @@ fn a_turn_that_names_an_image_whose_file_is_lost_gets_its_answer_and_the_life_te
     for want in ["1", "2"] {
       let root = engine.root().to_owned();
       let with =
-        verbs::Prompt { message: Some(message.clone()), on: on(&root), ..Default::default() };
+        verbs::Prompt { message: Some(message.clone()), on: Some(root), ..Default::default() };
       let id =
         engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
       let told =
@@ -1025,7 +1012,7 @@ fn the_claude_command_line_hears_a_turn_that_names_a_lost_image_as_its_text_alon
   let mut engine = seeing(provider, Some(at.join("images")));
   let root = engine.root().to_owned();
   let message = format!("look at {}", images::reference("a.png", &uri));
-  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message: Some(message), on: Some(root), ..Default::default() };
   let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
   block_on(act).expect("an answer");
   let heard = fake.heard();
@@ -1056,7 +1043,7 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let mut engine = seeing(provider, Some(at.join("images")));
   let root = engine.root().to_owned();
   let message = format!("look at {}", images::reference("named.png", &kept.uri));
-  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message: Some(message), on: Some(root), ..Default::default() };
   let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
   // The claude of the test says that the turn that it answers holds an image.
   assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'an image, reply 2'");
@@ -1306,7 +1293,8 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
     told("before", "");
     let gone = Arc::clone(&gone);
     thread::spawn(move || {
-      let _ = gone.lock().expect("the signal of the test").recv();
+      // A test that ended drops its signal, and the turn writes the rest all the same.
+      gone.lock().expect("the signal of the test").recv().ok();
       told("after", "");
     });
     std_future::pending().boxed()
@@ -1322,7 +1310,7 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let facts = engine
-      .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+      .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
       .expect("the transcript");
     facts.iter().any(|one| one.kind() == "done" && one.about().starts_with("reply"))
   };
@@ -1341,7 +1329,7 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
 fn ran(engine: &mut Engine, text: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let holds = |one: &Fact| {
     (0..4)
@@ -1388,7 +1376,7 @@ fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain
 fn writings(engine: &mut Engine) -> Vec<(String, i64)> {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let part = |one: &Fact| {
     let text = one.word(0).and_then(|word| word.as_str().map(str::to_owned));
@@ -1402,7 +1390,7 @@ fn turn(engine: &mut Engine) -> String {
   replied(engine);
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let done = facts.iter().find(|one| {
     one.by() == "provider" && one.kind() == "done" && fact::named(one.about(), "reply")
@@ -1822,7 +1810,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   let (mut engine, _) = life("claude-limit", on_reactor(claude.models()));
   let root = engine.root().to_owned();
   let with =
-    verbs::Prompt { message: Some("LIMIT task".into()), on: on(&root), ..Default::default() };
+    verbs::Prompt { message: Some("LIMIT task".into()), on: Some(root), ..Default::default() };
   let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
   assert_eq!(block_on(act).expect("the prompt is answered").py_repr(), "'reply 1'");
   let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, ..)| kind).collect();
@@ -1834,7 +1822,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
 fn wrote(engine: &mut Engine, part: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let place = |one: &Fact| (one.about().to_owned(), one.word(1).and_then(|word| word.as_int()));
   let made: Vec<_> = facts
@@ -1918,7 +1906,7 @@ fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_its_why_unde
   };
   assert!(until(&mut engine, next), "the chain asks its model again after the note");
   let root = engine.root().to_owned();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: Some(root), of: None, at: None }).unwrap();
   let raised: Vec<String> = facts
     .iter()
     .filter(|one| one.kind() == "done" && one.about().starts_with("run"))
@@ -2022,7 +2010,7 @@ fn imaged(name: &str, model: &MockCompletionModel) -> (Engine, Yard, String) {
 /// A prompt on the root of a life with this message, which wants an int.
 fn messaged(engine: &mut Engine, message: String) -> String {
   let root = engine.root().to_owned();
-  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message: Some(message), on: Some(root), ..Default::default() };
   engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
 }
 
@@ -2098,13 +2086,13 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
   let root = engine.root().to_owned();
   let with = verbs::Prompt {
     message: Some(format!("look at {named}")),
-    on: on(&root),
+    on: Some(root.clone()),
     ..Default::default()
   };
   let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
   block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   let fork =
-    verbs::Chain { label: Some("side".to_owned()), source: on(&root), ..Default::default() };
+    verbs::Chain { label: Some("side".to_owned()), source: Some(root), ..Default::default() };
   let side = engine.chain(fork).expect("the fork is made").id().to_owned();
   counted(&mut engine, &side, 2);
   let requests = model.requests();
@@ -2120,7 +2108,7 @@ fn a_message_with_an_image_in_the_middle_goes_as_text_image_text_in_the_order_of
   let (mut engine, _at, named) = imaged("images-middle", &model);
   let root = engine.root().to_owned();
   let message = Some(format!("before {named} after"));
-  let with = verbs::Prompt { message, on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message, on: Some(root), ..Default::default() };
   let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
   block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   let request = model.requests().remove(0);
@@ -2283,7 +2271,7 @@ fn resumed(yard: &claude::Yard) -> Vec<Value> {
 #[cfg(unix)]
 fn answer(engine: &mut Engine, said: &str) -> Object {
   let root = engine.root().to_owned();
-  let with = verbs::Prompt { message: Some(said.into()), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message: Some(said.into()), on: Some(root), ..Default::default() };
   block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
     .expect("an answer")
 }
@@ -2335,8 +2323,14 @@ fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
   // conversation that furb writes only when it begins a new one: a second compaction makes it.
   closed(&mut engine, CUT).expect("the second cut runs");
   answer(&mut engine, "third");
-  let thought: String = (1..=4000).map(|at| format!("step {at} of a long thought. ")).collect();
-  let signature: String = (1..=512).map(|at| format!("{:x}", at % 16)).collect();
+  let thought = (1..=4000).fold(String::new(), |mut all, at| {
+    write!(all, "step {at} of a long thought. ").expect("a String takes the text");
+    all
+  });
+  let signature = (1..=512).fold(String::new(), |mut all, at| {
+    write!(all, "{:x}", at % 16).expect("a String takes the text");
+    all
+  });
   let deep = [
     json!({"type": "thinking", "thinking": thought, "signature": signature}),
     json!({"type": "thinking", "thinking": "", "signature": format!("omitted-{signature}")}),
@@ -2366,9 +2360,12 @@ fn a_ceiling_on_a_chain_pauses_it_at_a_reply_that_a_named_account_served() {
   let kit =
     skill::official().into_iter().find(|one| one.name == "grant").expect("the extension grant");
   let word = Some(format!("{}\ngrant(usd=0.005)", kit.word));
-  engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).expect("a grant is made");
+  engine
+    .rung(verbs::Rung { word, on: Some(root.clone()), ..Default::default() })
+    .expect("a grant is made");
   // The answer of the prompt never comes: the ceiling pauses the chain at the first reply.
-  let with = verbs::Prompt { message: Some("first".into()), on: on(&root), ..Default::default() };
+  let with =
+    verbs::Prompt { message: Some("first".into()), on: Some(root.clone()), ..Default::default() };
   drop(engine.prompt(Object::string("str"), with).expect("a prompt is made"));
   let pauses = |engine: &mut Engine| {
     let of = verbs::Transcript { on: Some(root.clone()), of: Some("pause".to_owned()), at: None };

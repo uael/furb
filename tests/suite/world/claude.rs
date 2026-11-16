@@ -1,12 +1,6 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a
 //! script, which `fake-claude.sh` says.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   env, fs,
   os::unix::fs::PermissionsExt,
@@ -799,7 +793,7 @@ fn a_process_that_ends_while_a_process_it_started_holds_its_stdout_fails_its_tur
   let model = yard.claude(60_000).completion_model("sonnet");
   let no = ended(&model, "ORPHAN");
   let orphan = fs::read_to_string(yard.at.join("orphan")).unwrap_or_default();
-  let _ = Command::new("kill").arg(orphan.trim()).status();
+  Command::new("kill").arg(orphan.trim()).status().expect("kill runs");
   let no = no.unwrap();
   assert!(no.to_string().contains("Claude exited (4): orphan left"), "{no}");
 }

@@ -7,7 +7,6 @@
 //! record is made again by running its words: a life whose host turns the
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
   fs, panic,
@@ -409,9 +408,10 @@ impl Opening {
       config: self.config.clone().map_or(here.config, PathBuf::from),
       home: self.home.clone().map(PathBuf::from).or(here.home),
     };
-    let (played, refused) = match self.skills != Some(false) && works {
-      true => skill::configured(&places, self.directory.as_ref())?,
-      false => (Vec::new(), Vec::new()),
+    let (played, refused) = if self.skills != Some(false) && works {
+      skill::configured(&places, self.directory.as_ref())?
+    } else {
+      (Vec::new(), Vec::new())
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
     let advertised = played

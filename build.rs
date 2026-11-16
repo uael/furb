@@ -5,12 +5,9 @@
 //! structs of the defaults of its verbs, the methods of each door, and the constants. [`minify`]
 //! reads the engine `src/furb/engine.py` and writes its minified text, which is the system prompt
 //! of every model.
-
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
+  clippy::expect_used,
+  reason = "a build script fails the build by a panic, as cargo reports it"
 )]
 
 use std::{env, fs, path::Path};
@@ -42,7 +39,7 @@ fn main() {
   let all = verbs::verbs(&source);
   let out = env::var("OUT_DIR").expect("cargo gives the build a directory");
   let written = |name: &str, text: String| {
-    fs::write(Path::new(&out).join(name), text).expect("the build writes")
+    fs::write(Path::new(&out).join(name), text).expect("the build writes");
   };
   written("constants.rs", verbs::constants(&source));
   written("methods.rs", verbs::methods(&all));

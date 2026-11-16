@@ -25,6 +25,10 @@
   reason = "a build script fails the build by a panic, as cargo reports it"
 )]
 #![expect(clippy::panic, reason = "a build script fails the build by a panic, as cargo reports it")]
+#![expect(
+  clippy::expect_used,
+  reason = "a build script fails the build by a panic, as cargo reports it"
+)]
 
 use ruff_python_ast::{Expr, Number, Stmt, StmtFunctionDef};
 use ruff_python_parser::parse_module;
@@ -359,7 +363,7 @@ impl Verb {
       .vararg
       .as_deref()
       .map(|one| Parameter { name: one.name.as_str().to_owned(), kind: annotated(one) });
-    let answer = Answer::of(&def.returns.as_deref().map(text).unwrap_or_else(|| "None".to_owned()));
+    let answer = Answer::of(&def.returns.as_deref().map_or_else(|| "None".to_owned(), text));
     Self { name: def.name.as_str().to_owned(), doc: doc(def), needed, optional, rest, answer }
   }
 
