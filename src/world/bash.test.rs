@@ -1,32 +1,20 @@
-//! The ear of the commands.
+//! An error of the wait on the shell of a command, where no door reaches it: the wait on a child
+//! that runs fails on no machine. The suite proves the rest of the ear through the commands of a
+//! life.
 
-use super::Running;
 #[cfg(unix)]
-use std::io;
+use super::{Cut, watch};
+#[cfg(unix)]
+use crate::{ear::runtime, world::child::spawn};
+#[cfg(unix)]
+use std::{future, io};
 #[cfg(unix)]
 use tokio::process;
-use unsync::spsc;
-
-#[test]
-fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
-  let (stdin, fed) = spsc::unbounded();
-  let mut one = Running { stdin };
-  assert!(one.feed(Some("one\n".to_owned())).is_ok());
-  drop(fed);
-  let refused = one.feed(Some("two\n".to_owned())).unwrap_err();
-  assert_eq!(refused.message(), "the command reads no more");
-  assert!(one.feed(None).is_ok());
-}
 
 #[test]
 #[cfg(unix)]
 #[expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_with_no_code() {
-  use super::{Cut, watch};
-  use crate::ear::runtime;
-  use crate::world::child::spawn;
-  use std::future;
-
   let outcome = runtime().block_on(async {
     let mut command = process::Command::new("sh");
     command.arg("-c").arg("sleep 5");

@@ -181,6 +181,93 @@ fn a_command_that_writes_more_than_its_cap_keeps_its_first_and_its_last_bytes_an
   assert!(read.content.len() < 9 << 20, "a read gives {} bytes", read.content.len());
 }
 
+/// The text of each out of a command, in order.
+fn outs(lived: &mut Lived, root: &str, id: &str) -> Vec<String> {
+  let facts =
+    lived.engine.transcript(verbs::Transcript { on: on(root), of: None, at: None }).unwrap();
+  let text = |one: &Fact| one.word(0).and_then(|it| it.as_str().map(str::to_owned));
+  facts.iter().filter(|one| one.kind() == "out" && one.about() == id).filter_map(text).collect()
+}
+
+/// The line that a stream says once it passes its head of 4 MiB.
+const OVER: &str = "\n[output over 4194304 bytes: the exit keeps its first and its last bytes]\n";
+
+#[test]
+fn a_stream_past_its_caps_keeps_its_head_and_its_tail_whole_and_counts_the_cut() {
+  let mut lived = Lived::new("whole", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(120.0), on: on(&root), ..Default::default() };
+  // A head and a tail of 4 MiB each end in the middle of an é, which neither keeps.
+  let line = "printf a; yes é | head -n 5000000 | tr -d '\\n'; printf b";
+  let act = lived.engine.bash(line, with).unwrap();
+  let id = act.id().to_owned();
+  let exit: Exit = block_on(act).unwrap();
+  let (head, tail) = (format!("a{}", "é".repeat(2_097_151)), format!("{}b", "é".repeat(2_097_151)));
+  let cut = 10_000_002 - head.len() - tail.len();
+  assert_eq!(exit.stdout.content, format!("{head}\n[... {cut} bytes cut ...]\n{tail}"));
+  assert_eq!(outs(&mut lived, &root, &id).concat(), format!("{head}{OVER}"));
+}
+
+#[test]
+fn a_stream_past_its_head_and_within_both_caps_is_kept_whole_in_its_exit() {
+  let mut lived = Lived::new("within", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(120.0), on: on(&root), ..Default::default() };
+  let act = lived.engine.bash("yes é | head -n 3000000 | tr -d '\\n'", with).unwrap();
+  let id = act.id().to_owned();
+  let exit: Exit = block_on(act).unwrap();
+  assert_eq!(exit.stdout.content, "é".repeat(3_000_000));
+  assert_eq!(outs(&mut lived, &root, &id).concat(), format!("{}{OVER}", "é".repeat(2_097_152)));
+}
+
+#[test]
+fn a_command_that_writes_a_line_at_a_time_says_what_comes_within_a_tenth_of_a_second_as_one_fact() {
+  let mut lived = Lived::new("gathers", &[], true).unwrap();
+  let root = lived.root();
+  let line = "i=1; while [ $i -le 50 ]; do echo line$i; sleep 0.001; i=$((i+1)); done";
+  let act = lived.engine.bash(line, verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
+  let id = act.id().to_owned();
+  let began = Instant::now();
+  let exit: Exit = block_on(act).unwrap();
+  // The command wrote for no longer than this, so it said at most one fact for each tenth of it,
+  // whatever the load of the machine.
+  let tenths = began.elapsed().as_millis() / 100 + 1;
+  let lines = (1..=50).fold(String::new(), |all, n| format!("{all}line{n}\n"));
+  assert_eq!(exit.stdout.content, lines);
+  let outs = outs(&mut lived, &root, &id);
+  assert!(outs.len() as u128 <= tenths, "{} facts in {tenths} tenths", outs.len());
+  assert_eq!(outs.concat(), lines, "the facts say each line once, in order");
+}
+
+#[test]
+fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
+  let mut lived = Lived::new("unread", &[], true).unwrap();
+  let root = lived.root();
+  let line = "exec 0<&-; printf closed; exec sleep 30";
+  let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
+  let id = lived.engine.bash(line, with).unwrap().id().to_owned();
+  let door = || verbs::Read { on: on(&root), ..Default::default() };
+  let waker = waker();
+  while lived.engine.read(&format!("{id}/stdout"), door()).unwrap().content != "closed" {
+    lived.engine.pump(&waker).unwrap();
+    thread::park_timeout(Duration::from_millis(20));
+  }
+  // The first text finds the stdin closed as it is written, so a later one is refused.
+  let fed = |lived: &mut Lived, text: &str| {
+    lived.engine.write(&Text::new(format!("{id}/stdin"), text), verbs::Write { on: on(&root) })
+  };
+  let refused = (0..500)
+    .find_map(|_| {
+      let got = fed(&mut lived, "x\n").err();
+      lived.engine.pump(&waker).unwrap();
+      thread::park_timeout(Duration::from_millis(10));
+      got
+    })
+    .expect("a text is refused");
+  assert_eq!(refused.message(), "the command reads no more");
+  assert!(fed(&mut lived, "").is_ok(), "a close is not refused");
+}
+
 #[test]
 fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
   let mut lived = Lived::new("feeds", &[], true).unwrap();
