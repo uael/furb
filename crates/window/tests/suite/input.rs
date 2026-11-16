@@ -16,7 +16,12 @@ use furb_host::protocol::{
   Answer, Axis, Frame, Gesture, Mount, Node, Run, Shape, Tone, Tree, Verb, ViewEvent,
 };
 use furb_window::{Options, open};
-use opentui::{input::Event, style::Color, testing::TestApp};
+use opentui::{
+  input::{Event, KeyEventKind},
+  prelude::{KeyCode, KeyEvent, Modifiers},
+  style::Color,
+  testing::TestApp,
+};
 
 use crate::{
   cards::{app, options, shows},
@@ -1252,4 +1257,28 @@ fn ctrl_j_breaks_the_line_of_the_input_as_shift_and_enter_do() {
     lines.windows(2).any(|two| two[0] == "one" && two[1] == "two")
   };
   assert!(app.wait_until(PATIENCE, rows), "the input never broke its line:\n{}", app.text());
+}
+
+#[test]
+fn shift_and_enter_or_a_backslash_and_enter_break_the_line_and_send_nothing() {
+  let (app, daemon, sessions) = started();
+  app.paste("not working:");
+  // Shift and Enter as a terminal with the keys of Kitty tells them.
+  let shifted = KeyEvent {
+    code: KeyCode::Enter,
+    modifiers: Modifiers::SHIFT,
+    kind: KeyEventKind::Press,
+    base_layout: None,
+    keypad: false,
+  };
+  app.key(shifted);
+  app.paste("the table");
+  // A backslash before Enter, as a terminal with no keys of Kitty breaks a line.
+  app.paste("\\");
+  app.press("enter");
+  app.paste("and the quotes");
+  let frame = shows(&app, "┃ and the quotes");
+  assert!(frame.contains("┃ not working:") && frame.contains("┃ the table"), "{frame}");
+  assert!(!frame.contains("the table\\"), "{frame}");
+  assert!(told(&daemon, &sessions).is_empty(), "{:?}", told(&daemon, &sessions));
 }

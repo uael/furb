@@ -1446,9 +1446,22 @@ fn left(app: &App, window: &Shared) {
   }
 }
 
-/// The text of the input sent to its target, and the input empty.
+/// The text of the input sent to its target, and the input empty. A backslash just before the caret
+/// breaks the line in its place and sends nothing, as a terminal with no keys of Kitty tells no
+/// Shift+Enter.
 fn sent(app: &App, window: &Shared) {
-  let text = window.borrow().area.text();
+  let area = window.borrow().area.clone();
+  let text = area.text();
+  let caret = usize::try_from(area.cursor_offset()).unwrap_or_default();
+  let chars: Vec<char> = text.chars().collect();
+  if caret > 0 && chars.get(caret - 1) == Some(&'\\') {
+    let broken: String =
+      chars[..caret - 1].iter().chain(['\n'].iter()).chain(&chars[caret..]).collect();
+    area.set_text(&broken);
+    area.set_cursor_offset(u32::try_from(caret).unwrap_or(u32::MAX));
+    tell(app, window, |model| model.client.edited(broken, caret));
+    return;
+  }
   if text.trim().is_empty() || !tell(app, window, |model| model.send(text)) {
     return;
   }

@@ -279,9 +279,13 @@ fn keys() -> impl Iterator<Item = &'static Bound> {
 }
 
 impl Stroke {
+  /// Whether a key is the stroke. Shift changes the letter of a character, so it counts only on a
+  /// key that types none: Shift+Enter, which the keys of Kitty tell, is no Enter and breaks a line.
   fn matches(self, key: &KeyEvent) -> bool {
     let held = |one| key.modifiers.contains(one);
+    let typed = matches!(self.code, KeyCode::Char(_));
     key.code == self.code
+      && (typed || !held(Modifiers::SHIFT))
       && held(Modifiers::CTRL) == self.ctrl
       && held(Modifiers::ALT) == self.alt
       && held(Modifiers::SUPER) == self.cmd
