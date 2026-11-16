@@ -27,7 +27,7 @@ use crate::{
   model::Model,
   names::{self, Named},
   picture, prose,
-  question::closed,
+  question::{closed, person},
   thread::{Click, Item, Items, Row, width},
   tokens::{APART, Loader, PROMPT, Role, WORKS, mixed},
 };
@@ -941,9 +941,20 @@ impl Feed<'_> {
 
   /// What an answer said, as markdown from the column of the text. A question is one line with its
   /// mark: its first line while it waits, then what closed it. While its form shows it whole, the
-  /// form is its one place, and the feed shows none of it.
+  /// form is its one place, and the feed shows none of it. A resolve by a person is one quiet row
+  /// that says who resolved it, as a question says who closed it.
   fn said(&self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
+    let login = &self.model.client.machines[self.opened.thread.key.0].login;
+    if let Saying::Resolved { by } = &said.kind {
+      let muted = self.style(Role::Muted);
+      let left = vec![run("  ✓ Resolved", muted)];
+      let right = vec![run(person(by, login), muted)];
+      return vec![
+        Row::of(spread(left, right, self.wide.saturating_sub(4), Style::new())),
+        Row::default(),
+      ];
+    }
     if let Saying::Question { answered, .. } = &said.kind {
       let formed = self.opened.form.as_ref().is_some_and(|form| form.act == said.act);
       if answered.is_none() && formed {
@@ -955,7 +966,6 @@ impl Feed<'_> {
         Some(_) => (self.style(Role::Muted), self.style(Role::Muted)),
       };
       let left = vec![run("  ◆ ", mark), run(self.model.homed(first), text)];
-      let login = &self.model.client.machines[self.opened.thread.key.0].login;
       let right =
         answered.iter().map(|one| run(closed(one, login), self.style(Role::Muted))).collect();
       return vec![

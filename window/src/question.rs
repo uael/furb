@@ -396,14 +396,19 @@ impl Model {
   }
 }
 
-/// What closed a question, as one line of its thread shows it: the reply, then who closed it, which
-/// is the operator himself when it is the login that he has on the machine of the thread.
-pub(crate) fn closed(answered: &Answered, login: &str) -> String {
-  let who = match &answered.by {
+/// Who a maker is to the operator of a login: `you` for himself, else his name.
+pub(crate) fn person(by: &Maker, login: &str) -> String {
+  match by {
     Maker::Member { operator: member } if member != login => member.clone(),
     Maker::Operator | Maker::Member { .. } => "you".to_owned(),
     other => other.shown(),
-  };
+  }
+}
+
+/// What closed a question, as one line of its thread shows it: the reply, then who closed it, which
+/// is the operator himself when it is the login that he has on the machine of the thread.
+pub(crate) fn closed(answered: &Answered, login: &str) -> String {
+  let who = person(&answered.by, login);
   let reply = match &answered.reply {
     Reply::Value(text) => text.clone(),
     Reply::Refused(why) if why == REFUSED => "refused".to_owned(),

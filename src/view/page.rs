@@ -436,7 +436,12 @@ impl<'a> Reader<'a> {
       said.push((asked.began, one));
     }
     for closed in &answers.closes {
-      let one = Said { act: closed.id.clone(), kind: Saying::Answer, text: text(closed.value()) };
+      // A person who closes a message resolves it: what he closed it with is no answer of a model.
+      let kind = match &closed.closer {
+        Some(by @ (Maker::Operator | Maker::Member { .. })) => Saying::Resolved { by: by.clone() },
+        _ => Saying::Answer,
+      };
+      let one = Said { act: closed.id.clone(), kind, text: text(closed.value()) };
       said.push((closed.ended.unwrap_or(closed.began), one));
     }
     said.sort_by_key(|(place, _)| *place);

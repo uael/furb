@@ -1756,6 +1756,20 @@ class Thought(TypedDict):
   took: NotRequired[int | None]
 
 
+class Resolved(TypedDict):
+  by: Maker
+
+
+class Saying2(TypedDict):
+  """
+  What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
+  `hint` of the view read, and what answered it once it is closed: it is open until then. A
+  resolve is the close of a message by a person, who it was, which no model answered.
+  """
+
+  resolved: Resolved
+
+
 Reply1 = TypedDict("Reply1", {"is": Literal["value"], "text": str})
 
 
@@ -2787,16 +2801,18 @@ class Question(TypedDict):
 class Saying1(TypedDict):
   """
   What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
-  `hint` of the view read, and what answered it once it is closed: it is open until then.
+  `hint` of the view read, and what answered it once it is closed: it is open until then. A
+  resolve is the close of a message by a person, who it was, which no model answered.
   """
 
   question: Question
 
 
-type Saying = Literal["answer", "notice"] | Saying1
+type Saying = Literal["answer", "notice"] | Saying1 | Saying2
 """
 What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
-`hint` of the view read, and what answered it once it is closed: it is open until then.
+`hint` of the view read, and what answered it once it is closed: it is open until then. A
+resolve is the close of a message by a person, who it was, which no model answered.
 """
 
 
@@ -2917,8 +2933,8 @@ class Block(TypedDict):
 
 class Said(TypedDict):
   """
-  What an answer says to the operator: the value of the close of its message, a notice, or a
-  question, with its act and its text.
+  What an answer says to the operator: the value of the close of its message, a notice, a
+  question, or the resolve of its message by a person, with its act and its text.
   """
 
   act: str
@@ -3211,4 +3227,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 67
+PROTOCOL = 68

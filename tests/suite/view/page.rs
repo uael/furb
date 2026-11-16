@@ -544,6 +544,21 @@ fn a_wake_that_the_engine_says_on_a_thread_is_no_message_of_the_operator() {
 }
 
 #[test]
+fn a_message_that_a_person_closes_is_resolved_by_him_and_answered_by_no_model() {
+  let mut streams = Streamed::default();
+  let facts = thread().into_iter().chain([
+    json!(["close", "prompt3", "operator", "resolved"]),
+    json!(["done", "prompt3", "operator", "resolved"]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let kinds: Vec<Vec<&Saying>> =
+    page.exchanges.iter().map(|one| one.said.iter().map(|said| &said.kind).collect()).collect();
+  let resolved = Saying::Resolved { by: Maker::Operator };
+  assert_eq!(kinds, [vec![&Saying::Notice, &Saying::Answer], vec![&resolved]]);
+}
+
+#[test]
 fn a_message_that_the_operator_took_back_is_no_message_of_the_thread() {
   let mut streams = Streamed::default();
   let taken = json!({"is": "CancelledError", "args": []});

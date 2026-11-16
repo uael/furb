@@ -339,8 +339,8 @@ impl Thought {
   }
 }
 
-/// What an answer says to the operator: the value of the close of its message, a notice, or a
-/// question, with its act and its text.
+/// What an answer says to the operator: the value of the close of its message, a notice, a
+/// question, or the resolve of its message by a person, with its act and its text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Said {
   pub act: String,
@@ -349,13 +349,15 @@ pub struct Said {
 }
 
 /// What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
-/// `hint` of the view read, and what answered it once it is closed: it is open until then.
+/// `hint` of the view read, and what answered it once it is closed: it is open until then. A
+/// resolve is the close of a message by a person, who it was, which no model answered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Saying {
   Answer,
   Notice,
   Question { shape: String, answered: Option<Answered> },
+  Resolved { by: Maker },
 }
 
 /// What closed a question: who closed it, and what it came to.

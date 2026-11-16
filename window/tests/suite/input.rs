@@ -344,8 +344,13 @@ fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
   shows(&app, " Stop and resolve ");
   let (x, y) = at(&app, " Stop and resolve ", 0);
   app.click(x, y);
-  let frame = shows(&app, "✓ Resolved");
-  assert!(!frame.contains("Working · ⎋ stop"), "{frame}");
+  // The feed says the resolve at the close of the message, and the head once the work stopped.
+  let stopped = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.lines().next().is_some_and(|head| head.contains("✓ Resolved"))
+      && !frame.contains("Working · ⎋ stop")
+  });
+  assert!(stopped, "{}", app.text());
 }
 
 #[test]

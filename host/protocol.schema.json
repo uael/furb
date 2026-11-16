@@ -5329,7 +5329,7 @@
         "kind",
         "text"
       ],
-      "description": "What an answer says to the operator: the value of the close of its message, a notice, or a\nquestion, with its act and its text."
+      "description": "What an answer says to the operator: the value of the close of its message, a notice, a\nquestion, or the resolve of its message by a person, with its act and its text."
     },
     "Saying": {
       "oneOf": [
@@ -5369,9 +5369,29 @@
             "question"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "resolved": {
+              "type": "object",
+              "properties": {
+                "by": {
+                  "$ref": "#/definitions/Maker"
+                }
+              },
+              "required": [
+                "by"
+              ]
+            }
+          },
+          "required": [
+            "resolved"
+          ],
+          "additionalProperties": false
         }
       ],
-      "description": "What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and\n`hint` of the view read, and what answered it once it is closed: it is open until then."
+      "description": "What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and\n`hint` of the view read, and what answered it once it is closed: it is open until then. A\nresolve is the close of a message by a person, who it was, which no model answered."
     },
     "Answered": {
       "type": "object",
@@ -6294,5 +6314,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 67
+  "x-protocol": 68
 }
