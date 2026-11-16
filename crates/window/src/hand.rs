@@ -172,6 +172,8 @@ fn windowed(app: &App, machines: &[Machine], options: Options) -> Shared {
   if options.reloaded {
     let file = reload::file_of(&options.kept);
     model.resume(kept::kept(&file));
+    let built = options.program.as_deref().and_then(reload::built_at);
+    model.client.notice = built.map(|at| format!("This window runs the build of {at}."));
     // A place serves once, so a window that a person starts later opens as a new one.
     fs::remove_file(file).ok();
   }
@@ -1329,6 +1331,11 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Close => escaped(app, window, forgot),
     Does::Stop | Does::Resolve | Does::Revert | Does::Pause => {
       controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
+    }
+    // The window takes its own newest build too, at once and not at the next look.
+    Does::Reload => {
+      controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
+      watched(app, window);
     }
     Does::Send => sent(app, window),
     Does::Queue => queued(app, window),

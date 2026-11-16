@@ -124,8 +124,22 @@ impl Model {
       Does::Resolve => self.resolve(),
       Does::Revert => self.revert(),
       Does::Pause => self.pause(),
+      Does::Reload => self.reload(),
       _ => None,
     }
+  }
+
+  /// The reload of the session of the open thread: the word `await reload()` on the root of its
+  /// life, which loads its skills again, reads its servers of MCP again and moves furb to its
+  /// newest build, as a model that runs the word does.
+  pub(crate) fn reload(&mut self) -> Option<(usize, Verb)> {
+    let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.1.is_empty());
+    let Some(opened) = opened else {
+      self.client.notice = Some("Open a thread to reload its session.".to_owned());
+      return None;
+    };
+    let (at, life, _) = opened.thread.key.clone();
+    Some((at, Verb::Run { life, word: "await reload()".to_owned(), on: None }))
   }
 
   /// The stop of the work of the open thread: the cancel of its prompt.

@@ -4,6 +4,8 @@
 
 #![cfg(test)]
 
+use std::fs;
+
 use furb_window::open;
 use opentui::testing::TestApp;
 
@@ -30,6 +32,22 @@ fn f1_shows_each_key_and_the_list_names_it_beside_the_leader() {
   app.feed(b"\x1bOP");
   shows(&app, "Search a key");
   shows(&app, "⌃X ? or F1");
+}
+
+#[test]
+fn f5_with_no_thread_open_says_that_a_reload_needs_one() {
+  let (app, _daemon) = opened();
+  app.feed(b"\x1b[15~");
+  shows(&app, "Open a thread to reload its session.");
+}
+
+#[test]
+fn f5_runs_the_reload_on_the_root_of_the_session_of_the_open_thread() {
+  let (app, daemon) = threaded();
+  app.feed(b"\x1b[15~");
+  let record = daemon.file("furb").join(".furb").join("sessions").join("keys.jsonl");
+  let ran = || fs::read_to_string(&record).is_ok_and(|text| text.contains("await reload()"));
+  assert!(app.wait_until(PATIENCE, ran), "{}", app.text());
 }
 
 /// A window on the thread of a session that answered, open.

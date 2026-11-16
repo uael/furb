@@ -42,6 +42,7 @@ pub(crate) enum Does {
   Jump,
   GoTo,
   Keys,
+  Reload,
   Up,
   Down,
   Lean,
@@ -139,6 +140,12 @@ const GO: &[Bound] = &[
     &[&[ctrl('p')], &[cmd('p')], &[ctrl('o')]],
   ),
   bound(Does::Keys, "each key", Some("keys"), &[&led('?'), &[plain(KeyCode::F(1))]]),
+  bound(
+    Does::Reload,
+    "reload on the newest build",
+    Some("reload"),
+    &[&[plain(KeyCode::F(5))], &[cmd('r')]],
+  ),
   bound(
     Does::Needed,
     "the next thread that needs you",

@@ -3,10 +3,14 @@
 //! the new program, which opens where this one stood: on the same thread, at the same place of its
 //! feed, with the same draft. A person who works on furb from its window sees each build at once.
 
-use std::path::{Path, PathBuf};
+use std::{
+  fs,
+  path::{Path, PathBuf},
+};
 
 use furb_client::{Key, Opened, Place};
 use furb_host::built;
+use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
@@ -28,6 +32,14 @@ pub(crate) struct Stood {
 /// The file where a window writes where it stood, beside the file of its cards.
 pub(crate) fn file_of(kept: &Path) -> PathBuf {
   kept.with_file_name("reload.json")
+}
+
+/// The time at which a build wrote a program, as a person reads it on this computer, which names
+/// the build that a window runs after it gave its place.
+pub(crate) fn built_at(program: &Path) -> Option<String> {
+  let written = fs::metadata(program).ok()?.modified().ok()?;
+  let at = Timestamp::try_from(written).ok()?.to_zoned(TimeZone::system());
+  Some(at.strftime("%H:%M").to_string())
 }
 
 /// The watch of the program of a window: its path, its build when the window opened, and its

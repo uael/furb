@@ -1,31 +1,30 @@
 ---
 source: crates/window/tests/suite/screens.rs
-assertion_line: 34
 ---
   furb
 
 
 
                  Each key
-                 ▌Search a key                                              1 / 37
+                 ▌Search a key                                              1 / 38
 
                  Go                                                                 ┃
                  ▌⌃P or ⌃O    go to anything, or run a command                      ┃
                   ⌃X ? or F1  each key                                              ┃
+                  F5          reload on the newest build                            ┃
                   ⌥A or ⌃X A  the next thread that needs you                        ┃
-                  ⌥↓ or ⌃X J  the next card                                         ┃
+                  ⌥↓ or ⌃X J  the next card
                   ⌥↑ or ⌃X K  the card before
                   ⌃X L or ⌃\  show or hide the list
 
                  The thread
                   ⌃N          a new thread, and back to the thread
-                  ↘           jump to the latest
-  Nothing needs   ⇞           a page up
-  ● 1 session r   ⇟           a page down
-                  ⎋ ⎋         stop the work of the thread
-  ⌃P          g   ⌃X R        resolve the thread
-  ⌃X ?        e   ⌃X D        revert the files that the last answer wrote
-                  ⌃X Z        pause the thread, or resume it
+  Nothing needs   ↘           jump to the latest
+  ● 1 session r   ⇞           a page up
+                  ⇟           a page down
+  ⌃P          g   ⎋ ⎋         stop the work of the thread
+  ⌃X ?        e   ⌃X R        resolve the thread
+                  ⌃X D        revert the files that the last answer wrote
   ┃
   ┃ Ask for a c  ↑↓ move · ⏎ run · ⎋ close
   ┃
