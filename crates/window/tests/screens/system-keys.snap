@@ -10,7 +10,7 @@ source: crates/window/tests/suite/screens.rs
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
     ▌Ctrl+P or Ctrl+O    go to anything, or run a…        ┃
-     Ctrl+X ?            each key                         ┃
+     Ctrl+X ? or F1      each key                         ┃
      Alt+A or Ctrl+X A   the next thread that needs…      ┃
      Alt+↓ or Ctrl+X J   the next card                    ┃
      Alt+↑ or Ctrl+X K   the card before

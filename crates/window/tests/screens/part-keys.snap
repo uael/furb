@@ -10,7 +10,7 @@ source: crates/window/tests/suite/screens.rs
 
                  Go                                                                 ┃
                  ▌⌃P or ⌃O    go to anything, or run a command                      ┃
-                  ⌃X ?        each key                                              ┃
+                  ⌃X ? or F1  each key                                              ┃
                   ⌥A or ⌃X A  the next thread that needs you                        ┃
                   ⌥↓ or ⌃X J  the next card                                         ┃
                   ⌥↑ or ⌃X K  the card before

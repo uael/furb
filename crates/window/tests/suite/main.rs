@@ -14,6 +14,7 @@ mod copy;
 mod daemon;
 mod image;
 mod input;
+mod keys;
 mod list;
 mod loss;
 mod mention;

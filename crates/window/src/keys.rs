@@ -137,7 +137,7 @@ const GO: &[Bound] = &[
     Some("go"),
     &[&[ctrl('p')], &[cmd('p')], &[ctrl('o')]],
   ),
-  bound(Does::Keys, "each key", Some("keys"), &[&led('?')]),
+  bound(Does::Keys, "each key", Some("keys"), &[&led('?'), &[plain(KeyCode::F(1))]]),
   bound(
     Does::Needed,
     "the next thread that needs you",
@@ -291,6 +291,7 @@ impl Stroke {
       (KeyCode::PageDown, false) => "PgDn".to_owned(),
       (KeyCode::End, false) => "End".to_owned(),
       (KeyCode::Tab, false) => "Tab".to_owned(),
+      (KeyCode::F(number), _) => format!("F{number}"),
       (code, _) => format!("{code:?}"),
     };
     let held = [(self.ctrl, "⌃", "Ctrl+"), (self.alt, "⌥", "Alt+"), (self.cmd, "⌘", "Super+")];
