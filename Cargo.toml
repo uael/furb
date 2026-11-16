@@ -149,8 +149,9 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
 # The one interface of the models of the provider, which the claude command line answers too, and the clients of the
-# providers of the network, over its TLS.
-rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
+# providers of the network, over its TLS. The model that answers from a script, which the tests of the provider ask,
+# is a feature of the build too: a feature that only the tests add builds rig and this crate a second time for them.
+rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls", "test-utils"] }
 # The client of HTTP that rig brings, which the fetch of a page, of the catalog and of uv takes as it is.
 reqwest = { version = "0.13", default-features = false }
 # The providers of the clouds, which sign a request with the credentials of the cloud: Amazon Bedrock, and Google
@@ -166,8 +167,9 @@ schemars = "1"
 anstream = { version = "1", default-features = false }
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
-# The lines of the engine that differ at a crossing, which each chain of the life is told.
-similar = "2"
+# The lines of the engine that differ at a crossing, which each chain of the life is told. The tests of the window
+# take it with its feature inline, which the build takes too, so the tests build this crate again for no feature.
+similar = { version = "2", features = ["inline"] }
 base64 = "0.22"
 # The reactor that wakes an ear when what it waits for is ready: a pipe of a command, a timer, a socket of a model,
 # and the listener on 127.0.0.1 that takes back the code of a login to a server of MCP.
@@ -203,10 +205,6 @@ windows-sys = { version = "0.61", features = [
 ] }
 # The job that holds every process of a command, and ends them when it closes.
 win32job = "2"
-
-[dev-dependencies]
-# The model of rig that answers from a script, which the tests of the provider ask.
-rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
 
 [build-dependencies]
 # The contract is read at the build, and every verb of it becomes a method of the engine and of each door. The
