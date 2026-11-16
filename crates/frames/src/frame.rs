@@ -1,8 +1,7 @@
 //! A frame: the grid of a terminal at one moment, as rows of runs of one look. Its JSON is the one
 //! that each frame of the window and of another program takes, so one reader reads both.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
-use std::{array, fs, path::Path};
+use std::{fs, path::Path};
 
 use opentui::{
   native::{Capture, Context, ContextOptions, WidthMethod},
@@ -68,7 +67,11 @@ impl Rgb {
 
   /// The color halfway toward another, as a dim text takes it.
   fn half(self, other: Self) -> Self {
-    Self(array::from_fn(|at| u8::midpoint(self.0[at], other.0[at])))
+    let mut half = self.0;
+    for (one, two) in half.iter_mut().zip(other.0) {
+      *one = u8::midpoint(*one, two);
+    }
+    Self(half)
   }
 }
 
