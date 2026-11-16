@@ -1724,7 +1724,7 @@
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the\nrole that it asks. The daemon gives the peer the lesser of that role and the role that its\ntransport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer\nhas the role that its transport proved."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, its name, which is the name\nof a skill, or for a daemon that asks the handover the record of the life that asked its\nbuild, and the role that it asks. The daemon gives the peer the lesser of that role and the\nrole that its transport proved, so a peer asks `read` to be a reader on any transport. With no\nrole, the peer has the role that its transport proved."
     },
     "Draft": {
       "type": "object",

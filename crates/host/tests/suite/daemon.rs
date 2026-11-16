@@ -1489,7 +1489,7 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     data: None,
   };
   let next = local.clone();
-  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
   assert!(window.closed().await);
   assert!(matches!(old.await, Ok(Ok(()))));
   let record = Path::new(&life);
@@ -1535,7 +1535,7 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
     data: None,
   };
   let next = local.clone();
-  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
   time::sleep(PAST).await;
   assert!(!old.is_finished(), "the handover waits for the command");
   window.ran(&life, "x = 41 + 1").await;
@@ -1549,6 +1549,76 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
   let inspect = Verb::Inspect { life: life.clone(), name: "out".to_owned(), on: None };
   let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
   assert_eq!(value, json!("ran\n"), "the command ran to its end in the old daemon");
+}
+
+#[tokio::test]
+async fn a_handover_waits_only_for_the_commands_in_flight_at_its_ask() {
+  let at = place();
+  let (local, old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let waits = |file: &str| format!("await bash('while [ ! -f {file} ]; do sleep 0.05; done')");
+  let runs = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
+  };
+  let verb = Verb::Run { life: life.clone(), word: waits("go"), on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  window.until(runs).await;
+  let (next, opening) = (local.clone(), opening(&at));
+  let settings = Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    data: None,
+  };
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
+  time::sleep(PAST).await;
+  // A command that starts after the ask holds the handover no more: it never ends here.
+  let verb = Verb::Run { life: life.clone(), word: waits("never"), on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  window.until(runs).await;
+  assert!(!old.is_finished(), "the handover waits for the command of its ask");
+  File::create(at.join("go")).unwrap();
+  assert!(window.closed().await);
+  assert!(matches!(old.await, Ok(Ok(()))));
+  listening(&local, &mut new).await;
+}
+
+#[tokio::test]
+async fn a_handover_that_a_life_asked_waits_for_no_command_of_that_life() {
+  let at = place();
+  let (local, old) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let word = "await bash('while [ ! -f never ]; do sleep 0.05; done')".to_owned();
+  let verb = Verb::Run { life: life.clone(), word, on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  let runs = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
+  };
+  window.until(runs).await;
+  let (next, opening, from) = (local.clone(), opening(&at), Some(life.clone()));
+  let settings = Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    data: None,
+  };
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, from).await });
+  // The life made the build, so its command holds the handover no more: it never ends here.
+  assert!(window.closed().await);
+  assert!(matches!(old.await, Ok(Ok(()))));
+  listening(&local, &mut new).await;
 }
 
 #[tokio::test]
@@ -1577,7 +1647,7 @@ async fn a_program_that_asks_the_handover_while_one_waits_takes_its_place_and_th
       door: None,
       data: None,
     };
-    tokio::spawn(async move { upgrade(&next, settings).await })
+    tokio::spawn(async move { upgrade(&next, settings, None).await })
   };
   let first = upgraded();
   time::sleep(PAST).await;
@@ -1662,7 +1732,7 @@ async fn asked_once_across_a_handover(by_record: bool) {
     data: None,
   };
   let next = local.clone();
-  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
   assert!(window.closed().await);
   assert!(matches!(old.await, Ok(Ok(()))));
   listening(&local, &mut new).await;
@@ -1740,7 +1810,7 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     data: None,
   };
   let next = local.clone();
-  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
   time::sleep(PAST).await;
   assert!(!old.is_finished(), "the handover waits for a life that has not ended");
   let seen = log.lock().unwrap().join("\n");
@@ -2957,7 +3027,7 @@ async fn an_upgrade_takes_the_place_of_a_daemon_of_an_older_protocol_in_its_prot
     data: Some(at.join("data")),
   };
   let next = local.clone();
-  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  let mut new = tokio::spawn(async move { upgrade(&next, settings, None).await });
   // The new daemon refused by the older one ends at once, and the older one waits for ever.
   let gave = tokio::select! {
     gave = old => gave,

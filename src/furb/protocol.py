@@ -758,10 +758,11 @@ What a peer may do: read a life, or read and write it. Write holds each right of
 
 class Hello(TypedDict):
   """
-  The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the
-  role that it asks. The daemon gives the peer the lesser of that role and the role that its
-  transport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer
-  has the role that its transport proved.
+  The first frame of a peer: the protocol that it speaks, its kind, its name, which is the name
+  of a skill, or for a daemon that asks the handover the record of the life that asked its
+  build, and the role that it asks. The daemon gives the peer the lesser of that role and the
+  role that its transport proved, so a peer asks `read` to be a reader on any transport. With no
+  role, the peer has the role that its transport proved.
   """
 
   protocol: int

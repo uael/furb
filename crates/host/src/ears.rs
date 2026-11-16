@@ -31,8 +31,10 @@ use crate::{
 pub(crate) fn ears(
   told: UnboundedSender<Event>,
   journal: Option<&Journal>,
+  record: Option<&str>,
 ) -> Vec<(&'static str, Box<dyn Ear>)> {
-  let mut ears = vec![(CONSOLE, console()), ("events", events(told)), (UPGRADE, upgrade())];
+  let upgrade = upgrade(record.map(str::to_owned));
+  let mut ears = vec![(CONSOLE, console()), ("events", events(told)), (UPGRADE, upgrade)];
   if let Some(journal) = journal {
     ears.push(("changes", journal.ear()));
   }
@@ -59,15 +61,16 @@ static STARTED: Mutex<Option<String>> = Mutex::new(None);
 /// The ear of the upgrade, which answers the act `upgrade` with what it did. When a build replaced
 /// the program of this process since it started, it starts that program as `furb host upgrade`,
 /// once for each build, which takes the place of the daemon of this machine, and each life opens
-/// again on it. A program that a build writes now cannot start, and the act is refused.
-fn upgrade() -> Box<dyn Ear> {
-  hearing(&[UPGRADE], |mut co| async move {
+/// again on it. The new program names the record of this life, whose commands its handover does
+/// not wait for. A program that a build writes now cannot start, and the act is refused.
+fn upgrade(record: Option<String>) -> Box<dyn Ear> {
+  hearing(&[UPGRADE], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if !a.question() || a.kind() != UPGRADE {
         continue;
       }
-      let answer = match upgraded() {
+      let answer = match newest(record.as_deref()) {
         Ok(said) => Object::string(said),
         Err(no) => Fault::refused(format!("furb cannot start its newest build: {no}")).object(),
       };
@@ -77,8 +80,9 @@ fn upgrade() -> Box<dyn Ear> {
 }
 
 /// What the upgrade did: the start of the newest build, in a group of its own, so the end of the
-/// daemon that it takes the place of does not end it.
-fn upgraded() -> io::Result<&'static str> {
+/// daemon that it takes the place of does not end it, for the life of a record when one asked it.
+/// The daemon and each act upgrade start the newest build here alone.
+pub(crate) fn newest(from: Option<&str>) -> io::Result<&'static str> {
   let program = env::current_exe()?;
   let unread = || io::Error::other("its program cannot be read, as while a build writes it");
   let now = built(&program).ok_or_else(unread)?;
@@ -91,6 +95,9 @@ fn upgraded() -> io::Result<&'static str> {
   }
   let mut command = Command::new(&program);
   command.args(["host", "upgrade"]).stdin(Stdio::null());
+  if let Some(record) = from {
+    command.args(["--from", record]);
+  }
   #[cfg(unix)]
   {
     use std::os::unix::process::CommandExt;

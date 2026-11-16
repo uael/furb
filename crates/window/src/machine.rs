@@ -4,6 +4,7 @@
 
 use std::{
   env,
+  ffi::OsStr,
   fs::{self, DirBuilder, File},
   io,
   net::SocketAddr,
@@ -109,6 +110,16 @@ impl Looking {
   }
 }
 
+/// The program furb that serves the daemon of this computer: the one beside the window, which is of
+/// its build, else the one on PATH, or the fault that names where it looked and what to run.
+pub(crate) fn furb(beside: PathBuf, path: &OsStr) -> Result<PathBuf, Error> {
+  if beside.is_file() {
+    Ok(beside)
+  } else {
+    world::program("furb", env::split_paths(path)).ok_or(Error::NoFurb { beside })
+  }
+}
+
 /// A stream of a daemon that the window dialed, by any transport.
 pub trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
 
@@ -120,13 +131,9 @@ impl Machine {
   pub fn here() -> Result<Self, Error> {
     let folder = world::cache().ok_or(Error::NoCache)?.join("host");
     let named = format!("furb{}", env::consts::EXE_SUFFIX);
-    let beside = env::current_exe().ok().map(|window| window.with_file_name(named));
-    let path = env::var_os("PATH").unwrap_or_default();
-    let furb = beside
-      .filter(|furb| furb.is_file())
-      .or_else(|| world::program("furb", env::split_paths(&path)))
-      .ok_or(Error::NoFurb)?;
-    let mut served = Command::new(furb);
+    let beside =
+      env::current_exe().map_or_else(|_| PathBuf::from(&named), |one| one.with_file_name(&named));
+    let mut served = Command::new(furb(beside, &env::var_os("PATH").unwrap_or_default())?);
     served.arg("host");
     let served = Box::new(served);
     Ok(Self { name: furb_host::machine(), reach: Reach::Here { folder, served }, reads: false })
@@ -163,36 +170,6 @@ impl Machine {
   }
 }
 
-impl Machine {
-  /// The build of the program that serves the daemon of this computer, as [`furb_host::built`]
-  /// gives it: none on the tailnet, where the window starts nothing, and none while the program
-  /// cannot be read, as while a build replaces it.
-  pub(crate) fn program(&self) -> Option<String> {
-    let Reach::Here { served, .. } = &self.reach else { return None };
-    furb_host::built(Path::new(served.as_std().get_program()))
-  }
-
-  /// The daemon of this computer handed to the program that serves it, as `furb host upgrade` does:
-  /// in a group of its own, as [`started`] starts a daemon, so it outlives the window and no end of
-  /// a command reaches it. The daemon that runs ends each life with its image and gives it, and
-  /// each window dials the new one.
-  pub(crate) fn upgrade(&self) -> io::Result<()> {
-    let Reach::Here { folder, served } = &self.reach else { return Ok(()) };
-    let mut upgrade = Command::new(served.as_std().get_program());
-    upgrade.args(["host", "upgrade"]);
-    for (key, value) in served.as_std().get_envs() {
-      match value {
-        Some(value) => upgrade.env(key, value),
-        None => upgrade.env_remove(key),
-      };
-    }
-    let mut child = started(folder, &mut upgrade)?;
-    // The new daemon outlives the window; the task only reaps it if it ends first.
-    drop(tokio::spawn(async move { child.wait().await }));
-    Ok(())
-  }
-}
-
 /// The daemon as a process of its own, which outlives the window: in a group of its own, so no
 /// signal of the terminal of the window reaches it, with what it says in the log of its folder.
 /// The folder is of the user alone, as the daemon asks of the folder where it listens.
@@ -224,3 +201,7 @@ fn ended_before(folder: &Path, status: ExitStatus) -> Error {
   let log = fs::read_to_string(folder.join(LOG)).unwrap_or_default();
   Error::Ended { status, said: log.trim().lines().last().unwrap_or_default().to_owned() }
 }
+
+#[cfg(test)]
+#[path = "machine.test.rs"]
+mod tests;

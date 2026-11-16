@@ -221,7 +221,7 @@ impl Daemon {
     // The grace of the machine, so the daemon that took the lives waits for the window that dials
     // it again, as a daemon of `furb host upgrade` does.
     let settings = Settings { grace: GRACE, ..settings };
-    drop(self.runtime.spawn(async move { upgrade(&local, settings).await }));
+    drop(self.runtime.spawn(async move { upgrade(&local, settings, None).await }));
   }
 
   /// Whether a window holds a life of the daemon that listens now: no while no daemon answers, or

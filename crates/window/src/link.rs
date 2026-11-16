@@ -11,18 +11,13 @@
 //! cards again. A verb that the window asked of the connection that ended goes nowhere: the window
 //! asks a machine only while it lists its cards.
 //!
-//! The daemon of this computer follows the build of furb: once the program that serves it holds a
-//! build that the daemon does not run, as its welcome or its refusal of the protocol of the window
-//! says, the window asks the handover of that program, once for each build, and dials the new
-//! daemon, as [`Machine::upgrade`] says.
+//! The daemon follows the build of furb itself, and a window starts no build: once a new daemon
+//! listens, the old one closes the connection, and the task dials the new one.
 
-use std::{convert::Infallible, io, time::Duration};
+use std::{convert::Infallible, time::Duration};
 
 use furb_client::greeting;
-use furb_host::{
-  ProtocolError,
-  protocol::{Answer, BOUND, Frame, Kind, PROTOCOL, Request, Role},
-};
+use furb_host::protocol::{BOUND, Frame, Kind, Request, Role};
 use futures::{SinkExt, StreamExt};
 use opentui::App;
 use tokio::{
@@ -46,9 +41,6 @@ const SLOWEST: Duration = Duration::from_secs(10);
 /// How long the window waits between two looks at the tailnet for a machine that came online.
 const LOOK: Duration = Duration::from_secs(30);
 
-/// How often the window looks at the program that serves the daemon of this computer.
-const FOLLOW: Duration = Duration::from_secs(1);
-
 /// What the task tells the thread of the app: a frame of the daemon, or why the connection ended.
 pub(crate) type Heard = Result<Frame, Error>;
 
@@ -60,8 +52,7 @@ pub(crate) fn dialed(app: &App, machine: Machine, on: impl FnMut(&App, Heard) + 
   let (requests, outgoing) = mpsc::unbounded_channel();
   // The task ends when the window lets the frames go, and with the runtime of the app.
   drop(app.runtime().spawn(async move {
-    let (mut link, mut outgoing) =
-      (Link { machine, wait: FIRST, seen: None, asked: None }, outgoing);
+    let (mut link, mut outgoing) = (Link { machine, wait: FIRST }, outgoing);
     loop {
       let Err(end) = held(&mut link, &mut outgoing, &tell).await;
       // A window that is gone hears no end.
@@ -128,9 +119,6 @@ async fn held(
   for request in greeting(Kind::Window, link.machine.reads.then_some(Role::Read)) {
     lines.send(serde_json::to_string(&request)?).await?;
   }
-  // The program of the daemon, as its welcome names it, until the welcome comes.
-  let mut daemon = None;
-  let mut follow = time::interval(FOLLOW);
   loop {
     tokio::select! {
       request = outgoing.recv() => {
@@ -139,55 +127,19 @@ async fn held(
       }
       read = lines.next() => {
         let frame: Frame = serde_json::from_str(&read.ok_or(Error::Closed)??)?;
-        match &frame {
-          Frame::Reply { answer: Answer::Welcome { program, .. }, .. } => {
-            daemon = Some(program.clone());
-          }
-          // A daemon of an older protocol refuses the window and closes: its program is not the
-          // one that serves it now.
-          Frame::Refused { error: ProtocolError::Protocol { ours, .. }, .. } if *ours < PROTOCOL => {
-            daemon = Some(None);
-          }
-          _ => {}
-        }
         if tell.send(Ok(frame)).await.is_err() {
           return Err(Error::Closed);
         }
       }
-      _ = follow.tick() => {}
-    }
-    if let Some(program) = &daemon {
-      link.followed(program.as_deref()).map_err(Error::Upgrade)?;
     }
   }
 }
 
-/// The connection to one machine as the task holds it from one dial to the next: the machine, the
-/// wait before its next dial, the program that serves its daemon at the last look, and the program
-/// that the window last asked the handover of.
+/// The connection to one machine as the task holds it from one dial to the next: the machine and
+/// the wait before its next dial.
 struct Link {
   machine: Machine,
   wait: Duration,
-  seen: Option<String>,
-  asked: Option<String>,
-}
-
-impl Link {
-  /// The handover asked of the program that serves the daemon, once it holds a build that the
-  /// daemon does not run and stood still since the last look, so the build wrote it whole. The
-  /// window asks it once for each build, so a program that fails to take the place of the daemon
-  /// is not asked again, and its failure ends the connection with its reason.
-  fn followed(&mut self, daemon: Option<&str>) -> io::Result<()> {
-    let now = self.machine.program();
-    let still = now.is_some() && now == self.seen;
-    let asks = still && now.as_deref() != daemon && now != self.asked;
-    self.seen.clone_from(&now);
-    if asks {
-      self.asked = now;
-      self.machine.upgrade()?;
-    }
-    Ok(())
-  }
 }
 
 /// The frames that wait told to the window, then the next ones, until the connection ends.

@@ -210,7 +210,12 @@ fn grace(given: &str) -> Result<f64, CliError> {
 enum Hosting {
   /// Serve in the place of the daemon that runs: it ends each life and gives them to this one, and
   /// each window connects again.
-  Upgrade,
+  Upgrade {
+    /// The record of the life that asked this build, whose commands the handover does not wait
+    /// for.
+    #[arg(long)]
+    from: Option<String>,
+  },
 }
 
 impl Place {
@@ -298,7 +303,11 @@ async fn command(furb: Furb) -> Result<(), CliError> {
       task::block_in_place(|| audit::audited(&record, &sha256, report.as_deref()))
     }
     Some(Command::Host { grace, then }) => {
-      host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
+      let (upgrading, from) = match then {
+        Some(Hosting::Upgrade { from }) => (true, from),
+        None => (false, None),
+      };
+      host::serve(Duration::from_secs_f64(grace), upgrading, from).await
     }
     None => window::launch(furb.read).map(|never| match never {}),
   }

@@ -31,10 +31,14 @@ use furb_host::{
 use crate::error::CliError;
 
 /// The daemon of this machine, served until a daemon of a new build takes its place, or, with
-/// `upgrading`, served in the place of the daemon that runs, where a life with no holder lives
-/// for `grace`. It says where it listens once it listens, so a program that starts it knows when
-/// to dial it.
-pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliError> {
+/// `upgrading`, served in the place of the daemon that runs, for the life of the record `from`
+/// when a life asked it, where a life with no holder lives for `grace`. It says where it
+/// listens once it listens, so a program that starts it knows when to dial it.
+pub(crate) async fn serve(
+  grace: Duration,
+  upgrading: bool,
+  from: Option<String>,
+) -> Result<(), CliError> {
   let folder = folder()?;
   let door = Some(folder.join(DOOR));
   let path = Places::here().config.join("host.json");
@@ -51,7 +55,7 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
   let settings = Settings { opening, grace, first: STARTING, stall, tailnet, door, data: None };
   let local = Local::new(&folder);
   if upgrading {
-    return Ok(upgrade(&local, settings).await?);
+    return Ok(upgrade(&local, settings, from).await?);
   }
   let listener = local.listen().await.map_err(DaemonError::from)?;
   println!("furb host listens in {}", folder.display());

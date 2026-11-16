@@ -13,8 +13,11 @@ pub enum Error {
   Folder(io::Error),
   #[error("this machine has no cache of furb, so no daemon has a place on it")]
   NoCache,
-  #[error("no program furb stands beside the window or on PATH, so nothing serves the daemon")]
-  NoFurb,
+  #[error(
+    "no program furb stands at {} or on PATH, so nothing serves the daemon: build it in the tree of the window with `cargo build -p furb-cli`, or install furb",
+    beside.display()
+  )]
+  NoFurb { beside: PathBuf },
   #[error("the terminal failed: {0}")]
   Terminal(#[from] opentui::Error),
   #[error(transparent)]
@@ -31,8 +34,9 @@ pub enum Error {
   Frame(#[from] serde_json::Error),
   #[error("the connection to the daemon failed: {0}")]
   Lines(#[from] LinesCodecError),
-  #[error("the new build of the window cannot start: {0}")]
-  Reload(io::Error),
-  #[error("the new build of furb cannot take the place of the daemon: {0}")]
-  Upgrade(io::Error),
+  #[error(
+    "the new build of the window at {} cannot start: {source}; build it again with `cargo build -p furb-window`",
+    program.display()
+  )]
+  Reload { program: PathBuf, source: io::Error },
 }

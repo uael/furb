@@ -34,7 +34,8 @@
 )]
 use std::{
   cmp::Reverse,
-  collections::{HashMap, HashSet},
+  collections::{BTreeSet, HashMap, HashSet},
+  env,
   fmt::Display,
   fs, mem,
   net::{IpAddr, SocketAddr},
@@ -69,7 +70,7 @@ use tokio::{
     oneshot, watch,
   },
   task::{self, AbortHandle, JoinSet, spawn_blocking},
-  time::{Instant, sleep_until},
+  time::{self, Instant, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -78,6 +79,7 @@ use crate::{
   answers::Answerer,
   cards::{self, Session, Told},
   changes,
+  ears::newest,
   error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
   git,
@@ -91,7 +93,7 @@ use crate::{
   },
   reads::{Read, Readers},
   records,
-  serve::{Host, Outbox, PROGRAM, fixed, home_folder, serve},
+  serve::{Host, Outbox, PROGRAM, built, fixed, home_folder, serve},
   stall::{Quiet, Stall},
   stops::Stops,
   transport::{
@@ -161,14 +163,19 @@ where
 /// protocol refuses the hello and names its own, so this one dials it again and says its hello in
 /// that protocol: the hello and the handover keep their form across the versions. A daemon that a
 /// later program asks the handover of while it waits says that it stops, and this one ends, so
-/// the program that asks last takes its place, and one daemon starts.
-pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonError> {
+/// the program that asks last takes its place, and one daemon starts. `from` names the record of
+/// the life that asked this build, whose commands the handover does not wait for.
+pub async fn upgrade(
+  local: &Local,
+  settings: Settings,
+  from: Option<String>,
+) -> Result<(), DaemonError> {
   let log = settings.opening.log.clone();
   let (handed, asker) = match local.dial().await {
     Ok(stream) => {
-      let answered = match handover(stream, PROTOCOL).await {
+      let answered = match handover(stream, PROTOCOL, from.clone()).await {
         Err(DaemonError::Refused(ProtocolError::Protocol { ours, .. })) if ours != PROTOCOL => {
-          handover(local.dial().await?, ours).await
+          handover(local.dial().await?, ours, from).await
         }
         other => other,
       };
@@ -197,12 +204,14 @@ pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonErro
 type Asker = Framed<<Local as Dialer>::Stream, LinesCodec>;
 
 /// The lives that the daemon of a stream gave at its handover, asked in a protocol, and the stream.
+/// The hello names the record of the life that asked the new build, when one did.
 async fn handover(
   stream: <Local as Dialer>::Stream,
   protocol: u32,
+  from: Option<String>,
 ) -> Result<(Vec<Handed>, Asker), DaemonError> {
   let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
-  let hello = Verb::Hello(Hello { protocol, kind: Kind::Daemon, name: None, role: None });
+  let hello = Verb::Hello(Hello { protocol, kind: Kind::Daemon, name: from, role: None });
   for (id, verb) in [(0, hello), (1, Verb::Handover)] {
     let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
     lines.send(request).await.map_err(TransportError::from)?;
@@ -249,9 +258,11 @@ where
   let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed, user.name.to_string());
   let mut peers = JoinSet::new();
   let mut stops = heard(log.as_ref());
+  let (mut follow, mut seen) = (time::interval(FOLLOW), None);
   let leaving = loop {
     tokio::select! {
       () = stopped(stops.as_mut()) => return stop(&daemon, stops.as_mut(), log.as_ref()).await,
+      _ = follow.tick() => seen = followed(seen.as_deref(), log.as_ref()),
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
           peers.spawn(peer(daemon.clone(), identity.clone(), user.clone(), stream));
@@ -294,6 +305,24 @@ where
     asker.closed().await;
   }
   Ok(())
+}
+
+/// How often the daemon looks at its program, which a build may replace.
+const FOLLOW: Duration = Duration::from_secs(1);
+
+/// The build of the program of the daemon at this look. Once a build replaced the program and it
+/// held still since the look before, so the build wrote it whole, the daemon starts it in its own
+/// place, as the act upgrade does: each window follows the daemon, and none starts a build.
+fn followed(seen: Option<&str>, log: Option<&Log>) -> Option<String> {
+  let now = env::current_exe().ok().as_deref().and_then(built);
+  if now.is_some()
+    && now.as_deref() == seen
+    && now != *PROGRAM
+    && let Err(no) = newest(None)
+  {
+    report(log, &format_args!("the new build cannot start: {no}"));
+  }
+  now
 }
 
 /// The user of the machine: by the login of the system, which the local transport proves, and by
@@ -489,8 +518,8 @@ enum Asked {
   Restand,
   /// What a site sent in the project of a record, with what the life of the record holds now.
   History { life: String, site: String, held: Vec<Sent>, reply: oneshot::Sender<Vec<Sent>> },
-  /// The handover that a peer asked, once no life runs a command that it ran when it was asked.
-  Settled,
+  /// The handover of an ask of a round, once no life runs a command that it ran at that ask.
+  Settled(u64),
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -535,6 +564,7 @@ impl Daemon {
       readers: Readers::default(),
       empty,
       settling: None,
+      rounds: 0,
     };
     lives.members.set(lives.operators());
     lives.adopt(handed);
@@ -806,8 +836,11 @@ struct Lives {
   readers: Readers,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
-  /// The peer that asks the handover while it waits for the commands in flight, and its reply.
-  settling: Option<(Outbox, Replied)>,
+  /// The peer that asks the handover while it waits for the commands in flight, its reply, and the
+  /// round of its ask, which a wait of an earlier ask does not end.
+  settling: Option<(Outbox, Replied, u64)>,
+  /// How many handovers peers asked.
+  rounds: u64,
   /// The cards that the daemon told to the peers that asked them.
   told: Told,
   /// Each record that the daemon sent to the task that makes the index of its threads, so no
@@ -1076,16 +1109,17 @@ impl Lives {
       match asked {
         None => return,
         // The program that asks last takes the place of the daemon: the one that asked before it,
-        // a build older than its own, hears that the daemon stops, and ends.
-        Some(Asked::Verb { verb, outbox, reply, .. }) if *verb == Verb::Handover => {
-          if let Some((_, before)) = self.settling.replace((outbox, reply)) {
+        // a build older than its own, hears that the daemon stops, and ends. One handover waits,
+        // for the commands in flight at the last ask.
+        Some(Asked::Verb { peer, verb, outbox, reply }) if *verb == Verb::Handover => {
+          self.rounds += 1;
+          if let Some((_, before, _)) = self.settling.replace((outbox, reply, self.rounds)) {
             before.send(Err(ProtocolError::Stopped)).ok();
-          } else {
-            self.settle();
           }
+          self.settle(peer.name.as_deref(), self.rounds);
         }
-        Some(Asked::Settled) => {
-          if let Some((asker, reply)) = self.settling.take() {
+        Some(Asked::Settled(round)) => {
+          if let Some((asker, reply, _)) = self.settling.take_if(|one| one.2 == round) {
             return self.handover(asker, reply);
           }
         }
@@ -1136,7 +1170,7 @@ impl Lives {
       }
       Asked::Stop(reply) => self.stop(reply),
       // The task hands the lives over before it hears an ask, since the handover ends it.
-      Asked::Settled => {}
+      Asked::Settled(_) => {}
       Asked::Restand => self.restand(),
       Asked::History { life, site, held, reply } => {
         reply.send(self.history(&life, &site, held)).ok();
@@ -1731,24 +1765,32 @@ impl Lives {
     }
   }
 
-  /// The handover asked, once each life that lives holds no command in flight: the end of a life
-  /// cuts its commands, which no later life takes again. The daemon serves each peer meanwhile,
-  /// and its log names each life that it waits for.
-  fn settle(&self) {
-    let living = self.held.iter().filter(|(_, held)| matches!(held.stage, Stage::Living(_)));
-    let runs = living.filter(|(_, held)| held.handle.runs_commands());
-    let lives: Vec<(String, LifeHandle)> =
-      runs.map(|(life, held)| (life.clone(), held.handle.clone())).collect();
+  /// The handover asked, once each command that a life ran at the ask ended: the end of a life cuts
+  /// its commands, which no later life takes again. A command that starts after the ask ends at the
+  /// handover as interrupted, as a life that opens from its image closes one, so its model reads
+  /// that end and runs it again, and a busy life never holds the handover for ever. A program that
+  /// a life asked, by the act upgrade, names that life, and the handover waits for no command of
+  /// it, since that life made the build. The daemon serves each peer meanwhile, and its log names
+  /// each life that it waits for.
+  fn settle(&self, from: Option<&str>, round: u64) {
+    let living = self
+      .held
+      .iter()
+      .filter(|(life, held)| matches!(held.stage, Stage::Living(_)) && from != Some(life.as_str()));
+    let runs =
+      living.map(|(life, held)| (life.clone(), held.handle.clone(), held.handle.commands()));
+    let lives: Vec<(String, LifeHandle, BTreeSet<String>)> =
+      runs.filter(|(_, _, commands)| !commands.is_empty()).collect();
     let (log, asks) = (self.settings.opening.log.clone(), self.asks.clone());
     tokio::spawn(async move {
       if !lives.is_empty() {
-        let records: Vec<&str> = lives.iter().map(|(record, _)| record.as_str()).collect();
+        let records: Vec<&str> = lives.iter().map(|(record, ..)| record.as_str()).collect();
         let waits = records.join(", ");
         report(log.as_ref(), &format_args!("the handover waits for each command of: {waits}"));
       }
-      future::join_all(lives.iter().map(|(_, life)| life.settled())).await;
+      future::join_all(lives.iter().map(|(_, life, commands)| life.settled(commands))).await;
       if let Some(asks) = asks.upgrade() {
-        asks.send(Asked::Settled).ok();
+        asks.send(Asked::Settled(round)).ok();
       }
     });
   }

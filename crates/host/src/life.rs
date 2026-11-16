@@ -14,7 +14,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  collections::{BTreeMap, HashMap, VecDeque},
+  collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
   fs::File,
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
@@ -358,8 +358,8 @@ pub struct Life {
   opens: Told,
   /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
   cards: watch::Sender<Option<Arc<Session>>>,
-  /// Whether a command of the life runs, which a handover waits to see false.
-  commands: watch::Sender<bool>,
+  /// The id of each command of the life that runs, whose end a handover waits for.
+  commands: watch::Sender<BTreeSet<String>>,
   times: Times,
   /// Whether an event changed what the cards read since the life last told them, and when it may
   /// tell them next.
@@ -514,7 +514,7 @@ pub struct LifeHandle {
   name: Arc<Mutex<Option<String>>>,
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
-  commands: watch::Receiver<bool>,
+  commands: watch::Receiver<BTreeSet<String>>,
 }
 
 impl Life {
@@ -534,7 +534,7 @@ impl Life {
     let named = Arc::clone(&name);
     let (opened, opens) = Told::new();
     let (carded, cards) = watch::channel(None);
-    let (running, commands) = watch::channel(false);
+    let (running, commands) = watch::channel(BTreeSet::new());
     let told =
       Tells { readers: told, name: named, opens: opened, cards: carded, commands: running };
     thread::Builder::new()
@@ -1098,7 +1098,7 @@ struct Tells {
   name: Arc<Mutex<Option<String>>>,
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
-  commands: watch::Sender<bool>,
+  commands: watch::Sender<BTreeSet<String>>,
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
@@ -1237,7 +1237,7 @@ async fn lives(
   let images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
   let mut born =
     record.as_deref().filter(|_| !images).is_some_and(|one| life.recalled(one, &progress, false));
-  let ears = ears(told.clone(), journal);
+  let ears = ears(told.clone(), journal, record.as_deref());
   let mut kept = None::<Kept>;
   // A life that told its past stands on it, and on no image that came after.
   let mut stands = |part: &[u8]| {
@@ -1299,7 +1299,7 @@ async fn moved(
   }
   // The move passed each fact of the log, so the record holds each of them.
   life.let_go();
-  let ears = ears(told.clone(), journal);
+  let ears = ears(told.clone(), journal, opening.record.as_deref());
   let (engine, _) = opening.open(ears, progress.clone(), &mut |_| false, lease).await?;
   let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
   life.opened(birth, true, progress);
@@ -1379,8 +1379,7 @@ async fn driven(
       }
     }
     drained(&mut engine, life);
-    let runs = life.kept.held.commands();
-    life.commands.send_if_modified(|was| mem::replace(was, runs) != runs);
+    life.commands.send_if_modified(|was| mem::replace(was, life.kept.held.commands()) != *was);
     life.kept.streams.lined(engine.lines());
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
@@ -1800,18 +1799,18 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 }
 
 impl LifeHandle {
-  /// Whether a command of the life runs now.
+  /// The id of each command of the life that runs now.
   #[must_use]
-  pub fn runs_commands(&self) -> bool {
-    *self.commands.borrow()
+  pub fn commands(&self) -> BTreeSet<String> {
+    self.commands.borrow().clone()
   }
 
-  /// Once no command of the life runs, or the life ended: the end of a life cuts each command
-  /// that it runs, which no later life takes again.
-  pub async fn settled(&self) {
+  /// Once none of these commands of the life runs, or the life ended: the end of a life cuts each
+  /// command that it runs, which no later life takes again.
+  pub async fn settled(&self, of: &BTreeSet<String>) {
     let mut commands = self.commands.clone();
     // A life that ended runs no command.
-    commands.wait_for(|runs| !runs).await.ok();
+    commands.wait_for(|runs| runs.is_disjoint(of)).await.ok();
   }
 
   /// The name of the session of the life, as its facts fold it: the one that the operator said last

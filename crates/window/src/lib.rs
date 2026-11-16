@@ -166,7 +166,7 @@ pub fn run(reads: bool) -> Result<(), Error> {
   let reloads = hand::opened(&app, machines, options);
   app.run()?;
   match program.filter(|_| reloads.get()) {
-    Some(program) => Err(Error::Reload(started(&program))),
+    Some(program) => Err(Error::Reload { source: started(&program), program }),
     None => Ok(()),
   }
 }

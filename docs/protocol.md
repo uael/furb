@@ -96,9 +96,11 @@ The first frame of a peer is its hello:
   The answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its
   version of furb, the `program` that it runs, its size and the time of its last write when the daemon started, and the
   `home` folder of the user of the machine, which a window of another machine shows as `~` in a folder of that machine.
-  A window of the same machine whose program `furb` holds another build asks the handover of that program, once for
-  each build, and so does a window that a daemon of an older protocol refuses: a new build of furb takes the place of
-  the daemon while the window runs.
+  The daemon follows its own program: once a build replaced it, the daemon starts that build as
+  `furb host upgrade`, which asks the handover, and a window starts none. A daemon that asks the handover names in its
+  hello the record of the life that asked the new build with the act `upgrade`, when one did: the handover waits for
+  the commands that each other life runs at the ask, and for none of that life. A handover that a later daemon asks
+  while one waits takes its place, and the daemon that asked before hears that the daemon stops.
 
   ```json
   {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "program": "75755696-1794817620000000000", "home": "/Users/uael"}}

@@ -351,10 +351,10 @@ impl Held {
     self.live.iter().map(|at| &*self.acts[*at]).filter(|act| !act.done())
   }
 
-  /// Whether a command of the life runs.
+  /// The id of each command of the life that runs.
   #[must_use]
-  pub fn commands(&self) -> bool {
-    self.open().any(|act| act.kind == Kind::Bash)
+  pub fn commands(&self) -> BTreeSet<String> {
+    self.open().filter(|act| act.kind == Kind::Bash).map(|act| act.id.clone()).collect()
   }
 
   /// Each run of a word that is not done, in the order the acts were first told.
