@@ -903,12 +903,6 @@ impl Model {
     let count = 2 * entries.len().to_string().len() + 4;
     let asked = asked.max(hint.map_or(0, |hint| 1 + hint + 2 + count + 4));
     let asked = u16::try_from(asked).unwrap_or(PARTS).clamp(PART, PARTS);
-    // A part of things that say what they do grows past its width while the window has room, so
-    // what each says stands whole on its row.
-    let describes = self.picker.as_ref().is_some_and(|one| one.of.describes());
-    let says = entries.iter().map(|one| one.says.width() + 5).max().unwrap_or_default();
-    let says = u16::try_from(says).unwrap_or(u16::MAX);
-    let asked = if describes { asked.max(says) } else { asked };
     (columns, if rises { input } else { asked.min(columns.saturating_sub(4)) })
   }
 

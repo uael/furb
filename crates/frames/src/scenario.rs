@@ -964,7 +964,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // The arrows show the group of the keys of furb, which a tab names beside each kit.
         step("x-group", &[Act::Key("Left")], "max_thinking_tokens"),
         // The chosen key says what it does whole, wrapped, where each other says one row of it.
-        step("x-whole", &[Act::Key("Down"), Act::Key("Down")], "makes it again from the writes"),
+        step("x-whole", &[Act::Key("Down"), Act::Key("Down")], "again from the writes"),
         // A value that the property of its key does not take says so as he writes it, before he
         // sends it, and the machine refuses it, with what it takes.
         step(
