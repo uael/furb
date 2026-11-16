@@ -12,7 +12,7 @@ use furb::view::{Part, age, homed, since};
 use furb_client::{Ask, Asked, Client, Fold, HOLD, Hold, Listing, Step, Time};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
-  Event,
+  Event, ProtocolError,
   protocol::{Answer, Card, Frame},
 };
 use jiff::{Timestamp, tz::TimeZone};
@@ -128,6 +128,11 @@ impl Model {
   /// One frame of the daemon of a machine, or the end of its connection: whether what the machine
   /// told changed. The first cause of a loss stays.
   pub(crate) fn hear(&mut self, at: usize, heard: Heard) -> bool {
+    // A daemon that stops refuses each request that waits there, then its stream ends: the window
+    // reads the two as one loss of the machine, which gives each message on its way back once.
+    if let Ok(Frame::Refused { error: ProtocolError::Stopped, .. }) = &heard {
+      return false;
+    }
     if let Ok(Frame::Reply { id, .. } | Frame::Refused { id: Some(id), .. }) = &heard
       && let Some(asked) = self.client.asked.remove(&(at, *id))
     {
