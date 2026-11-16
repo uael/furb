@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { compile } from "json-schema-to-typescript";
 
 const root = join(import.meta.dir, "..", "..", "..");
-export const schemaPath = join(root, "host", "protocol.schema.json");
-export const typesPath = join(root, "bind", "typescript", "src", "protocol.ts");
+export const schemaPath = join(root, "crates", "host", "protocol.schema.json");
+export const typesPath = join(root, "crates", "typescript", "src", "protocol.ts");
 
 /** The types of the protocol, as the JSON Schema that the crate furb-host gives makes them. */
 export async function generated(): Promise<string> {

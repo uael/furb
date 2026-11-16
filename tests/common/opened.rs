@@ -6,7 +6,7 @@
 #![allow(dead_code, reason = "each side takes the part of the harness that it needs")]
 
 use std::{
-  collections::VecDeque,
+  collections::{HashSet, VecDeque},
   env, fs,
   path::{Path, PathBuf},
   process,
@@ -136,7 +136,7 @@ pub(crate) fn corpus() -> Vec<PathBuf> {
     .filter(|one| world::unopened(one).is_none())
     .collect();
   records.sort();
-  let mut held = std::collections::HashSet::new();
+  let mut held = HashSet::new();
   records.retain(|one| held.insert(fs::read(one).unwrap()));
   records
 }
