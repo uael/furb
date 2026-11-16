@@ -458,9 +458,28 @@ impl Model {
     self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum()
   }
 
-  /// How many rows the input, the launcher and the hints take at the bottom of the left side.
+  /// How many rows the input, the launcher and the hints take on the left side.
   pub(crate) fn input_rows(&self) -> usize {
     self.input().len()
+  }
+
+  /// The row where the input starts. It stands at the foot, but on a home that holds no thread
+  /// yet, where its text and the box stand together in the middle of the rows between the title
+  /// and the row of hints, which stays at the foot.
+  pub(crate) fn input_top(&self) -> usize {
+    let (rows, input) = (usize::from(self.size.1), self.input_rows());
+    if self.centers() {
+      // The text under the title and its blank row, a blank row, then the box without its hints.
+      let said = self.home_text().len();
+      return 2 + rows.saturating_sub(3).saturating_sub(said + input) / 2 + said + 1;
+    }
+    rows.saturating_sub(input)
+  }
+
+  /// Whether the input stands in the middle of the home: while no thread is open and none stands
+  /// yet, once the window knows what stands.
+  pub(crate) fn centers(&self) -> bool {
+    self.feed().is_none() && self.client.settled.is_empty() && self.known()
   }
 
   /// The box of the text of the input: over its bands, or over the row of a form where the
@@ -474,7 +493,7 @@ impl Model {
       .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
     let ended = self.client.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
-    let top = usize::from(self.size.1).saturating_sub(self.input_rows());
+    let top = self.input_top();
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
       (Some(_), None) => (2, 0, 1, String::new()),
       (Some((_, question)), Some(at)) if question.offers_line() => {

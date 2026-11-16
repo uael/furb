@@ -143,8 +143,7 @@ impl Model {
     if rows.is_empty() {
       return None;
     }
-    let top = usize::from(self.size.1).saturating_sub(self.input_rows());
-    let y = u16::try_from(top.saturating_sub(rows.len())).ok()?;
+    let y = u16::try_from(self.input_top().saturating_sub(rows.len())).ok()?;
     // The panel is as wide as the rows of the box of the input, which stop two columns short.
     let width = u16::try_from(self.wide().saturating_sub(2)).ok()?;
     let pointed = self.pointed().and_then(|(x, at)| at.checked_sub(y).map(|row| (x, row)));

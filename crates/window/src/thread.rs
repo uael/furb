@@ -736,8 +736,13 @@ impl Model {
         rows
       }
     };
-    rows.resize(usize::from(self.size.1).saturating_sub(self.input_rows()), Row::default());
-    rows.extend(self.input());
+    // The row of hints stands at the foot wherever the box of the input stands.
+    let mut input = self.input();
+    let hints = input.pop();
+    rows.resize(self.input_top(), Row::default());
+    rows.extend(input);
+    rows.resize(usize::from(self.size.1).saturating_sub(1), Row::default());
+    rows.extend(hints);
     rows
   }
 

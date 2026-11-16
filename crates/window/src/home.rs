@@ -18,18 +18,25 @@ use crate::{
 };
 
 impl Model {
-  /// The rows of the home, above the input.
+  /// The rows of the home, above the input: its title and a blank row, then its text.
   pub(crate) fn home(&self) -> Vec<Row> {
-    let mut rows: Vec<Row> = self.says().into_iter().map(Row::of).collect();
-    // A key of the home does on a click what it does on its key.
-    if rows.len() > 2 {
-      rows.extend([Does::GoTo, Does::Keys].map(|does| self.key_row(does)));
+    let title = vec![run("  furb", self.tokens.style(Role::Title))];
+    let mut rows = vec![Row::of(title), Row::default()];
+    let text = self.home_text();
+    // With no thread, the text stands just above the input, where the eye goes next.
+    if self.centers() {
+      let pad = self.input_top().saturating_sub(rows.len() + text.len() + 1);
+      rows.extend(iter::repeat_n(Row::default(), pad));
     }
-    // With no thread, what the home says stands just above the input, where the eye goes next.
-    if self.client.settled.is_empty() && self.known() {
-      let room = usize::from(self.size.1).saturating_sub(self.input_rows() + 1);
-      let pad = room.saturating_sub(rows.len());
-      rows.splice(2..2, iter::repeat_n(Row::default(), pad));
+    rows.extend(text);
+    rows
+  }
+
+  /// The text of the home under its title, with the keys that lead out, which a click does too.
+  pub(crate) fn home_text(&self) -> Vec<Row> {
+    let mut rows: Vec<Row> = self.says().into_iter().map(Row::of).collect();
+    if !rows.is_empty() {
+      rows.extend([Does::GoTo, Does::Keys].map(|does| self.key_row(does)));
     }
     rows
   }
@@ -71,7 +78,7 @@ impl Model {
       let lines = line::wrapped(text, room);
       lines.iter().map(|line| self.said(line, style, "")).chain([Vec::new()]).collect::<Vec<_>>()
     };
-    let mut rows = vec![vec![run("  furb", t.style(Role::Title))], Vec::new()];
+    let mut rows = Vec::new();
     if self.client.settled.is_empty() && !self.known() && !self.slow {
       return rows;
     }

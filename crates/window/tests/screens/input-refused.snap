@@ -1,19 +1,11 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         broken ▾              This computer
 
                                                                 No thread yet in this project.
 
                                                                 ⌃P  other projects and sessions
-
-
-
-
-
-
-
-
 
 
 
@@ -30,4 +22,12 @@ source: tests/suite/screens.rs
 ┃
 ┃  Message  Python    This… ▾   BR broken ▾    opus  high
 ┃
+
+
+
+
+
+
+
+
   Refused: Could not use…                         ⌃P find

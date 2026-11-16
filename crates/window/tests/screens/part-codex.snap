@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
   furb                                                         furb-try ▾            This computer
 
@@ -17,17 +17,17 @@ source: tests/suite/screens.rs
     Codex
     ▌Open the sign-in page again  sign in there
      Cancel the sign-in  keep the models as they are
-
-    ↑↓ move · ⏎ open the page · ⎋ close
-
-  with opus at high effort.
-
-  ⌃P          go to anything, or run a command
-  ⌃X ?        each key
-
 ┃
-┃ Ask for a change, a review or an answer
+┃   ↑↓ move · ⏎ open the page · ⎋ close
 ┃
 ┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
 ┃
+
+
+
+
+
+
+
+
   ~/furb-try                                      ⌃P find
