@@ -580,7 +580,7 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
 }
 
 #[test]
-fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
+fn a_click_on_the_number_of_a_line_of_the_diff_starts_a_comment_under_it_that_he_writes() {
   let (app, daemon, sessions) = started();
   let project = daemon.file("furb-try");
   let git = |args: &[&str]| {
@@ -595,23 +595,30 @@ fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
   app.press("ctrl+x");
   app.press("g");
   shows(&app, "one = 2");
+  // A click on the code of a line reads it, and anchors nothing: the review stays.
   let (x, y) = at(&app, "one = 2", 0);
   app.click(x, y);
-  shows(&app, "┃ Say what to do with a.py, line 1");
-  shows(&app, "◆ a.py:1");
-  // An escape turns it back to a plain message.
+  app.advance(Duration::from_millis(50));
+  assert!(!app.text().contains("Comment on"), "{}", app.text());
+  shows(&app, "Changes  1 file");
+  // A click on its number starts a comment under it, which takes his letters at once, and an
+  // escape drops it and leaves the review.
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1");
   app.press("escape");
-  shows(&app, "┃ Ask for a change, a review or an answer");
-  app.press("ctrl+x");
-  app.press("g");
-  shows(&app, "one = 1");
-  let (x, y) = at(&app, "one = 1", 0);
-  app.click(x, y);
-  shows(&app, "┃ Say what to do with a.py, line 1, before the change");
-  sent(&app, "why not one");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Comment on"));
+  assert!(gone, "{}", app.text());
+  shows(&app, "Changes  1 file");
+  let (_, y) = at(&app, "one = 1", 0);
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1 before");
+  app.type_text("why not one");
+  shows(&app, "┃ why not one▏");
+  app.press("enter");
   let wanted = "On `a.py`, line 1 before the change:\n> one = 1\n\nwhy not one";
   let came = app.wait_until(PATIENCE, || told(&daemon, &sessions).iter().any(|one| one == wanted));
-  assert!(came, "{:?}", told(&daemon, &sessions));
+  assert!(came, "{:?}\n{}", told(&daemon, &sessions), app.text());
+  app.press("escape");
   // The thread shows what he said, with the line at its right.
   let shown = shows(&app, "why not one");
   assert!(shown.contains("◆ a.py:1 before"), "{shown}");
@@ -636,9 +643,15 @@ fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line()
   app.press("ctrl+x");
   app.press("g");
   shows(&app, "one = 2");
-  let (x, y) = at(&app, "one = 2", 0);
-  app.click(x, y);
-  sent(&app, "why two");
+  let (_, y) = at(&app, "one = 2", 0);
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1");
+  app.type_text("why two");
+  app.press("enter");
+  // The review stays where he reads; an escape shows the thread.
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Comment on"));
+  assert!(gone, "{}", app.text());
+  app.press("escape");
   // The sub thread opens with its line in its head, and its model answers in it.
   let shown = shows(&app, "◆ a.py:1 · why two");
   assert!(shown.contains("why two"), "{shown}");
@@ -655,8 +668,8 @@ fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line()
   let shown = shows(&app, "one = 2");
   let row = shown.lines().find(|one| one.contains("one = 2")).unwrap_or_default();
   assert!(row.contains("◆"), "{shown}");
-  let (x, y) = at(&app, "one = 2", 0);
-  app.click(x, y);
+  let (_, y) = at(&app, "one = 2", 0);
+  app.click(3, y);
   shows(&app, "◆ a.py:1 · why two");
 }
 

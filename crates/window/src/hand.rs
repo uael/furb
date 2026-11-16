@@ -240,7 +240,16 @@ fn listened(app: &App, window: &Shared, area: &Textarea) {
   });
   heard_edits(window, area);
   let on = Rc::clone(window);
-  app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
+  app.on_mouse(move |cx, event| {
+    // A press in the review would give the focus to its box of the diff, which takes no key, so
+    // the comment that a press on the number of a line starts would take none of his letters: the
+    // editor of the input keeps the focus, which writes that comment.
+    let reviews = on.borrow().screen.model.client.review.is_some();
+    if reviews && matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
+      cx.prevent_default();
+    }
+    mouse(cx.app(), &on, *event);
+  });
   // The window copies a selection itself, as the app would, so it can say whether the copy took.
   // Each row of the window is as wide as its part, so a line of the selection ends in the blanks
   // that pad it, which no copy keeps.
