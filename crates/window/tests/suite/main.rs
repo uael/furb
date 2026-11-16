@@ -2,6 +2,12 @@
 //! moves, on a real daemon. The daemon serves a folder of the test on the runtime of the app, and
 //! opens each life on a model that answers from a script.
 
+#[path = "../../../host/tests/suite/counted.rs"]
+#[expect(
+  dead_code,
+  reason = "the window reads the heap alone, and the count of the calls serves the host"
+)]
+mod counted;
 #[path = "../../../../tests/common/tailscale.rs"]
 mod tailscale;
 #[path = "../../../../tests/common/yard.rs"]
@@ -18,6 +24,7 @@ mod input;
 mod keys;
 mod list;
 mod loss;
+mod memory;
 mod mention;
 mod motion;
 mod open;
@@ -34,3 +41,8 @@ mod thread;
 mod views;
 mod voice;
 mod walk;
+
+/// The allocator that counts each byte that the process holds, which the test of the memory of a
+/// window reads.
+#[global_allocator]
+static COUNTED: counted::Counted = counted::Counted;
