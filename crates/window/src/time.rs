@@ -8,7 +8,7 @@
 //! the asker to the track of the chain that it asks, and its answer flows back, as the flow events
 //! of a profiler join two tracks.
 
-use std::{cmp::Ordering, collections::HashMap, ptr};
+use std::{cmp::Ordering, ptr};
 
 use crate::cells::Cells;
 use furb_client::{Chains, Flow, Time, resting};
@@ -29,18 +29,20 @@ const BEFORE: usize = 5;
 /// The columns of the toggle of the chains at the end of a bar of the time.
 const TOGGLE: usize = 10;
 
-/// The flows between the chains under the bar, and their cells by row and column: the sign, and the
-/// place of the flow among the flows.
+/// The flows between the chains under the bar, and their cells, row after row of the columns of the
+/// track: the sign, and the place of the flow among the flows.
 #[derive(Default)]
 struct Flows {
   all: Vec<Flow>,
-  cells: HashMap<(usize, usize), (&'static str, usize)>,
+  room: usize,
+  cells: Vec<Option<(&'static str, usize)>>,
 }
 
 impl Flows {
   /// The sign and the flow at a cell of the rows of the chains.
   fn at(&self, row: usize, column: usize) -> Option<(&'static str, &Flow)> {
-    self.cells.get(&(row, column)).map(|(sign, at)| (*sign, &self.all[*at]))
+    let cell = (column < self.room).then(|| self.cells.get(row * self.room + column)).flatten();
+    cell.copied().flatten().map(|(sign, at)| (sign, &self.all[at]))
   }
 }
 
@@ -170,7 +172,6 @@ impl Model {
       return None;
     }
     let (_, _, axis) = self.axis(time);
-    let flows = time.chains.as_ref().map(|chains| flowed(time, chains, &axis)).unwrap_or_default();
     // The bar and its chains are the last rows of the left side, under the status row.
     let chained = time.chains.as_ref().map_or(0, |chains| chains.shown().len());
     let top = usize::from(self.size.1).saturating_sub(1 + chained);
@@ -178,7 +179,7 @@ impl Model {
       let at = time.place();
       time.at.and_then(|_| time.message(at)).map(|one| moment(time, at, one))
     };
-    self.under(time, &axis, &flows, top).or_else(|| found(time)).or_else(walked)
+    self.under(time, &axis, top).or_else(|| found(time)).or_else(walked)
   }
 
   /// The bar of the time while the operator does not hold it: one calm row under the input, from
@@ -208,7 +209,7 @@ impl Model {
 
   /// What the pointer is on under the bar: on the track, the message in force at its moment, and on
   /// a flow between the chains, what it asks or answers.
-  fn under(&self, time: &Time, axis: &Axis, flows: &Flows, row: usize) -> Option<String> {
+  fn under(&self, time: &Time, axis: &Axis, row: usize) -> Option<String> {
     let (x, y) = self.pointed()?;
     let column = usize::from(x).checked_sub(BEFORE).filter(|one| *one < axis.room)?;
     match usize::from(y).checked_sub(row)? {
@@ -216,19 +217,27 @@ impl Model {
         let at = axis.place(column);
         time.message(at).map(|one| moment(time, at, one))
       }
-      below => flows.at(below - 1, column).map(|(_, flow)| flow_says(time, flow)),
+      // The flows are made only while the pointer stands on the rows of the chains.
+      below => {
+        let flows = flowed(time, time.chains.as_ref()?, axis);
+        flows.at(below - 1, column).map(|(_, flow)| flow_says(time, flow))
+      }
     }
   }
 
-  /// The ink of a chain under the bar, grey while it rests. While it works, the chain that holds
-  /// the thread takes the hue of the thread, as its bar, and each other chain takes in turn by its
-  /// place among them the hues of the work less that one, so no other chain reads as the thread.
-  fn ink(&self, chains: &Chains, at: usize) -> Style {
+  /// The place among the chains of the one that holds the open thread.
+  fn holder(&self, chains: &Chains) -> Option<usize> {
+    let key = &self.client.thread.as_ref()?.thread.key;
+    chains.tracks.iter().position(|one| one.threads.iter().any(|began| began.prompt == key.2))
+  }
+
+  /// The ink of a chain under the bar, grey while it rests, with the place of the chain that holds
+  /// the thread. While it works, that chain takes the hue of the thread, as its bar, and each other
+  /// chain takes in turn by its place among them the hues of the work less that one, so no other
+  /// chain reads as the thread.
+  fn ink(&self, chains: &Chains, at: usize, holder: Option<usize>) -> Style {
     let t = &self.tokens;
     let key = self.client.thread.as_ref().map(|one| &one.thread.key);
-    let holder = key.and_then(|key| {
-      chains.tracks.iter().position(|one| one.threads.iter().any(|began| began.prompt == key.2))
-    });
     let hue = key.map(|key| self.hue(key));
     let ink = match hue {
       _ if resting(chains.tracks[at].state) => t.muted,
@@ -254,6 +263,7 @@ impl Model {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
     let shown = chains.shown();
+    let holder = self.holder(chains);
     let column = |moment: &u64| axis.column(time.moments.partition_point(|one| one < moment));
     let first = time.moments.first().copied().unwrap_or_default();
     shown
@@ -261,7 +271,7 @@ impl Model {
       .enumerate()
       .map(|(row, (track, depth))| {
         let at = chains.tracks.iter().position(|one| ptr::eq(one, *track)).unwrap_or(row);
-        let ink = self.ink(chains, at);
+        let ink = self.ink(chains, at, holder);
         // Each column of the track once, so a row costs its moments and its columns, not their
         // product.
         let marked = |moments: &mut dyn Iterator<Item = &u64>| {
@@ -282,7 +292,7 @@ impl Model {
           let flow = flows.at(row, one);
           let (sign, style) = match (began[one], acted[one], one == mark) {
             _ if one == 0 && before => ("‹", ink),
-            _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender)),
+            _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender, holder)),
             (true, ..) => ("◆", ink),
             (false, true, _) => ("━", ink),
             (false, false, true) => ("│", Style::new().fg(t.text)),
@@ -366,8 +376,14 @@ impl Model {
 /// that it leaves or comes in. A later flow on a cell draws over an earlier one.
 fn flowed(time: &Time, chains: &Chains, axis: &Axis) -> Flows {
   let all = chains.flows();
-  let last = chains.shown().len().saturating_sub(1);
-  let mut cells = HashMap::new();
+  let rows = chains.shown().len();
+  let (last, room) = (rows.saturating_sub(1), axis.room);
+  let mut cells = vec![None; rows * room];
+  let mut put = |row: usize, column: usize, cell| {
+    if let Some(one) = (column < room).then(|| cells.get_mut(row * room + column)).flatten() {
+      *one = Some(cell);
+    }
+  };
   for (at, flow) in all.iter().enumerate() {
     let column = axis.column(time.moments.partition_point(|one| *one < flow.at));
     let line = if flow.answer { "┆" } else { "│" };
@@ -380,13 +396,13 @@ fn flowed(time: &Time, chains: &Chains, axis: &Axis) -> Flows {
       (None, Some(to)) => (to, last, ("▲", "↑")),
       (None, None) => continue,
     };
-    cells.insert((top, column), (signs.0, at));
+    put(top, column, (signs.0, at));
     for row in top + 1..bottom {
-      cells.insert((row, column), (line, at));
+      put(row, column, (line, at));
     }
-    cells.insert((bottom, column), (signs.1, at));
+    put(bottom, column, (signs.1, at));
   }
-  Flows { all, cells }
+  Flows { all, room, cells }
 }
 
 /// What a flow under the pointer says: the chain that sends it, whether it asks or answers, the
