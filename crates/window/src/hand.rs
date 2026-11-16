@@ -496,7 +496,17 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   // The marks of the sub threads stand in a column beside the diff, so they scroll with it.
   let marks = Text::new(app, "").wrap(WrapMode::None).width(u32::from(MARKS)).shrink(0.0);
   let rows = View::new(app).row().child(&marks).child(&diff.grow(1.0));
-  let scroll = scroll.child(&rows);
+  // The comment that he writes on a line stands under that line, over the lines after it.
+  let note = Text::new(app, "").absolute().wrap(WrapMode::None).z_index(1).visible(false);
+  let note = note.position(Edge::Left, MARKS).position(Edge::Right, 0);
+  let scroll = scroll.child(&View::new(app).child(&rows).child(&note));
+  screen.part(Model::commenting, move |shown| {
+    note.visible(shown.is_some());
+    if let Some((row, lines)) = shown {
+      note.position(Edge::Top, *row);
+      note.set_text(written(lines));
+    }
+  });
   let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
   let panel = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
@@ -1159,9 +1169,17 @@ fn completing(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 
 /// A key while the review of the changes stands: the arrows read another file, the keys of a page
 /// scroll its diff, escape and the key of the review close it, and it takes each other key, so no
-/// letter goes to the input under it. Whether the review took the key.
+/// letter goes to the input under it. While a comment on a line is open, each key but escape goes
+/// to its draft, and escape drops the comment. Whether the review took the key.
 fn looked(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.client.review.is_none() {
+    return false;
+  }
+  if window.borrow().screen.model.commenting().is_some() {
+    if key.code == KeyCode::Escape {
+      tell(app, window, |model| model.client.draft.anchor = None);
+      return true;
+    }
     return false;
   }
   match key.code {
@@ -1251,8 +1269,10 @@ fn found(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 }
 
 /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
-/// file or the folder under it goes bright, a click on a folder or on a line of the diff opens the
-/// sub thread about it, or turns the input to a message about it, and the wheel scrolls the diff.
+/// file or the folder under it goes bright, a click on a folder opens the sub thread about it, or
+/// turns the input to a message about it, a click on the numbers of a line opens the sub thread
+/// about it, or starts a comment on it under the line, a click on its code does nothing, and the
+/// wheel scrolls the diff.
 fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
   let file = window.borrow().screen.model.review_at(event.x, event.y);
   // The diff stands under the two rows of the head, from the row where its box scrolled.
@@ -1274,16 +1294,18 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
       }
     } else if down
       && !model.on_side(event.x)
-      && let Some(sub) = row.and_then(|row| model.sub_on(row))
+      && model.gutter_at(event.x)
+      && let Some(row) = row
     {
-      // A line that a sub thread is about opens that thread.
-      model.client.review = None;
-      model.open_agent(sub);
-    } else if down
-      && !model.on_side(event.x)
-      && let Some(anchor) = row.and_then(|row| model.anchor_at(event.x, row))
-    {
-      (model.client.draft.anchor, model.client.review) = (Some(anchor), None);
+      // Only the numbers of a line take a click, as on GitHub, so a click that reads the code
+      // anchors nothing and leaves the diff where it stands.
+      match model.sub_on(row) {
+        Some(sub) => {
+          model.client.review = None;
+          model.open_agent(sub);
+        }
+        None => model.client.draft.anchor = model.anchor_at(event.x.max(1 + MARKS), row),
+      }
     }
   });
   let rows = f64::from(WHEEL);

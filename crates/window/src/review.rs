@@ -209,7 +209,7 @@ impl Model {
   /// The foot, as the row of hints: the keys of the review.
   fn review_foot(&self) -> Line {
     let foot = format!(
-      "  {}{} file · {} {} change · {}{} scroll · {} close",
+      "  {}{} file · {} {} change · {}{} scroll · {} close · a click on a number comments",
       self.key(Does::Up),
       self.key(Does::Down),
       PREVIOUS,
@@ -219,6 +219,60 @@ impl Model {
       self.key(Does::Close),
     );
     vec![run(foot, self.tokens.style(Role::Muted))]
+  }
+
+  /// The comment that he writes on a line of the file that the review reads: the row of the diff
+  /// under which it stands, and its rows, the draft of the input on a band with the bar of the
+  /// input, and the keys that send it and drop it.
+  pub(crate) fn commenting(&self) -> Option<(u16, Vec<Line>)> {
+    let shown = self.reviewing()?;
+    let anchor = self.client.draft.anchor.as_ref()?;
+    let Anchor { path, at: Where::Line { line, before, .. } } = anchor else { return None };
+    if Some(path) != self.client.reviewed().map(|one| &one.path) {
+      return None;
+    }
+    let rows = rows(&shown.diff, shown.split.then_some(!*before));
+    let at = |one: &Diffed| one.as_ref().is_some_and(|one| one.0 == *line && one.1 == *before);
+    let row = rows.iter().position(at)?;
+    let t = &self.tokens;
+    let (raised, width) = (Style::new().bg(t.raised), self.diff_width());
+    let caret = run("▏", Style::new().fg(t.accent).bg(t.raised));
+    let band = |text: Line| {
+      let used = 2 + text.iter().map(|one| one.content.width()).sum::<usize>();
+      let mut band = vec![run("┃ ", Style::new().fg(self.bar()).bg(t.raised))];
+      band.extend(text);
+      band.push(run(" ".repeat(width.saturating_sub(used)), raised));
+      band
+    };
+    let draft = &self.client.draft.text;
+    let mut lines: Vec<Line> = if draft.is_empty() {
+      let says = format!("Comment on {}", shown_at(anchor));
+      vec![band(vec![run(says, t.style(Role::Muted).bg(t.raised)), caret])]
+    } else {
+      let count = draft.split('\n').count();
+      let prose = t.style(Role::Prose).bg(t.raised);
+      let row = |(at, text): (usize, &str)| {
+        let end = (at + 1 == count).then(|| caret.clone());
+        band(iter::once(run(text.to_owned(), prose)).chain(end).collect())
+      };
+      draft.split('\n').enumerate().map(row).collect()
+    };
+    let (send, drop) = (self.key(Does::Send), self.key(Does::Close));
+    let keys = format!("{send} sends it as a thread on this line · {drop} drops it");
+    lines.push(band(vec![run(keys, t.style(Role::Muted).bg(t.raised))]));
+    Some((u16::try_from(row + 1).ok()?, lines))
+  }
+
+  /// Whether a column of the window stands on the numbers of a line of the diff, or on the column
+  /// of the marks before them: the numbers of each side in the split view.
+  pub(crate) fn gutter_at(&self, x: u16) -> bool {
+    let Some(shown) = self.reviewing() else { return false };
+    let Some(column) = usize::from(x).checked_sub(1) else { return false };
+    // The numbers stand with one cell before them and the sign after them, as `splits` counts.
+    let numbers = shown.diff.lines().count().to_string().len() + 3;
+    let Some(at) = column.checked_sub(usize::from(MARKS)) else { return true };
+    let half = self.diff_width() / 2;
+    at < numbers || shown.split && (half..half + numbers).contains(&at)
   }
 
   /// The lines that a change adds and removes, each in its color, and none of a count of zero.
