@@ -1,6 +1,7 @@
 """Act, the name of an act."""
 
 from asyncio import CancelledError
+from collections.abc import Generator
 
 import pytest
 
@@ -81,3 +82,18 @@ async def test_an_act_is_dropped_at_its_done_and_only_the_ear_of_a_command_lives
   await settle()
   engine.drive(engine.idle(two), two)
   assert f"#{two} exited 0\n{two}_stdout = 'ran echo hi'" in paragraphs(engine.turns(on=root))
+  # An ear that no controlled wraps is dropped at the done of its act too, so it hears nothing after it.
+  heard = []
+
+  def plain(id: str) -> Generator[object, object]:
+    yield "started", id
+    yield "done", id, 1
+    while True:
+      heard.append((yield set()))
+
+  three = engine.act("chance", root, plain)
+  await settle()
+  engine.clock(on=root)
+  await settle()
+  assert engine.peek(three) == 1 and heard == []
+  engine.drive(engine.idle(three), three)

@@ -145,6 +145,35 @@ fn an_ear_that_wakes_on_its_own_answer_ends_at_the_bound_of_a_turn_and_the_life_
 }
 
 #[test]
+fn an_ear_that_no_controlled_wraps_and_that_wakes_on_its_own_answer_is_dropped_at_its_end() {
+  cut_first(Duration::from_secs(1));
+  let at = yard("ear-spin-plain");
+  let spin = "def spin(on=''):\n  def ear(id):\n    yield 'started', id\n    while True:\n      try:\n        \
+              chance()\n      except Exception:\n        pass\n      yield {'done'}\n\n  return act('spin', on, \
+              ear)\n\n\nspun = spin()\nclose(1)";
+  let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(2)"]) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  assert_eq!(asked_of(&mut life, "go").unwrap().as_ref().as_int(), Some(1));
+  assert_eq!(asked_of(&mut life, "again").unwrap().as_ref().as_int(), Some(2), "the life goes on");
+  let state = |life: &mut Engine| {
+    let got = life.word("repr((peek('spin1'), 'spin1' in listening()))", vec![]).unwrap();
+    got.as_ref().as_str().unwrap_or_default().to_owned()
+  };
+  let ended = state(&mut life);
+  assert!(
+    ended.contains("spin1, an act of spin, asked the World for longer than the bound of a turn")
+      && ended.ends_with(", False)"),
+    "the act ends with a refusal that names it, and its ear is dropped: {ended}"
+  );
+  drop(life);
+  let mut again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(again.raised().is_none(), "a later life replays the refusal with no drift");
+  assert_eq!(state(&mut again), ended, "the later life drops the ear at the same place");
+}
+
+#[test]
 fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leaves_no_deadline() {
   BOUND.set(Duration::from_secs(2));
   let at = yard("clock-caught");

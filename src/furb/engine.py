@@ -818,11 +818,10 @@ def idle(id):
 def controlled(ear, lasting=False):
   def lived(id):
     g, later, halt = ear(id), [], paused(id)
+    lasting and lasts.add(id)
     w = lives(g, None)
-    while w is not False:
+    while w is not False and (lasting or not over(id)):
       a = later.pop(0) if later and not halt else (yield w)
-      if over(id) and not lasting:
-        return
       match a:
         case ("pause" | "wake", *_) if covers(a, id) and (halt := a[0] == "pause"):
           pass
@@ -841,7 +840,7 @@ def controlled(ear, lasting=False):
 
 
 def boot(record=(), **outside):
-  global say, act, drive, get, peek, transcript, listening, lives, feed, flying, jumped
+  global say, act, drive, get, peek, transcript, listening, lives, feed, flying, jumped, lasts
   get_running_loop()
   made, known, done, held, log, alive, born, busy, heed, taken, top, upto, jumped = (
     Counter(),
@@ -858,7 +857,7 @@ def boot(record=(), **outside):
     {},
     {},
   )
-  due, again, owned, pending, broke, n, tip = [], {}, set(), {}, [], 0, -1
+  due, again, owned, lasts, pending, broke, n, tip = [], {}, set(), set(), {}, [], 0, -1
 
   def lives(g, a):
     if a and a[2] and again.get(id(a)) is a and site.get() in outside:
@@ -1073,7 +1072,7 @@ def boot(record=(), **outside):
       with site.set(name), hearer.set(name):
         busy.add(name)
         try:
-          heed[name] = w = lives(g, a)
+          heed[name] = w = (name in lasts or not over(name)) and lives(g, a)
           w is False and alive.pop(name)
         except (Exception, CancelledError) as fault:
           alive.pop(name)
