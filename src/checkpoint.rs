@@ -9,9 +9,11 @@
 //! `engine`, the engine that the carry leaves; `taken`, the highest number of each kind; `chains`,
 //! each chain that lives with its parent, its label, its source, whether it is paused, its turns,
 //! the definitions of each word, its plain values by name, the names that it lost, and the acts
-//! that the carry cut, each word that ran on it among them, which no later life runs again; and
+//! that the carry cut, each word that ran on it among them, which no later life runs again;
 //! `acts`, each act that a value names, the last stand and the last clock, with its value and its
 //! words, or, for an open prompt, with its shape, its message, its actor and the ear that held it;
+//! `jumped`, each chain that jumped, with the chain that it went on as, which the next life makes
+//! again under its name, so a root that jumped stays the root;
 //! and `lines`, the line of the word that made each act that a word made, which the host adds,
 //! since only the sandbox of the engine that the carry leaves saw those words run.
 //! `gathered` of the checkpointer that the next fact made names gathers it, so each later build

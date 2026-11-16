@@ -3,11 +3,14 @@ from collections.abc import Callable
 from furb.engine import Ear, Entry
 
 def birth(names: dict[str, object]) -> Ear:
-  """birth gives the ear of the outside that binds the module of each chain that seed makes again, which a host gives boot under the name birth, so the engine binds no module from data of its own."""
+  """birth gives the ear of the outside that binds the module of each chain that seed makes again, which a host gives boot under the name birth, so the engine binds no module from data of its own.
+  birth makes each chain that jumped go on as the chain that it went on as when it hears the fact jumped that seed gives of it.
+  """
 
 def seed(names: dict[str, object], data: object) -> list[Entry]:
   """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine goes on from the life that an earlier engine of its major replayed and gathered.
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
+  Each chain of the data that jumped is made again under its name in the order of the numbers of the chains, and goes on as the chain that it went on as, so a root that jumped stays the root of the later life.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each chain with an open prompt opens paused while birth binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
@@ -31,11 +34,12 @@ def seed(names: dict[str, object], data: object) -> list[Entry]:
   """
 
 def gathered(names: dict[str, object], define: Callable[[str], str], floor: dict[str, int]) -> dict:
-  """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
+  """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains, acts and jumped.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
   chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word of the definitions of its last fact carried, then of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives.
   The definitions of a chain take only the words whose rung is an act, so no text that the chain heard, as a note in prose of a tell, and the word of a checkpoint parses, so a later life binds each value again.
   chains holds each chain whose ear still hears, after a number that no chain of the life holds too.
+  jumped holds each chain that jumped, with its maker, its parent, its label, its source and the chain that it went on as, and chains holds none of them, so a later life makes it again as the chain that it was.
   The turns of a chain keep no reply that is not done, so a later life holds no reply that no ear of it takes.
   The turns of a chain keep each told rung of the chain.
   gathered reads the questions of the life alone, so the fact of an act of an earlier life that a carried turn holds raises nothing.

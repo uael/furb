@@ -252,7 +252,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   segment, which no record keeps: plain data with a version of its own shape, `schema`, apart from the version of the
   record. It holds each
   chain that lives with its label, its source, its turns, the definitions of each word, its plain values and whether
-  it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
+  it is paused, each act that a value names with its answer, each open prompt, each chain that jumped with the chain that it went on as, and the names that each kind took,
   and no word of a verb by its place. `gathered` of the checkpointer that the next fact made names holds its shape and
   gives it. Its `seed` makes from that data the entries that the next engine boots on, before the next segment, so the
   engine that opens it, and not the one that ran the segment before, says how its own journal makes each chain again. Each name of the past

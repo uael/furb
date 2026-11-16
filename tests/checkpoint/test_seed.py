@@ -85,6 +85,20 @@ async def test_each_chain_of_the_data_is_made_again_under_its_name_on_its_parent
   assert str(engine.bash("echo two", on="chain1")) == "bash3"
 
 
+async def test_each_chain_of_the_data_that_jumped_is_made_again_under_its_name_in_the_order_of_the_numbers_of_the_chains_and_goes_on_as_the_chain_that_it_went_on_as_so_a_root_that_jumped_stays_the_root_of_the_later_life() -> (
+  None
+):
+  """Each chain of the data that jumped is made again under its name in the order of the numbers of the chains, and goes on as the chain that it went on as, so a root that jumped stays the root of the later life."""
+  _, _, root = born()
+  assert await engine.rung("k = 7", on=root) is None
+  went = str(await engine.jump(on=root))
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  assert (engine.scope(root), engine.module(went)["k"]) == (went, 7)
+  assert await engine.rung("k += 1", on=root) is None and engine.module(went)["k"] == 8
+
+
 async def test_each_open_prompt_of_the_data_is_made_again_through_prompt_under_its_name_and_each_chain_that_the_data_says_paused_is_paused() -> (
   None
 ):

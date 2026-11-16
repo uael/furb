@@ -33,12 +33,12 @@ def value(root: str, name: str) -> str:
   return str(engine.module(root)[name])
 
 
-async def test_gathered_gives_the_data_of_a_checkpoint_of_the_life_at_its_tip_which_seed_reads_as_plain_data_that_each_build_of_the_major_reads_taken_chains_and_acts() -> (
+async def test_gathered_gives_the_data_of_a_checkpoint_of_the_life_at_its_tip_which_seed_reads_as_plain_data_that_each_build_of_the_major_reads_taken_chains_acts_and_jumped() -> (
   None
 ):
-  """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts."""
+  """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains, acts and jumped."""
   _, data = await gather()
-  assert [*data] == ["taken", "chains", "acts"]
+  assert [*data] == ["taken", "chains", "acts", "jumped"]
   assert [*checkpoint.seed(vars(engine), data)[0][0]] == ["chain", "chain1", OPERATOR, "", "root", ""]
 
 
@@ -287,3 +287,15 @@ async def test_every_other_value_is_lost_and_the_rest_of_the_checkpoint_is_gathe
   lost = {"gone", "many", "once", "keyed", "deep", "listed", "paired", "nan", "inf"} | wrong
   assert lost <= set(one["lost"]) and not lost & one["values"].keys()
   assert one["values"]["kept"] == "1"
+
+
+async def test_jumped_holds_each_chain_that_jumped_with_its_maker_its_parent_its_label_its_source_and_the_chain_that_it_went_on_as_and_chains_holds_none_of_them_so_a_later_life_makes_it_again_as_the_chain_that_it_was() -> (
+  None
+):
+  """jumped holds each chain that jumped, with its maker, its parent, its label, its source and the chain that it went on as, and chains holds none of them, so a later life makes it again as the chain that it was."""
+  _, _, root = born()
+  went = str(await engine.jump(on=root))
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  by, on, label, source = engine.get(root)[2:6]
+  assert data["jumped"] == [{"id": root, "by": by, "on": on, "label": label, "source": source, "to": went}]
+  assert root not in [c["id"] for c in data["chains"]]
