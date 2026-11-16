@@ -905,14 +905,21 @@ impl Engine {
   /// pending while it is not done and no pause holds it, and so is each act above it that made it, directly or not,
   /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds.
   pub fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
+    let holding = self.holding()?;
+    self.above(holding)
+  }
+
+  /// Each act that the outside started in an earlier life and that no ear of this life took yet,
+  /// once each: the record shows an act that each of several lives started at each start.
+  fn holding(&mut self) -> Result<Vec<String>, Fault> {
     let mut holding = Vec::new();
     for id in mem::take(&mut self.holding) {
-      if !self.whether(TOOK, &id)? {
+      if !holding.contains(&id) && !self.whether(TOOK, &id)? {
         holding.push(id);
       }
     }
     self.holding.clone_from(&holding);
-    self.above(holding)
+    Ok(holding)
   }
 
   /// Each act of a list that waits and that no pause holds, and each act above it that made it,
@@ -959,41 +966,34 @@ impl Engine {
   }
 
   /// The work that an earlier life left, put to the outside again with no wake from a host: a
-  /// wake of each act of [`Engine::pending`] that no other act of it made, so the World asks each
-  /// reply of it again, takes each wait, stand and prompt to the operator of it again, and closes
-  /// each other act of it that it takes as interrupted, a command among them, and the model of its
-  /// chain reads that end in a turn. A
-  /// life that opens on a record and does work says it once, at its tip, since a resume returns to
-  /// the state of that tip, whose work goes on. A parked act and an act that a pause holds stay as
-  /// they are.
+  /// wake of each act that the outside started then, so the World asks each reply of it again,
+  /// takes each wait, stand and prompt to the operator of it again, and closes each other act of it
+  /// that it takes as interrupted, a command among them, and the word that awaits that act reads
+  /// that end. A life that opens on a record and does work says it once, at its tip, since a
+  /// resume returns to the state of that tip, whose work goes on. A parked act and an act that a
+  /// pause holds stay as they are.
   pub fn resume(&mut self) -> Result<(), Fault> {
-    let pending = self.pending()?;
-    self.woken(&pending)
+    let holding = self.holding()?;
+    self.woken(holding)
   }
 
   /// The acts that the ears of the life of an image held in flight, put to their fresh ears as
   /// [`Engine::resume`] puts the work of an earlier life: the journal holds each act that an ear of
-  /// the outside took and that is not done, and a wake of each that no other act of them made puts
-  /// it to the outside again, so a life opens by its image as it opens by its record.
+  /// the outside took and that is not done.
   pub(crate) fn flight(&mut self) -> Result<(), Fault> {
     let held = self.held()?;
     let ids = held.as_ref().items().unwrap_or_default();
-    let ids = ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect();
-    let pending = self.above(ids)?;
-    self.woken(&pending)
+    self.woken(ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect())
   }
 
-  /// A wake of each act of a pending list that no other act of it made.
-  fn woken(&mut self, pending: &[(String, String)]) -> Result<(), Fault> {
-    let mut tops = Vec::new();
-    for (id, _) in pending {
-      let by = self.get(id)?.map(|act| act.by().to_owned()).unwrap_or_default();
-      if !pending.iter().any(|(one, _)| *one == by) {
-        tops.push(id.clone());
+  /// A wake of each act of a list that waits and that no pause holds, which puts it to the outside
+  /// again. The wake names that act alone and no act above it: a wake of the prompt that a word
+  /// runs for would ask its chain again, while the word that awaits the act still runs.
+  fn woken(&mut self, holding: Vec<String>) -> Result<(), Fault> {
+    for id in holding {
+      if !self.parked.iter().any(|(one, _)| *one == id) && self.whether(WAITS, &id)? {
+        self.wake(&id)?;
       }
-    }
-    for id in tops {
-      self.wake(&id)?;
     }
     Ok(())
   }

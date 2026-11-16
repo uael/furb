@@ -1571,6 +1571,78 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
   assert_eq!(value, json!("ran\n"), "the command ran to its end in the old daemon");
 }
 
+#[tokio::test]
+async fn a_word_that_awaits_an_agent_is_asked_nothing_more_once_its_life_opens_from_its_image() {
+  asked_once_across_a_handover(false).await;
+}
+
+#[tokio::test]
+async fn a_word_that_awaits_an_agent_is_asked_nothing_more_once_its_life_opens_by_its_record() {
+  asked_once_across_a_handover(true).await;
+}
+
+/// A root whose word awaits an agent across a handover, after which its life opens from its image,
+/// or by its record once the image is gone: the root is asked once, by the message, since the word
+/// still awaits its agent on the new daemon.
+async fn asked_once_across_a_handover(by_record: bool) {
+  let at = place();
+  // The root answers the first ask with a word that awaits an agent, which thinks for ever, and
+  // each later ask with a close; the test counts the asks of each.
+  let (asks, thinks) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+  let (counted, thought) = (Arc::clone(&asks), Arc::clone(&thinks));
+  let answer = Answered(Arc::new(move |request: Value, _| {
+    if request["chain"] != "chain1" {
+      thought.fetch_add(1, Ordering::SeqCst);
+      return Box::pin(future::pending());
+    }
+    let word = if counted.fetch_add(1, Ordering::SeqCst) == 0 {
+      "think = prompt(str, 'go', on=chain('side'))\nawait wait(900, think)"
+    } else {
+      "close(None)"
+    };
+    let turn = [Object::string("assistant"), Object::string(word), Object::none(), Object::none()];
+    Box::pin(future::ready(Ok(Object::tuple(turn))))
+  }));
+  let opening = Opening { answer: Some(answer), ..opening(&at) };
+  let (local, old) = started_with(&at, SHORT, opening.clone()).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let prompt = Verb::Prompt {
+    life: life.clone(),
+    shape: "str".to_owned(),
+    message: "go".to_owned(),
+    to: None,
+    on: None,
+  };
+  assert!(matches!(window.ask(prompt).await, Ok(Answer::Act(_))));
+  let waits = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Act(act), .. } if act.kind == view::Kind::Wait);
+  window.until(waits).await;
+  let settings = Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    home: None,
+    data: None,
+  };
+  let next = local.clone();
+  let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
+  assert!(window.closed().await);
+  assert!(matches!(old.await, Ok(Ok(()))));
+  listening(&local, &mut new).await;
+  if by_record {
+    fs::remove_file(format!("{life}.image")).unwrap();
+  }
+  let mut window = Window::dialed(&local).await;
+  window.attach(&life).await;
+  time::sleep(PAST).await;
+  assert_eq!(asks.load(Ordering::SeqCst), 1, "the root is asked once, by the message");
+  assert_eq!(thinks.load(Ordering::SeqCst), 2, "the new daemon asks the reply of the agent again");
+}
+
 /// The new daemon of a handover, once it listens: the old one ends before the new one binds. A new
 /// daemon that ends before it listens fails the test with its error.
 async fn listening(local: &Local, new: &mut JoinHandle<Result<(), DaemonError>>) {
