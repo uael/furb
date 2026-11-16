@@ -13,4 +13,5 @@ mod operator;
 mod provider;
 mod reader;
 mod schema;
+mod search;
 mod store;

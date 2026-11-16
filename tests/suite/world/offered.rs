@@ -99,7 +99,7 @@ pub(super) fn cached(name: &str, copy: &str) -> Yard {
 /// The yard of the child of the test at `test` that ran in it, whose cache holds this copy of
 /// models.dev, with these variables, each `NAME` with a key or `NAME=value`, and no claude command
 /// line.
-fn run(test: &str, at: Yard, vars: &[&str]) -> Yard {
+pub(super) fn run(test: &str, at: Yard, vars: &[&str]) -> Yard {
   let vars: Vec<(&str, &str)> = (vars.iter())
     .map(|one| one.split_once('=').unwrap_or((one, "key")))
     .chain([("FURB_CLAUDE_BIN", "")])
@@ -117,7 +117,7 @@ fn told(test: &str, name: &str, copy: &str, vars: &[&str]) -> Value {
 }
 
 /// Says a value to the test that ran this child.
-fn say(at: &Path, value: &Value) {
+pub(super) fn say(at: &Path, value: &Value) {
   fs::write(at.join("said"), value.to_string()).expect("the child says");
 }
 
@@ -1234,8 +1234,10 @@ fn commands(at: &Path) {
     return;
   }
   let word = "close(await act('search', '', None, 'what is rust', 'claude-cli:sonnet'))";
-  let got = closed(&mut engine, word).expect("the search ends");
-  say(at, &json!(Text::of(got.as_ref()).expect("a text").content));
+  match closed(&mut engine, word) {
+    Ok(got) => say(at, &json!(Text::of(got.as_ref()).expect("a text").content)),
+    Err(why) => say(at, &json!({ "raised": why })),
+  }
 }
 
 /// A program that stands for the claude command line in a search, which writes each word that it
@@ -1285,8 +1287,16 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
     serde_json::from_str(&fs::read_to_string(at.join("said")).expect("said")).expect("JSON");
   let said = said.as_str().expect("the text of the search");
   let (args, query) = said.split_once("---\n").expect("the words and the query");
-  assert!(args.starts_with("[run]\n[3]\n[two words]\n[$HOME;literal]\n[-p]\n"), "{args}");
-  assert_eq!(query, "what is rust");
+  let flags =
+    "[-p]\n[--model]\n[sonnet]\n[--output-format]\n[text]\n[--system-prompt]\n[Search the web";
+  assert!(
+    args.starts_with(&format!("[run]\n[3]\n[two words]\n[$HOME;literal]\n{flags}")),
+    "{args}"
+  );
+  assert_eq!(args.matches("[run]").count(), 1, "the words of the prefix come once: {args}");
+  let tools = "[--allowedTools]\n[WebSearch]\n[--tools]\n[WebSearch]\n";
+  assert!(args.ends_with(tools), "the search has the tool WebSearch alone: {args}");
+  assert_eq!(query, "what is rust", "the query goes on the input of the command line");
   let setup = |name: &str, command: Value| {
     let at = run(test, commanded(name, &user, &command, "setup"), &[]);
     fs::read_to_string(at.join("said")).expect("said") == "true"
@@ -1294,6 +1304,23 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   assert!(!setup("prefix-off", json!(false)));
   assert!(setup("prefix-on", json!(true)), "true keeps the user command");
   assert!(setup("prefix-one", json!({"command": bin})), "a single executable string is valid");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_search_of_the_claude_command_line_that_fails_raises_with_its_status_and_what_it_said_of_why() {
+  if let Some(at) = child() {
+    commands(&at);
+    return;
+  }
+  let fake = Fake::new("search-fails");
+  let search = searcher(&fake.at, "echo out; echo 'no credit' >&2; exit 3");
+  let command = json!({"command": [search]});
+  let at = run(here!(), commanded("search-fails", &json!(true), &command, "search"), &[]);
+  let said: Value =
+    serde_json::from_str(&fs::read_to_string(at.join("said")).expect("said")).expect("JSON");
+  let raised = said["raised"].as_str().expect("the search raised");
+  assert!(raised.contains("claude exit status: 3: no credit"), "{raised}");
 }
 
 #[cfg(unix)]
