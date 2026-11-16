@@ -118,7 +118,7 @@ jobs:
         # The extension is built for one interpreter, and the program for none.
         crate:
           - { name: furb-monty, path: crates/python, args: --interpreter python3.14 }
-          - { name: furb-cli, path: cli, args: "" }
+          - { name: furb-cli, path: crates/cli, args: "" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -147,7 +147,7 @@ jobs:
       matrix:
         crate:
           - { name: furb-monty, path: crates/python }
-          - { name: furb-cli, path: cli }
+          - { name: furb-cli, path: crates/cli }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
