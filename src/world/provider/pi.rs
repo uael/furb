@@ -283,7 +283,3 @@ struct Cost {
 struct Failure {
   error_message: Option<String>,
 }
-
-#[cfg(test)]
-#[path = "pi.test.rs"]
-mod test;

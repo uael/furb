@@ -19,14 +19,14 @@ use furb::{
   Act, Engine, Fact, Object, SYSTEM, Text,
   life::{Opening, Retrying, Stream},
   verbs,
-  world::{Class, Retries, Writes},
+  world::{Class, Retries, Writes, images},
 };
 use serde_json::{Value, json};
 
 use super::provider::{asked, counted, on, said, taken, until, yard};
 use crate::{
   child::{child, here, ran},
-  drive::block_on,
+  drive::{block_on, pause},
   opened,
   yard::Yard,
 };
@@ -65,6 +65,9 @@ pub(super) fn served(answers: Vec<String>) -> (u16, thread::JoinHandle<Vec<Strin
   (port, asked)
 }
 
+/// The mark in an answer of [`served`] where its stream is cut in two writes.
+pub(super) const CUT: u8 = 1;
+
 /// One request that a provider on a port of this machine reads, and the events it streams in
 /// answer; and the request it read.
 fn exchanged(listener: &TcpListener, events: &str) -> String {
@@ -89,7 +92,19 @@ fn exchanged(listener: &TcpListener, events: &str) -> String {
   // An answer that holds its own head goes as it stands, as a refusal of the provider.
   let head_out = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
   let head_out = if events.starts_with("HTTP/") { "" } else { head_out };
-  stream.write_all(format!("{head_out}{events}").as_bytes()).expect("the turn is streamed");
+  // A mark of a cut ends a first write one byte after it, which can fall inside a letter, and the
+  // rest goes in a second write a moment later, so the client reads two chunks.
+  let mut out = format!("{head_out}{events}").into_bytes();
+  let cut = out.iter().position(|one| *one == CUT).map_or(out.len(), |at| {
+    out.remove(at);
+    at + 1
+  });
+  stream.write_all(&out[..cut]).expect("the turn is streamed");
+  stream.flush().expect("the first part goes");
+  if cut < out.len() {
+    pause(Duration::from_millis(100));
+    stream.write_all(&out[cut..]).expect("the rest of the turn is streamed");
+  }
   format!("{head}{}", String::from_utf8_lossy(&body))
 }
 
@@ -229,6 +244,81 @@ fn the_gateway_of_cloudflare_takes_the_credential_of_cloudflare_alone_at_the_add
   assert!(request.starts_with("POST /v1/acc/gw/compat/chat/completions "), "{request}");
   let credentials = (header(request, "cf-aig-authorization"), header(request, "authorization"));
   assert_eq!(credentials, (Some("Bearer cf"), None));
+}
+
+/// The yard of a test whose config names the gateway radius at a port of this machine.
+fn radius(name: &str, port: u16) -> Yard {
+  configured(name, &json!({"radius": {"url": format!("http://127.0.0.1:{port}/v1")}}))
+}
+
+#[test]
+fn a_gateway_of_pi_ai_gets_an_image_in_the_middle_of_a_message_and_reads_a_letter_that_two_chunks_split()
+ {
+  if let Some(at) = child() {
+    let gallery = at.join("images");
+    fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+    let kept = images::attach(&gallery, &at.join("a.png")).expect("the image is attached");
+    let message = format!("before {} after", images::reference("a.png", &kept.uri));
+    let opening = Opening {
+      actor: Some("radius:balanced/high".to_owned()),
+      images: Some(gallery.display().to_string()),
+      ..opened(&at)
+    };
+    let mut engine = opening.boot::<String>([]).expect("the life opens").0;
+    let root = engine.root().to_owned();
+    let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+    let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
+    let got = block_on(Act::<Object>::of(&mut engine, &id)).unwrap_or_else(|fault| fault.object());
+    assert_eq!(got.as_ref().as_int(), Some(1), "the letter is one letter: {got:?}");
+    return;
+  }
+  let delta = |text: &str| json!({"type": "text_delta", "contentIndex": 0, "delta": text});
+  let done = json!({"type": "done", "reason": "stop", "usage": {}});
+  let events = [delta("close(len('"), delta("\u{e9}"), delta("'))"), done]
+    .map(|one| format!("data: {one}\n\n"))
+    .concat();
+  // The cut falls between the two bytes of the letter.
+  let letter = events.find('\u{e9}').expect("the letter");
+  let events = format!("{}{}{}", &events[..letter], char::from(CUT), &events[letter..]);
+  let (port, asked_of) = served(vec![events]);
+  ran(here!(), &radius("pi-image", port), &[("RADIUS_API_KEY", "r")]);
+  let [request] = &asked_of.join().expect("the gateway read the request")[..] else {
+    panic!("one request")
+  };
+  let sent = body(request);
+  let messages = sent["context"]["messages"].as_array().expect("the messages of the context");
+  let parts = messages
+    .iter()
+    .filter_map(|one| one["content"].as_array())
+    .find(|parts| parts.iter().any(|part| part["type"] == "image"))
+    .expect("a message holds the image");
+  let at = parts.iter().position(|part| part["type"] == "image").expect("the image");
+  let text = |part: &Value| part["text"].as_str().map(str::to_owned).unwrap_or_default();
+  // The text before the image ends with the name that the message gives it.
+  let before = text(&parts[at - 1]);
+  assert!(before.contains("'before ![a.png](") && before.ends_with(".png)"), "{before}");
+  assert!(text(&parts[at + 1]).starts_with(" after"), "{parts:?}");
+  assert_eq!(parts[at]["data"], json!("iVBORw0KGgppbWFnZQ=="));
+}
+
+#[test]
+fn an_event_of_pi_ai_that_lacks_a_field_its_protocol_gives_fails_the_reply() {
+  if let Some(at) = child() {
+    let (_, got) = prompted(&at, "radius:balanced/high", None);
+    assert_eq!(got.as_ref().as_int(), Some(2), "the reply that failed is asked again: {got:?}");
+    return;
+  }
+  let delta = |text: &str| json!({"type": "text_delta", "contentIndex": 0, "delta": text});
+  let done = json!({"type": "done", "reason": "stop", "usage": {}});
+  let turn = |events: &[Value]| {
+    events.iter().fold(String::new(), |all, one| format!("{all}data: {one}\n\n"))
+  };
+  // A reply that read past the event that lacks its delta would close with 1.
+  let lacking =
+    turn(&[json!({"type": "text_delta", "contentIndex": 0}), delta("close(1)"), done.clone()]);
+  let (port, asked_of) = served(vec![lacking, turn(&[delta("close(2)"), done])]);
+  ran(here!(), &radius("pi-field", port), &[("RADIUS_API_KEY", "r")]);
+  assert_eq!(asked_of.join().expect("the gateway read the requests").len(), 2);
 }
 
 #[test]
