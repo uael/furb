@@ -82,7 +82,8 @@ fn a_window_holds_no_more_on_a_life_four_times_as_large() {
   let (small, life) = held(DRAWS);
   let (large, larger) = held(4 * DRAWS);
   println!("a window holds {small} bytes on a life of {life} bytes, {large} on one of {larger}");
-  // The process held 20 MiB before the window on the smaller life and 40 MiB on the larger on 11-17.
+  // The process held 20 MiB before the window on the smaller life and 40 MiB on the larger, on
+  // 11-17.
   assert!(larger > life + (10 << 20), "the larger life holds {larger} bytes, the smaller {life}");
   assert!(small < MOST && large < MOST, "a window holds {small} and {large} bytes, past {MOST}");
   assert!(

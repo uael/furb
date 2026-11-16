@@ -363,8 +363,8 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   let mut screen = Screen::new(model);
   staged(&mut screen, &stage);
   let mut left = Screen::new(sides(&mut screen.model));
-  left.part(
-    |sides: &mut Sides| sides.rows.clone(),
+  left.held(
+    |sides: &Sides| &sides.rows,
     move |lines| {
       home.set_text(written(lines));
     },
@@ -457,22 +457,24 @@ fn loaded(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   for cell in &cells {
     stage.child(cell);
   }
-  let frames = |sides: &mut Sides| sides.loaders.clone();
-  screen.part(frames, move |shown| {
-    for (at, cell) in cells.iter().enumerate() {
-      match shown.get(at) {
-        Some((spot, frame)) => {
-          let cell = cell.position(Edge::Top, spot.y).position(Edge::Left, spot.x);
-          let spans = frame.iter().map(|&(text, color)| Span::styled(text, spot.style.fg(color)));
-          cell.set_text(spans.collect::<Vec<_>>());
-          cell.visible(true);
-        }
-        None => {
-          cell.visible(false);
+  screen.held(
+    |sides: &Sides| &sides.loaders,
+    move |shown| {
+      for (at, cell) in cells.iter().enumerate() {
+        match shown.get(at) {
+          Some((spot, frame)) => {
+            let cell = cell.position(Edge::Top, spot.y).position(Edge::Left, spot.x);
+            let spans = frame.iter().map(|&(text, color)| Span::styled(text, spot.style.fg(color)));
+            cell.set_text(spans.collect::<Vec<_>>());
+            cell.visible(true);
+          }
+          None => {
+            cell.visible(false);
+          }
         }
       }
-    }
-  });
+    },
+  );
 }
 
 /// An image of the left side in its box, with its bytes, which stay the same bytes while the
@@ -495,20 +497,22 @@ fn imaged(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   for (view, _) in &views {
     stage.child(view);
   }
-  let shown = |sides: &mut Sides| sides.pictures.clone();
-  screen.part(shown, move |shown| {
-    for (at, (view, loaded)) in views.iter_mut().enumerate() {
-      let Some(Drawn(boxed, bytes)) = shown.get(at) else {
-        view.visible(false);
-        continue;
-      };
-      let fresh = !loaded.as_ref().is_some_and(|one| Arc::ptr_eq(one, bytes));
-      let decoded = !fresh || view.load(bytes).is_ok();
-      *loaded = decoded.then(|| Arc::clone(bytes));
-      let view = view.position(Edge::Top, boxed.y).position(Edge::Left, boxed.x);
-      view.size(boxed.wide, boxed.high).visible(decoded);
-    }
-  });
+  screen.held(
+    |sides: &Sides| &sides.pictures,
+    move |shown| {
+      for (at, (view, loaded)) in views.iter_mut().enumerate() {
+        let Some(Drawn(boxed, bytes)) = shown.get(at) else {
+          view.visible(false);
+          continue;
+        };
+        let fresh = !loaded.as_ref().is_some_and(|one| Arc::ptr_eq(one, bytes));
+        let decoded = !fresh || view.load(bytes).is_ok();
+        *loaded = decoded.then(|| Arc::clone(bytes));
+        let view = view.position(Edge::Top, boxed.y).position(Edge::Left, boxed.x);
+        view.size(boxed.wide, boxed.high).visible(decoded);
+      }
+    },
+  );
 }
 
 /// The stage of each widget of the left side at the left edge and at the width that the list

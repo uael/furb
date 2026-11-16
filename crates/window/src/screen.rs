@@ -42,6 +42,26 @@ impl<M: 'static> Screen<M> {
     self.parts.push(Box::new(part));
   }
 
+  /// A part whose value the model holds: `shown` lends it, and the part compares it in place and
+  /// copies it only when it changed, so a value that stays the same costs no copy at each change of
+  /// the model.
+  pub(crate) fn held<S: PartialEq + Clone + 'static>(
+    &mut self,
+    shown: impl Fn(&M) -> &S + 'static,
+    mut draw: impl FnMut(&S) + 'static,
+  ) {
+    let mut last: Option<S> = None;
+    let mut part = move |model: &mut M| {
+      let now = shown(model);
+      if last.as_ref() != Some(now) {
+        draw(now);
+        last = Some(now.clone());
+      }
+    };
+    part(&mut self.model);
+    self.parts.push(Box::new(part));
+  }
+
   /// Parts that show one value, which `shown` reads from the model once for each change, as one
   /// part does: each part of `of` then reads its own value from it, by the same rule. A value that
   /// costs its parts much to read stands here once, not once for each part.

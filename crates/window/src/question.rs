@@ -370,14 +370,18 @@ impl Model {
 
   /// The row that says that a question of the open thread waits while the operator writes.
   pub(crate) fn waiting_row(&self) -> Option<Row> {
-    let shows = self.form().is_some() || self.client.aim.is_some() || self.questions().is_empty();
-    if shows {
+    if !self.question_waits() {
       return None;
     }
     let t = &self.tokens;
     let says = "A question waits. It shows when the input is empty.";
     let line = vec![run("  ◆ ", Style::new().fg(t.attention)), run(says, t.style(Role::Muted))];
     Some(Row::of(line))
+  }
+
+  /// Whether a question of the open thread waits behind the input, which a row above it says.
+  pub(crate) fn question_waits(&self) -> bool {
+    self.form().is_none() && self.client.aim.is_none() && !self.questions().is_empty()
   }
 
   /// The left of the row of hints while a form shows: the keys that answer it.

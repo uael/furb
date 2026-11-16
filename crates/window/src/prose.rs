@@ -241,14 +241,14 @@ impl Prose<'_> {
           && (address.starts_with("https://") || address.starts_with("http://"));
         if bare && address.len() > "https://".len() {
           let linked = style.fg(self.tokens.accent).underline();
-          self.words.push(run(address, linked).link(address.to_owned()));
+          self.words.push(run(address.to_owned(), linked).link(address.to_owned()));
           let rest = word.get(address.len()..).unwrap_or_default();
           if !rest.is_empty() {
-            self.words.push(run(rest, style));
+            self.words.push(run(rest.to_owned(), style));
           }
           continue;
         }
-        let span = run(word, style);
+        let span = run(word.to_owned(), style);
         self.words.push(match &self.link {
           Some(link) => span.link(link.clone()),
           None => span,
@@ -392,14 +392,14 @@ impl Prose<'_> {
             Some(b'-') => self.tokens.danger,
             _ => self.tokens.prose,
           };
-          vec![run(one, Style::new().fg(color))]
+          vec![run(one.to_owned(), Style::new().fg(color))]
         })
         .collect(),
       language => self.colors.coded(text, language, plain.bg(ground)).to_vec(),
     };
     let numbers = Gutter::of(lines.len());
     let gutter = numbers.width;
-    let head = vec![run(language, muted)];
+    let head = vec![run(language.to_owned(), muted)];
     let head = (!language.is_empty())
       .then(|| line::spread(Vec::new(), head, self.room.saturating_sub(2), Style::new()));
     let room = Gutter::inside(self.room.saturating_sub(2)).saturating_sub(gutter + 2);

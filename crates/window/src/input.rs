@@ -535,7 +535,15 @@ impl Model {
   /// How many rows the input, the launcher, the hints and the bar of the time take at the bottom of
   /// the left side, with no row of them made.
   pub(crate) fn input_rows(&self) -> usize {
-    self.input_box().len() + 1 + self.time_count()
+    // The count of each case of [`Model::input_box`].
+    let boxed = if self.client.only_reads(self.client.target().machine()).is_some() {
+      1
+    } else if self.form().is_some() {
+      self.form_rows(self.grown()).0.len() + 3
+    } else {
+      usize::from(self.question_waits()) + self.grown() + 4
+    };
+    boxed + 1 + self.time_count()
   }
 
   /// The box of the text of the input: over its bands, or over the row of a form where the

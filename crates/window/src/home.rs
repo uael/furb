@@ -54,7 +54,12 @@ impl Model {
     let muted = self.tokens.style(Role::Muted);
     let mut line = vec![run("  ", Style::new())];
     let room = self.wide().saturating_sub(4);
-    line.extend(spread(vec![run(left, style)], vec![run(right, muted)], room, Style::new()));
+    line.extend(spread(
+      vec![run(left.to_owned(), style)],
+      vec![run(right.to_owned(), muted)],
+      room,
+      Style::new(),
+    ));
     line
   }
 

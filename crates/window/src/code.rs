@@ -100,7 +100,7 @@ impl Colors {
         if !part.is_empty()
           && let Some(last) = lines.last_mut()
         {
-          last.push(run(part, style));
+          last.push(run(part.to_owned(), style));
         }
       }
     }

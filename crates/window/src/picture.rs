@@ -61,13 +61,13 @@ pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
       continue;
     }
     if span.start > from {
-      out.push(run(line.get(from..span.start).unwrap_or_default(), plain));
+      out.push(run(line.get(from..span.start).unwrap_or_default().to_owned(), plain));
     }
-    out.push(run(line.get(span.clone()).unwrap_or_default(), mark));
+    out.push(run(line.get(span.clone()).unwrap_or_default().to_owned(), mark));
     from = span.end;
   }
   if from < line.len() || out.is_empty() {
-    out.push(run(line.get(from..).unwrap_or_default(), plain));
+    out.push(run(line.get(from..).unwrap_or_default().to_owned(), plain));
   }
   out
 }

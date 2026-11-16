@@ -1,6 +1,6 @@
 //! A row of text as its runs, and how a row fills its columns.
 
-use std::{mem, ops::Range};
+use std::{borrow::Cow, mem, ops::Range};
 
 use crate::{
   cells::{Cells, characters},
@@ -11,9 +11,10 @@ use opentui::style::{Color, Span, Style};
 /// A row of text, as its runs.
 pub(crate) type Line = Vec<Span<'static>>;
 
-/// One run of a row.
-pub(crate) fn run(text: impl Into<String>, style: Style) -> Span<'static> {
-  Span::styled(text.into(), style)
+/// One run of a row: a text that the program holds, as each mark and each blank of a row, takes no
+/// copy.
+pub(crate) fn run(text: impl Into<Cow<'static, str>>, style: Style) -> Span<'static> {
+  Span::styled(text, style)
 }
 
 /// A text cut to a count of columns, with a mark that says so. The cut falls between two words
@@ -226,7 +227,7 @@ pub(crate) fn sliced(line: &[Span<'static>], room: usize) -> Vec<Line> {
     for (character, _, style) in row {
       match line.last_mut() {
         Some(last) if last.style == style => last.content.to_mut().push_str(character),
-        _ => line.push(run(character, style)),
+        _ => line.push(run(character.to_owned(), style)),
       }
     }
     line
