@@ -9,7 +9,7 @@
 
 use std::{
   collections::HashMap,
-  fs,
+  fmt, fs,
   path::Path,
   sync::{Mutex, OnceLock, PoisonError, mpsc},
   time::{Duration, Instant},
@@ -186,20 +186,32 @@ async fn update() -> Status {
   let saved = serde_json::to_string_pretty(&kept)
     .map_err(|source| Error::Status { source })
     .and_then(|text| keep(&dir.join(STATUS), &text));
-  let mut status = status();
-  if let Err(why) = saved {
+  match saved {
     // The status that stands is the old one, so it says that it could not be kept.
-    for source in [&mut status.models_dev, &mut status.pi_ai] {
-      source.error.get_or_insert_with(|| why.to_string());
-    }
+    Err(why) => failed(&why),
+    Ok(()) => status(),
+  }
+}
+
+/// The status that stands, which says why the update could not run or be kept, where a source
+/// says no error of its own.
+fn failed(why: &dyn fmt::Display) -> Status {
+  let mut status = status();
+  for source in [&mut status.models_dev, &mut status.pi_ai] {
+    source.error.get_or_insert_with(|| why.to_string());
   }
   status
 }
 
-/// [`update`], for a host that does not run on the reactor.
+/// [`update`], for a host that does not run on the reactor, or the status that says why the system
+/// gave it no reactor.
 pub fn updated() -> Status {
   let (send, got) = mpsc::channel();
-  reactor().spawn(async move {
+  let reactor = match reactor() {
+    Ok(reactor) => reactor,
+    Err(no) => return failed(&no),
+  };
+  reactor.spawn(async move {
     // The caller waits on the other end until this send, so it cannot fail.
     drop(send.send(update().await));
   });
@@ -243,9 +255,11 @@ static UPDATER: OnceLock<Updater> = OnceLock::new();
 pub fn keep_fresh() {
   UPDATER.get_or_init(|| {
     Updater::new(|| {
-      runtime().spawn(async {
-        update().await;
-      });
+      // With no runtime the copy stands as it is, as when a source fails, and a stand an hour
+      // later tries again.
+      if let Ok(runtime) = runtime() {
+        drop(runtime.spawn(update()));
+      }
     })
   });
 }

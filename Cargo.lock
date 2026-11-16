@@ -1462,6 +1462,7 @@ dependencies = [
  "napi",
  "napi-derive",
  "num-bigint",
+ "once_cell",
  "pyo3",
  "reqwest",
  "rig-bedrock",

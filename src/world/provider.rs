@@ -32,6 +32,7 @@ mod watch;
 mod word;
 
 use std::{
+  io,
   path::PathBuf,
   sync::{Arc, PoisonError, RwLock},
 };
@@ -39,7 +40,6 @@ use std::{
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::task::JoinError;
 
 use self::search::Searches;
 pub(crate) use self::{
@@ -232,7 +232,7 @@ pub(crate) enum Unrefreshed {
   #[error(transparent)]
   Roster(#[from] catalog::Unknown),
   #[error(transparent)]
-  Lost(#[from] JoinError),
+  Lost(#[from] io::Error),
 }
 
 impl Provider {

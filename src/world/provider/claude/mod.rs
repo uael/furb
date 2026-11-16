@@ -16,7 +16,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  env,
+  env, io,
   path::{Path, PathBuf},
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -179,7 +179,9 @@ pub struct Claude {
   program: Program,
   stall: Duration,
   gone: Duration,
-  keeper: mpsc::UnboundedSender<Kept>,
+  /// The keeper of the conversations, or why the system gave it no runtime, which each turn
+  /// then gives.
+  keeper: Result<mpsc::UnboundedSender<Kept>, Arc<io::Error>>,
 }
 
 impl Claude {
@@ -226,7 +228,12 @@ impl Claude {
     });
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
+    let keeper = runtime()
+      .map(|runtime| {
+        drop(runtime.spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade())));
+        keeper
+      })
+      .map_err(Arc::new);
     Self { program: Program::with(bin, args, accounts), stall, gone: GONE, keeper }
   }
 

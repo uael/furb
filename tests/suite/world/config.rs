@@ -58,7 +58,7 @@ fn keyed(at: &path::Path, name: &str, keys: &Value) {
 /// A change kept as a life keeps it, which a test of no runtime waits for.
 #[expect(clippy::disallowed_methods, reason = "a test of no runtime waits for the change")]
 fn set(layers: &Layers, change: Change) -> Result<(), Error> {
-  ear::runtime().block_on(layers.set(change))
+  ear::runtime().expect("the system gives the ears a runtime").block_on(layers.set(change))
 }
 
 fn text(file: &PathBuf) -> Value {

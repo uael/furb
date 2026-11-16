@@ -41,6 +41,7 @@ use serde_json::{Value, json};
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
   process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
+  runtime::Handle,
   sync::{mpsc, oneshot},
   time::{Duration, timeout},
 };
@@ -241,10 +242,13 @@ impl Kits {
     let (life, name, stopped) = (life.to_owned(), name.clone(), stopped.shared());
     let ending = stopped.clone();
     let work = stream::once(async move {
-      match spawned(&life, &name, &program).await {
-        Ok((mut child, group)) => {
-          runtime().spawn(written(child.stdin.take(), lines));
-          ran(name, program, (child, group), ending)
+      match spawned(&life, &name, &program)
+        .await
+        .and_then(|child| Ok((runtime().map_err(Unborn::Start)?, child)))
+      {
+        Ok((runtime, (mut child, group))) => {
+          runtime.spawn(written(child.stdin.take(), lines));
+          ran(&runtime, (name, program), (child, group), ending)
         }
         Err(no) => {
           let why = format!("The process {} of the kit {name} {no}", program.display());
@@ -459,12 +463,12 @@ async fn written(input: Option<ChildStdin>, mut lines: mpsc::UnboundedReceiver<S
 /// lines of its stderr. A stop of the work ends the process with each process that it started, as
 /// [`waited`] says.
 fn ran(
-  name: String,
-  program: PathBuf,
+  runtime: &Handle,
+  (name, program): (String, PathBuf),
   (mut child, group): (Child, Group),
   stopped: Shared<oneshot::Receiver<()>>,
 ) -> stream::LocalBoxStream<'static, Worked> {
-  let stderr = runtime().spawn(tail(child.stderr.take()));
+  let stderr = runtime.spawn(tail(child.stderr.take()));
   let lines = child.stdout.take().map(|one| BufReader::new(one).lines());
   let said = stream::unfold(lines, |lines: Option<Lines<BufReader<ChildStdout>>>| async move {
     let mut lines = lines?;
@@ -473,7 +477,7 @@ fn ran(
   });
   let line_of = name.clone();
   let said = said.map(move |line| Worked::Line(line_of.clone(), line));
-  let waiting = runtime().spawn(waited(child, group, stopped));
+  let waiting = runtime.spawn(waited(child, group, stopped));
   let end = stream::once(async move {
     let (status, slain) = waiting.await.unwrap_or_else(|no| (Err(io::Error::other(no)), None));
     let lines = timeout(DRAIN, stderr).await.ok().and_then(Result::ok).unwrap_or_default();

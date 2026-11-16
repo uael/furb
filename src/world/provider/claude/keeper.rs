@@ -7,6 +7,7 @@
 )]
 use std::{
   collections::{HashMap, VecDeque},
+  io,
   sync::Arc,
   time::{Duration, SystemTime},
 };
@@ -254,14 +255,17 @@ impl Keeper {
 }
 
 /// The conversation of a key, lent to this turn alone by the keeper, to which it goes back however
-/// the turn ends.
+/// the turn ends; or why the system gave the keeper no runtime.
 pub(super) async fn borrow(
-  keeper: &mpsc::UnboundedSender<Kept>,
+  keeper: &Result<mpsc::UnboundedSender<Kept>, Arc<io::Error>>,
   key: String,
   fresh: Box<Conversation>,
   messages: Vec<Message>,
 ) -> Result<Lent, CompletionError> {
   let (lent, borrowed) = oneshot::channel();
+  let keeper = keeper
+    .as_ref()
+    .map_err(|no| failed(format!("the conversations of claude have no keeper: {no}")))?;
   let gone = || failed("the keeper of the conversations of claude is gone");
   if keeper.send(Kept::Lend { key, fresh, messages, lent }).is_err() {
     return Err(gone());

@@ -529,6 +529,7 @@ pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
     retry =
       all.get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_)));
   }
+  let runtime = runtime().inspect_err(|no| publish(&path, SignIn::Failed(no.to_string())))?;
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
@@ -545,7 +546,7 @@ pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
     flow.canceled = stop;
     flow.state.send_replace(status.clone());
   }
-  runtime().spawn(finish(path, pending, canceled));
+  runtime.spawn(finish(path, pending, canceled));
   Ok(status)
 }
 

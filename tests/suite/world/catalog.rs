@@ -808,7 +808,7 @@ fn priced(input: f64) -> Value {
 fn a_model_takes_the_class_of_the_catalog_else_the_one_of_its_price_else_dear() {
   if let Some(at) = child() {
     let catalog = opened(&at).catalog().expect("the catalog");
-    let class = |name: &str| catalog.find(name).map(|one| one.class());
+    let class = |name: &str| catalog.find(name).unwrap().map(|one| one.class());
     assert_eq!(class("claude-cli:haiku"), Some(Class::Cheap));
     assert_eq!(class("claude-cli:opus"), Some(Class::Dear));
     assert_eq!(class("codex:gpt-5-mini"), Some(Class::Cheap));
@@ -821,7 +821,7 @@ fn a_model_takes_the_class_of_the_catalog_else_the_one_of_its_price_else_dear() 
     let priced = ["p:under", "p:even", "p:over"].map(|name| class(name).expect("a model of p"));
     assert_eq!(priced, [Class::Cheap, Class::Cheap, Class::Dear]);
     assert_eq!(class("p:free"), Some(Class::Dear), "a model with no price is dear");
-    let classed = catalog.find("p:under").expect("a model of p").classed(Class::Dear);
+    let classed = catalog.find("p:under").unwrap().expect("a model of p").classed(Class::Dear);
     assert_eq!(classed.class(), Class::Dear, "a class that is given wins over the price");
     return;
   }

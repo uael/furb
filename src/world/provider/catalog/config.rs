@@ -327,7 +327,7 @@ impl Catalog {
   /// false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
   pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
-    super::blocking(self.configure(directory, config))
+    super::blocking(self.configure(directory, config)).map_err(Error::Unread)?
   }
 
   /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,

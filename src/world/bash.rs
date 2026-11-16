@@ -28,7 +28,6 @@ use std::io;
 use tokio::{
   io::AsyncWriteExt,
   process::ChildStdin,
-  task::JoinHandle,
   time::{Instant, sleep, sleep_until},
 };
 use unsync::spsc;
@@ -342,7 +341,7 @@ enum Phase {
 /// reach the group ends it with that fault, and the timeout of the command ends its processes at
 /// any time.
 async fn watch(
-  shell: JoinHandle<io::Result<Option<i32>>>,
+  shell: impl Future<Output = io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
@@ -356,7 +355,7 @@ async fn watch(
     tokio::select! {
       biased;
       got = &mut shell, if matches!(phase, Phase::Running) => {
-        let status = got.map_err(io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
+        let status = got.map_err(Cut::Unwaited)?;
         phase = Phase::Draining { status, until: Instant::now() + DRAIN };
       }
       read = &mut streams => read.map_err(Cut::Unread)?,

@@ -2,10 +2,7 @@
 
 use std::{process::Output, time::Duration};
 
-use tokio::{
-  process::{Child, Command},
-  task::JoinHandle,
-};
+use tokio::process::{Child, Command};
 
 use crate::ear::runtime;
 #[cfg(unix)]
@@ -46,7 +43,8 @@ pub enum Unborn {
 /// ends when the [`Group`] drops, and on Unix when this process dies by a signal and runs no drop,
 /// as by SIGKILL. A child that started and that the group could not hold is ended, and reaped.
 pub fn spawn(command: &mut Command) -> Result<(Child, Group), Unborn> {
-  let _inside = runtime().enter();
+  let runtime = runtime().map_err(Unborn::Start)?;
+  let _inside = runtime.enter();
   let lead =
     grouped(command.as_std_mut()).map_err(|source| Unborn::Held { source, ended: None })?;
   let mut child = command.spawn().map_err(Unborn::Start)?;
@@ -201,10 +199,11 @@ impl Drop for Group {
 }
 
 /// A child, awaited by one task of the runtime that gives its code, so it is reaped as it exits,
-/// whether its holder still waits for it or dropped before. An error of the wait is given, not read
-/// as an exit with no code.
-pub(super) fn reaped(mut child: Child) -> JoinHandle<std_io::Result<Option<i32>>> {
-  runtime().spawn(async move { child.wait().await.map(coded) })
+/// whether its holder still waits for it or dropped before. An error of the wait, of its task or of
+/// the runtime is given, not read as an exit with no code.
+pub(super) fn reaped(mut child: Child) -> impl Future<Output = std_io::Result<Option<i32>>> {
+  let task = runtime().map(|runtime| runtime.spawn(async move { child.wait().await.map(coded) }));
+  async move { task?.await.map_err(std_io::Error::other)? }
 }
 
 /// The code of an exit, and for a child that a signal ended, 128 and the number of the signal, as

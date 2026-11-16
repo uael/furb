@@ -578,9 +578,17 @@ impl Opening {
   pub fn catalog(&self) -> Result<Catalog, Fault> {
     let claude = self.claude.as_ref().map(PathBuf::from);
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-    Catalog::load(claude.clone())
-      .claude(claude, stall)
-      .configured(Path::new(&self.directory), self.config.as_deref().map(Path::new))
+    let (directory, config) = (Path::new(&self.directory), self.config.as_deref().map(Path::new));
+    let configured = world::catalog::blocking(async {
+      Catalog::loaded(claude.clone())
+        .await
+        .discovered(claude, stall)
+        .await
+        .configure(directory, config)
+        .await
+    });
+    configured
+      .map_err(|no| Fault::refused(no.to_string()))?
       .map_err(|no| Fault::refused(no.to_string()))
   }
 
@@ -607,7 +615,9 @@ impl Opening {
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
       if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
-    let kept = catalog.keep(roster().as_deref(), actor.as_deref());
+    let kept = catalog
+      .keep(roster().as_deref(), actor.as_deref())
+      .map_err(|no| Fault::refused(no.to_string()))?;
     let mut provider = catalog
       .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
       .map_err(|no| Fault::refused(no.to_string()))?

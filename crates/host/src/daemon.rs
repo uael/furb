@@ -876,7 +876,10 @@ async fn models(opening: Opening, reply: Replied) {
 
 /// The models that the catalog of an opening offers.
 async fn offered(opening: Opening) -> Result<Answer, ProtocolError> {
-  let offered = spawn_blocking(move || Ok::<_, Fault>(opening.catalog()?.offered())).await;
+  let offered = spawn_blocking(move || {
+    opening.catalog()?.offered().map_err(|no| Fault::refused(no.to_string()))
+  })
+  .await;
   match offered {
     Ok(Ok(models)) => Ok(Answer::Models(models.iter().map(model).collect())),
     Ok(Err(fault)) => Err(ProtocolError::Refused { why: fault.to_string() }),

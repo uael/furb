@@ -614,7 +614,8 @@ pub fn models(
   config: Option<String>,
 ) -> Result<Vec<ModelInfo>, Fault> {
   let catalog = configured_catalog(claude, directory, config)?;
-  Ok(catalog.offered().iter().map(ModelInfo::of).collect())
+  let offered = catalog.offered().map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(offered.iter().map(ModelInfo::of).collect())
 }
 
 fn configured_catalog(
@@ -672,7 +673,9 @@ pub fn setup(
   config: Option<String>,
 ) -> Result<SetupInfo, Fault> {
   let count = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
-  let found = configured_catalog(claude, directory, config)?.setup();
+  let found = configured_catalog(claude, directory, config)?
+    .setup()
+    .map_err(|no| Fault::refused(no.to_string()))?;
   Ok(SetupInfo {
     claude: found.claude,
     signed: found.signed,
@@ -703,7 +706,8 @@ pub fn model(
   directory: Option<String>,
   config: Option<String>,
 ) -> Result<Option<ModelInfo>, Fault> {
-  Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
+  let found = configured_catalog(None, directory, config)?.find(&name);
+  Ok(found.map_err(|no| Fault::refused(no.to_string()))?.as_ref().map(ModelInfo::of))
 }
 
 /// A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
@@ -750,7 +754,9 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
 pub fn config_set(directory: String, change: String, config: Option<String>) -> Result<(), Fault> {
   let change = serde_json::from_str(&change).map_err(|no| Fault::refused(no.to_string()))?;
   let layers = world::config::Layers::new(directory, config.map(Into::into));
-  world::catalog::blocking(layers.set(change)).map_err(|no| Fault::refused(no.to_string()))
+  let set =
+    world::catalog::blocking(layers.set(change)).map_err(|no| Fault::refused(no.to_string()))?;
+  set.map_err(|no| Fault::refused(no.to_string()))
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.
@@ -1088,12 +1094,14 @@ mod console {
     Event(&'static str, oneshot::Sender<bool>),
   }
 
-  /// The keeper of the callback of the host that hears the end of the console, which it owns alone.
-  fn ending() -> &'static mpsc::UnboundedSender<Ending> {
+  /// The keeper of the callback of the host that hears the end of the console, which it owns alone,
+  /// or why the system gave it no reactor.
+  fn ending() -> io::Result<&'static mpsc::UnboundedSender<Ending>> {
     static ENDING: OnceLock<mpsc::UnboundedSender<Ending>> = OnceLock::new();
-    ENDING.get_or_init(|| {
+    let reactor = ear::reactor()?;
+    Ok(ENDING.get_or_init(|| {
       let (tells, mut told) = mpsc::unbounded_channel();
-      ear::reactor().spawn(async move {
+      reactor.spawn(async move {
         let mut callback: Option<Told> = None;
         while let Some(one) = told.recv().await {
           match one {
@@ -1106,7 +1114,7 @@ mod console {
         }
       });
       tells
-    })
+    }))
   }
 
   /// The callback, kept, and the handler of this module, added to the handlers of the process, once.
@@ -1117,6 +1125,7 @@ mod console {
   pub(super) fn listen(callback: Told) -> Result<(), Fault> {
     static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
+      .map_err(|no| Fault::refused(format!("the console callback has no keeper: {no}")))?
       .send(Ending::Callback(callback))
       .map_err(|no| Fault::refused(format!("the keeper of the console callback is gone: {no}")))?;
     // The system calls the handlers from the last added to the first, so this one comes before
@@ -1142,7 +1151,8 @@ mod console {
       _ => return 0,
     };
     let (answer, told) = oneshot::channel();
-    if ending().send(Ending::Event(name, answer)).is_err() || told.blocking_recv() != Ok(true) {
+    let sent = ending().is_ok_and(|one| one.send(Ending::Event(name, answer)).is_ok());
+    if !sent || told.blocking_recv() != Ok(true) {
       return 0;
     }
     loop {

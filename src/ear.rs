@@ -42,11 +42,9 @@ use std::{
   any::Any,
   collections::{HashMap, HashSet, VecDeque},
   future::{Future, poll_fn},
+  io,
   pin::Pin,
-  sync::{
-    OnceLock,
-    mpsc::{self, Receiver, Sender},
-  },
+  sync::mpsc::{self, Receiver, Sender},
   task::{Context, Poll},
   thread,
 };
@@ -55,11 +53,12 @@ use futures::{
   Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
+use once_cell::sync::OnceCell;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use tokio::{
-  runtime::Handle,
-  task::{AbortHandle, JoinError},
+  runtime::{Handle, Runtime},
+  task::AbortHandle,
 };
 use unsync::oneshot;
 
@@ -736,9 +735,13 @@ impl Coroutine {
     }
     // What the body waits for, a pipe, a timer, a socket, the runtime of the thread wakes, or the reactor when the
     // thread runs none.
-    let polled = {
-      let _inside = Handle::try_current().is_err().then(|| reactor().enter());
-      body.as_mut().poll(cx)
+    let inside = match Handle::try_current() {
+      Ok(_) => Ok(None),
+      Err(_) => reactor().map(|reactor| Some(reactor.enter())),
+    };
+    let polled = match inside {
+      Ok(_inside) => body.as_mut().poll(cx),
+      Err(no) => Poll::Ready(Err(Fault::refused(no.to_string()))),
     };
     if let Poll::Ready(done) = polled {
       self.body = None;
@@ -852,17 +855,19 @@ pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
   co.spoke(Spoken::Saying(saying));
 }
 
-/// The runtime that wakes an ear when what it waits for is ready, a pipe, a timer, a socket, and that its work runs
-/// on: the runtime of the thread that drives the life, or the reactor when that thread runs none.
-pub fn runtime() -> Handle {
-  Handle::try_current().unwrap_or_else(|_| reactor().clone())
+/// The runtime that wakes an ear when what it waits for is ready, a pipe, a timer, a socket, and
+/// that its work runs on: the runtime of the thread that drives the life, or the reactor when that
+/// thread runs none, or why the system refused the reactor.
+pub fn runtime() -> io::Result<Handle> {
+  Handle::try_current().or_else(|_| reactor().cloned())
 }
 
 /// A future as a task of the [`runtime`], so it goes on while the life drives no ear, and which
-/// ends when what awaits it drops it, as the done of the act whose work awaits it does.
+/// ends when what awaits it drops it, as the done of the act whose work awaits it does. It gives
+/// the output of the work, or why the task ended with none, or why it found no runtime.
 pub(crate) fn spawned<T: Send + 'static>(
   work: impl Future<Output = T> + Send + 'static,
-) -> impl Future<Output = Result<T, JoinError>> {
+) -> impl Future<Output = io::Result<T>> {
   /// The task, which ends when its handle goes.
   struct Aborted(AbortHandle);
   impl Drop for Aborted {
@@ -870,37 +875,60 @@ pub(crate) fn spawned<T: Send + 'static>(
       self.0.abort();
     }
   }
-  let task = runtime().spawn(work);
-  let aborted = Aborted(task.abort_handle());
+  let task = runtime().map(|runtime| {
+    let task = runtime.spawn(work);
+    (Aborted(task.abort_handle()), task)
+  });
   async move {
-    let got = task.await;
+    let (aborted, task) = task?;
+    let got = task.await.map_err(io::Error::other);
     drop(aborted);
     got
   }
 }
 
-/// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime, driven by a
-/// thread of its own, while every ear runs on the thread of its life.
-#[expect(
-  clippy::expect_used,
-  reason = "the process asks the system once for the thread and the poll of the reactor, as for memory"
-)]
+/// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime,
+/// driven by a thread of its own, while every ear runs on the thread of its life. When the system
+/// refuses the runtime or its thread, as when the process holds all the files or the threads that
+/// it may, it gives why, and the next call asks the system again.
+pub fn reactor() -> io::Result<&'static Handle> {
+  static REACTOR: OnceCell<Handle> = OnceCell::new();
+  REACTOR.get_or_try_init(|| driven(|| Builder::new_current_thread().enable_all().build()))
+}
+
+/// The handle of the runtime that `build` makes on a thread of its own, which drives it for the
+/// life of the process. The thread builds it, so a runtime whose thread the system refused never
+/// drops in the async context of a caller, where the drop of a runtime panics.
 #[expect(
   clippy::disallowed_methods,
   reason = "the thread of the reactor blocks on the runtime that it drives, which waits for nothing"
 )]
-pub fn reactor() -> &'static Handle {
-  static REACTOR: OnceLock<Handle> = OnceLock::new();
-  REACTOR.get_or_init(|| {
-    let runtime = Builder::new_current_thread()
-      .enable_all()
-      .build()
-      .expect("the machine gives the ears a reactor");
-    let handle = runtime.handle().clone();
-    thread::Builder::new()
-      .name("furb-reactor".to_owned())
-      .spawn(move || runtime.block_on(future::pending::<()>()))
-      .expect("the machine gives the reactor a thread");
-    handle
-  })
+fn driven(build: impl FnOnce() -> io::Result<Runtime> + Send + 'static) -> io::Result<Handle> {
+  let (give, given) = mpsc::sync_channel(1);
+  thread::Builder::new()
+    .name("furb-reactor".to_owned())
+    .spawn(move || match build() {
+      Ok(runtime) => {
+        // The caller waits on the other end until this send, so it cannot fail.
+        drop(give.send(Ok(runtime.handle().clone())));
+        runtime.block_on(future::pending::<()>());
+      }
+      Err(no) => drop(give.send(Err(no))),
+    })
+    .map_err(|no| {
+      io::Error::new(no.kind(), format!("the system gives the reactor no thread: {no}"))
+    })?;
+  let refused = |no: io::Error| {
+    io::Error::new(no.kind(), format!("the system gives the ears no reactor: {no}"))
+  };
+  given
+    .recv()
+    .map_err(|ended| {
+      io::Error::other(format!("the thread of the reactor ended before its runtime: {ended}"))
+    })?
+    .map_err(refused)
 }
+
+#[cfg(test)]
+#[path = "ear.test.rs"]
+mod test;

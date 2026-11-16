@@ -130,7 +130,7 @@ fn names(models: &[Model]) -> Vec<String> {
 #[test]
 fn the_catalog_offers_a_provider_whose_credential_stands_and_names_each_model_as_provider_and_id() {
   if let Some(at) = child() {
-    say(&at, &json!(names(&Catalog::load(None).offered())));
+    say(&at, &json!(names(&Catalog::load(None).unwrap().offered().unwrap())));
     return;
   }
   let test = here!();
@@ -153,8 +153,8 @@ fn the_catalog_offers_a_provider_whose_credential_stands_and_names_each_model_as
 #[test]
 fn a_name_finds_a_model_by_its_provider_and_its_id_or_by_an_id_that_one_model_alone_holds() {
   if let Some(_at) = child() {
-    let catalog = Catalog::load(None);
-    let found = |name: &str| catalog.find(name).map(|model| model.name().to_owned());
+    let catalog = Catalog::load(None).unwrap();
+    let found = |name: &str| catalog.find(name).unwrap().map(|model| model.name().to_owned());
     assert_eq!(found("openai:gpt-4o").as_deref(), Some("openai:gpt-4o"));
     assert_eq!(
       found("opus").as_deref(),
@@ -173,13 +173,13 @@ fn a_name_finds_a_model_by_its_provider_and_its_id_or_by_an_id_that_one_model_al
 #[test]
 fn a_model_has_the_window_the_price_and_the_images_of_the_catalog() {
   if let Some(_at) = child() {
-    let catalog = Catalog::load(None);
-    let opus = catalog.find("anthropic:claude-opus-t5").expect("opus");
+    let catalog = Catalog::load(None).unwrap();
+    let opus = catalog.find("anthropic:claude-opus-t5").unwrap().expect("opus");
     assert_eq!(
       (opus.window(), opus.sees(), opus.priced()),
       (1_000_000, true, Some([5.0, 25.0, 0.5, 6.25]))
     );
-    let gpt = catalog.find("openai:gpt-4o").expect("gpt-4o");
+    let gpt = catalog.find("openai:gpt-4o").unwrap().expect("gpt-4o");
     assert_eq!((gpt.window(), gpt.sees(), gpt.priced()), (128_000, false, None));
     return;
   }
@@ -190,7 +190,7 @@ fn a_model_has_the_window_the_price_and_the_images_of_the_catalog() {
 fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names_or_every_model_the_catalog_offers()
  {
   if let Some(_at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let (models, actor) = catalog.roster(None, None).expect("the roster of no name");
     assert_eq!(
       (names(&models), actor),
@@ -234,12 +234,12 @@ fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names_or_ev
 #[test]
 fn a_catalog_keeps_the_names_it_finds_and_names_each_one_that_left_once() {
   if let Some(_at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let named = ["openai:gpt-5".to_owned(), "nothing".to_owned()];
-    let kept = catalog.keep(Some(&named), Some("nothing"));
+    let kept = catalog.keep(Some(&named), Some("nothing")).unwrap();
     assert_eq!(kept.names, Some(vec!["openai:gpt-5".to_owned()]));
     assert_eq!((kept.actor, kept.left), (None, vec!["nothing".to_owned()]));
-    let kept = catalog.keep(None, Some("openai:gpt-5/medium"));
+    let kept = catalog.keep(None, Some("openai:gpt-5/medium")).unwrap();
     assert_eq!((kept.names, kept.actor), (None, Some("openai:gpt-5/medium".to_owned())));
     assert_eq!(kept.left, Vec::<String>::new());
     return;
@@ -250,9 +250,9 @@ fn a_catalog_keeps_the_names_it_finds_and_names_each_one_that_left_once() {
 #[test]
 fn the_cache_holds_the_models_of_the_providers_of_the_snapshot_and_nothing_more() {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let held = ["openai:gpt-6", "openai:gpt-4o", "anthropic:claude-haiku-4-5", "stranger:m"];
-    let found: Vec<bool> = held.iter().map(|name| catalog.find(name).is_some()).collect();
+    let found: Vec<bool> = held.iter().map(|name| catalog.find(name).unwrap().is_some()).collect();
     say(&at, &json!(found));
     return;
   }
@@ -277,9 +277,9 @@ fn the_cache_holds_the_models_of_the_providers_of_the_snapshot_and_nothing_more(
 #[test]
 fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let held = ["anthropic:claude-cached", "anthropic:claude-haiku-4-5"];
-    let found: Vec<bool> = held.iter().map(|name| catalog.find(name).is_some()).collect();
+    let found: Vec<bool> = held.iter().map(|name| catalog.find(name).unwrap().is_some()).collect();
     say(&at, &json!(found));
     return;
   }
@@ -308,7 +308,7 @@ fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
 #[test]
 fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_place_of_its_address() {
   if let Some(at) = child() {
-    say(&at, &json!(names(&Catalog::load(None).offered())));
+    say(&at, &json!(names(&Catalog::load(None).unwrap().offered().unwrap())));
     return;
   }
   let test = here!();
@@ -356,17 +356,19 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
 #[test]
 fn the_snapshot_that_the_crate_carries_names_a_client_of_rig_for_each_provider() {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
-    let setup = catalog.setup();
+    let catalog = Catalog::load(None).unwrap();
+    let setup = catalog.setup().unwrap();
     // The command line of Codex signs in with an account of its own, and names no credential.
     let named = setup.providers.iter().filter(|one| one.provider != "codex");
     assert!(setup.providers.len() >= 40 && named.clone().all(|one| !one.env.is_empty()));
-    let opus = catalog.find("anthropic:claude-opus-5").expect("the snapshot holds opus");
+    let opus = catalog.find("anthropic:claude-opus-5").unwrap().expect("the snapshot holds opus");
     assert!(opus.window() >= 200_000 && opus.sees() && opus.priced().is_some());
-    let radius =
-      catalog.find("radius:balanced").expect("the data of pi-ai gives the models of Radius");
+    let radius = catalog
+      .find("radius:balanced")
+      .unwrap()
+      .expect("the data of pi-ai gives the models of Radius");
     assert!(radius.efforts().contains(&"high"));
-    let offered = catalog.offered();
+    let offered = catalog.offered().unwrap();
     let offering: Vec<&str> =
       offered.iter().map(|one| one.name().split(':').next().unwrap_or_default()).collect();
     let silent: Vec<&str> = (setup.providers.iter())
@@ -452,13 +454,15 @@ fn found() -> PathBuf {
 #[test]
 fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_what_it_offers() {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let named = ["openai:gpt-4o".to_owned()];
     catalog.roster(Some(&named), Some("openai:gpt-5")).expect("a roster of the network");
     catalog
       .roster(Some(&[]), Some("openai:gpt-5/high"))
       .expect("an actor of the network at an effort");
-    assert!(catalog.find("openai:gpt-6").is_none() && catalog.find("gpt-6").is_none());
+    assert!(
+      catalog.find("openai:gpt-6").unwrap().is_none() && catalog.find("gpt-6").unwrap().is_none()
+    );
     assert_eq!(heard(&at), 0, "a roster that names no model of the local server asks it nothing");
     let (models, actor) = catalog.roster(None, None).expect("the default");
     assert_eq!(
@@ -468,9 +472,9 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
        the network"
     );
     assert_eq!(heard(&at), 1);
-    assert_eq!(names(&catalog.offered()), names(&models));
+    assert_eq!(names(&catalog.offered().unwrap()), names(&models));
     assert!(
-      catalog.find("qwen").is_none(),
+      catalog.find("qwen").unwrap().is_none(),
       "an id alone with no colon finds no model of the local server"
     );
     assert!(
@@ -483,7 +487,7 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
       Some(Some("local:qwen/high".to_owned())),
       "a level after a slash is an effort of the model"
     );
-    assert_eq!(catalog.find("local:qwen").map(|one| one.window()), Some(1000));
+    assert_eq!(catalog.find("local:qwen").unwrap().map(|one| one.window()), Some(1000));
     assert_eq!(heard(&at), 1, "a catalog asks the server once");
     return;
   }
@@ -496,17 +500,17 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
 fn the_default_actor_is_a_model_of_the_claude_command_line_then_of_the_network_then_of_the_local_server()
  {
   if let Some(_at) = child() {
-    let (models, _) = Catalog::load(None).roster(None, None).expect("the default");
+    let (models, _) = Catalog::load(None).unwrap().roster(None, None).expect("the default");
     assert_eq!(
       names(&models),
       ["local:qwen"],
       "the local server stands when nothing else is offered"
     );
-    let claude = Catalog::load(None).claude(Some(found()), None);
+    let claude = Catalog::load(None).unwrap().claude(Some(found()), None).unwrap();
     let (models, _) = claude.roster(None, None).expect("the default");
     assert_eq!(names(&models)[0], "claude-cli:opus");
     assert_eq!(
-      claude.find("local:qwen").map(|one| one.name().to_owned()).as_deref(),
+      claude.find("local:qwen").unwrap().map(|one| one.name().to_owned()).as_deref(),
       Some("local:qwen")
     );
     return;
@@ -520,7 +524,7 @@ fn the_default_actor_is_a_model_of_the_claude_command_line_then_of_the_network_t
 fn a_roster_that_the_host_does_not_name_offers_every_model_of_the_claude_command_line_that_it_finds()
  {
   if let Some(_at) = child() {
-    let claude = Catalog::load(None).claude(Some(found()), None);
+    let claude = Catalog::load(None).unwrap().claude(Some(found()), None).unwrap();
     let (models, actor) = claude.roster(None, None).expect("the default");
     let all = [
       "claude-cli:opus",
@@ -549,7 +553,7 @@ fn a_roster_that_the_host_does_not_name_offers_every_model_of_the_claude_command
 #[test]
 fn a_roster_that_names_a_model_of_the_local_server_that_the_catalog_does_not_offer_says_why() {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let said = |names: Option<&[String]>, actor: Option<&str>| {
       catalog.roster(names, actor).err().map(|no| no.to_string()).unwrap_or_default()
     };
@@ -593,15 +597,15 @@ fn a_roster_that_names_a_model_of_the_local_server_that_the_catalog_does_not_off
 fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_found_in_what_it_listed()
  {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     assert!(
-      catalog.find("google:gemma3").is_none(),
+      catalog.find("google:gemma3").unwrap().is_none(),
       "a name of a provider of the network asks the server nothing"
     );
     assert_eq!(heard(&at), 0);
-    assert_eq!(names(&catalog.offered()), ["local:google:gemma3"]);
+    assert_eq!(names(&catalog.offered().unwrap()), ["local:google:gemma3"]);
     assert_eq!(heard(&at), 1);
-    let found = catalog.find("google:gemma3").map(|one| one.name().to_owned());
+    let found = catalog.find("google:gemma3").unwrap().map(|one| one.name().to_owned());
     assert_eq!(
       (found.as_deref(), heard(&at)),
       (Some("local:google:gemma3"), 1),
@@ -617,8 +621,8 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
 #[test]
 fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server() {
   if let Some(at) = child() {
-    let setup = Catalog::load(None).setup();
-    let claude = Catalog::load(None).claude(Some(found()), None).setup();
+    let setup = Catalog::load(None).unwrap().setup().unwrap();
+    let claude = Catalog::load(None).unwrap().claude(Some(found()), None).unwrap().setup().unwrap();
     let ready: Vec<Value> = (setup.providers.iter().take(3))
       .map(|one| json!([one.provider, one.env.join(" "), one.offered]))
       .collect();
@@ -680,7 +684,15 @@ fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server
 fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
   use std::os::unix::fs::PermissionsExt;
   if let Some(at) = child() {
-    let signed = |name: &str| Catalog::load(None).claude(Some(at.join(name)), None).setup().signed;
+    let signed = |name: &str| {
+      Catalog::load(None)
+        .unwrap()
+        .claude(Some(at.join(name)), None)
+        .unwrap()
+        .setup()
+        .unwrap()
+        .signed
+    };
     assert!(!signed("words"), "it says that it is not logged in");
     assert!(!signed("json"), "its JSON says that it is not logged in");
     assert!(signed("in"), "its JSON says that it is logged in");
@@ -731,7 +743,7 @@ fn configured(at: &Path) {
   let mut said = Vec::new();
   for config in all {
     fs::write(at.join(".furb/config.json"), config.to_string()).expect("the config");
-    let taken = Catalog::load(None).configured(at, Some(at));
+    let taken = Catalog::load(None).unwrap().configured(at, Some(at));
     said.push(taken.map_or_else(|no| no.to_string(), |_| "taken".to_owned()));
   }
   say(at, &json!(said));
@@ -782,20 +794,23 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
 fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
   if let Some(at) = child() {
     let configured =
-      || Catalog::load(None).configured(&at, Some(&at)).expect("the settings are valid");
+      || Catalog::load(None).unwrap().configured(&at, Some(&at)).expect("the settings are valid");
     let local = at.join(".furb/config.local.json");
     assert!(
-      configured().find("strata:qwen").is_some(),
+      configured().find("strata:qwen").unwrap().is_some(),
       "the config of the project gives the provider"
     );
     fs::write(&local, json!({"providers": {"strata": false}}).to_string())
       .expect("the local config");
-    assert!(configured().find("strata:qwen").is_none(), "the local config turns the provider off");
+    assert!(
+      configured().find("strata:qwen").unwrap().is_none(),
+      "the local config turns the provider off"
+    );
     let models = json!({"providers": {"strata": {"models": {"other": {"window": 8192}}}}});
     fs::write(&local, models.to_string()).expect("the local config");
     let got = configured();
     assert!(
-      got.find("strata:other").is_some() && got.find("strata:qwen").is_none(),
+      got.find("strata:other").unwrap().is_some() && got.find("strata:qwen").unwrap().is_none(),
       "the local config wins for each field that it gives"
     );
     return;
@@ -875,10 +890,11 @@ fn each_provider_reads_an_effort_in_its_own_words() {
     "openai:gpt-5/off",
   ];
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     let efforts = |name: &str| {
       catalog
         .find(name)
+        .unwrap()
         .expect("the model")
         .efforts()
         .iter()
@@ -947,8 +963,8 @@ fn each_other_provider_reads_an_effort_in_its_own_words() {
     "radius:balanced/max",
   ];
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
-    let efforts = |name: &str| catalog.find(name).expect("the model").efforts().join(" ");
+    let catalog = Catalog::load(None).unwrap();
+    let efforts = |name: &str| catalog.find(name).unwrap().expect("the model").efforts().join(" ");
     assert_eq!(efforts("openrouter:x/thinks"), "", "a switch alone says no level");
     assert_eq!(efforts("fireworks-ai:gpt-4o"), "low");
     asks(&at);
@@ -1223,8 +1239,8 @@ fn commanded(name: &str, user: &Value, project: &Value, does: &str) -> Yard {
 fn commands(at: &Path) {
   let does = fs::read_to_string(at.join("does")).expect("what the child does");
   if does == "setup" {
-    let catalog = Catalog::load(None).configured(at, Some(&at.join("config")));
-    say(at, &json!(catalog.expect("the configs are valid").setup().claude));
+    let catalog = Catalog::load(None).unwrap().configured(at, Some(&at.join("config")));
+    say(at, &json!(catalog.expect("the configs are valid").setup().unwrap().claude));
     return;
   }
   let opening = Opening { actor: Some("claude-cli:sonnet".to_owned()), ..opened(at) };
@@ -1358,8 +1374,11 @@ fn pied(name: &str, version: &str, models: &Value) -> Yard {
 fn a_copy_of_pi_ai_as_new_as_the_snapshot_replaces_the_models_of_its_provider_and_any_other_leaves_them()
  {
   if let Some(at) = child() {
-    let catalog = Catalog::load(None);
-    let held = (catalog.find("radius:new").is_some(), catalog.find("radius:balanced").is_some());
+    let catalog = Catalog::load(None).unwrap();
+    let held = (
+      catalog.find("radius:new").unwrap().is_some(),
+      catalog.find("radius:balanced").unwrap().is_some(),
+    );
     let renewed = fs::read_to_string(at.join("renewed")).is_ok();
     assert_eq!(held, (renewed, !renewed), "{}", at.display());
     return;
