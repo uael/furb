@@ -2,8 +2,8 @@
 //! list: one card of the pull request of its branch, with its title, its number, the lines that it
 //! adds and removes and how its checks stand, or, with no pull request, its branch and the lines
 //! that its checkout adds and removes against its base. A click on the title opens the pull
-//! request, on the counts the review of the changes, on the checks the checks of the pull request,
-//! and the menu reads the changes again.
+//! request, on the counts the review of the changes, and on the checks the checks of the pull
+//! request: each thing of the card is its own target, so it holds no menu.
 
 use std::{mem, ops::Range};
 
@@ -23,7 +23,6 @@ pub(crate) enum Changing {
   Pull,
   Diff,
   Checks,
-  Menu,
 }
 
 /// A row of the part: its runs, and the columns of the list that take a click.
@@ -54,10 +53,10 @@ impl Model {
       ),
       None => (branch, None, based.unwrap_or_else(sums), Changing::Diff),
     };
-    let title = cut(title, inner.saturating_sub(4));
+    let title = cut(title, inner.saturating_sub(2));
     let left = vec![run("⑂ ", Style::new().fg(t.accent)), run(title.clone(), prose)];
-    let first = spread(left, vec![run("⋯", muted)], inner, Style::new());
-    let mut hot = vec![(1..3 + title.width(), opens), (inner..inner + 1, Changing::Menu)];
+    let first = spread(left, Vec::new(), inner, Style::new());
+    let mut hot = vec![(1..3 + title.width(), opens)];
     let first = (indented(first), mem::take(&mut hot));
     let mut left = Vec::new();
     let mut column = 1;
@@ -117,11 +116,6 @@ impl Model {
       self.client.changes(at, &folder)?.pull.as_ref().map(|one| one.url.clone())
     });
     let to = match (does, pull) {
-      (Changing::Menu, _) => {
-        self.client.focused();
-        self.client.notice = Some("Reading the changes and the pull request again.".to_owned());
-        return None;
-      }
       (Changing::Diff, _) | (_, None) => return Some(Does::Changes),
       (Changing::Checks, Some(url)) => format!("{url}/checks"),
       (Changing::Pull, Some(url)) => url,
