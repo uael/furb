@@ -41,12 +41,11 @@ pub(crate) async fn changes(folder: &Path, path: Option<&str>) -> Result<Changes
   for one in files.iter_mut().filter(|one| one.state == Change::Untracked) {
     one.added = lines(&top.join(&one.path));
   }
-  let (diff, base, pull) = match path {
-    Some(path) => (Some(diff(folder, path).await?), None, None),
-    None => {
-      let (base, pull) = join!(based(folder), pulled(folder));
-      (None, base, pull)
-    }
+  let (diff, base, pull) = if let Some(path) = path {
+    (Some(diff(folder, path).await?), None, None)
+  } else {
+    let (base, pull) = join!(based(folder), pulled(folder));
+    (None, base, pull)
   };
   Ok(Changes { branch, files, diff, base, pull })
 }

@@ -52,6 +52,10 @@ pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
 /// The rows of each part of the feed, with the count of changes and the clock that they show.
 pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, Vec<thread::Row>>);
 
+#[expect(
+  clippy::struct_excessive_bools,
+  reason = "four facts of the window that change apart: no state joins them"
+)]
 pub(crate) struct Model {
   /// What each machine told, and the cards of all of them in the order of the list.
   pub(crate) client: Client,

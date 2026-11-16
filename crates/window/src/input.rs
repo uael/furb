@@ -1017,6 +1017,18 @@ impl Model {
     Some(vec![run(format!("  {FOLDED}"), accent), run("paste it again to show it whole", muted)])
   }
 
+  /// The key that the right of the row of hints names, and what it does.
+  fn hint_key(&self) -> (Does, &'static str) {
+    match (&self.client.aim, &self.client.thread) {
+      _ if self.form().is_some() => (Does::Empty, "refuse"),
+      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
+      (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
+      (_, Some(_)) => (Does::GoTo, "find"),
+      (_, None) if self.listed() => (Does::GoTo, "find"),
+      (_, None) => (Does::List, "the list"),
+    }
+  }
+
   /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
   /// completion or of the bar of the time, else the word of python that the window ran, as it runs
   /// and what it came to, else the state of the open thread while it works, with the key that stops
@@ -1040,14 +1052,7 @@ impl Model {
     // The thread says why it has no page, so the row says it once more only for another fault.
     let shown = self.client.thread.as_ref().and_then(|one| self.why(one));
     let notice = self.client.notice.clone().map(|one| (one, t.muted));
-    let (does, name) = match (&self.client.aim, &self.client.thread) {
-      _ if self.form().is_some() => (Does::Empty, "refuse"),
-      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
-      (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
-      (_, Some(_)) => (Does::GoTo, "find"),
-      (_, None) if self.listed() => (Does::GoTo, "find"),
-      (_, None) => (Does::List, "the list"),
-    };
+    let (does, name) = self.hint_key();
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
     // A second press says what it does in the room that the key at the right leaves.
     let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));

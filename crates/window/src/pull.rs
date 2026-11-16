@@ -153,7 +153,7 @@ fn grouped(count: u32) -> String {
   let digits = count.to_string();
   let mut out = String::new();
   for (at, digit) in digits.chars().enumerate() {
-    if at > 0 && (digits.len() - at) % 3 == 0 {
+    if at > 0 && (digits.len() - at).is_multiple_of(3) {
       out.push(',');
     }
     out.push(digit);

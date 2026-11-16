@@ -240,9 +240,9 @@ fn timed(window: &Shared, app: &TestApp, chains: Option<usize>) {
             "by": by, "ended": one * 5000 + at as u64 + 900, "says": "count the lines"})
         })
         .collect();
-      let state = if at % 2 == 0 { "runs" } else { "done" };
+      let state = if at.is_multiple_of(2) { "runs" } else { "done" };
       serde_json::json!({"chain": format!("chain{at}"), "label": format!("work {at}"),
-        "parent": (at > 0).then(|| "chain0"), "state": state, "moments": moments, "threads": threads})
+        "parent": (at > 0).then_some("chain0"), "state": state, "moments": moments, "threads": threads})
     };
     let tracks = (0..count).map(track).collect::<Vec<_>>();
     let tracks = serde_json::from_value(serde_json::Value::Array(tracks)).expect("tracks read");

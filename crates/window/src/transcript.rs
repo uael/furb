@@ -4,7 +4,7 @@
 //! kind, and a foot of its keys. A piece longer than a screen folds to its first lines, and a click
 //! on the row under them opens it whole or folds it again.
 
-use furb_client::Content;
+use furb_client::{Content, Transcript};
 use opentui::style::Style;
 
 use crate::{
@@ -63,8 +63,8 @@ impl Model {
       let lines = self.colors.lines(&self.homed(&piece.text), prose);
       let open = transcript.unfolded.contains(at);
       let folds_here = lines.len() > FOLDS;
-      let shows = if folds_here && !open { SHOWS } else { lines.len() };
-      for line in lines.iter().take(shows) {
+      let count = if folds_here && !open { SHOWS } else { lines.len() };
+      for line in lines.iter().take(count) {
         let mut row = vec![run("    ", Style::new())];
         row.extend(line.iter().cloned());
         push(row, None);
@@ -73,20 +73,28 @@ impl Model {
         let says = if open {
           "    ▴ fold".to_owned()
         } else {
-          format!("    … {} more lines · a click opens them", lines.len() - shows)
+          format!("    … {} more lines · a click opens them", lines.len() - count)
         };
         push(vec![run(says, muted)], Some(*at));
       }
       push(Vec::new(), None);
     }
+    let (head, foot) = self.transcript_ends(transcript, shown.len());
+    Some(Transcribed { head, body, foot, folds })
+  }
+
+  /// The head of the transcript, which names its thread, its kind and the count of its pieces, and
+  /// its foot of keys.
+  fn transcript_ends(&self, transcript: &Transcript, pieces: usize) -> (Line, Line) {
+    let muted = self.tokens.style(Role::Muted);
     let thread = self.title().unwrap_or_default();
     let kind = transcript.only.map_or("the whole chain", Content::name);
     let left = vec![
       run("  Transcript · ", muted),
-      run(thread, t.style(Role::Title)),
+      run(thread, self.tokens.style(Role::Title)),
       run(format!(" · {kind}"), muted),
     ];
-    let count = transcript.pieces.as_ref().map(|_| format!("{} pieces", shown.len()));
+    let count = transcript.pieces.as_ref().map(|_| format!("{pieces} pieces"));
     let head = spread(left, vec![run(count.unwrap_or_default(), muted)], self.wide(), Style::new());
     let whole = if transcript.only.is_some() {
       format!("{} the whole chain · ", self.key(Does::Transcript))
@@ -99,7 +107,7 @@ impl Model {
       self.key(Does::PageDown),
       self.key(Does::Close)
     );
-    Some(Transcribed { head, body, foot: vec![run(keys, muted)], folds })
+    (head, vec![run(keys, muted)])
   }
 
   /// A click on a row of the transcript: the row under a long piece folds it or opens it whole.

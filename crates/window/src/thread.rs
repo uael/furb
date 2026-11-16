@@ -653,65 +653,65 @@ impl Model {
     let x = usize::from(x);
     let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
     match click? {
-      Click::Fold(fold) => {
-        self.client.thread.as_mut()?.fold(fold);
-        None
-      }
       Click::Pick(at) => self.took(at),
-      Click::Tab(tab) => {
-        self.tabbed(tab);
-        None
-      }
       Click::Key(does) => Some(does),
       Click::Answer(at) => self.choose(at),
+      click => {
+        self.clicked_on(click);
+        None
+      }
+    }
+  }
+
+  /// A click on a thing of the left side that names no key: it opens, folds, moves or asks.
+  fn clicked_on(&mut self, click: Click) {
+    match click {
+      Click::Pick(_) | Click::Key(_) | Click::Answer(_) => {}
+      Click::Fold(fold) => {
+        if let Some(opened) = self.client.thread.as_mut() {
+          opened.fold(fold);
+        }
+      }
+      Click::Tab(tab) => {
+        self.tabbed(tab);
+      }
       Click::Agent(prompt) => {
         self.open_agent(prompt);
-        None
       }
       Click::Line(number, name) => {
         self.go_to(number, name);
-        None
       }
       Click::Context => {
         self.context_step();
-        None
       }
       Click::Aim(column, span) => {
         self.client.aim(column, span);
-        None
       }
       Click::Time(at) => {
         self.client.touched(at);
-        None
       }
       Click::Play => {
         self.client.play();
-        None
       }
       Click::Chain { row, at } => {
         self.open_chain(row, at);
-        None
       }
       Click::Unqueue(entry) => {
         if let Some(text) = self.client.unqueue(&entry) {
           self.client.restore = Some(self.before_draft(text));
         }
-        None
       }
       Click::Press { viewer, node } => {
         self.client.gesture(ViewEvent { viewer, node, kind: Gesture::Press, value: None });
-        None
       }
       Click::Fill { viewer, node, value } => {
         self.client.fill(Some(Filled { viewer, node }), value);
-        None
       }
       Click::Link(address) => {
         self.client.notice = Some(match (self.browse)(&address) {
           Ok(()) => format!("Opened {address} in the browser."),
           Err(no) => format!("The browser did not open {address}: {no}"),
         });
-        None
       }
     }
   }

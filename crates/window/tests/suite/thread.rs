@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use std::fs;
+use std::{fs, mem, time::Duration};
 
 use furb_host::protocol::{Answer, Draft, Frame, Role, Verb};
 use furb_window::{
@@ -14,9 +14,10 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 use crate::{
   cards::{app, options, row, shows},
   daemon::{
-    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, FANS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES,
-    THINKS, WORKS,
+    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, FANS, LONG, OPENS, PATIENCE, PRINTS, Peer, READS,
+    RETRIES, THINKS, WORKS,
   },
+  question,
   screens::screen,
 };
 
@@ -812,16 +813,13 @@ fn a_line_that_awaits_more_than_one_act_says_how_many_ended() {
 
 #[test]
 fn a_command_that_wrote_past_its_tail_opens_whole_under_its_line_and_folds_again() {
-  let (app, ..) = crate::question::opened(
-    &format!("count to forty\n{}", crate::daemon::PRINTS),
-    "It printed 40 lines.",
-  );
+  let (app, ..) = question::opened(&format!("count to forty\n{PRINTS}"), "It printed 40 lines.");
   // The tail of the command, under a row that says how many lines came before it.
   let tail = shows(&app, "… 37 lines · ⌃O whole");
   assert!(tail.contains("  40") && !tail.contains("▴ 40 lines"), "{tail}");
   // A click on that row opens the whole of what it wrote, which its machine gives.
   app.click(30, row(&app, "… 37 lines · ⌃O whole"));
-  let whole = app.wait_until(crate::daemon::PATIENCE, || {
+  let whole = app.wait_until(PATIENCE, || {
     let text = app.text();
     !text.contains("… 37 lines") && text.lines().any(|one| one.trim().starts_with("25"))
   });
@@ -833,10 +831,7 @@ fn a_command_that_wrote_past_its_tail_opens_whole_under_its_line_and_folds_again
 
 #[test]
 fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
-  let (app, ..) = crate::question::opened(
-    &format!("time of the bench\n{}", crate::daemon::DELEGATES),
-    "Count the lines",
-  );
+  let (app, ..) = question::opened(&format!("time of the bench\n{DELEGATES}"), "Count the lines");
   // The bar stands under the status row with no click, at now.
   let bar = |frame: &str| frame.lines().last().unwrap_or_default().to_owned();
   let ready = app.wait_until(PATIENCE, || bar(&app.text()).contains("now"));
@@ -845,9 +840,9 @@ fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
   // second apart show the same track.
   let mut before = String::new();
   let rests = app.wait_until(PATIENCE, || {
-    app.advance(std::time::Duration::from_secs(1));
+    app.advance(Duration::from_secs(1));
     let now = bar(&app.text());
-    std::mem::replace(&mut before, now.clone()) == now
+    mem::replace(&mut before, now.clone()) == now
   });
   assert!(rests, "{}", app.text());
   screen("time-out", &app);

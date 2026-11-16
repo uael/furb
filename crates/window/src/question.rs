@@ -161,11 +161,9 @@ impl Model {
       |asked: Option<(usize, Verb)>| asked.map_or(Keyed::Taken, |(at, verb)| Keyed::Says(at, verb));
     match does {
       Some(Does::Send) => says(self.answer()),
-      Some(Does::Empty) if !self.client.draft.text.is_empty() => Keyed::Empties,
-      Some(Does::Empty) => says(self.refuse()),
       // Escape refuses the question as the key that empties does, and only on an empty form.
-      Some(Does::Close) if !self.client.draft.text.is_empty() => Keyed::Empties,
-      Some(Does::Close) => says(self.refuse()),
+      Some(Does::Empty | Does::Close) if !self.client.draft.text.is_empty() => Keyed::Empties,
+      Some(Does::Empty | Does::Close) => says(self.refuse()),
       // A digit takes its row of a choice, or ticks its row of values, as he reads its number.
       _ if let Some(row) = digit.filter(|one| !own && (1..=values.min(9)).contains(one)) => {
         if ticks {

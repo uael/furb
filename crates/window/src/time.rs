@@ -180,7 +180,8 @@ impl Model {
       _ => format!(" {} back", last - time.place()),
     };
     let zoom = |length: usize| {
-      let ratio = last.max(1) as f64 / length.max(1) as f64;
+      let count = |moments: usize| f64::from(u32::try_from(moments.max(1)).unwrap_or(u32::MAX));
+      let ratio = count(last) / count(length);
       if ratio < 10.0 { format!(" ×{ratio:.1}") } else { format!(" ×{ratio:.0}") }
     };
     let says = if time.zoom.is_some() { format!("{says}{}", zoom(end - first)) } else { says };
