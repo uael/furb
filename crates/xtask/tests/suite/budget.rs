@@ -1,6 +1,6 @@
 //! The task `budget`, each run on limits, a load and a log of the guard of memory that the
 //! environment gives it, as the task reads them.
-#![expect(clippy::panic, reason = "a panic is how a test fails")]
+#![cfg_attr(unix, expect(clippy::panic, reason = "a panic is how a test fails"))]
 
 use std::{fs, path::Path};
 #[cfg(unix)]

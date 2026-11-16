@@ -2,8 +2,8 @@
 //! bound, until the record takes them again. The test fills the
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
 //! so a child of the suite runs it alone, as `apart` says.
-#![expect(clippy::panic, reason = "a panic is how a test fails")]
-#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
+#![cfg_attr(unix, expect(clippy::panic, reason = "a panic is how a test fails"))]
+#![cfg_attr(unix, expect(clippy::unreachable, reason = "a panic is how a test fails"))]
 #![cfg_attr(
   unix,
   expect(
