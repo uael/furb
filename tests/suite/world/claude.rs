@@ -1346,3 +1346,28 @@ fn an_account_with_no_token_fails_its_turn_with_why_and_starts_no_process() {
   assert!(why(Source::TokenEnv("FURB_NO_SUCH_TOKEN".to_owned())).contains(said));
   assert!(yard.pids().is_empty(), "no process starts with no token");
 }
+
+#[test]
+fn an_event_of_a_kind_that_is_not_read_is_ignored() {
+  let yard = Yard::new("events-other");
+  let events = [
+    json!({"type": "system", "subtype": "init"}),
+    json!({"session_id": "a"}),
+    json!({"type": "stream_event", "event": {"type": "ping"}}),
+  ];
+  let lines = events.iter().fold(String::new(), |all, one| format!("{all}{one}\n"));
+  fs::write(yard.at.join("events"), lines).unwrap();
+  let got = asked(&yard.claude(10_000).completion_model("sonnet"), &[user("first")], json!({}));
+  assert_eq!(got.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
+}
+
+#[test]
+fn a_delta_that_lacks_the_text_it_gives_is_refused() {
+  let yard = Yard::new("events-lacking");
+  let delta = json!({"type": "stream_event", "event": {
+    "type": "content_block_delta", "index": 0, "delta": {"type": "text_delta"}}});
+  fs::write(yard.at.join("events"), format!("{delta}\n")).unwrap();
+  let no = asked(&yard.claude(10_000).completion_model("sonnet"), &[user("first")], json!({}));
+  let said = "ProviderError: Claude sent an event its protocol forbids: missing field `text`";
+  assert_eq!(no.unwrap_err().to_string(), said);
+}

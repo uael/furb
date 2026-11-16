@@ -14,7 +14,8 @@
 # holds the stdout and the stderr open, writes the id of that process in the file orphan beside it, says so on the
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
-# any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
+# any input, and when the file deaf stands beside it, it reads no input and lives on. When the file events stands
+# beside it, it writes its lines before its answer to each line of input. When the file cost stands beside
 # it, each turn costs the dollars that it holds, when the file usage stands beside it, each request says the
 # usage that it holds, and when the file thought stands beside it, a line that holds THINK thinks the text that it
 # holds, which no quote and no backslash may hold. It writes the MAX_THINKING_TOKENS of each process beside it too, or unset. It writes the
@@ -107,6 +108,7 @@ fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"
+  if [ -f "$here/events" ]; then cat "$here/events"; fi
   if [ -f "$here/limited.$who" ]; then
     echo "{\"type\":\"result\",\"is_error\":true,\"result\":\"Claude AI usage limit reached|$(( $(date +%s) + $(cat "$here/limited.$who") ))\"}"
     continue

@@ -498,7 +498,3 @@ pub(super) fn unexplained(event: &Finished) -> String {
   let tail = if errors.is_empty() { String::new() } else { format!(": {errors}") };
   format!("Claude reported an error{head}{tail}.")
 }
-
-#[cfg(test)]
-#[path = "protocol.test.rs"]
-mod test;
