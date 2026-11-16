@@ -8,6 +8,7 @@ use std::{
   env, fs,
   ops::Deref,
   path::{Path, PathBuf},
+  sync::atomic::{AtomicUsize, Ordering},
 };
 
 /// The env var that keeps the folder of each yard, so that a failure can still be read there.
@@ -32,8 +33,26 @@ impl Yard {
   }
 
   /// The folder of this name in the temporary directory, which the test or the code that it tests
-  /// makes.
+  /// makes. The name takes a count of the yards of the process after it: the tests of a program run
+  /// on threads of one process, and two of them that name the same yard hold a folder each.
   pub(crate) fn unmade(name: impl AsRef<Path>) -> Self {
+    static MADE: AtomicUsize = AtomicUsize::new(0);
+    let mut name = name.as_ref().as_os_str().to_owned();
+    name.push(format!("-{}", MADE.fetch_add(1, Ordering::Relaxed)));
+    Self::exact(name)
+  }
+
+  /// The folder of exactly this name, made empty, for a test whose later life finds it again by its
+  /// name alone. No other test of the process may name it.
+  pub(crate) fn named(name: impl AsRef<Path>) -> Self {
+    let yard = Self::exact(name);
+    if let Err(no) = fs::create_dir_all(&yard.base) {
+      panic!("the yard {} was not made: {no}", yard.base.display());
+    }
+    yard
+  }
+
+  fn exact(name: impl AsRef<Path>) -> Self {
     let base = temp().join(name);
     drop(fs::remove_dir_all(&base));
     Self { at: base.clone(), base }

@@ -89,7 +89,7 @@ impl Lived {
   /// A life in a yard of its own, fresh, or opened on what the store kept there.
   pub(crate) fn new(yard: &str, words: &[&str], fresh: bool) -> Result<Self, Fault> {
     let name = format!("furb-engine-{yard}-{}", process::id());
-    let yard = fresh.then(|| Yard::new(&name));
+    let yard = fresh.then(|| Yard::named(&name));
     let at = env::temp_dir().join(name);
     fs::create_dir_all(&at).unwrap_or_else(|no| panic!("a yard of the test: {no}"));
     let (record, store) = world::store(at.join("record.jsonl"))?;
