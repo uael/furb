@@ -901,12 +901,14 @@ impl Window {
   }
 
   /// A key that the window did not take, which its editor hears as the app gives it a key: the
-  /// action of the key, else the text that it types. Ctrl+Z, which neither takes, gives the
-  /// terminal back to the shell, where the system can.
+  /// action of the key, else the text that it types. A hidden editor, as in a window that only
+  /// reads, hears none, so no text that he cannot see keeps a leave from leaving. Ctrl+Z, which
+  /// neither takes, gives the terminal back to the shell, where the system can.
   fn typed(&self, app: &App, key: &KeyEvent) {
-    if let Some(action) = self.keymap.get(key) {
+    let shown = self.area.is_visible();
+    if let Some(action) = self.keymap.get(key).filter(|_| shown) {
       self.area.perform(action);
-    } else if let Some(text) = key.text() {
+    } else if let Some(text) = key.text().filter(|_| shown) {
       self.area.insert(text.encode_utf8(&mut [0; 4]));
     } else if app.options().suspend_on_ctrl_z && key.matches("ctrl+z") {
       app.suspend();

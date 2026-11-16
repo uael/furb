@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   ● furb · where does the list stand               Resolve     All projects ▾        This computer
   ┃
@@ -27,7 +28,7 @@ source: crates/window/tests/suite/screens.rs
   ┃   left
   ┃ › at the top
   ┃
-  ┃  Message  Python    → where… ▾      opus  high   + ⌃N
-  ┃                                                            Context
-  ↑↓ choose · ⏎ answer                          ⌃C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━●            now  chains ▾    No answer yet
+  ┃  Message  Python    → where… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · ⏎ answer                          ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

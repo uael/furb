@@ -258,7 +258,13 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
     let message = format!("and the step {n}");
     let on = Some(prompt.clone());
     let verb = Verb::Prompt { life: life.clone(), shape: "None".to_owned(), message, to: None, on };
-    assert!(matches!(peer.ask(verb), Answer::Act(_)));
+    let Answer::Act(step) = peer.ask(verb) else { panic!("no prompt") };
+    // The model answers each message before the next comes, so the marks of the bar of the time
+    // stand at the same moments in each run.
+    peer.heard(&app, |frame| {
+      let data = &serde_json::json!(frame)["event"]["data"];
+      data[0] == "done" && data.as_array().is_some_and(|all| all.iter().any(|one| *one == step))
+    });
   }
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "ground the branch,"));
@@ -530,10 +536,13 @@ fn the_back_key_of_a_mouse_opens_the_thread_left_where_he_read_it_and_forward_go
   app.resize(100, 16);
   app.click(80, row(&app, "how long does an"));
   shows(&app, "See the trace.");
-  // The rows of the feed under its head, whose buttons change with the places that stand ahead.
+  // The rows of the feed under its head, whose buttons change with the places that stand ahead,
+  // and above the bar of the time, which draws its track once the moments of the thread came.
   let feed = |app: &TestApp| {
     let frame = app.text();
-    frame.lines().skip(1).map(|one| one.chars().take(LEFT).collect::<String>()).collect::<Vec<_>>()
+    let rows = frame.lines().count().saturating_sub(2);
+    let left = |one: &str| one.chars().take(LEFT).collect::<String>();
+    frame.lines().skip(1).take(rows).map(left).collect::<Vec<_>>()
   };
   let end = feed(&app);
   app.scroll(10, 6, false);
@@ -552,15 +561,19 @@ fn the_back_key_of_a_mouse_opens_the_thread_left_where_he_read_it_and_forward_go
   shows(&app, "No place stands ahead.");
 }
 
-/// The rows of the box of the context, from its head to the foot of the window, each cut to the
-/// columns of the box and trimmed.
+/// The rows of the box of the context, from its head to the row of the hints, each cut to the
+/// columns of the box and trimmed: the rows beside the bar of the time under it are blank.
 fn boxed(app: &TestApp) -> Vec<String> {
   let frame = app.text();
   let (x, y) = place(&frame, "Context", LEFT);
   let rows = frame.lines().skip(usize::from(y));
-  rows
+  let mut boxed: Vec<String> = rows
     .map(|line| line.chars().skip(usize::from(x)).collect::<String>().trim_end().to_owned())
-    .collect()
+    .collect();
+  while boxed.last().is_some_and(String::is_empty) {
+    boxed.pop();
+  }
+  boxed
 }
 
 #[test]
@@ -764,7 +777,8 @@ fn a_prompt_of_one_chain_to_another_flows_between_their_tracks_and_a_click_opens
   let (x, y) = cell(&frame, "bench", '▼').unwrap();
   let (x, y) = (u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
   app.hover(x, y);
-  shows(&app, "root asks bench: Run the bench of the replay");
+  // The row of the hints cuts the message where the box of the context stands.
+  shows(&app, "root asks bench: Run the bench of the");
   app.click(x, y);
   // The prompt opens as an agent opens, at its own head.
   shows(&app, "┃ Run the bench of the replay");

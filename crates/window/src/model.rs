@@ -614,7 +614,7 @@ impl Model {
 
   /// The rows of the list that scroll, and how many of them show.
   fn room(&self) -> usize {
-    usize::from(self.size.1).saturating_sub(PINNED + self.boxed())
+    usize::from(self.size.1).saturating_sub(PINNED + self.boxed() + self.beside_bar())
   }
 
   /// The rows at the foot of the list that the part of the changes and the box of the context take,
@@ -624,9 +624,19 @@ impl Model {
     if rows == 0 { 0 } else { rows + 1 }
   }
 
+  /// The blank rows of the list under the box of the context, beside the bar of the time, so the
+  /// box ends on the row of the hints, as it ends on the row of the input.
+  fn beside_bar(&self) -> usize {
+    if self.boxed() == 0 { 0 } else { self.time_count() }
+  }
+
   /// The row of the list at a row of the window: a row of the box of the context at its foot.
   pub(crate) fn row(&self, y: usize) -> Option<Row> {
-    let foot = usize::from(self.size.1).saturating_sub(self.boxed());
+    let bottom = usize::from(self.size.1).saturating_sub(self.beside_bar());
+    if y >= bottom {
+      return Some(Row::Blank);
+    }
+    let foot = bottom.saturating_sub(self.boxed());
     if y >= foot {
       let (at, changes) = ((y - foot).saturating_sub(1), self.changes_rows().len());
       return Some(match () {
@@ -653,6 +663,7 @@ impl Model {
       let changes = self.changes_rows().len();
       scrolled.extend((0..changes).map(Row::Changes));
       scrolled.extend((0..boxed.saturating_sub(1 + changes)).map(Row::Context));
+      scrolled.extend((0..self.beside_bar()).map(|_| Row::Blank));
     }
     rows.into_iter().take(pinned).chain(scrolled)
   }

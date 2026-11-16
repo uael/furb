@@ -132,14 +132,22 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   screen("input-in-order", &app);
 }
 
+/// The row of the hints of a frame: the last row, or the row above the bar of the time, which
+/// stands under it while a thread is open and ends with the toggle of its chains.
+pub(crate) fn hints(frame: &str) -> usize {
+  let lines: Vec<&str> = frame.lines().collect();
+  let bar = lines.iter().rposition(|line| line.contains("chains ▾") || line.contains("chains ▴"));
+  bar.unwrap_or(lines.len()).saturating_sub(1)
+}
+
 /// The text of an input of one row, which stands above a blank row of its box, the launcher, the
 /// last row of its box and the hints, once it shows a text: the window draws the text that the
 /// editor takes at its next frame. The box of the context stands at its right.
 pub(crate) fn typed(app: &TestApp, text: &str) -> String {
   let row = || {
     let frame = app.text();
-    let lines: Vec<&str> = frame.lines().collect();
-    let input: String = lines[lines.len() - 5].chars().take(LEFT).collect();
+    let at = hints(&frame).saturating_sub(4);
+    let input: String = frame.lines().nth(at).unwrap_or_default().chars().take(LEFT).collect();
     input.trim_start_matches(['┃', ' ']).trim_end().to_owned()
   };
   let shown = app.wait_until(PATIENCE, || row() == text);
@@ -231,7 +239,7 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   app.paste("fi");
   typed(&app, &first);
   let frame = app.render();
-  let row = (frame.height as usize - 5) * frame.width as usize;
+  let row = hints(&app.text()).saturating_sub(4) * frame.width as usize;
   let (written, rest) = (&frame.cells[row + 4], &frame.cells[row + 6]);
   assert_ne!(written.fg, rest.fg, "the rest is grey and what he wrote is not");
   screen("input-suggested", &app);
@@ -497,7 +505,8 @@ fn a_message_takes_the_place_of_the_hints_of_the_word_that_ran_before_it() {
   app.press("ctrl+n");
   clicked(&app, " Python ", 0, 1);
   sent(&app, "raise ValueError('no')");
-  let hint = |frame: &str| frame.lines().last().is_some_and(|one| one.contains("ValueError"));
+  let hint =
+    |frame: &str| frame.lines().nth(hints(frame)).is_some_and(|one| one.contains("ValueError"));
   assert!(app.wait_until(PATIENCE, || hint(&app.text())), "{}", app.text());
   clicked(&app, " Message ", 0, 1);
   sent(&app, "and now a message");
@@ -963,7 +972,7 @@ fn commands(app: &TestApp) -> Vec<(String, String)> {
     let chosen = frame
       .lines()
       .find_map(|line| line.trim_start().strip_prefix("▌ /"))
-      .expect("a row is chosen");
+      .unwrap_or_else(|| panic!("a row is chosen:\n{frame}"));
     let parts: Vec<&str> =
       chosen.split("  ").map(str::trim).filter(|one| !one.is_empty()).collect();
     let [name, says, key] = parts[..] else { panic!("/{chosen} names no key") };
@@ -992,13 +1001,15 @@ fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
     clicked(&app, "go to anything", 0, 0);
     shows(&app, "Search a thread, session");
     let (x, y) = at(&app, "Search a", 0);
-    for _ in 0..40 {
-      if app.text().contains(&says) {
-        break;
+    // The wheel turns until the row shows, so a count of the rows above it changes nothing.
+    let reached = app.wait_until(PATIENCE, || {
+      let shown = app.text().contains(&says);
+      if !shown {
+        app.scroll(x, y, true);
       }
-      app.scroll(x, y, true);
-    }
-    assert!(app.text().contains(&says), "/{name}: no row of Go to says {says:?}");
+      shown
+    });
+    assert!(reached, "/{name}: no row of Go to says {says:?}\n{}", app.text());
     lights(&app, &says, 0, 0);
     app.press("escape");
   }

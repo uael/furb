@@ -1,12 +1,13 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   ● furb · which keys does the form take           Resolve     All projects ▾        This computer
   ┃
   ┃ which keys does the form take                              Needs you 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
     Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
-    ▌Search a key                                 1 / 44      ▐   FU furb                    opus ▌
+    ▌Search a key                                 1 / 45      ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
     ▌Ctrl+P              go to anything, or run a…        ┃
@@ -27,7 +28,7 @@ source: crates/window/tests/suite/screens.rs
      Esc Esc             stop the work of the thread
 
     ↑↓ move · Enter run · Esc close
-
-  ┃                                                            Context
-  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━●            now  chains ▾    No answer yet
+                                                               Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

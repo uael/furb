@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   ● furb · time of the bench                       Resolve     All projects ▾        This computer
   ┃
@@ -27,7 +28,7 @@ source: crates/window/tests/suite/screens.rs
   ┃
   ┃ Reply to this thread
   ┃
-  ┃  Message  Python    → time of… ▾    opus  high   + ⌃N
-  ┃                                                            Context
-  8 moments back · time of the bench              ⌃P find      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ▶  ━━━━●─────────────────────────── 9 back ×1.4  chains ▾    No answer yet
+  ┃  Message  Python    → time of… ▾    opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8 moments back · time of the bench              ⌃P find      No answer yet
+  ▶  ━━━━●─────────────────────────── 9 back ×1.4  chains ▾

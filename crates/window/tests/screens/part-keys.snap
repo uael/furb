@@ -1,12 +1,13 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   furb
 
 
 
                Each key
-               ▌Search a key                                                 1 / 44
+               ▌Search a key                                                 1 / 45
 
                Go                                                                    ┃
                ▌⌃P          go to anything, or run a command                         ┃

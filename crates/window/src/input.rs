@@ -646,9 +646,9 @@ impl Model {
     }
   }
 
-  /// The keys of what stands over the input: a form, the completion, or the bar of the time; else
-  /// where a walk through what he sent stands, in the form of the place in a list, or how many
-  /// lines of a text longer than its box show.
+  /// The keys of what stands over the input, in the order that they hear a key: the completion, the
+  /// bar of the time while he holds it, or a form; else where a walk through what he sent stands,
+  /// in the form of the place in a list, or how many lines of a text longer than its box show.
   fn over_input(&self) -> Option<Line> {
     let muted = self.tokens.style(Role::Muted);
     let walked = || {
@@ -660,9 +660,9 @@ impl Model {
     let long = || (lines > grows).then(|| vec![run(format!("  {grows} of {lines} lines"), muted)]);
     self
       .listening_hints()
-      .or_else(|| self.form_hints())
       .or_else(|| self.completion_hints())
       .or_else(|| self.time_hints())
+      .or_else(|| self.form_hints())
       .or_else(walked)
       .or_else(long)
   }

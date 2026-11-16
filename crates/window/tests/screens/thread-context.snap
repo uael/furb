@@ -1,5 +1,6 @@
 ---
 source: crates/window/tests/suite/screens.rs
+assertion_line: 34
 ---
   ● furb · read the trace of the open          ✓ Resolved      All projects ▾        This computer
   ┃
@@ -23,11 +24,11 @@ source: crates/window/tests/suite/screens.rs
 
 
 
-
-  ┃                                                            Context ▾   Kinds · Cache       12%
-  ┃ A reply opens this thread again                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ┃                                                            ■ From the cache          98k   10%
-  ┃  Message  Python    → read the… ▾   opus  high   + ⌃N      ■ Written to the cache   8.4k    1%
-  ┃                                                            ■ New                     17k    2%
-  This computer · ~/furb                          ⌃P find      ■ Free                   876k   88%
-  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾    124k of 1M · 98k cached       $0.75
+                                                               Context ▾   Kinds · Cache       12%
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ┃ A reply opens this thread again                            ■ From the cache          98k   10%
+  ┃                                                            ■ Written to the cache   8.4k    1%
+  ┃  Message  Python    → read the… ▾   opus  high   + ⌃N      ■ New                     17k    2%
+  ┃                                                            ■ Free                   876k   88%
+  This computer · ~/furb                          ⌃P find      124k of 1M · 98k cached       $0.75
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

@@ -105,6 +105,8 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   // tells it.
   first.advance(AWAY);
   shows(&first, "Resolved 1");
+  // The bar of the time draws its track once its moments came.
+  shows(&first, "▶  ◆");
   let before = left(&first);
   // The daemon ends with the app whose runtime serves it, and its lives with it.
   drop((peer, first));
@@ -118,6 +120,7 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   second.click(80, row(&second, "Resolved 1"));
   card(&second, title);
   shows(&second, "Two stages hold most");
+  shows(&second, "▶  ◆");
   assert_eq!(left(&second), before);
   screen("open-stood", &second);
 }
