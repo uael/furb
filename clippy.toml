@@ -15,3 +15,8 @@ disallowed-methods = [
 absolute-paths-max-segments = 2
 # The names of products that a doc comment writes as they are, beside the names that clippy knows.
 doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW", "DeepSWE"]
+# One owner for each state: a part that seems to share one sends a message, moves the value or
+# borrows it, as rule 9 of the skill rust says.
+disallowed-types = [
+  { path = "std::cell::RefCell", reason = "give the state one owner, as rule 9 of the skill rust says" },
+]
