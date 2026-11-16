@@ -176,7 +176,7 @@ async def test_a_write_of_a_skill_writes_its_word_in_the_project(tmp_path: Path)
   )
   await engine.rung('write(Text("skills://web", "X = 1"))', on=root)
   web = tmp_path / "work" / ".furb" / "skills" / "web"
-  assert sorted(x.name for x in web.iterdir()) == ["SKILL.md", "web.py", "web.pyi"]
+  assert sorted(x.name for x in web.iterdir()) == ["SKILL.md", "process.py", "web.py", "web.pyi"]
   assert (web / "web.py").read_text(encoding="utf-8").endswith("\n\n\nX = 1\n")
   assert (web / "web.py").read_text(encoding="utf-8").startswith("from furb.engine import ")
   skilled(tmp_path / "config" / "skills", "plain", "name: plain\ndescription: No code.")
