@@ -39,6 +39,7 @@ use furb_wire::{
 pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
+pub use furb_wire::anchor::Anchor;
 pub use history::{History, Walk};
 pub use input::{ASIDE, Draft, PICTURE, Pasted};
 pub use inspect::Inspection;
@@ -50,7 +51,7 @@ pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
 pub use sign_in::SignIn;
-pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
+pub use thread::{Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
 pub use views::{Filled, View};
 

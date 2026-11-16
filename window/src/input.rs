@@ -459,7 +459,12 @@ impl Model {
       }
       (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
       (None, _) => {
+        let anchored = self.client.draft.anchor.as_ref().map(|one| {
+          let side = if one.before { ", before the change" } else { "" };
+          format!("Say what to do with {}, line {}{side}", named(&one.path), one.line)
+        });
         let says = match self.client.target() {
+          _ if anchored.is_some() => anchored.as_deref().unwrap_or_default(),
           _ if self.client.draft.python => "A word of Python to run",
           Target::Thread(_) if reads => "The window sends nothing to this session",
           Target::Thread(_) if opens => "Your message goes once the session is open",
@@ -868,6 +873,18 @@ impl Model {
     self.client.chosen = Some(Chosen::of(&self.client.target(), actor));
   }
 
+  /// The line of a file that the next message is about, while the operator writes it, with the
+  /// key that turns it back to a plain message.
+  fn anchored(&self) -> Option<Line> {
+    let t = &self.tokens;
+    let one = self.client.draft.anchor.as_ref()?;
+    let line = format!("{}:{}", named(&one.path), one.line);
+    let drop = format!("  ·  {} a plain message", self.key(Does::Close));
+    let (accent, prose, muted) =
+      (Style::new().fg(t.accent), t.style(Role::Prose), t.style(Role::Muted));
+    Some(vec![run("  ◆ ", accent), run(line, prose), run(drop, muted)])
+  }
+
   /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
   /// completion or of the bar of the time, else the word of python that the window ran, as it runs
   /// and what it came to, else the state of the open thread while it works, with the key that stops
@@ -904,7 +921,8 @@ impl Model {
     let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));
     let says = armed.map(|one| (one, t.attention)).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
-    let keyed = self.over_input();
+    // The keys of the input go first, then the line of a file that the next message is about.
+    let keyed = self.over_input().or_else(|| self.anchored());
     let room = wide.saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);

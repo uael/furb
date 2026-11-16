@@ -10,7 +10,7 @@
 use std::{mem, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use furb_wire::protocol::BOUND;
+use furb_wire::{anchor::Anchor, protocol::BOUND};
 use jiff::Timestamp;
 use serde_json::Value;
 
@@ -25,13 +25,15 @@ pub const ASIDE: &str = "/btw ";
 /// The sign of an image in the text of the input, before its name.
 pub const PICTURE: &str = "▣ ";
 
-/// The text of the input, whether it is a word of python that runs, and each image that the
-/// operator put in it, which a message takes when its text holds the mark of that image.
+/// The text of the input, whether it is a word of python that runs, each image that the operator
+/// put in it, which a message takes when its text holds the mark of that image, and the line of a
+/// file that the next message is about.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Draft {
   pub text: String,
   pub python: bool,
   pub images: Vec<Pasted>,
+  pub anchor: Option<Anchor>,
 }
 
 /// An image that the operator put in the input: its name, `image-<n>.<extension>`, its bytes in
@@ -129,6 +131,11 @@ impl Client {
       Some(Ok(word)) => (word, true),
       Some(Err(why)) => return Err(why),
       None => (text, self.draft.python),
+    };
+    // A message about a line of a file carries that line, as it stands now.
+    let text = match self.draft.anchor.take().filter(|_| !python) {
+      Some(anchor) => anchor.said(&text),
+      None => text,
     };
     let images = mem::take(&mut self.draft.images);
     let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();

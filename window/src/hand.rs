@@ -880,15 +880,25 @@ fn found(app: &App, window: &Shared, key: &KeyEvent) -> bool {
 }
 
 /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
-/// file under it goes bright, and the wheel scrolls the diff.
+/// file under it goes bright, a click on a line of the diff turns the input to a message about
+/// that line, and the wheel scrolls the diff.
 fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
   let file = window.borrow().screen.model.review_at(event.x, event.y);
+  // The diff stands under the two rows of the head, from the row where its box scrolled.
+  let scrolled = window.borrow().scroll.scroll_position().1;
+  let row = event.y.checked_sub(2).map(|y| whole(f64::from(y) + scrolled));
   tell(app, window, |model| {
     model.pointer = Some((event.x, event.y));
-    if let (Some(file), MouseEventKind::Down(MouseButton::Left)) = (file, event.kind)
+    let down = matches!(event.kind, MouseEventKind::Down(MouseButton::Left));
+    if let (Some(file), true) = (file, down)
       && let Some(review) = model.client.review.as_mut()
     {
       review.chosen = file;
+    } else if down
+      && !model.on_side(event.x)
+      && let Some(anchor) = row.and_then(|row| model.anchor_at(event.x, row))
+    {
+      (model.client.draft.anchor, model.client.review) = (Some(anchor), None);
     }
   });
   let rows = f64::from(WHEEL);
@@ -898,6 +908,16 @@ fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
     _ => return,
   };
   window.borrow().scroll.scroll_by(0.0, by);
+}
+
+/// A place of a box that scrolls, in whole rows.
+#[expect(
+  clippy::cast_possible_truncation,
+  clippy::cast_sign_loss,
+  reason = "a box scrolls by whole rows, from 0"
+)]
+fn whole(rows: f64) -> usize {
+  rows.max(0.0).round() as usize
 }
 
 /// A row of the completion taken, at a place or the chosen one: the editor takes the text with

@@ -25,7 +25,7 @@ pub struct Opened {
   pub thread: Thread,
   /// The place at the top of the view while the operator reads away from its end, and none while
   /// the view follows its end.
-  pub top: Option<Anchor>,
+  pub top: Option<Place>,
   /// The blocks, the thoughts and the whole lines that the operator opened.
   pub unfolded: HashSet<Fold>,
   /// The form of the question of the thread that the input answers.
@@ -88,7 +88,7 @@ pub fn rests(agent: &Agent) -> bool {
 /// A place in a thread that holds when exchanges come above it: an exchange, and an offset from
 /// its start in the units of the view, which is negative for a place above that exchange.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Anchor {
+pub struct Place {
   pub at: usize,
   pub row: isize,
 }

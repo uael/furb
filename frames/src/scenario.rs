@@ -639,7 +639,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     name: "14-changes",
     has: Has::Walk(Walk {
       sessions: &[],
-      words: &[CHANGES],
+      words: &[CHANGES, "close('It sums the count of each item.')"],
       pace: &[],
       reads: false,
       steps: &[
@@ -655,6 +655,22 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-diff", &[Act::Pointer { on: "models.py  +2", button: 0 }], "+    self.count = 0"),
         // A revert writes back what the life knew before the answer, as a word of his.
         step("x-revert", &[Act::Pointer { on: "↶ Revert", button: 0 }], "models.py  +1 −2"),
+        // A click on a line of the diff makes the next message about that line.
+        step(
+          "x-anchor",
+          &[
+            Act::Key("C-x"),
+            Act::Key("g"),
+            Act::Until("return sum(one.count"),
+            Act::Pointer { on: "return sum(one.count", button: 0 },
+          ],
+          "Say what to do with report.py, line 2",
+        ),
+        step(
+          "x-anchored",
+          &[Act::Type("Say what it sums."), Act::Key("Enter")],
+          "It sums the count of each item.",
+        ),
       ],
     }),
   },

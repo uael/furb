@@ -10,7 +10,7 @@ use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
   Standing, Thought, Work, lines, operator, timer,
 };
-use furb_client::{Fold, Opened, Target, rests};
+use furb_client::{Anchor, Fold, Opened, Target, rests};
 use furb_host::{
   FollowUp,
   protocol::{Card, Present},
@@ -384,8 +384,19 @@ impl Feed<'_> {
   /// A message on a raised band, with a bar in the color of the thread when an operator said it,
   /// and muted when a model gave it to its agent, and a blank row under it.
   fn message(&self, text: &str, his: bool) -> Vec<Row> {
-    let hue = if his { self.model.hue(&self.opened.thread.key) } else { self.model.tokens.muted };
-    self.band(text, (hue, self.style(Role::Prose)), Vec::new())
+    let t = &self.model.tokens;
+    let hue = if his { self.model.hue(&self.opened.thread.key) } else { t.muted };
+    // A message about a line of a file says what it says of it, and names the line at its right.
+    let Some((anchor, said)) = Anchor::of(text) else {
+      return self.band(text, (hue, self.style(Role::Prose)), Vec::new());
+    };
+    let side = if anchor.before { " before" } else { "" };
+    let line = format!("{}:{}{side}", named(&anchor.path), anchor.line);
+    // The line ends two columns in from the band, as the cross of a queued message does.
+    let muted = self.style(Role::Muted).bg(t.raised);
+    let right =
+      vec![run("◆ ", Style::new().fg(t.accent).bg(t.raised)), run(line, muted), run("  ", muted)];
+    self.band(said, (hue, self.style(Role::Prose)), right)
   }
 
   /// A text on the raised band of a message, after the bar in a hue, in a style, with a line at

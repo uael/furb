@@ -3,6 +3,7 @@
 //! no engine and no daemon, so a phone or a web page reads the same meaning as the window.
 
 pub mod act;
+pub mod anchor;
 pub mod card;
 pub mod config;
 pub mod desk;

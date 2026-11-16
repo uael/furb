@@ -569,6 +569,45 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
 }
 
 #[test]
+fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
+  let (app, daemon, sessions) = started();
+  let project = daemon.file("furb-try");
+  let git = |args: &[&str]| {
+    let done = Command::new("git").arg("-C").arg(&project).args(args).status().unwrap();
+    assert!(done.success(), "git {args:?}");
+  };
+  fs::write(project.join("a.py"), "one = 1\n").unwrap();
+  git(&["init", "-q", "-b", "trunk"]);
+  git(&["add", "a.py"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(project.join("a.py"), "one = 2\n").unwrap();
+  app.press("ctrl+x");
+  app.press("g");
+  shows(&app, "one = 2");
+  let (x, y) = at(&app, "one = 2", 0);
+  app.click(x, y);
+  shows(&app, "┃ Say what to do with a.py, line 1");
+  shows(&app, "◆ a.py:1");
+  // An escape turns it back to a plain message.
+  app.press("escape");
+  shows(&app, "┃ Ask for a change, a review or an answer");
+  app.press("ctrl+x");
+  app.press("g");
+  shows(&app, "one = 1");
+  let (x, y) = at(&app, "one = 1", 0);
+  app.click(x, y);
+  shows(&app, "┃ Say what to do with a.py, line 1, before the change");
+  sent(&app, "why not one");
+  let wanted = "On `a.py`, line 1 before the change:\n> one = 1\n\nwhy not one";
+  let came = app.wait_until(PATIENCE, || told(&daemon, &sessions).iter().any(|one| one == wanted));
+  assert!(came, "{:?}", told(&daemon, &sessions));
+  // The thread shows what he said, with the line at its right.
+  let shown = shows(&app, "why not one");
+  assert!(shown.contains("◆ a.py:1 before"), "{shown}");
+  assert!(!shown.contains("> one = 1"), "{shown}");
+}
+
+#[test]
 fn a_file_changed_with_no_life_counts_once_the_window_takes_the_focus_again() {
   let (app, daemon, _) = started();
   let project = daemon.file("furb-try");

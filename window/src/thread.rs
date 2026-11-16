@@ -3,7 +3,7 @@
 //! of the thread come from the daemon, with each rule of what a line and a block show: the window
 //! lays them out in its columns.
 //!
-//! The feed shows from an anchor: an exchange, and a count of rows from its first row. So a page
+//! The feed shows from a place: an exchange, and a count of rows from its first row. So a page
 //! of older exchanges, which comes above, moves no row that the operator reads, and a frame builds
 //! the rows of the exchanges that show and of no other.
 
@@ -21,7 +21,7 @@ use furb_host::protocol::{Card, Gesture, Verb, ViewEvent};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Filled, Fold, Hold, Opened, Thread};
+use furb_client::{Filled, Fold, Hold, Opened, Place, Thread};
 
 use crate::{
   keys::Does,
@@ -198,7 +198,7 @@ pub(crate) struct Items<'a, V> {
 #[derive(Debug)]
 pub(crate) struct Shown {
   pub(crate) rows: Vec<Row>,
-  pub(crate) top: Option<Anchor>,
+  pub(crate) top: Option<Place>,
   pub(crate) end: bool,
 }
 
@@ -226,27 +226,27 @@ impl<V> Items<'_, V> {
     last.or_else(|| self.head.then_some(Item::Head))
   }
 
-  /// The anchor of a row of an item: a row of the head stands above the first exchange.
-  fn anchor(&self, item: Item, row: usize, rows: usize) -> Option<Anchor> {
+  /// The place of a row of an item: a row of the head stands above the first exchange.
+  fn place(&self, item: Item, row: usize, rows: usize) -> Option<Place> {
     let row = isize::try_from(row).unwrap_or_default();
     match item {
-      Item::At(at) => Some(Anchor { at, row }),
+      Item::At(at) => Some(Place { at, row }),
       Item::Head => {
         let first = self.held.keys().next()?;
-        Some(Anchor { at: *first, row: row - isize::try_from(rows).unwrap_or_default() })
+        Some(Place { at: *first, row: row - isize::try_from(rows).unwrap_or_default() })
       }
     }
   }
 
-  /// The rows that show in a count of rows, from an anchor or at the end. Only the rows of the
-  /// items that show, and of those between the anchor and them, are made.
+  /// The rows that show in a count of rows, from a place or at the end. Only the rows of the
+  /// items that show, and of those between the place and them, are made.
   pub(crate) fn shown(
     &self,
-    top: Option<Anchor>,
+    top: Option<Place>,
     room: usize,
     mut rows_of: impl FnMut(Item) -> Vec<Row>,
   ) -> Shown {
-    let Some(Anchor { at, mut row }) = top.filter(|one| self.held.contains_key(&one.at)) else {
+    let Some(Place { at, mut row }) = top.filter(|one| self.held.contains_key(&one.at)) else {
       return self.end(room, rows_of);
     };
     let mut item = Item::At(at);
@@ -273,7 +273,7 @@ impl<V> Items<'_, V> {
         None => return self.end(room, rows_of),
       }
     }
-    let top = self.anchor(item, row, rows.len());
+    let top = self.place(item, row, rows.len());
     let mut shown: Vec<Row> = rows.drain(row..).collect();
     while shown.len() < room {
       match passed.pop().or_else(|| self.after(item).map(|next| (next, rows_of(next)))) {
@@ -299,13 +299,13 @@ impl<V> Items<'_, V> {
       item = self.before(one);
     }
     let skip = count.saturating_sub(room);
-    let top = items.last().and_then(|(one, rows)| self.anchor(*one, skip, rows.len()));
+    let top = items.last().and_then(|(one, rows)| self.place(*one, skip, rows.len()));
     let rows = items.into_iter().rev().flat_map(|one| one.1).skip(skip).collect();
     Shown { rows, top, end: true }
   }
 
-  /// How many rows stand above an anchor, counted up to a bound.
-  fn above(&self, top: Anchor, bound: usize, mut rows_of: impl FnMut(Item) -> Vec<Row>) -> usize {
+  /// How many rows stand above a place, counted up to a bound.
+  fn above(&self, top: Place, bound: usize, mut rows_of: impl FnMut(Item) -> Vec<Row>) -> usize {
     let mut count = usize::try_from(top.row).unwrap_or_default();
     let mut deficit = usize::try_from(-top.row).unwrap_or_default();
     let mut item = self.before(Item::At(top.at));
@@ -367,11 +367,15 @@ impl Model {
     self.open_agent(prompt);
   }
 
-  /// An escape: from the input of a view, back to the target of the input; from the open thread:
-  /// from the thread of an agent, back to the thread that it came
+  /// An escape: from a message about a line of a file, to a plain message; from the input of a
+  /// view, back to the target of the input; from the open thread: from the thread of an agent, back
+  /// to the thread that it came
   /// from; from a thread that opens or whose open failed, back to the list, while the open goes on.
   /// Whether it went back.
   pub(crate) fn back(&mut self) -> bool {
+    if self.client.draft.anchor.take().is_some() {
+      return true;
+    }
     if self.client.filled.take().is_some() {
       self.client.restore = Some(String::new());
       return true;
@@ -428,7 +432,7 @@ impl Model {
     let row = feed.rows(Item::At(at)).iter().position(|one| one.code == Some(number));
     let row = isize::try_from(row.unwrap_or_default()).unwrap_or_default() - 3;
     if let Some(opened) = self.client.thread.as_mut() {
-      opened.top = Some(Anchor { at, row });
+      opened.top = Some(Place { at, row });
     }
   }
 
@@ -526,7 +530,7 @@ impl Model {
     let feed = self.feed()?;
     let items = feed.items();
     let now = items.shown(feed.opened.top, room, |item| feed.rows(item));
-    let moved = now.top.map(|top| Anchor { at: top.at, row: top.row + by });
+    let moved = now.top.map(|top| Place { at: top.at, row: top.row + by });
     let then = items.shown(moved, room, |item| feed.rows(item));
     let near = then.top.is_none_or(|top| items.above(top, room, |item| feed.rows(item)) < room);
     let opened = self.client.thread.as_mut()?;

@@ -4,10 +4,12 @@
 //! on the ground of a selected card. The diff of OpenTUI draws its line numbers, its grounds and
 //! the colors of its grammar. What the review holds stands in the client.
 
+use std::{iter, mem};
+
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::Review;
+use furb_client::{Anchor, Review};
 use furb_host::protocol::{Change, Changed, Changes};
 
 use crate::{
@@ -190,11 +192,23 @@ impl Model {
   }
 
   /// Whether a column of the window stands on the panel of the review.
-  fn on_side(&self, x: u16) -> bool {
+  pub(crate) fn on_side(&self, x: u16) -> bool {
     x >= self.size.0.saturating_sub(self.list_width())
   }
 
   /// The file of the review at a cell of the window, which a click reads.
+  /// The line of the file that the review reads at a row of its diff, from its first row, in the
+  /// column of a pointer: in the split view, the old file stands at the left and the new one at the
+  /// right.
+  pub(crate) fn anchor_at(&self, x: u16, row: usize) -> Option<Anchor> {
+    let shown = self.reviewing()?;
+    let path = self.client.reviewed()?.path.clone();
+    let right = usize::from(x.checked_sub(1)?) >= self.diff_width() / 2;
+    let rows = rows(&shown.diff, shown.split.then_some(right));
+    let (line, before, quote) = rows.get(row)?.clone()?;
+    Some(Anchor { path, line, before, quote })
+  }
+
   pub(crate) fn review_at(&self, x: u16, y: u16) -> Option<usize> {
     let shown = self.reviewing()?;
     let row = usize::from(y.checked_sub(ABOVE)?);
@@ -206,6 +220,67 @@ impl Model {
       _ => None,
     }
   }
+}
+
+/// A line of a diff as a row shows it: its number in its file, whether that file is the one before
+/// the change, and its text; none for a row that pads a side.
+type Diffed = Option<(u64, bool, String)>;
+
+/// The rows of the first file of a unified diff, as the diff of OpenTUI lays them out: each line of
+/// each hunk in one column, or, for one side of the split view, the old file at the left and the
+/// new file at the right, where each run of removed lines stands beside the added lines that
+/// replace it, padded to the longer run.
+fn rows(diff: &str, side: Option<bool>) -> Vec<Diffed> {
+  let mut rows = Vec::new();
+  let (mut old, mut new, mut run): (u64, u64, (Vec<Diffed>, Vec<Diffed>)) =
+    (0, 0, Default::default());
+  let flush = |rows: &mut Vec<Diffed>, run: &mut (Vec<Diffed>, Vec<Diffed>)| {
+    let (removed, added) = mem::take(run);
+    let count = removed.len().max(added.len());
+    let kept = if side == Some(true) { added } else { removed };
+    rows.extend(kept.into_iter().chain(iter::repeat(None)).take(count));
+  };
+  let mut hunks = false;
+  for line in diff.lines() {
+    if let Some(header) = line.strip_prefix("@@ ") {
+      flush(&mut rows, &mut run);
+      let start = |sign: char| {
+        let part = header.split(' ').find_map(|one| one.strip_prefix(sign))?;
+        part.split(',').next()?.parse::<u64>().ok()
+      };
+      (old, new, hunks) = (start('-').unwrap_or(1), start('+').unwrap_or(1), true);
+      continue;
+    }
+    if !hunks || line.starts_with("diff ") || line.starts_with("--- ") || line.starts_with("+++ ") {
+      if hunks && line.starts_with("diff ") {
+        break;
+      }
+      continue;
+    }
+    let (kind, text) = line.split_at(line.len().min(1));
+    match (kind, side) {
+      ("-", None) => rows.push(Some((old, true, text.to_owned()))),
+      ("+", None) => rows.push(Some((new, false, text.to_owned()))),
+      ("-", Some(_)) => run.0.push(Some((old, true, text.to_owned()))),
+      ("+", Some(_)) => run.1.push(Some((new, false, text.to_owned()))),
+      ("\\", _) => continue,
+      (_, Some(false)) => {
+        flush(&mut rows, &mut run);
+        rows.push(Some((old, true, text.to_owned())));
+      }
+      _ => {
+        flush(&mut rows, &mut run);
+        rows.push(Some((new, false, text.to_owned())));
+      }
+    }
+    match kind {
+      "-" => old += 1,
+      "+" => new += 1,
+      _ => (old, new) = (old + 1, new + 1),
+    }
+  }
+  flush(&mut rows, &mut run);
+  rows
 }
 
 /// A row of the files of a review: the folder of the files under it, or a file by its place among
