@@ -2230,7 +2230,7 @@ fn found_by_native() -> Searches {
 pub(super) fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
   let root = engine.root().to_owned();
   let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
-  block_on(engine.rung(rung).expect("a rung is made")).map_err(|no| format!("{no:?}"))
+  block_on(engine.rung(rung).expect("a rung is made")).map_err(|no| no.to_string())
 }
 
 #[test]
