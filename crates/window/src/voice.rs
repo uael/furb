@@ -14,6 +14,7 @@ use std::{
 
 use furb_client::{Form, Time};
 use futures::SinkExt;
+use opentui::input::KeyEvent;
 use serde::Deserialize;
 use tokio::{
   process::{Child, ChildStdout, Command},
@@ -40,6 +41,11 @@ const CARRIED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/listen"));
 #[derive(Default)]
 pub(crate) struct Voice {
   run: Option<Run>,
+  /// Whether the terminal told the release of a key, which a terminal tells only with the keys of
+  /// Kitty that tell each kind of event.
+  pub(crate) releases: bool,
+  /// The press of a space that waits for its release to play or stop the bar of the time.
+  pub(crate) waits: Option<KeyEvent>,
   pub(crate) listener: Option<Listener>,
   pub(crate) record: Option<Record>,
 }

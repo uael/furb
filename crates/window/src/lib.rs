@@ -57,7 +57,7 @@ use jiff::tz::TimeZone;
 use opentui::{
   App, AppOptions,
   host::HostOptions,
-  native::{MouseTracking, TerminalOptions},
+  native::{KittyKeyboard, MouseTracking, TerminalOptions},
 };
 
 pub use error::Error;
@@ -151,12 +151,15 @@ fn still() -> Option<u64> {
 
 /// The window on the terminal of the program, on the daemon of this machine, until the operator
 /// leaves it. The app asks the terminal for its colors, so the window stands on its background,
-/// and for each move of the pointer, so what takes a click rises under it.
+/// for each move of the pointer, so what takes a click rises under it, and, where it speaks the
+/// keys of Kitty, for the release of each key, so a tap of the space bar tells itself from a hold.
 pub fn run(reads: bool) -> Result<(), Error> {
   let machines = vec![Machine { reads, ..Machine::here()? }];
   let options = Options::here()?;
   let terminal =
     TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };
+  let kitty_keyboard = terminal.kitty_keyboard | KittyKeyboard::EVENT_TYPES;
+  let terminal = TerminalOptions { kitty_keyboard, ..terminal };
   let host = HostOptions { terminal, ..HostOptions::default() };
   let app = App::new(AppOptions { palette_size: 16, host, ..AppOptions::default() })?;
   let program = options.program.clone();

@@ -8,7 +8,11 @@
 use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
 
 use furb_window::{Options, open};
-use opentui::testing::TestApp;
+use opentui::{
+  input::KeyEventKind,
+  prelude::{KeyCode, KeyEvent, Modifiers},
+  testing::TestApp,
+};
 
 use crate::{
   cards::{app, options, row, shows},
@@ -111,4 +115,60 @@ fn a_speech_that_ends_before_a_hold_says_nothing_and_the_hold_says_why() {
   assert!(!app.text().contains("The speech ended."), "{}", app.text());
   hold(&app);
   shows(&app, "The speech ended.");
+}
+
+/// A space as a terminal tells it with the keys of Kitty that tell each kind of event.
+fn space(app: &TestApp, kind: KeyEventKind) {
+  let code = KeyCode::Char(' ');
+  app.key(KeyEvent { code, modifiers: Modifiers::NONE, kind, base_layout: None, keypad: false });
+}
+
+#[test]
+fn where_the_terminal_tells_each_release_a_hold_never_plays_the_bar_and_a_tap_plays_it_at_once() {
+  let (app, mut daemon) = listened();
+  let sessions = daemon.project("furb");
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("time.jsonl"), true);
+  peer.said(&life, &format!("how long does an open take {ANSWERS}"));
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "The open takes");
+  app.press("ctrl+x");
+  app.press("b");
+  space(&app, KeyEventKind::Release);
+  shows(&app, "▶  ◆");
+  // The bar steps back to the first moment, so a play has moments to show.
+  for _ in 0..5 {
+    app.press("left");
+  }
+  let bar = app.text();
+  // The head and the bar of the time, under which the list settles once the hand is away.
+  let same = |frame: &str| frame.lines().take(2).map(str::to_owned).collect::<Vec<_>>();
+  // A tap plays the bar at its release, and a second tap stops it.
+  space(&app, KeyEventKind::Press);
+  space(&app, KeyEventKind::Release);
+  app.advance(Duration::from_millis(40));
+  assert_ne!(same(&app.text()), same(&bar));
+  space(&app, KeyEventKind::Press);
+  space(&app, KeyEventKind::Release);
+  let bar = app.text();
+  app.advance(Duration::from_secs(1));
+  assert_eq!(same(&app.text()), same(&bar));
+  // The bar again at now, where the input records.
+  app.press("escape");
+  app.press("ctrl+x");
+  app.press("b");
+  let bar = shows(&app, "▶  ◆");
+  // The press of a hold, its pause, its repeats and its release leave the bar as it stood.
+  space(&app, KeyEventKind::Press);
+  app.advance(Duration::from_millis(250));
+  assert_eq!(same(&app.text()), same(&bar));
+  space(&app, KeyEventKind::Repeat);
+  app.advance(Duration::from_millis(30));
+  space(&app, KeyEventKind::Repeat);
+  typed(&app, "read the engine");
+  assert_eq!(same(&app.text()), same(&bar));
+  app.advance(Duration::from_millis(400));
+  space(&app, KeyEventKind::Release);
+  typed(&app, "read the engine.");
+  assert_eq!(same(&app.text()), same(&bar));
 }

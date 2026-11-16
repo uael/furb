@@ -926,9 +926,39 @@ fn older(window: &Shared, verb: Option<Verb>) {
 /// whether the window took it. A key that follows the leader never reaches the editor.
 fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if key.kind == KeyEventKind::Release {
+    released(app, window, key);
     return false;
   }
   voiced(app, window, key).unwrap_or_else(|| keyed(app, window, key))
+}
+
+/// A release of a key, which says that the terminal tells each one, and which plays or stops the
+/// bar of the time for a tap of the space that waited for it. A space released ends its run, so
+/// two quick taps never read as a hold.
+fn released(app: &App, window: &Shared, key: &KeyEvent) {
+  let tap = {
+    let mut held = window.borrow_mut();
+    held.voice.releases = true;
+    let space = key.code == KeyCode::Char(' ');
+    if space {
+      held.voice.other();
+    }
+    held.voice.waits.take_if(|_| space)
+  };
+  if let Some(tap) = tap {
+    keyed(app, window, &tap);
+  }
+}
+
+/// Whether a space plays or stops the bar of the time: the bar shows with no chains, no leader
+/// waits for its key, and the input is empty.
+fn plays(window: &Shared) -> bool {
+  let held = window.borrow();
+  let thread = held.screen.model.client.thread.as_ref();
+  let time = thread.and_then(|one| one.thread.time.as_ref());
+  time.is_some_and(|time| time.chains.is_none())
+    && held.led.is_none()
+    && held.area.text().is_empty()
 }
 
 /// A key that the voice left: the leader, a list part, the completion, the review, the bar of the
@@ -1571,6 +1601,8 @@ fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> Option<bool> {
   }
   let heard = window.borrow_mut().voice.space(app.now());
   Some(match heard {
+    // The repeat of a space that waits for its release: a hold, which the bar never hears.
+    Space::Taps(_) if window.borrow_mut().voice.waits.take().is_some() => true,
     Space::Taps(first) => {
       if first {
         let parts = window
@@ -1583,6 +1615,12 @@ fn voiced(app: &App, window: &Shared, key: &KeyEvent) -> Option<bool> {
           .map(|one| (one.thread.time.clone(), one.form.clone()))
           .unwrap_or_default();
         window.borrow_mut().voice.keep(parts);
+      }
+      // A terminal that tells each release lets the space of the bar wait for it, so a tap plays
+      // or stops the bar at its release and the press of a hold never does.
+      if window.borrow().voice.releases && plays(window) {
+        window.borrow_mut().voice.waits = Some(*key);
+        return Some(true);
       }
       let parted = keyed(app, window, key);
       window.borrow_mut().voice.tapped(parted);
