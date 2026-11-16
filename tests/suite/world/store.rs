@@ -259,6 +259,26 @@ fn a_record_whose_last_line_is_torn_or_not_ended_is_mended_at_the_first_keep_and
 }
 
 #[test]
+fn the_place_of_a_crossing_counts_the_entries_that_a_read_gives_past_a_made_line_that_a_stop_tore()
+{
+  let at = place("torn-crossings", "record.jsonl");
+  let lines = [
+    r#"[["made","chain1","store","one"]]"#,
+    r#"[["stand","stand1","operator","chain1"]]"#,
+    r#"[["made","chain1","store","two"]]"#,
+    r#"[["made","chain1","sto"#,
+  ];
+  fs::write(&at, lines.join("\n")).unwrap();
+  let read = kept(&at).unwrap();
+  assert_eq!(crossings(&at).unwrap(), [2], "{:?}", shown(&read));
+  assert_eq!(shown(&read[2..]), ["[['made', 'chain1', 'store', 'two']]"]);
+  // A failed write cuts its torn line before the next one, so only the last line of a record
+  // stands torn, and a torn line before another is no record that a life opens.
+  fs::write(&at, [lines[0], lines[3], lines[2]].join("\n")).unwrap();
+  assert!(kept(&at).is_err());
+}
+
+#[test]
 fn a_record_named_as_a_database_is_one_of_sqlite_and_any_other_is_a_file_of_lines() {
   for (file, database) in
     [("r.sqlite", true), ("r.SQLITE3", true), ("r.db", true), ("r.jsonl", false), ("r", false)]

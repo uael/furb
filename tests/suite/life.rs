@@ -290,6 +290,33 @@ fn a_life_whose_module_binds_the_name_of_a_builtin_crosses_with_the_module_of_it
 }
 
 #[test]
+fn a_life_whose_record_ends_in_a_fact_made_that_a_stop_tore_opens_at_each_crossing_with_no_drift() {
+  let at = yard("torn-made");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
+  let read = |life: &mut Engine| closed(life, "close(k)").as_ref().py_repr();
+  let mut first = open().boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut first, "k = 41\nclose(1)").as_ref().as_int(), Some(1));
+  drop(first);
+  crossing(&at);
+  let mut crossed = open().boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut crossed, "k += 1\nclose(1)").as_ref().as_int(), Some(1));
+  drop(crossed);
+  let record = at.join("record.jsonl");
+  let text = fs::read_to_string(&record).unwrap();
+  let made = text.lines().rfind(|one| one.starts_with("[[\"made\",")).unwrap();
+  fs::write(&record, format!("{text}{}", &made[..made.len() / 2])).unwrap();
+  let entries = world::kept(&record).unwrap();
+  let places = world::crossings(&record).unwrap();
+  assert!(!places.is_empty(), "the record crosses to this build");
+  for place in places {
+    let fact = entries[place].as_ref().py_repr();
+    assert!(fact.starts_with("[['made', "), "the crossing at {place} is a fact made: {fact}");
+  }
+  let mut again = open().boot::<String>([]).unwrap().0;
+  assert_eq!(read(&mut again), "42", "the life opens at the state of its record");
+}
+
+#[test]
 fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
   for name in ["record.jsonl", "record.db"] {
     let at = yard(&format!("made-{name}"));
