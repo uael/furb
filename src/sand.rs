@@ -36,11 +36,12 @@ const MADE: &str = "act";
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
 
-/// The most frames and levels of a value that a run stacks. Monty holds 1000 by default, which the
-/// replay of a record passes on an engine that nests two frames for each entry that it plays: a
-/// record of a few thousand entries did not open, and each part of a record replays on the engine
-/// that made it.
-const DEPTH: usize = 20_000;
+/// The most frames and levels of a value that a run on the engine of an earlier build stacks. Such
+/// an engine nests two frames for each entry that its replay plays, and each part of a record
+/// replays on the engine that made it, so a record of a few thousand entries passed the 1000 of
+/// monty there. The engine of this build replays at a depth that no count of entries grows, so a
+/// run on it holds the bound of monty.
+pub(crate) const DEPTH: usize = 20_000;
 
 /// The stack that a run takes. Monty walks a value one level at a time on the stack of the thread,
 /// under a KiB a level, up to [`DEPTH`] levels, so a run grows a stack of this size on a thread
@@ -61,8 +62,6 @@ pub(crate) const TURN: Duration = Duration::from_secs(30);
 thread_local! {
   /// The bound of each sandbox that this thread makes, which a test sets short.
   pub(crate) static BOUND: Cell<Duration> = const { Cell::new(TURN) };
-  /// The depth of each sandbox that this thread makes, which a test sets low.
-  pub(crate) static DEEP: Cell<usize> = const { Cell::new(DEPTH) };
 }
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
@@ -126,23 +125,35 @@ pub(crate) struct Sand {
   /// act, in the order the acts were made: a function of the record, since each open runs each
   /// word again, and none of a fact.
   lines: Vec<(String, u32)>,
+  /// The stack that a run grows when its thread holds less: [`STACK`] for the engine of an earlier
+  /// build, and none for the engine of this build, which holds the bound of monty.
+  stack: usize,
 }
 
 impl Sand {
-  /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
-  pub(crate) fn new() -> Self {
-    let limits = ResourceLimits::default()
-      .gc_interval(GC_INTERVAL)
-      .max_turn_duration(turn())
-      .max_recursion_depth(depth());
+  /// A sandbox with the limits of monty, which holds handles, and nothing in it yet: with
+  /// [`DEPTH`] frames for the engine of an earlier build, and else with the 1000 of monty.
+  pub(crate) fn new(earlier: bool) -> Self {
+    let mut limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
+    if earlier {
+      limits = limits.max_recursion_depth(DEPTH);
+    }
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: turn(), lines: Vec::new() }
+    let stack = if earlier { STACK } else { 0 };
+    Self {
+      state: State::Idle(repl),
+      fed: 0,
+      bounded: true,
+      applied: turn(),
+      lines: Vec::new(),
+      stack,
+    }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0, bounded: true, applied: turn(), lines: Vec::new() }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: turn(), lines: Vec::new(), stack: 0 }
   }
 
   /// Watches each return of `act` of the engine, which the opening defined, so the sandbox keeps
@@ -190,7 +201,15 @@ impl Sand {
     repl.tracker_mut().set_max_turn_duration(turn());
     // An image of a build before the watch holds none, and a second watch changes nothing.
     repl.watch(EXEC, MADE);
-    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: turn(), lines: Vec::new() })
+    // An image holds the session of the engine of this build, whose key names its texts.
+    Ok(Self {
+      state: State::Idle(*repl),
+      fed,
+      bounded: true,
+      applied: turn(),
+      lines: Vec::new(),
+      stack: 0,
+    })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -214,7 +233,8 @@ impl Sand {
     if let Some(limit) = self.changed() {
       repl.tracker_mut().set_max_turn_duration(limit);
     }
-    stacker::maybe_grow(STACK, STACK, || {
+    let stack = self.stack;
+    stacker::maybe_grow(stack, stack, || {
       let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
       self.drive(step, host)
     })
@@ -246,7 +266,8 @@ impl Sand {
     let call = self.taken()?;
     let call = self.limited(call);
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
-    stacker::maybe_grow(STACK, STACK, || {
+    let stack = self.stack;
+    stacker::maybe_grow(stack, stack, || {
       let step =
         call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
       self.drive(step, host)
@@ -422,15 +443,6 @@ pub(crate) fn past() -> Option<Duration> {
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.
-/// The depth that a new sandbox holds.
-fn depth() -> usize {
-  #[cfg(test)]
-  let depth = DEEP.get();
-  #[cfg(not(test))]
-  let depth = DEPTH;
-  depth
-}
-
 fn turn() -> Duration {
   #[cfg(test)]
   let bound = BOUND.get();

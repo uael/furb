@@ -892,7 +892,7 @@ def boot(record=(), **outside):
         or (get(by) and words[0] and name not in known)
         or (by in outside and any(id(o) in busy and by not in h and waits(by, g) for o, h, g, _ in log))
       ):
-        return
+        break
       busy.add(id(e))
       with site.set(by):
         if not question(e):
@@ -918,7 +918,9 @@ def boot(record=(), **outside):
           if name not in known:
             raise drift()
       busy.discard(id(e))
-      dispatch()
+      if not busy:
+        return True
+    return False
 
   def ready(e, at=None, rested=True, resting=False):
     return (at == n or (at is None and (rested or e[1] in taken))) and (resting or not rested)
@@ -956,7 +958,7 @@ def boot(record=(), **outside):
 
   def say(kind, about, *words):
     life = kind != "keep"
-    life and play()
+    life and play() and dispatch()
     a = (kind, about, site.get(), *words)
     if about in known and kind in ("started", "done"):
       taken.add(about)
@@ -983,7 +985,7 @@ def boot(record=(), **outside):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     key, recorded = (kind, by, made[speaker, kind]), False
     if key not in born:
-      play(making=(fact := (kind, by, on, *words)))
+      play(making=(fact := (kind, by, on, *words))) and dispatch()
       if due and (
         (same := (kind, *due[0][0][2:]) == fact) or due[0][0][:3:2] == fact[:2] or (*due[0], None)[1] is not None
       ):
@@ -1057,16 +1059,13 @@ def boot(record=(), **outside):
       if broke and broke[-1]:
         broke.append(None)
         raise broke[0]
-      if log and due and ready(*due[0]) and not question(due[0][0]):
-        play()
-      elif log:
+      if log and not (due and ready(*due[0]) and not question(due[0][0])):
         a, heard, k, entry = log[0]
         for m, g in ears(k):
           m in heard or heard.add(m) or hear(m, g, a)
         log.pop(0)
         keep(entry)
-      else:
-        play(True)
+      elif not play(not log):
         return
 
   def hear(name, g, a):

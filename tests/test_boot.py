@@ -587,6 +587,15 @@ async def test_the_journal_says_the_whole_record_again_before_boot_returns() -> 
   assert [(a[1], a[3]) for a in said(again, "grant")] == [(ceiling, child), (mine, root)]
 
 
+async def test_the_journal_says_the_record_again_at_a_depth_that_no_count_of_its_entries_grows() -> None:
+  """The journal says the record again at a depth of the stack that no count of its entries grows, so a record of any length opens within the bound of frames of its interpreter."""
+  sand, _, root = born()
+  for _ in range(1500):
+    engine.clock(on=root)
+  again, over = await relived(sown(), list(sand.record))
+  assert over == root and len(said(again, "clock")) == 1500
+
+
 async def test_one_said_again_takes_the_name_it_had() -> None:
   """One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken."""
   sand, log, _ = await lived()

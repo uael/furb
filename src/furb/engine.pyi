@@ -1155,6 +1155,7 @@ def boot(record: Iterable[Entry] = (), **outside: Ear) -> Act[Never]:
 
 
   The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot.
+  The journal says the record again at a depth of the stack that no count of its entries grows, so a record of any length opens within the bound of frames of its interpreter.
   One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
   In a later life an act takes the name of the question that the record holds at its place, which holds its kind, its maker, its chain and its words, or else it drifts.
   An act that the life makes past the tip of its record takes the number after the highest of its kind in the record.

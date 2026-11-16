@@ -695,7 +695,7 @@ impl Engine {
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
     let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
-    let mut sand = Sand::new();
+    let mut sand = Sand::new(source != crate::ENGINE);
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
