@@ -103,6 +103,13 @@ repos:
         language: system
         files: (^|/)(README\.md|pyproject\.toml|Cargo\.toml|package\.json)$
         pass_filenames: false
+      - id: pack
+        name: each file that the build of a published crate reads stands in its pack
+        # A source of a crate that names a file, or a manifest that changes the include of a pack. It builds nothing.
+        entry: cargo xtask pack
+        language: system
+        files: (\.rs|(^|/)Cargo\.toml)$
+        pass_filenames: false
       - id: paths
         name: the paths that the tools and the workflows name
         # It runs whatever the files, since a move of a file in a change that touches no script leaves the old path in

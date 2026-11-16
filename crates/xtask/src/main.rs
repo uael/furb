@@ -223,10 +223,10 @@ enum Task {
   Paths,
   /// Fail on each file that the build of a published crate reads and that its pack leaves out.
   ///
-  /// It builds each crate whose manifest lets it be published, then reads the files that cargo
-  /// says each library and program read, each source, each file of `include_str!` and each file
-  /// that a build script watches, against the files of its pack, as `cargo package --list` names
-  /// them. A file left out builds here and fails in the crate that a user adds.
+  /// It reads each source of the pack of each crate whose manifest lets it be published, as `cargo
+  /// package --list` names them, and each file that a source names by `include_str!`,
+  /// `include_bytes!`, `#[path]` or a `rerun-if-changed` of its build script, against that list.
+  /// A file left out builds here and fails in the crate that a user adds. It builds nothing.
   Pack,
   /// Lint the workspace on Linux and Windows, which this machine does not build, so code under a
   /// cfg of those systems shows its warnings before the gates of CI fail on it. It lints what the

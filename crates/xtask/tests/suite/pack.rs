@@ -20,9 +20,17 @@ fn manifest(include: &str) -> String {
 fn a_file_that_the_build_of_a_crate_reads_and_its_pack_leaves_out_is_named() {
   let yard = Yard::new(format!("xtask-pack-{}", process::id()));
   fs::create_dir_all(yard.join("src")).unwrap();
-  fs::write(yard.join("src/lib.rs"), "pub const READ: &str = include_str!(\"../read.txt\");\n")
-    .unwrap();
+  // A module of the tests reads a file that no user builds, which the pack leaves out.
+  let lib = "pub const READ: &str = include_str!(\"../read.txt\");\n\
+             #[cfg(test)]\n#[path = \"lib.test.rs\"]\nmod test;\n";
+  fs::write(yard.join("src/lib.rs"), lib).unwrap();
+  fs::write(
+    yard.join("src/lib.test.rs"),
+    "const FIXTURE: &str = include_str!(\"../fixture.txt\");\n",
+  )
+  .unwrap();
   fs::write(yard.join("read.txt"), "read").unwrap();
+  fs::write(yard.join("fixture.txt"), "fixture").unwrap();
   fs::write(yard.join("Cargo.toml"), manifest("\"/src/**\"")).unwrap();
   let done = packed(&yard);
   let said = String::from_utf8_lossy(&done.stdout);

@@ -29,6 +29,7 @@ include = [
   "/.agents/skills/ouroboros/ouroboros.py*",
   "/.agents/skills/web/SKILL.md",
   "/.agents/skills/web/web.py*",
+  "/.agents/skills/web/process.py",
   "/.agents/skills/mcp/SKILL.md",
   "/.agents/skills/mcp/mcp.py*",
   "/.agents/skills/mcp/process.py",

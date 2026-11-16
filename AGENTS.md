@@ -441,9 +441,8 @@ fix what your change broke, and report what was broken before.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `git commit` verifies only the form of its files, and ends in about 2 seconds. Its hook, `script/hooks/pre-commit`,
   which `git config core.hooksPath script/hooks` turns on, runs only the hooks that read the staged files alone and end
-  at once: the checks of the files, the format and the lint of Python, the width of the comments of Rust, the workflows,
-  the corpus and
-  the stray files. It names each other hook of the stage `pre-commit` in `SKIP`, and it prints only what fails. So no
+  at once: the checks of the files, the format and the lint of Python, the width of the comments of Rust, the packs of
+  the crates, the workflows, the corpus and the stray files. It names each other hook of the stage `pre-commit` in `SKIP`, and it prints only what fails. So no
   commit runs a test, a type check, a format of Rust or a check that reads the whole repository: run the one or two
   tests of your change while you work, as the skill `testing` says, and the two commands below run the rest outside the
   commit, on a period. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of
