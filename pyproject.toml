@@ -194,7 +194,10 @@ consider_namespace_packages = true
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 # A worker that is idle takes the tests that another worker has not started, so no core waits on a run of slow tests
 # at the end: on 3 cores this ran the suite in 88 s and 92 s, against 107 s and 102 s when each worker kept its share.
-addopts = ["-ra", "--durations=10", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--dist", "worksteal", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]
+# Coverage counts the folders of the two packages, not their names: a name counts each module of that name, and a
+# process of a kit that the suite starts runs its own copy of furb.skill and furb.protocol from the config folder of a
+# test, under the coverage that the active environment carries into it.
+addopts = ["-ra", "--durations=10", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--dist", "worksteal", "--cov=src/furb", "--cov=crates/python/furb_monty", "--cov-report=term-missing"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"
