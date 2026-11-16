@@ -27,7 +27,7 @@ use opentui::{
 use furb_host::protocol::Verb;
 
 use furb::world::images;
-use furb_client::{Asked, mentioned};
+use furb_client::{Asked, Folded, Pasted, mentioned};
 
 use crate::{
   Machine, Options, Screen,
@@ -229,10 +229,10 @@ fn heard_edits(window: &Shared, area: &Textarea) {
     colored(&on);
   });
   // A paste of the path of an image file puts in that image, as a terminal pastes a file that he
-  // drags on it.
+  // drags on it, and a long text folds into its mark.
   let on = Rc::clone(window);
   area.on_paste(move |cx, text| {
-    if filed(cx.app(), &on, text) {
+    if filed(cx.app(), &on, text) || folded(cx.app(), &on, text) {
       cx.prevent_default();
     }
   });
@@ -603,6 +603,38 @@ fn filed(app: &App, window: &Shared, text: &str) -> bool {
   let folder = PathBuf::from(&window.borrow().screen.model.client.folder);
   let Some(bytes) = picture::file(text, &folder) else { return false };
   pictured(app, window, &bytes);
+  true
+}
+
+/// A long text that he pastes put in the input at its caret as its mark. The same text pasted
+/// again while its mark stands shows it whole in the place of its mark.
+fn folded(app: &App, window: &Shared, text: &str) -> bool {
+  let area = window.borrow().area.clone();
+  let draft = area.text();
+  // A terminal ends each line of a paste with a return, as a key of the return.
+  let text = text.replace("\r\n", "\n").replace('\r', "\n");
+  let again = window
+    .borrow()
+    .screen
+    .model
+    .client
+    .draft
+    .folds
+    .iter()
+    .position(|one| one.text == text && draft.contains(&one.mark()));
+  if let Some(at) = again {
+    // The editor tells no change that the window makes, so the draft takes the text too.
+    let whole = tell(app, window, |model| {
+      let one = model.client.draft.folds.remove(at);
+      model.client.draft.text = draft.replacen(&one.mark(), &one.text, 1);
+      model.client.draft.text.clone()
+    });
+    area.set_text(whole);
+  } else {
+    let Some(mark) = tell(app, window, |model| model.client.fold(&text)) else { return false };
+    area.insert(format!("{mark} "));
+  }
+  colored(window);
   true
 }
 
@@ -1225,9 +1257,10 @@ fn colored(window: &Shared) {
     for (span, _) in mentioned(text) {
       area.add_extmark(place(span), mark);
     }
-    // An image stands as one unit, which a key of the caret goes over and a delete takes whole.
-    for image in &model.client.draft.images {
-      let shown = image.mark();
+    // An image and a folded text stand as one unit, which a key of the caret goes over and a
+    // delete takes whole.
+    let images = model.client.draft.images.iter().map(Pasted::mark);
+    for shown in images.chain(model.client.draft.folds.iter().map(Folded::mark)) {
       for (at, _) in text.match_indices(&shown) {
         area.add_extmark(place(at..at + shown.len()), mark.atomic());
       }

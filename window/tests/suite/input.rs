@@ -1090,3 +1090,29 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   folders.sort();
   assert_eq!(folders, [alone.join("plan-the-week"), alone.join("plan-the-week-2")]);
 }
+
+#[test]
+fn a_long_paste_folds_into_its_mark_and_the_message_says_it_whole() {
+  let (app, daemon, sessions) = started();
+  let trace = (1..=40).map(|at| format!("frame {at} of the trace")).collect::<Vec<_>>().join("\n");
+  app.type_text("why so slow? ");
+  app.paste(&trace);
+  let frame = shows(&app, "why so slow? ≡ paste-1 · 40 lines");
+  assert!(!frame.contains("frame 2 of the trace"), "{frame}");
+  assert!(frame.contains("≡ paste it again to show it whole"), "{frame}");
+  // The same paste again shows it whole, and a second paste folds as its own.
+  app.paste(&trace);
+  shows(&app, "frame 40 of the trace");
+  app.press("ctrl+c");
+  assert!(app.wait_until(PATIENCE, || !app.text().contains("why so slow")), "{}", app.text());
+  app.paste(&trace);
+  shows(&app, "≡ paste-1 · 40 lines");
+  // A short paste stands as it is.
+  app.paste("one\ntwo\n");
+  shows(&app, "two");
+  sent(&app, ANSWERS);
+  shows(&app, "Resolved 1");
+  let said = told(&daemon, &sessions);
+  assert!(said.len() == 1 && said[0].contains("frame 40 of the trace"), "{said:?}");
+  assert!(!said[0].contains("≡ paste-1"), "{said:?}");
+}

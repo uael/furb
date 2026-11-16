@@ -41,7 +41,7 @@ pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
 pub use furb_wire::anchor::Anchor;
 pub use history::{History, Walk};
-pub use input::{ASIDE, Draft, PICTURE, Pasted};
+pub use input::{ASIDE, Draft, FOLD, FOLDED, Folded, PICTURE, Pasted};
 pub use inspect::Inspection;
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};

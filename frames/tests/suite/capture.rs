@@ -10,8 +10,10 @@ use serde_json::{Value, json};
 use crate::{frames, put, read, said, yard};
 
 /// The program in place of the window: it says the text that the first step of a walk waits for
-/// after half a second, then shows each key that it reads, as the terminal echoes it.
-const WINDOW: &str = "#!/bin/sh\nstty -isig\nsleep 0.5\nprintf 'Ask for a change\\n'\nexec cat\n";
+/// after half a second, then shows each key that it reads, as the terminal echoes it, and says the
+/// mark of a long paste at its first line, as the window folds it.
+const WINDOW: &str = "#!/bin/sh\nstty -isig\nsleep 0.5\nprintf 'Ask for a change\\n'\nexec sed -u \
+  's/Read the boot, then the seed[.]$/≡ paste-1 · 12 lines/'\n";
 /// The program in place of furb: its daemon says that it listens, then ends.
 const FURB: &str = "#!/bin/sh\necho listening\nsleep 1\n";
 
@@ -50,7 +52,9 @@ fn a_capture_waits_for_the_text_of_each_step_and_its_recording_replays_into_its_
       ("m", "b"),
       ("i", "<C-c>"),
       ("i", "Read the boot, then the seed."),
-      ("m", "c")
+      ("m", "c"),
+      ("i", "Read the boot, then the seed."),
+      ("m", "d")
     ]
   );
   // The program says the text of the first step half a second after its start, so the frame of
@@ -58,5 +62,6 @@ fn a_capture_waits_for_the_text_of_each_step_and_its_recording_replays_into_its_
   let frame = |step: &str| read(&out.join(format!("05-prompt-box.{step}.txt")));
   assert!(frame("a").starts_with("Ask for a change\n"), "{}", frame("a"));
   assert!(frame("b").contains("Where does the time of the open go?"), "{}", frame("b"));
-  assert!(frame("c").contains("Then stop."), "{}", frame("c"));
+  assert!(frame("c").contains("≡ paste-1 · 12 lines"), "{}", frame("c"));
+  assert!(frame("d").contains("Then stop."), "{}", frame("d"));
 }

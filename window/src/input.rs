@@ -10,7 +10,7 @@ use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Asked, Chosen, Outgoing, Target};
+use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Target};
 
 use crate::{
   keys::Does,
@@ -900,6 +900,15 @@ impl Model {
     Some(vec![run("  ◆ ", accent), run(line, prose), run(drop, muted)])
   }
 
+  /// The hint of a draft that holds a long text that a paste folded: the same paste shows it whole.
+  fn folded(&self) -> Option<Line> {
+    let draft = &self.client.draft;
+    draft.folds.iter().find(|one| draft.text.contains(&one.mark()))?;
+    let t = &self.tokens;
+    let (accent, muted) = (Style::new().fg(t.accent), t.style(Role::Muted));
+    Some(vec![run(format!("  {FOLDED}"), accent), run("paste it again to show it whole", muted)])
+  }
+
   /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
   /// completion or of the bar of the time, else the word of python that the window ran, as it runs
   /// and what it came to, else the state of the open thread while it works, with the key that stops
@@ -937,7 +946,7 @@ impl Model {
     let says = armed.map(|one| (one, t.attention)).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of the input go first, then the line of a file that the next message is about.
-    let keyed = self.over_input().or_else(|| self.anchored());
+    let keyed = self.over_input().or_else(|| self.anchored()).or_else(|| self.folded());
     let room = wide.saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);

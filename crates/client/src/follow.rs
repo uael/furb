@@ -23,6 +23,8 @@ impl Client {
       return Err("A message with an image goes now: send it with Enter.".to_owned());
     }
     let (at, life, thread) = key;
+    let text = self.unfolded(text.to_owned());
+    self.draft.folds.clear();
     // The client holds the life, so its machine pushes each change of the queue.
     self.hold((at, life.clone()), self.cwd(at, &life), self.moved);
     let entry = format!("{}-{}", self.machines[at].login, self.now);

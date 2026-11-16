@@ -129,7 +129,7 @@ impl Client {
     self.walk = None;
     self.restore = Some(sent.text.clone());
     let anchor = self.draft.anchor.take();
-    self.draft = Draft { text: sent.text.clone(), python: sent.python, images: Vec::new(), anchor };
+    self.draft = Draft { text: sent.text.clone(), python: sent.python, anchor, ..Draft::default() };
   }
 
   /// Where the walk stands: the place of the text that the input shows, from one, among the texts
@@ -152,7 +152,7 @@ impl Client {
         let one = found[place.min(oldest)];
         let anchor = walk.from.anchor.clone();
         let draft =
-          Draft { text: one.text.clone(), python: one.python, images: Vec::new(), anchor };
+          Draft { text: one.text.clone(), python: one.python, anchor, ..Draft::default() };
         (draft, Some(place.min(oldest)))
       }
       (Some(_), None) => {

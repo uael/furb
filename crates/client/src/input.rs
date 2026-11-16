@@ -25,15 +25,38 @@ pub const ASIDE: &str = "/btw ";
 /// The sign of an image in the text of the input, before its name.
 pub const PICTURE: &str = "▣ ";
 
+/// The sign of a long text that a paste folded into one mark, before its name.
+pub const FOLDED: &str = "≡ ";
+
+/// The most lines of a paste that the input shows whole: a longer one stands as its mark.
+pub const FOLD: usize = 5;
+
 /// The text of the input, whether it is a word of python that runs, each image that the operator
-/// put in it, which a message takes when its text holds the mark of that image, and the line of a
+/// put in it, which a message takes when its text holds the mark of that image, each long text
+/// that a paste folded, which a message says whole in the place of its mark, and the line of a
 /// file that the next message is about.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Draft {
   pub text: String,
   pub python: bool,
   pub images: Vec<Pasted>,
+  pub folds: Vec<Folded>,
   pub anchor: Option<Anchor>,
+}
+
+/// A long text that a paste folded: its name, `paste-<n>`, and the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Folded {
+  pub name: String,
+  pub text: String,
+}
+
+impl Folded {
+  /// The mark of the text in the input, which the window shows as one unit: its name and how many
+  /// lines it holds.
+  pub fn mark(&self) -> String {
+    format!("{FOLDED}{} · {} lines", self.name, self.text.lines().count())
+  }
 }
 
 /// An image that the operator put in the input: its name, `image-<n>.<extension>`, its bytes in
@@ -100,6 +123,7 @@ impl Client {
   /// machine that the client dials again, or a life that a fault ended, takes nothing, and the
   /// error says why.
   pub fn send(&mut self, text: String) -> Result<(), String> {
+    let text = self.unfolded(text);
     if self.submit_fill(&text) {
       return Ok(());
     }
@@ -138,6 +162,7 @@ impl Client {
     let text = anchor.as_ref().map_or(text.clone(), |anchor| anchor.said(&text));
     let images = mem::take(&mut self.draft.images);
     let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();
+    self.draft.folds.clear();
     let pending = Pending { act: None, text: text.clone() };
     match (&thread, python, self.thread.as_mut()) {
       (_, true, _) | (Some(_), false, None) => {}
@@ -154,6 +179,25 @@ impl Client {
     self.outgoing.push_back(Outgoing { at, life, thread, text, python, images });
     self.walk = None;
     Ok(())
+  }
+
+  /// A text of the input with each mark of a long text that a paste folded in it as that text.
+  pub fn unfolded(&self, text: String) -> String {
+    let folds = self.draft.folds.iter();
+    folds.fold(text, |text, one| text.replacen(&one.mark(), &one.text, 1))
+  }
+
+  /// A text that he pastes in the input: a long one folds into its mark, which this gives, and a
+  /// short one stands as it is.
+  pub fn fold(&mut self, text: &str) -> Option<String> {
+    if text.lines().count() <= FOLD {
+      return None;
+    }
+    let name = format!("paste-{}", self.draft.folds.len() + 1);
+    let folded = Folded { name, text: text.to_owned() };
+    let mark = folded.mark();
+    self.draft.folds.push(folded);
+    Some(mark)
   }
 
   /// The word that asks a message that starts with `/btw ` aside, as his word on the open thread:

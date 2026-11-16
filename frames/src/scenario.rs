@@ -169,6 +169,9 @@ def total(stages):
 See [the trace](https://github.com/uael/furb/issues/988).''')";
 
 /// A word that asks the operator a choice, and closes its thread with the answer.
+/// A long draft, of twelve lines, that a paste puts in the input.
+const DRAFT: &str = "Read the boot, then the seed.\nThen the turns of each chain.\nThen the stages.\nSum them.\nSay where the time goes.\nKeep the numbers.\nName each stage.\nGive the share of each.\nSay what to cut first, and why it costs the most of the open of a record that holds a hundred thousand facts.\nThen the test.\nThen the proof.\nThen stop.";
+
 const ASKS: &str = "side = await prompt(Literal['right', 'left'], 'Where does the list of cards stand?', to=OPERATOR)\nclose(side)";
 
 /// The words of a model that changes two places of a file of the project and adds a file.
@@ -449,16 +452,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       steps: &[
         step("a", &[], READY),
         step("b", &[Act::Type("Where does the time of the open go?")], "open go?"),
-        step(
-          "c",
-          &[
-            Act::Key("C-c"),
-            Act::Paste(
-              "Read the boot, then the seed.\nThen the turns of each chain.\nThen the stages.\nSum them.\nSay where the time goes.\nKeep the numbers.\nName each stage.\nGive the share of each.\nSay what to cut first, and why it costs the most of the open of a record that holds a hundred thousand facts.\nThen the test.\nThen the proof.\nThen stop.",
-            ),
-          ],
-          "Then stop.",
-        ),
+        // A long paste folds into its mark, and the same paste again shows it whole.
+        step("c", &[Act::Key("C-c"), Act::Paste(DRAFT)], "paste-1 · 12 lines"),
+        step("d", &[Act::Paste(DRAFT)], "Then stop."),
       ],
     }),
   },
@@ -940,7 +936,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     name: "25-narrow",
     has: Has::Sized(
       SIZES[1],
-      &[("13-command", "c"), ("05-prompt-box", "c"), ("07-prompt-complete", "b")],
+      &[("13-command", "c"), ("05-prompt-box", "d"), ("07-prompt-complete", "b")],
     ),
   },
   Scenario {
