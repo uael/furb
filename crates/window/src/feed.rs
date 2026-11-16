@@ -227,10 +227,10 @@ impl Feed<'_> {
     let muted = self.style(Role::Muted);
     let title = self.model.title().unwrap_or_default();
     let (branch, branches) = self.branch();
-    let sub = self.opened.sub().and_then(|one| one.anchor.as_ref());
+    let sub = self.opened.sub().and_then(|one| one.anchor.clone()).or_else(|| self.made_sub());
     let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
       (Some(_), _, Some(at)) => (format!("⑂ {} · ", at + 2), title),
-      (Some(_), _, None) if let Some(one) = sub => (format!("◆ {} · ", shown_at(one)), title),
+      (Some(_), _, None) if let Some(one) = &sub => (format!("◆ {} · ", shown_at(one)), title),
       (Some(_), Some(_), None) => ("agent · ".to_owned(), title),
       (Some(_), None, None) => (String::new(), title),
       (None, ..) if branches > 0 => {
@@ -287,6 +287,8 @@ impl Feed<'_> {
     let made = !self.opened.thread.key.2.is_empty() && !leaves && !self.ended();
     let (mark, button) = match sub.or(card.map(|card| &card.thread)) {
       _ if branch.is_some() => (None, Some((run(" ⑂ 1 ", button), Does::Close))),
+      // A sub thread that his message just made works, as its page will say.
+      None if self.made_sub().is_some() => (None, Some((run(" Resolve ", button), Does::Resolve))),
       _ if self.opened.from.is_some() && sub.is_none() => {
         (None, Some((run(" Back ", button), Does::Close)))
       }
@@ -315,6 +317,14 @@ impl Feed<'_> {
     let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
     let button = button.filter(|(_, does)| !reads || *does != Does::Resolve);
     (mark, button)
+  }
+
+  /// The place of the line that the message that made this sub thread is about, while the page of
+  /// the sub thread does not name it yet: the window knows it from the message that it sent.
+  fn made_sub(&self) -> Option<Anchor> {
+    let thread = &self.opened.thread;
+    let first = thread.pending.first().filter(|_| thread.started && self.opened.sub().is_none())?;
+    Anchor::of(&first.text).map(|(anchor, _)| anchor)
   }
 
   /// The place of the thread among the branches of the thread that it came from, when a rewind
