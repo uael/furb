@@ -423,7 +423,10 @@ fn a_window_gives_its_place_to_a_new_build_of_its_program_where_it_stood() {
   first.advance(Duration::from_secs(1));
   first.advance(Duration::from_secs(1));
   assert!(stood.is_file());
-  drop((peer, first));
+  // The peer of the test stays: the daemon of a machine waits for the new build for its grace, and
+  // the daemon of the test, which has none, would end with its last peer before a slow open of the
+  // new build dials it.
+  drop(first);
   // The new build opens where the window before stood: on its thread, with its draft.
   open(&second, vec![daemon.machine("mac")], Options { reloaded: true, ..homed(&daemon) });
   shows(&second, "Two stages hold most");
