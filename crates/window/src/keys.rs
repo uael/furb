@@ -147,7 +147,7 @@ const GO: &[Bound] = &[
   ),
   bound(Does::Next, "the next card", Some("next"), &[&[alt(KeyCode::Down)], &led('j')]),
   bound(Does::Previous, "the card before", Some("previous"), &[&[alt(KeyCode::Up)], &led('k')]),
-  bound(Does::List, "show or hide the list", Some("list"), &[&led('l')]),
+  bound(Does::List, "show or hide the list", Some("list"), &[&led('l'), &[ctrl('\\')]]),
 ];
 
 /// The keys of the open thread.

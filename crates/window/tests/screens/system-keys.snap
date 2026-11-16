@@ -14,7 +14,7 @@ source: crates/window/tests/suite/screens.rs
      Alt+A or Ctrl+X A   the next thread that needs…      ┃
      Alt+↓ or Ctrl+X J   the next card                    ┃
      Alt+↑ or Ctrl+X K   the card before
-     Ctrl+X L            show or hide the list
+     Ctrl+X L or Ctrl+\  show or hide the list
 
     The thread
      Ctrl+N              a new thread, and back to…
