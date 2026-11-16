@@ -479,9 +479,9 @@ impl Kept {
 /// How deep the representation of a value by its fields goes: a part below shows as `…`.
 const FIELDS: usize = 3;
 
-/// A value as a debugger shows it, from the value as it went out of the sandbox, so no code of the life runs: an
-/// instance of a class of the life by its fields, as `P(x=1)`, a list, a tuple, a set or a dict by its parts, each
-/// the same way, and any other value as the host writes it.
+/// A value as a debugger shows it, from the value as it went out of the sandbox, so no code of the
+/// life runs: an instance of a class of the life by its fields, as `P(x=1)`, a list, a tuple, a set
+/// or a dict by its parts, each the same way, and any other value as the host writes it.
 fn fields(value: ObjectRef<'_>, depth: usize) -> String {
   if depth >= FIELDS {
     return "…".to_owned();
@@ -1068,11 +1068,12 @@ impl Engine {
     self.run(|sand, outside| outside.outcome(sand, id))
   }
 
-  /// One name that the module of a chain binds, the root when no chain is given, read without calling it: the name
-  /// of its type, its representation, and its value, which goes out as every value does. The read runs no code of
-  /// the life, so it makes no act and no fact: the representation is the one of a value of the builtins or of the
-  /// engine, or of a container of such values, and any other value shows as a debugger shows it, an instance by its
-  /// fields, since its own representation is code that a model may have written.
+  /// One name that the module of a chain binds, the root when no chain is given, read without
+  /// calling it: the name of its type, its representation, and its value, which goes out as every
+  /// value does. The read runs no code of the life, so it makes no act and no fact: the
+  /// representation is the one of a value of the builtins or of the engine, or of a container of
+  /// such values, and any other value shows as a debugger shows it, an instance by its fields,
+  /// since its own representation is code that a model may have written.
   pub fn inspect(
     &mut self,
     name: &str,
