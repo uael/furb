@@ -1,6 +1,4 @@
 //! The call of a model for a reply, and the turn that its answer gives.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -510,7 +508,7 @@ pub(super) fn wrote(model: &Model, response: &CompletionResponse) -> String {
   }
   let last: Vec<char> =
     if text.trim().is_empty() { &thought } else { &text }.trim_end().chars().collect();
-  let end: String = last[last.len().saturating_sub(END)..].iter().collect();
+  let end: String = last.iter().skip(last.len().saturating_sub(END)).collect();
   let (thought, text) = (thought.chars().count(), text.chars().count());
   let tokens = response.usage.output_tokens;
   format!(
@@ -605,14 +603,8 @@ pub(super) fn uuid_from(
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let digits = value::hex(&bytes);
-  Ok(format!(
-    "{}-{}-{}-{}-{}",
-    &digits[..8],
-    &digits[8..12],
-    &digits[12..16],
-    &digits[16..20],
-    &digits[20..]
-  ))
+  let part = |from: usize, to: usize| digits.get(from..to).unwrap_or_default();
+  Ok(format!("{}-{}-{}-{}-{}", part(0, 8), part(8, 12), part(12, 16), part(16, 20), part(20, 32)))
 }
 
 /// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.

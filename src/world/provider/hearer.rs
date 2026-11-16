@@ -1,5 +1,4 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, HashSet},
@@ -29,7 +28,7 @@ use super::{
 };
 use crate::fact;
 use crate::skill;
-use crate::value;
+use crate::value::{self, ObjectRef};
 use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
@@ -564,10 +563,9 @@ impl Hearer {
 /// Whether a fact is a done that ended a reply with a turn of the model.
 fn turned(a: &Fact) -> bool {
   a.kind() == "done"
-    && a
-      .word(0)
-      .and_then(|one| one.items())
-      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"))
+    && a.word(0).and_then(|one| one.items()).is_some_and(|turn| {
+      turn.len() == 4 && turn.first().and_then(ObjectRef::as_str) == Some("assistant")
+    })
 }
 
 /// The facts of a chain that a speaker said, in order, from the record.

@@ -4,7 +4,6 @@
 //! refreshes, or from a config dir where the account logged in. With one account or none, nothing is parked and the
 //! command line runs as it did. With several, a turn that meets a usage limit or a failed sign in parks its account,
 //! and the next turn takes another: a limit parks it until its reset, and a failed sign in until a reload.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::sync;
 use std::{
@@ -131,7 +130,7 @@ impl Accounts {
     let mut free = (0..self.count()).filter(|at| Self::free_in(state, *at, now));
     match self.switch {
       Switch::Failover => free.next(),
-      Switch::Spread => free.min_by_key(|at| state.given[*at]),
+      Switch::Spread => free.min_by_key(|at| state.given.get(*at).copied().unwrap_or_default()),
     }
   }
 
@@ -141,7 +140,9 @@ impl Accounts {
     let at = self.choose(&state, now)?;
     state.tick += 1;
     let tick = state.tick;
-    state.given[at] = tick;
+    if let Some(given) = state.given.get_mut(at) {
+      *given = tick;
+    }
     Some(at)
   }
 

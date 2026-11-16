@@ -11,7 +11,6 @@
 //! process that is gone leaves its conversation on the disk under its id, so a later turn resumes
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -370,7 +369,7 @@ impl Program {
     };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
-      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
+      serde_json::from_str::<Value>(&said).ok().and_then(|one| one.get("loggedIn")?.as_bool());
     let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
     logged.unwrap_or(!words.contains("not logged in"))
   }
@@ -415,7 +414,12 @@ impl CompletionModel for Completion {
       // Rig makes the choice of a stream of the parts it streamed, so the raw record of its end
       // holds the blocks the command line settled whole, which stand over those parts.
       let got = got.map(|mut response| {
-        response.raw["settled"] = serde_json::to_value(&response.choice).unwrap_or_default();
+        if let Some(raw) = response.raw.as_object_mut() {
+          raw.insert(
+            "settled".to_owned(),
+            serde_json::to_value(&response.choice).unwrap_or_default(),
+          );
+        }
         RawStreamingChoice::FinalResponse(ended(CLAUDE, response))
       });
       drop(deltas.send(got));
@@ -488,8 +492,10 @@ impl Claude {
     let name = accounts.name(at).to_owned();
     got
       .map(|mut response| {
-        if !name.is_empty() {
-          response.raw["account"] = json!(name);
+        if !name.is_empty()
+          && let Some(raw) = response.raw.as_object_mut()
+        {
+          raw.insert("account".to_owned(), json!(name));
         }
         response
       })

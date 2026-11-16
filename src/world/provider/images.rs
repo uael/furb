@@ -2,7 +2,6 @@
 //! digest of its bytes, and the message names it as a Markdown image, `![name](furb-image://<digest>.<extension>)`.
 //! The provider hands a model each image that the message of a prompt of a user turn names, and each image that a read
 //! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{HashMap, HashSet},
@@ -171,21 +170,20 @@ pub fn references(message: &str) -> Vec<Named> {
 fn placed(message: &str) -> Vec<(usize, Named)> {
   let mut found = Vec::new();
   let mut from = 0;
-  while let Some(at) = message[from..].find("![") {
+  while let Some(at) = message.get(from..).and_then(|rest| rest.find("![")) {
     let open = from + at;
     from = open + 2;
-    let rest = &message[from..];
-    let Some(close) = rest.find(']') else { break };
-    let Some((uri, _)) = rest[close + 1..].strip_prefix('(').and_then(|tail| tail.split_once(')'))
-    else {
+    let rest = message.get(from..).unwrap_or_default();
+    let Some((name, after)) = rest.split_once(']') else { break };
+    let Some((uri, _)) = after.strip_prefix('(').and_then(|tail| tail.split_once(')')) else {
       continue;
     };
     if parts(uri).is_none() {
       continue;
     }
-    let end = from + close + 1 + uri.len() + 2;
-    let (name, uri) = (rest[..close].to_owned(), uri.to_owned());
-    found.push((open, Named { text: message[open..end].to_owned(), name, uri }));
+    let end = from + name.len() + 1 + uri.len() + 2;
+    let text = message.get(open..end).unwrap_or_default().to_owned();
+    found.push((open, Named { text, name: name.to_owned(), uri: uri.to_owned() }));
     from = end;
   }
   found

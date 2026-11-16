@@ -29,8 +29,6 @@
 //! of the local server only when the catalog offers no other model.
 //!
 //! [`local`]: super::local
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -691,7 +689,7 @@ pub fn clamp<'a>(efforts: &[&'a str], level: &str) -> Option<&'a str> {
   let Some(at) = LEVELS.iter().position(|one| *one == level) else {
     return efforts.first().copied();
   };
-  let mut near = LEVELS[at..].iter().chain(LEVELS[..at].iter().rev());
+  let mut near = LEVELS.iter().skip(at).chain(LEVELS.iter().take(at).rev());
   near.find_map(|one| efforts.iter().find(|taken| *taken == one).copied())
 }
 
@@ -895,9 +893,11 @@ impl Listed {
   /// the value of the place before it, so a value that names a place stands as it is.
   fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, Unreached> {
     let (mut filled, mut from) = (api.to_owned(), 0);
-    while let Some(at) = filled[from..].find("${").map(|at| from + at) {
-      let Some(end) = filled[at..].find('}').map(|end| at + end) else { break };
-      let name = filled[at + 2..end].to_owned();
+    while let Some(at) = filled.get(from..).and_then(|rest| rest.find("${")).map(|at| from + at) {
+      let Some(end) = filled.get(at..).and_then(|rest| rest.find('}')).map(|end| at + end) else {
+        break;
+      };
+      let name = filled.get(at + 2..end).unwrap_or_default().to_owned();
       let value = self.aliases.get(&name).and_then(|alias| env(alias)).or_else(|| env(&name));
       let value = value.ok_or_else(|| Unreached::Unfilled { name: name.clone() })?;
       filled.replace_range(at..=end, &value);

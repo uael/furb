@@ -1,7 +1,6 @@
 //! One conversation of the claude command line: what it is fixed at, where it stands, the turns
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -229,8 +228,8 @@ impl Conversation {
         .any(|block| matches!(block, AssistantContent::Text(text) if stands(&text.text))),
       _ => false,
     });
-    let setup =
-      stand.and_then(|at| past[..at].iter().rposition(|one| matches!(one, Message::User { .. })));
+    let setup = stand
+      .and_then(|at| past.iter().take(at).rposition(|one| matches!(one, Message::User { .. })));
     for (at, message) in past.iter().enumerate().skip(covered) {
       let (role, content): (&'static str, Vec<Value>) = match message {
         Message::System { .. } => continue,
@@ -238,9 +237,9 @@ impl Conversation {
           let mut blocks: Vec<Value> = content.iter().map(said).collect::<Result<_, _>>()?;
           if Some(at) == setup
             && !self.marked
-            && let Some(last) = blocks.last_mut()
+            && let Some(last) = blocks.last_mut().and_then(Value::as_object_mut)
           {
-            last["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
+            last.insert("cache_control".to_owned(), json!({"type": "ephemeral", "ttl": lasting()}));
             self.marked = true;
           }
           ("user", blocks)
@@ -249,7 +248,8 @@ impl Conversation {
           ("assistant", content.iter().flat_map(resumed).collect())
         }
       };
-      self.said.push(Said { start: at, meaning: vec![meaning[at].clone()], role, content });
+      let meaning = meaning.get(at).cloned().into_iter().collect();
+      self.said.push(Said { start: at, meaning, role, content });
     }
     Ok(())
   }
@@ -277,7 +277,7 @@ impl Conversation {
     let last = incoming.len().saturating_sub(1);
     let grown = match (&self.asked, messages.last()) {
       (Some(asked), Some(now))
-        if self.chain.len() == incoming.len() && incoming[..last] == self.chain[..last] =>
+        if self.chain.len() == incoming.len() && incoming.get(..last) == self.chain.get(..last) =>
       {
         gained(asked, now)
       }
@@ -293,9 +293,10 @@ impl Conversation {
     };
     let again = grown.is_some() || start.is_some_and(|at| at > 0 && at == incoming.len());
     let anew = start.is_none() || again && self.again;
+    let from = |at: usize| messages.get(if again { last } else { at }..).unwrap_or_default();
     let mut delta = match (start, &grown) {
       (Some(_), Some(one)) if !anew => slice::from_ref(one),
-      (Some(at), None) if !anew => &messages[if again { last } else { at }..],
+      (Some(at), None) if !anew => from(at),
       _ => {
         self.renew()?;
         messages
@@ -448,7 +449,7 @@ impl Conversation {
     let line =
       format!("{}\n", json!({"type": "user", "message": message, "client_composed": true}));
     let start = outcome.incoming.len().saturating_sub(delta.len());
-    let meaning = outcome.incoming[start..].to_vec();
+    let meaning = outcome.incoming.get(start..).unwrap_or_default().to_vec();
     let line_said = Said { start, meaning, role: "user", content };
     // A process spends what it started at, so a turn at another effort or another most of thought
     // ends it.
@@ -519,8 +520,10 @@ impl Conversation {
     // The cost that the result says holds the request of this turn, and no request of an earlier
     // turn that failed, which this turn pays.
     let owed: f64 = mem::take(&mut self.unpaid).iter().map(Unpaid::cost).sum();
-    let cost = response.raw["cost"].as_f64().unwrap_or_default();
-    response.raw["cost"] = json!(cost + owed);
+    if let Some(raw) = response.raw.as_object_mut() {
+      let cost = raw.get("cost").and_then(Value::as_f64).unwrap_or_default();
+      raw.insert("cost".to_owned(), json!(cost + owed));
+    }
     Ok((response, process))
   }
 
@@ -716,7 +719,7 @@ fn gained(heard: &Message, now: &Message) -> Option<Message> {
     return None;
   };
   let text = is.text.strip_prefix(was.text.as_str())?.trim_start();
-  let blocks = now[1..].strip_prefix(&heard[1..])?;
+  let blocks = now.get(1..)?.strip_prefix(heard.get(1..)?)?;
   let text = (!text.is_empty()).then(|| UserContent::text(text));
   let content: Vec<UserContent> = text.into_iter().chain(blocks.iter().cloned()).collect();
   (!content.is_empty()).then_some(Message::User { content })
@@ -753,10 +756,11 @@ fn pinned(command: &mut process::Command) {
 /// three of the four that a request takes: its own prompt, the system prompt and the end of the
 /// request.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
-  let stand = |one: &Value| one["text"].as_str().is_some_and(stands);
-  if let Some(at) = (2..blocks.len()).find(|&at| !*marked && stand(&blocks[at])) {
-    // The block before it frames the turn as one of the model.
-    blocks[at - 2]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
+  let stand = |one: &Value| one.get("text").and_then(Value::as_str).is_some_and(stands);
+  let at = (2..blocks.len()).find(|&at| !*marked && blocks.get(at).is_some_and(stand));
+  // The block before it frames the turn as one of the model.
+  if let Some(frame) = at.and_then(|at| blocks.get_mut(at - 2)).and_then(Value::as_object_mut) {
+    frame.insert("cache_control".to_owned(), json!({"type": "ephemeral", "ttl": lasting()}));
     *marked = true;
   }
 }

@@ -1,7 +1,6 @@
 //! The protocol of pi-ai itself, which the gateway Radius speaks: a request is the model, the context of a turn and
 //! its options, which one post to `<address>/messages` carries, and the reply streams as the events of pi-ai, each a
 //! line of data of its own.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::collections::VecDeque;
 
@@ -155,7 +154,7 @@ impl Heard {
       let Some(at) = self.buffer.windows(2).rposition(|two| two == b"\n\n") else { continue };
       let rest = self.buffer.split_off(at + 2);
       let whole = mem::replace(&mut self.buffer, rest);
-      for block in String::from_utf8_lossy(&whole[..at]).split("\n\n") {
+      for block in String::from_utf8_lossy(whole.get(..at).unwrap_or_default()).split("\n\n") {
         let data = block.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim);
         let Some(data) = data.filter(|one| *one != "[DONE]") else { continue };
         match serde_json::from_str(data) {

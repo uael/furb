@@ -2,7 +2,6 @@
 //! the types that serde reads. A field that the protocol gives is required here, so an event that
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -411,8 +410,8 @@ impl<'a> Reply<'a> {
       if let Some(streamed) = &self.streamed {
         let at = streamed.get(&self.settled).copied();
         self.settled += 1;
-        if let (Some(at), Some(block)) = (at, block) {
-          self.blocks[at] = block;
+        if let (Some(at), Some(block)) = (at.and_then(|at| self.blocks.get_mut(at)), block) {
+          *at = block;
         }
       } else {
         let Some(block) = block else { continue };
