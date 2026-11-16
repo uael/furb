@@ -146,8 +146,8 @@ engine, a whole JavaScript number is an int and a number with a fraction is a fl
 form, `{"is":"float","args":["2"]}`. A whole number past the safe range is refused, since JavaScript holds it
 rounded: send a BigInt, or the `int` form above. A BigInt past 64 bits reaches the engine as its digits in a
 string. `inspect(name, chain)` also gives the Python type and representation of a value. It runs no code of the
-life, so the representation is empty for a value whose own representation is code of the life, as an instance of a
-class that a model wrote.
+life, so a value whose own representation is code of the life, as an instance of a class that a model wrote, shows
+by its fields, as a debugger shows it.
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
 precision before JavaScript can round a number. Every act the host makes enters the record, a query among them, and

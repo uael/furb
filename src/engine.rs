@@ -476,6 +476,44 @@ impl Kept {
   }
 }
 
+/// How deep the representation of a value by its fields goes: a part below shows as `…`.
+const FIELDS: usize = 3;
+
+/// A value as a debugger shows it, from the value as it went out of the sandbox, so no code of the life runs: an
+/// instance of a class of the life by its fields, as `P(x=1)`, a list, a tuple, a set or a dict by its parts, each
+/// the same way, and any other value as the host writes it.
+fn fields(value: ObjectRef<'_>, depth: usize) -> String {
+  if depth >= FIELDS {
+    return "…".to_owned();
+  }
+  let pairs = value.pairs().unwrap_or_default();
+  let at = |name: &str| pairs.iter().find(|one| one.0.as_str() == Some(name)).map(|one| one.1);
+  if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("instance") {
+    let inner = at("value").and_then(|one| Some((one.pairs()?, one.type_name().to_owned())));
+    let Some((attributes, class)) = inner else { return value.py_repr() };
+    let shown = attributes.iter().map(|(name, one)| {
+      format!("{}={}", name.as_str().unwrap_or_default(), fields(*one, depth + 1))
+    });
+    return format!("{class}({})", shown.collect::<Vec<_>>().join(", "));
+  }
+  let shown = |items: Vec<ObjectRef<'_>>| -> Vec<String> {
+    items.into_iter().map(|one| fields(one, depth + 1)).collect()
+  };
+  match (value.type_name(), value.items()) {
+    ("list", Some(items)) => return format!("[{}]", shown(items).join(", ")),
+    ("tuple", Some(items)) => return format!("({})", shown(items).join(", ")),
+    ("set" | "frozenset", Some(items)) => return format!("{{{}}}", shown(items).join(", ")),
+    _ => {}
+  }
+  if value.type_name() == "dict" {
+    let pairs = pairs
+      .iter()
+      .map(|(key, one)| format!("{}: {}", fields(*key, depth + 1), fields(*one, depth + 1)));
+    return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
+  }
+  value.py_repr()
+}
+
 /// The read of a name of a module, which gives the name of the type of its value, its representation when no code of
 /// the life makes it, and the value. A value of the builtins or of the engine, or a list, a tuple, a set or a dict of
 /// them, has a representation that no model wrote.
@@ -1020,8 +1058,8 @@ impl Engine {
   /// One name that the module of a chain binds, the root when no chain is given, read without calling it: the name
   /// of its type, its representation, and its value, which goes out as every value does. The read runs no code of
   /// the life, so it makes no act and no fact: the representation is the one of a value of the builtins or of the
-  /// engine, or of a container of such values, and empty for any other value, whose own representation is code that
-  /// a model may have written.
+  /// engine, or of a container of such values, and any other value shows as a debugger shows it, an instance by its
+  /// fields, since its own representation is code that a model may have written.
   pub fn inspect(
     &mut self,
     name: &str,
@@ -1034,7 +1072,9 @@ impl Engine {
     let text =
       |at| entry(&got, at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
     let value = entry(&got, 2).map_or_else(Object::none, |one| one.to_owned());
-    Ok((text(0), text(1), value))
+    let shown =
+      Some(text(1)).filter(|one| !one.is_empty()).unwrap_or_else(|| fields(value.as_ref(), 0));
+    Ok((text(0), shown, value))
   }
 
   /// Every name that the module of a chain binds, the root when no chain is given, in the order it bound them.

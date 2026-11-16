@@ -341,8 +341,8 @@ pub struct Outcome {
 }
 
 /// One name of a chain, read without calling it: the name, the name of its type, its representation in the sandbox,
-/// and its value, which crosses as every value does. The read runs no code of the life, so the representation is
-/// empty for a value whose own representation is code of the life.
+/// and its value, which crosses as every value does. The read runs no code of the life, so a value whose own
+/// representation is code of the life shows by its fields, as a debugger shows it.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Inspection {

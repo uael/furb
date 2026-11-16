@@ -3043,7 +3043,7 @@
             "answer",
             "data"
           ],
-          "description": "A name of a module: the name of its type, its representation, and its value as JSON. The read\nruns no code of the life, so the representation is empty for a value whose own representation\nis code of the life."
+          "description": "A name of a module: the name of its type, its representation, and its value as JSON. The read\nruns no code of the life, so a value whose own representation is code of the life shows by\nits fields, as a debugger shows it."
         },
         {
           "type": "object",
