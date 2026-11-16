@@ -138,3 +138,31 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   )
   (stood,) = furb.record.recorded(vars(furb.python), [wrote])
   assert stood[0][4:] == (engine.Text("a", "<A at 0x2>"), ["<B at 0x2>"], {"c": "<C at 0x2f>"})
+
+
+async def test_a_word_that_awaits_each_command_pays_one_wants_for_each_and_nothing_more() -> None:
+  """The cost of an await, counted as facts, which no load changes: a word that awaits each of its commands says one
+  wants for each, which its rung starts and ends and the journal keeps once, and each command says the same facts as
+  one that the word does not await."""
+
+  async def said(word: str) -> list[tuple]:
+    _, log, root = born(word)
+    asked = engine.prompt(int, "go", on=root)
+    for _ in range(100):
+      await settle()
+      if engine.peek(asked) is not None:
+        break
+    return log
+
+  made = await said("for _ in range(10):\n  bash('x')\nclose(1)")
+  awaited = await said("for _ in range(10):\n  await bash('x')\nclose(1)")
+  wants = {a[1] for a in awaited if a[0] == "wants"}
+  assert len(wants) == 10
+  assert sorted(a[0] for a in awaited if a[1] in wants) == ["done"] * 10 + ["started"] * 10 + ["wants"] * 10
+  assert sum(a[0] == "keep" and a[3][0][1] in wants for a in awaited) == 10
+
+  def of_commands(log: list[tuple]) -> list[tuple]:
+    commands = {a[1] for a in log if a[0] == "bash"}
+    return [a[:2] for a in log if a[1] in commands or (a[0] == "keep" and a[3][0][1] in commands)]
+
+  assert sorted(of_commands(awaited)) == sorted(of_commands(made))
