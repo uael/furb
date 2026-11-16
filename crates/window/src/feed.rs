@@ -469,9 +469,9 @@ impl Feed<'_> {
 
   /// The box of an image that a text names, whose rows a row of a line makes, from a column and in
   /// a room of columns, which the image fills once its machine gave it. Its first row names it
-  /// under the image, so a box that the edge of the feed cuts, where the image cannot draw a part
-  /// of itself, still says what it holds. An image that does not draw takes one row, which says
-  /// why.
+  /// while it comes, and its first and its last rows under the image, so a box that the foot or
+  /// the head of the feed cuts, where the image cannot draw a part of itself, still says what it
+  /// holds. An image that does not draw takes one row, which says why.
   fn picture(
     &self,
     named: &images::Named,
@@ -491,8 +491,11 @@ impl Feed<'_> {
         rows.extend(said(format!("{PICTURE}{} does not show: {why}", named.name)));
       }
       held => {
-        rows.splice(0..1, said(format!("{PICTURE}{}", named.name)).take(1));
+        let name = || said(format!("{PICTURE}{}", named.name)).take(1);
+        rows.splice(0..1, name());
         if let Some(Picture::Held(_)) = held {
+          let last = rows.len() - 1;
+          rows.splice(last.max(1).., name().take(last));
           let source = named.uri.clone();
           rows[0].picture = Some(Boxed { source, x, y: 0, wide, high });
         }

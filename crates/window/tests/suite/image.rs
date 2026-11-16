@@ -131,11 +131,14 @@ fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
   app.paste("shot.png");
   sent(&app, &format!(" {ANSWERS}"));
   // The wheel takes the feed on until the image draws whole, then back until its box crosses the
-  // foot of the feed, where the image cannot draw a part of itself: its row names it there.
+  // foot of the feed, where the image cannot draw a part of itself: its first row names it there.
+  // Then on until its box crosses the head of the feed, where its last row names it.
   let drawn = |frame: &str| {
     frame.lines().any(|row| row.chars().nth(2).is_some_and(|one| ('▀'..='▟').contains(&one)))
   };
-  let named = |frame: &str| frame.lines().any(|row| row.trim_end() == "┃ ▣ image-1.png");
+  // A row of the feed alone, as the list stands at its right.
+  let feed = |row: &str| row.chars().take(50).collect::<String>().trim_end().to_owned();
+  let named = |frame: &str| frame.lines().any(|row| feed(row) == "┃ ▣ image-1.png");
   let (x, y) = (10, 5);
   let turned = |down: bool, found: &dyn Fn(&str) -> bool| {
     let reached = app.wait_until(PATIENCE, || {
@@ -146,4 +149,6 @@ fn an_image_whose_box_the_edge_of_the_feed_cuts_names_it_there() {
   };
   turned(true, &drawn);
   turned(false, &named);
+  turned(true, &drawn);
+  turned(true, &named);
 }
