@@ -135,7 +135,7 @@ impl Model {
   }
 
   /// The column of the list at a column of the window, past the padding of its panel.
-  fn list_column(&self, x: u16) -> Option<usize> {
+  pub(crate) fn list_column(&self, x: u16) -> Option<usize> {
     usize::from(x).checked_sub(usize::from(self.size.0.saturating_sub(self.list_width())) + 1)
   }
 }

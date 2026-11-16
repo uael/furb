@@ -18,7 +18,7 @@ use std::{
 };
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
+use furb_client::{Ask, Asked, Client, ENDS, HOLD, Hold, Listing, Step, Time};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event, ProtocolError,
@@ -429,12 +429,7 @@ impl Model {
         self.jump();
       }
       // The bar of an open box shows its other split, and each other row folds it.
-      Some(Row::Context(1))
-        if self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context)) =>
-      {
-        self.client.split_again();
-      }
-      Some(Row::Context(_)) => self.fold_context(),
+      Some(Row::Context(at)) => self.context_clicked(at),
       Some(Row::Changes(at)) => return self.changes_clicked(at),
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;

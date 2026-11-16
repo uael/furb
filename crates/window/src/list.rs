@@ -114,21 +114,7 @@ impl Model {
       Row::Resolved(card) => self.resolved(card, self.ground(card, at(pointed))),
       Row::Changes(at) => self.changes_line(at, pointed == Some(row)),
       Row::Context(at) => {
-        let line = self.context_rows().into_iter().nth(at).unwrap_or_default();
-        // The text of the box goes bright under the pointer, and its colored cells keep their
-        // colors.
-        let lit = |one: Span<'static>| {
-          let cells = one.content.starts_with(['━', '■']);
-          let style = if cells { one.style } else { one.style.fg(t.hover) };
-          run(one.content, style)
-        };
-        // The box takes a click once an answer told the context, which its parts then show.
-        let told = self.client.thread.as_ref().is_some_and(|one| one.thread.context.is_some());
-        if told && matches!(pointed, Some(Row::Context(_))) {
-          line.into_iter().map(lit).collect()
-        } else {
-          line
-        }
+        self.context_line(at, (matches!(pointed, Some(Row::Context(_))), pointed == Some(row)))
       }
     }
   }
