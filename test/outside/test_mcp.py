@@ -184,6 +184,13 @@ async def asked(root: str, kind: str, words: str = "") -> object:
   return await engine.rung(f"close(await act({kind!r}, '', None, {words}))", on=root)
 
 
+async def controlled(root: str, words: str) -> dict:
+  """What a control of the kit on the root comes to: the state of its server."""
+  got = await asked(root, "mcp_control", words)
+  assert isinstance(got, dict)
+  return got
+
+
 async def refused(root: str, kind: str, words: str = "") -> str:
   """Why an act of the kit on the root is refused."""
   with pytest.raises(Refused) as no:
@@ -287,13 +294,13 @@ async def controls_write_the_local_scope(place: Place, root: str, local: Path) -
   def written() -> object:
     return json.loads(local.read_text())
 
-  assert (await asked(root, "mcp_control", "'approve', 'shared'"))["state"] == "connected"
+  assert (await controlled(root, "'approve', 'shared'"))["state"] == "connected"
   assert written() == {"theme": "kept", "approved": ["shared"]}
-  assert (await asked(root, "mcp_control", "'disable', 'shared'"))["state"] == "disabled"
+  assert (await controlled(root, "'disable', 'shared'"))["state"] == "disabled"
   assert written() == {"theme": "kept", "approved": ["shared"], "enabled": [], "disabled": ["shared"]}
-  assert (await asked(root, "mcp_control", "'enable', 'off'"))["state"] == "connected"
+  assert (await controlled(root, "'enable', 'off'"))["state"] == "connected"
   assert written() == {"theme": "kept", "approved": ["shared"], "enabled": ["off"], "disabled": ["shared"]}
-  assert (await asked(root, "mcp_control", "'reconnect', 'off'"))["state"] == "connected"
+  assert (await controlled(root, "'reconnect', 'off'"))["state"] == "connected"
   assert len(place.starts()) == 3, "the approval, the enable and the reconnect each started a process"
   assert (
     await refused(root, "mcp_control", "'reconnect', 'shared'")
