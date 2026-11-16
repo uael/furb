@@ -23,8 +23,8 @@ use crate::{
   line::{Line, balanced, capital, run, spread, wrapped},
   list::{NO_PROJECT, project},
   model::{Key, Model},
-  thread::{Click, Row, hued},
-  tokens::{BESIDE, OVER, PART, PARTS, Role},
+  thread::{Click, Row, hued, width},
+  tokens::{APART, BESIDE, OVER, PART, PARTS, Role},
 };
 
 /// What a list part lists.
@@ -59,14 +59,16 @@ pub(crate) enum Pick {
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, the place of the
-/// chosen row among those that pass the filter, and in the list of the models the effort that the
-/// arrows chose for a model, by its name, which the model takes with its row.
+/// chosen row among those that pass the filter, in the list of the models the effort that the
+/// arrows chose for a model, by its name, which the model takes with its row, and in the settings
+/// the group whose keys show while no text filters them, empty for the first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Picker {
   pub(crate) of: Pick,
   pub(crate) filter: String,
   pub(crate) at: usize,
   pub(crate) effort: Option<(String, String)>,
+  pub(crate) tab: String,
 }
 
 /// What a row of a list part takes.
@@ -241,7 +243,7 @@ impl Model {
       self.client.notice = Some(why);
       return;
     }
-    self.picker = Some(Picker { of, filter, at: 0, effort: None });
+    self.picker = Some(Picker { of, filter, at: 0, effort: None, tab: String::new() });
     self.chose(0);
     // The sessions open on the one that the input sends to, and the models on the one in use.
     let now = match self.client.target() {
@@ -273,6 +275,10 @@ impl Model {
       Pick::History => self.sent(),
       Pick::Session => self.session_choices(),
       Pick::Leave => self.leave_choices(),
+      Pick::Settings if picker.filter.is_empty() => {
+        let tab = self.tab();
+        self.settings().into_iter().filter(|one| one.part == tab).collect()
+      }
       Pick::Settings => self.settings(),
       Pick::Skills => self.played(),
       // The filter is the value that he writes, so it hides no row.
@@ -591,6 +597,13 @@ impl Model {
   /// catalog of its machine gives, which its row then shows and takes. Whether the list took the
   /// key: a row of another list leaves it to the input.
   pub(crate) fn leaned(&mut self, by: isize) -> bool {
+    if self.picker.as_ref().is_some_and(|one| one.of == Pick::Settings && one.filter.is_empty()) {
+      let tabs = self.tabs();
+      let now = tabs.iter().position(|one| *one == self.tab()).unwrap_or_default();
+      let next = now.saturating_add_signed(by).min(tabs.len().saturating_sub(1));
+      self.tabbed(tabs.get(next).cloned().unwrap_or_default());
+      return true;
+    }
     let Some(at) = self.picker.as_ref().filter(|one| one.of == Pick::Models).map(|one| one.at)
     else {
       return false;
@@ -611,6 +624,43 @@ impl Model {
       picker.effort = Some((model.name.clone(), next));
     }
     true
+  }
+
+  /// The groups of the settings, as tabs, in the order of their keys: furb, each kit, then the
+  /// keys that no schema names.
+  fn tabs(&self) -> Vec<String> {
+    let mut tabs: Vec<String> = Vec::new();
+    for one in self.settings() {
+      if !one.part.is_empty() && !tabs.iter().any(|tab| *tab == one.part) {
+        tabs.push(one.part.into_owned());
+      }
+    }
+    tabs
+  }
+
+  /// The group of the settings that shows: the one that he chose, else the first.
+  fn tab(&self) -> String {
+    let chosen = self.picker.as_ref().map(|one| one.tab.clone()).filter(|one| !one.is_empty());
+    chosen.or_else(|| self.tabs().into_iter().next()).unwrap_or_default()
+  }
+
+  /// The settings on a group, on its first key.
+  pub(crate) fn tabbed(&mut self, tab: String) {
+    if let Some(picker) = self.picker.as_mut() {
+      (picker.tab, picker.at) = (tab, 0);
+    }
+  }
+
+  /// The settings again after he wrote the value of a key, on its group and on its row.
+  fn set_back(&mut self, place: usize) {
+    let tab = self.settings().into_iter().find(|one| one.choice == Choice::Setting(place));
+    let tab = tab.map(|one| one.part.into_owned()).unwrap_or_default();
+    self.picker =
+      Some(Picker { of: Pick::Settings, filter: String::new(), at: 0, effort: None, tab });
+    let at = self.entries().iter().position(|one| one.choice == Choice::Setting(place));
+    if let Some(picker) = self.picker.as_mut() {
+      picker.at = at.unwrap_or_default();
+    }
   }
 
   /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in in the
@@ -687,14 +737,14 @@ impl Model {
   /// that a row names is done by the hand, which this gives.
   pub(crate) fn took(&mut self, at: usize) -> Option<Does> {
     let entry = self.entries().into_iter().nth(at)?;
-    let (of, filter) = self.picker.take().map(|one| (one.of, one.filter))?;
+    let (of, filter, tab) = self.picker.take().map(|one| (one.of, one.filter, one.tab))?;
     match entry.choice {
       Choice::Thread(key) => self.went(key),
       Choice::Session(target) => self.aimed(target),
       Choice::Visit(at, life) => self.visited(at, life),
       Choice::Added(text) => self.client.added(&text),
       Choice::Project(name) => {
-        self.picker = Some(Picker { of, filter: name, at: 0, effort: None });
+        self.picker = Some(Picker { of, filter: name, at: 0, effort: None, tab: String::new() });
       }
       Choice::Actor(actor) => self.took_actor(actor),
       Choice::Sent(sent) => self.client.recall(&sent),
@@ -704,24 +754,24 @@ impl Model {
       Choice::Leave(control) => self.left_with(control),
       Choice::Setting(place) => {
         self.picker = Some(if self.client.step_setting(place) {
-          Picker { of, filter, at, effort: None }
+          Picker { of, filter, at, effort: None, tab }
         } else {
           Picker {
             of: Pick::Value(place),
             filter: self.client.setting_text(place),
             at: 0,
             effort: None,
+            tab: String::new(),
           }
         });
       }
       Choice::Value(place) => {
         self.client.write_setting(place, &filter);
-        self.picker =
-          Some(Picker { of: Pick::Settings, filter: String::new(), at: place, effort: None });
+        self.set_back(place);
       }
       Choice::Skill(place) => {
         if self.client.turn_skill(place) {
-          self.picker = Some(Picker { of, filter, at, effort: None });
+          self.picker = Some(Picker { of, filter, at, effort: None, tab: String::new() });
         } else if let Some(one) = self.client.skill_at(place) {
           let mention = format!("/{}", one.name);
           self.client.added(&mention);
@@ -741,7 +791,9 @@ impl Model {
         }
         self.sign_in_shown(of);
       }
-      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at, effort: None }),
+      Choice::None => {
+        self.picker = Some(Picker { of, filter: String::new(), at, effort: None, tab });
+      }
     }
     None
   }
@@ -750,9 +802,10 @@ impl Model {
   /// filter hides them, with its first row chosen: the page of the sign-in once the machine gives
   /// it, and never its cancel, which an enter would take.
   fn sign_in_shown(&mut self, of: Pick) {
-    self.picker = Some(Picker { of, filter: String::new(), at: 0, effort: None });
+    self.picker =
+      Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
     let at = self.entries().iter().position(|one| one.part == "Codex").unwrap_or_default();
-    self.picker = Some(Picker { of, filter: String::new(), at, effort: None });
+    self.picker = Some(Picker { of, filter: String::new(), at, effort: None, tab: String::new() });
   }
 
   /// The thread of a card opened in the window.
@@ -846,6 +899,9 @@ impl Model {
     if !rises {
       rows.extend([filter.clone(), Row::default()]);
     }
+    if picker.of == Pick::Settings && picker.filter.is_empty() {
+      rows.extend([self.tab_row(room), Row::default()]);
+    }
     let fits = usize::from(self.size.1).saturating_sub(2 * usize::from(OVER) + FRAME).max(1);
     let mut shown = self.shown_entries(&entries, picker, (room, fits));
     if rises {
@@ -867,6 +923,25 @@ impl Model {
     }
     let x = columns.saturating_sub(width) / 2;
     Some(Over { x, y: OVER, width, rows })
+  }
+
+  /// The tabs of the groups of the settings on one row, the one that shows in the accent, each of
+  /// which a click shows.
+  fn tab_row(&self, room: usize) -> Row {
+    let t = &self.tokens;
+    let now = self.tab();
+    let (mut line, mut hot) = (vec![run("  ", Style::new())], Vec::new());
+    for (at, tab) in self.tabs().into_iter().enumerate() {
+      if at > 0 {
+        line.push(run(" ".repeat(APART), Style::new()));
+      }
+      let look = if tab == now { t.style(Role::Title).fg(t.accent) } else { t.style(Role::Muted) };
+      let start = width(&line);
+      line.push(run(tab.clone(), look));
+      hot.push((start..width(&line), Some(Click::Tab(tab))));
+    }
+    let line = spread(line, Vec::new(), room + 2, Style::new());
+    Row { hot, ..Row::of(line) }
   }
 
   /// The rows of the entries that show, each between two columns on each side, each that takes
@@ -901,7 +976,8 @@ impl Model {
   }
 
   /// The keys that the foot of a list part names, in its room: to move, to change the effort of a
-  /// chosen model that takes one, to take the chosen row, to close. A model is taken for what the
+  /// chosen model that takes one, to change the group of the settings, to take the chosen row, to
+  /// close. A model is taken for what the
   /// input sends to: its session, or the new session. The key to move, which each list shares,
   /// gives way first.
   fn foot(&self, picker: &Picker, chosen: Option<&Entry>, room: usize) -> String {
@@ -915,10 +991,13 @@ impl Model {
     let moves = format!("{} move", [Does::Up, Does::Down].map(|one| self.key(one)).join(""));
     let effort = chosen.filter(|one| model && !one.right.is_empty());
     let effort = effort.map(|_| format!("{} effort", keys::drawn_each(Does::Lean, self.system)));
+    let tabbed = picker.of == Pick::Settings && picker.filter.is_empty();
+    let groups = tabbed.then(|| format!("{} group", keys::drawn_each(Does::Lean, self.system)));
     let takes = if link { "open the page" } else { picker.of.takes() };
     let takes = format!("{} {takes}{scope}", self.key(Does::Send));
     let close = format!("{} close", self.key(Does::Close));
-    let rest = effort.into_iter().chain([takes, close]).collect::<Vec<_>>().join(" · ");
+    let rest =
+      effort.into_iter().chain(groups).chain([takes, close]).collect::<Vec<_>>().join(" · ");
     let whole = format!("{moves} · {rest}");
     if whole.width() <= room { whole } else { rest }
   }
@@ -944,7 +1023,9 @@ impl Model {
     let badged = |part: &str| entries.iter().any(|one| one.part == part && one.project.is_some());
     let under = picker.of.describes();
     for (at, entry) in entries.iter().enumerate() {
-      if picker.filter.is_empty() && entry.part != part && !entry.part.is_empty() {
+      // The settings name their group in their tabs.
+      let tabbed = picker.of == Pick::Settings;
+      if picker.filter.is_empty() && !tabbed && entry.part != part && !entry.part.is_empty() {
         if !all.is_empty() {
           all.push((None, Vec::new()));
         }
@@ -1037,6 +1118,10 @@ impl Model {
     if let Some(row) = row {
       return match row.click(usize::from(x - over.x)) {
         Some(Click::Pick(at)) => self.took(at),
+        Some(Click::Tab(tab)) => {
+          self.tabbed(tab);
+          None
+        }
         _ => None,
       };
     }

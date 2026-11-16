@@ -106,7 +106,13 @@ impl Model {
   /// The choices for the session of the open thread, or for a session of Go to.
   pub(crate) fn act_on(&mut self, at: usize, life: String) {
     self.acts = Some(Acts::On(at, life));
-    self.picker = Some(Picker { of: Pick::Session, filter: String::new(), at: 0, effort: None });
+    self.picker = Some(Picker {
+      of: Pick::Session,
+      filter: String::new(),
+      at: 0,
+      effort: None,
+      tab: String::new(),
+    });
   }
 
   /// The choices for the session of the open thread, while one is open.
@@ -142,8 +148,13 @@ impl Model {
     }
     let first = self.leave_choices().iter().position(|one| matches!(one.choice, Choice::Leave(_)));
     self.armed = None;
-    self.picker =
-      Some(Picker { of: Pick::Leave, filter: String::new(), at: first.unwrap_or(0), effort: None });
+    self.picker = Some(Picker {
+      of: Pick::Leave,
+      filter: String::new(),
+      at: first.unwrap_or(0),
+      effort: None,
+      tab: String::new(),
+    });
     false
   }
 }

@@ -22,6 +22,7 @@ mod part;
 mod prose;
 mod question;
 mod screens;
+mod settings;
 mod skills;
 mod system;
 mod text;

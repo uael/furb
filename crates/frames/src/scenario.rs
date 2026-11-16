@@ -909,6 +909,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // A key of text takes the value that he writes, in the layer of its scope.
         step("d", &[Act::Type(".actor"), Act::Key("Enter")], "a string"),
         step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"  user"),
+        // The arrows show the group of the keys of furb, which a tab names beside each kit.
+        step("x-group", &[Act::Key("Left")], "max_thinking_tokens"),
         // A value that the property of its key does not take is refused, with what it takes.
         step(
           "f",

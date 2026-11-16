@@ -40,6 +40,8 @@ pub(crate) enum Click {
   Fold(Fold),
   Key(Does),
   Pick(usize),
+  /// A group of the settings, by its name, which shows.
+  Tab(String),
   Answer(usize),
   Agent(String),
   /// The feed moved to the line of the thread that binds a name, by its number, and the name.
@@ -574,6 +576,10 @@ impl Model {
         None
       }
       Click::Pick(at) => self.took(at),
+      Click::Tab(tab) => {
+        self.tabbed(tab);
+        None
+      }
       Click::Key(does) => Some(does),
       Click::Answer(at) => self.choose(at),
       Click::Agent(prompt) => {
