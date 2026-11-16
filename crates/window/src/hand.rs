@@ -440,7 +440,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
       head.set_text(shown.head.clone());
       panel.visible(shown.side.is_some());
       side.set_text(written(shown.side.as_deref().unwrap_or_default()));
-      scroll.position(Edge::Right, if shown.side.is_some() { width + 1 } else { 1 });
+      scroll.position(Edge::Right, if shown.side.is_some() { width + 2 } else { 2 });
       foot.set_text(shown.foot.clone());
       let view = if shown.split { DiffView::Split } else { DiffView::Unified };
       diff.set_diff(shown.diff.clone()).filetype(shown.kind).view(view);

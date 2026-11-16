@@ -126,7 +126,8 @@ impl Model {
       left.push(run(format!("  {} of {count}", review.chosen + 1), muted));
     }
     let counts = read.map(|one| self.counts(one.added, one.removed)).unwrap_or_default();
-    spread(left, counts, self.diff_width(), Style::new())
+    // The head starts two columns before the diff, at the column of the band of a thread.
+    spread(left, counts, self.diff_width() + 2, Style::new())
   }
 
   /// The head of the panel, as the head of the list: what it holds, and the lines that all the
@@ -229,10 +230,11 @@ impl Model {
     added.into_iter().chain(gap).chain(removed).collect()
   }
 
-  /// The columns of the diff: those that the panel leaves, less one on each side.
+  /// The columns of the diff: those that the panel leaves, less the column of the marks and one
+  /// before it, and two after it, so its band ends where the band of a thread ends.
   pub(crate) fn diff_width(&self) -> usize {
     let panel = if self.sided() { self.panel_width() } else { 0 };
-    usize::from(self.size.0.saturating_sub(panel + 2 + MARKS))
+    usize::from(self.size.0.saturating_sub(panel + 3 + MARKS))
   }
 
   /// Whether the panel of the files shows: where the list shows beside a thread.
