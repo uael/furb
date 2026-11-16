@@ -409,11 +409,10 @@ impl Peer {
     let (mut facts, mut frames) = (0, 0);
     loop {
       frames += 1;
-      match self.read().await {
-        Frame::Event { event: Event::Fact(_), .. } => facts += 1,
-        Frame::Event { event: Event::Act(act), .. }
-          if act.id == id && matches!(act.phase, Phase::Done(_)) =>
-        {
+      let Frame::Event { event, .. } = self.read().await else { continue };
+      match &*event {
+        Event::Fact(_) => facts += 1,
+        Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)) => {
           return (facts, frames);
         }
         _ => {}

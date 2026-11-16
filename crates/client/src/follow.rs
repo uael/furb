@@ -92,11 +92,14 @@ impl Client {
     }
   }
 
-  /// The follow-ups that wait on a chain of a life, as its machine pushed them.
-  pub(crate) fn queued(&mut self, at: usize, life: String, event: &Event) {
-    let (Event::Queued { chain, waiting }, Some(told)) = (event, self.machines.get_mut(at)) else {
-      return;
-    };
-    told.queued.entry(life).or_default().insert(chain.clone(), waiting.clone());
+  /// The follow-ups that wait on a chain of a life, as its machine pushed them, and whether the
+  /// frame holds them.
+  pub(crate) fn queued(&mut self, at: usize, frame: &Frame) -> bool {
+    let Frame::Event { life, event, .. } = frame else { return false };
+    let Event::Queued { chain, waiting } = &**event else { return false };
+    if let Some(told) = self.machines.get_mut(at) {
+      told.queued.entry(life.clone()).or_default().insert(chain.clone(), waiting.clone());
+    }
+    true
   }
 }

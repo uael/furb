@@ -2064,11 +2064,7 @@ impl Teller {
       let paced = event.is_none();
       let due = |opens: &&mut Heard| paced || opens.ended();
       let opening = opens.iter_mut().filter(due).flat_map(|opens| opens.frames(&life));
-      let event = event.map(|(seq, event)| Frame::Event {
-        life: life.clone(),
-        seq,
-        event: Event::clone(&event),
-      });
+      let event = event.map(|(seq, event)| Frame::Event { life: life.clone(), seq, event });
       if opening.chain(event).any(|frame| outbox.send(frame).is_err()) {
         break;
       }

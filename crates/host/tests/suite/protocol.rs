@@ -859,3 +859,15 @@ fn flat(at: &str, one: &Value, paths: &mut BTreeSet<String>) {
     }
   }
 }
+
+/// A frame of an event says the event that the log holds, in the same bytes as when the frame held
+/// a copy of it, so no window reads another frame.
+#[test]
+fn a_frame_of_an_event_says_the_same_bytes() {
+  let fact =
+    furb_host::Event::Fact(serde_json::json!(["done", "run1", "run1", 7, {"a": [1.5, null]}]));
+  let frame = Frame::Event { life: "/l.jsonl".to_owned(), seq: 3, event: fact.into() };
+  // The bytes of the frame when it held a copy of its event.
+  let held = r#"{"frame":"event","life":"/l.jsonl","seq":3,"event":{"event":"fact","data":["done","run1","run1",7,{"a":[1.5,null]}]}}"#;
+  assert_eq!(serde_json::to_string(&frame).unwrap(), held);
+}

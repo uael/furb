@@ -232,8 +232,8 @@ impl Model {
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.client.let_go(at, life);
       }
-      Ok(Frame::Event { life, event: Event::Ended(Some(fault)), .. }) => {
-        return self.failed(at, &life, fault);
+      Ok(Frame::Event { ref life, ref event, .. }) if let Event::Ended(Some(fault)) = &**event => {
+        return self.failed(at, life, fault.clone());
       }
       _ => {}
     }

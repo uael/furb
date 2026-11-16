@@ -233,6 +233,14 @@ async fn seen_by(window: &mut Window, life: &str, about: &str) -> Vec<String> {
   about.filter_map(|one| one[2].as_str().map(str::to_owned)).collect()
 }
 
+/// The event of a frame that holds one.
+fn event_of(frame: &Frame) -> Option<&Event> {
+  match frame {
+    Frame::Event { event, .. } => Some(event),
+    _ => None,
+  }
+}
+
 #[tokio::test]
 async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_each() {
   let at = place();
@@ -369,7 +377,7 @@ impl Window {
     // Each birth names its rungs anew, so a rung of an earlier birth that a window reads late
     // may hold the same name: the done of this one holds this word.
     let this = |frame: &Frame| {
-      matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      matches!(event_of(frame), Some(Event::Act(act))
         if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
     };
     self.until(this).await;
@@ -447,15 +455,15 @@ impl Window {
 /// Whether a frame is the act of a name, done.
 fn done(id: &str) -> impl Fn(&Frame) -> bool + '_ {
   move |frame| {
-    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+    matches!(event_of(frame), Some(Event::Act(act))
       if act.id == id && matches!(act.phase, Phase::Done(_)))
   }
 }
 
 /// The command that a rung of a door made, once its fact is pushed.
 async fn bashed(window: &mut Window, rung: &str) -> String {
-  let made = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(f), .. } if f[0] == "bash" && f[2] == rung);
-  let Frame::Event { event: Event::Fact(fact), .. } = window.until(made).await else {
+  let made = |frame: &Frame| matches!(event_of(frame), Some(Event::Fact(f)) if f[0] == "bash" && f[2] == rung);
+  let Some(Event::Fact(fact)) = event_of(&window.until(made).await).cloned() else {
     panic!("no fact")
   };
   fact[1].as_str().expect("the name of an act is a text").to_owned()
@@ -627,7 +635,7 @@ async fn a_window_ends_its_life_now_whatever_pins_hold_it_and_never_one_that_ano
   let pin = Verb::Pin { life: life.clone(), holder: "background".to_owned() };
   assert_eq!(first.ask(pin).await, Ok(Answer::Done));
   assert_eq!(first.ask(end()).await, Ok(Answer::Done));
-  first.until(|frame| matches!(frame, Frame::Event { event: Event::Ended(None), .. })).await;
+  first.until(|frame| matches!(event_of(frame), Some(Event::Ended(None)))).await;
   assert!(!first.lives(&life).await, "the life ends before its grace");
 }
 
@@ -641,11 +649,11 @@ async fn an_end_is_a_pause_whose_next_life_takes_its_open_work_and_a_kill_cancel
     let word = "await wait(2, __name__)".to_owned();
     let run = Verb::Run { life: life.clone(), word, on: None };
     assert!(matches!(window.ask(run).await, Ok(Answer::Act(_))));
-    let waits = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Act(act), .. } if act.kind == view::Kind::Wait);
-    let Frame::Event { event: Event::Act(wait), .. } = window.until(waits).await else { panic!() };
+    let waits = |frame: &Frame| matches!(event_of(frame), Some(Event::Act(act)) if act.kind == view::Kind::Wait);
+    let Some(Event::Act(wait)) = event_of(&window.until(waits).await).cloned() else { panic!() };
     let end = Verb::End { life: life.clone(), cancel };
     assert_eq!(window.ask(end).await, Ok(Answer::Done));
-    window.until(|frame| matches!(frame, Frame::Event { event: Event::Ended(None), .. })).await;
+    window.until(|frame| matches!(event_of(frame), Some(Event::Ended(None)))).await;
     open(&mut window, &at, "a.jsonl", None).await;
     let ended = Verb::Ended { life, act: wait.id.clone() };
     let Ok(Answer::Acts(acts)) = window.ask(ended).await else { panic!("no end of the wait") };
@@ -1234,14 +1242,10 @@ async fn a_window_of_a_life_born_again_hears_each_fact_of_the_life_once() {
   later.attach(&life).await;
   later.ran(&life, "y = 1").await;
   let facts_of = |window: &Window| -> Vec<Value> {
-    let facts = window.pushed.iter().filter_map(|frame| match frame {
+    let facts = window.pushed.iter().filter_map(|frame| match event_of(frame) {
       // The extensions teach when they load, which a birth may do after the rung that the test
       // runs, so the test counts none of their facts.
-      Frame::Event { event: Event::Fact(fact), .. }
-        if fact[0] != "keep" && fact[2] != "extensions" =>
-      {
-        Some(fact.clone())
-      }
+      Some(Event::Fact(fact)) if fact[0] != "keep" && fact[2] != "extensions" => Some(fact.clone()),
       _ => None,
     });
     facts.collect()
@@ -1272,7 +1276,7 @@ async fn a_fault_of_one_life_leaves_the_daemon_and_the_other_lives() {
   let bad = opened(&mut window, &at, "bad.jsonl").await;
   match window.ask(Verb::Attach { life: bad.clone(), from: 0 }).await {
     Ok(Answer::Done) => {
-      let ended = |frame: &Frame| matches!(frame, Frame::Event { life, event: Event::Ended(Some(_)), .. } if *life == bad);
+      let ended = |frame: &Frame| matches!(frame, Frame::Event { life, event, .. } if *life == bad && matches!(**event, Event::Ended(Some(_))));
       window.until(ended).await;
     }
     refused => assert_eq!(refused, Err(ProtocolError::Closed { life: bad.clone() })),
@@ -1332,7 +1336,7 @@ async fn a_window_that_attaches_a_life_that_a_fault_ended_hears_why() {
   window.ended(&life).await;
   assert_eq!(window.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Ok(Answer::Done));
   let why = SchemaError::BeforeCut { of: "record" }.to_string();
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(no)), .. } if *one == life && *no == why);
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
   window.until(ended).await;
 }
 
@@ -1348,7 +1352,7 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_its_window_unt
   fs::copy(before, at.join("before.jsonl")).unwrap();
   let life = open(&mut window, &at, "before.jsonl", Some(0)).await;
   let why = SchemaError::BeforeCut { of: "record" }.to_string();
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(no)), .. } if *one == life && *no == why);
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
   window.until(ended).await;
   let page = || Verb::Thread {
     life: life.clone(),
@@ -1416,7 +1420,7 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
     attach: Some(0),
   };
   assert_eq!(later.ask(verb).await, Ok(Answer::Done));
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(why)) if drift(why)));
   later.until(ended).await;
   let said = format!("furb host: the life of {life} ended: ");
   let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);
@@ -1508,7 +1512,7 @@ async fn a_handover_waits_for_each_command_in_flight_and_serves_each_window_mean
   let verb = Verb::Run { life: life.clone(), word, on: None };
   assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
   let runs = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+    matches!(event_of(frame), Some(Event::Act(act))
       if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
   };
   window.until(runs).await;
@@ -1547,7 +1551,7 @@ async fn a_handover_waits_only_for_the_commands_in_flight_at_its_ask() {
   window.attach(&life).await;
   let waits = |file: &str| format!("await bash('while [ ! -f {file} ]; do sleep 0.05; done')");
   let runs = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+    matches!(event_of(frame), Some(Event::Act(act))
       if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
   };
   let verb = Verb::Run { life: life.clone(), word: waits("go"), on: None };
@@ -1626,7 +1630,7 @@ async fn a_handover_that_a_life_asked_waits_for_no_command_of_that_life() {
   let verb = Verb::Run { life: life.clone(), word, on: None };
   assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
   let runs = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+    matches!(event_of(frame), Some(Event::Act(act))
       if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
   };
   window.until(runs).await;
@@ -1658,7 +1662,7 @@ async fn a_program_that_asks_the_handover_while_one_waits_takes_its_place_and_th
   let verb = Verb::Run { life: life.clone(), word, on: None };
   assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
   let runs = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+    matches!(event_of(frame), Some(Event::Act(act))
       if act.kind == view::Kind::Bash && !matches!(act.phase, Phase::Done(_)))
   };
   window.until(runs).await;
@@ -1746,7 +1750,7 @@ async fn asked_once_across_a_handover(by_record: bool) {
     on: None,
   };
   assert!(matches!(window.ask(prompt).await, Ok(Answer::Act(_))));
-  let waits = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Act(act), .. } if act.kind == view::Kind::Wait);
+  let waits = |frame: &Frame| matches!(event_of(frame), Some(Event::Act(act)) if act.kind == view::Kind::Wait);
   window.until(waits).await;
   let settings = Settings {
     opening,
@@ -2158,8 +2162,9 @@ async fn a_skill_answers_an_act_that_its_word_took_with_a_close() {
   skill.attach(&life).await;
   let word = "def taken(id):\n  yield 'started', id\n  yield from idle(id)\nadded = act('k.add', '', controlled(taken), 'milk')";
   writer.ran(&life, word).await;
-  let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "k.add");
-  let Frame::Event { event: Event::Fact(fact), .. } = skill.until(asked).await else {
+  let asked =
+    |frame: &Frame| matches!(event_of(frame), Some(Event::Fact(fact)) if fact[0] == "k.add");
+  let Some(Event::Fact(fact)) = event_of(&skill.until(asked).await).cloned() else {
     panic!("no act")
   };
   assert_eq!(fact[4], json!("milk"), "the skill hears the words of the act");
@@ -2327,12 +2332,13 @@ async fn a_window_that_answers_the_models_of_its_life_gives_each_turn() {
     thinking: "So.".to_owned(),
   };
   assert_eq!(window.ask(wrote(ask)).await, Ok(Answer::Done));
-  let thought = |one: &Frame| matches!(one, Frame::Event { event: Event::Text { thinking, .. }, .. } if thinking == "So.");
+  let thought =
+    |one: &Frame| matches!(event_of(one), Some(Event::Text { thinking, .. }) if thinking == "So.");
   window.until(thought).await;
   let turn = Some(json!(["assistant", "close('ok')", [500_000, 10, 0, 0, 0.0], null]));
   let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
   assert_eq!(window.ask(answered.clone()).await, Ok(Answer::Done));
-  let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+  let Some(Event::Act(act)) = event_of(&window.until(done(&id)).await).cloned() else {
     panic!("no act")
   };
   assert_eq!(act.value(), Some(&json!("ok")));
@@ -2387,7 +2393,7 @@ async fn a_peer_that_opens_with_answers_answers_in_the_place_of_one_that_is_gone
   let turn = Some(json!(["assistant", "close('ok')", [10, 10, 0, 0, 0.0], null]));
   let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
   assert_eq!(window.ask(answered).await, Ok(Answer::Done));
-  let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+  let Some(Event::Act(act)) = event_of(&window.until(done(&id)).await).cloned() else {
     panic!("no act")
   };
   assert_eq!(act.value(), Some(&json!("ok")));
@@ -2440,7 +2446,7 @@ async fn a_second_writer_cannot_answer_the_request_of_the_peer_that_answers_the_
   let turn = Some(json!(["assistant", "close('ok')", [10, 10, 0, 0, 0.0], null]));
   let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
   assert_eq!(window.ask(answered).await, Ok(Answer::Done));
-  let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+  let Some(Event::Act(act)) = event_of(&window.until(done(&id)).await).cloned() else {
     panic!("no act")
   };
   assert_eq!(act.value(), Some(&json!("ok")));
@@ -2458,7 +2464,7 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
   let given = Door::Bash { command: text("cat"), stdin: Some(text("given\n")) };
   let Ok(Answer::Act(rung)) = window.ask(run(given)).await else { panic!("no command") };
   let given = bashed(&mut window, &rung).await;
-  let Frame::Event { event: Event::Act(act), .. } = window.until(done(&given)).await else {
+  let Some(Event::Act(act)) = event_of(&window.until(done(&given)).await).cloned() else {
     panic!("no act")
   };
   assert!(act.value().is_some_and(|exit| exit.to_string().contains("given")), "{act:?}");
@@ -2469,7 +2475,7 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
     let write = Door::Write { path: format!("{fed}/stdin"), content: text(content) };
     assert!(matches!(window.ask(run(write)).await, Ok(Answer::Act(_))));
   }
-  let Frame::Event { event: Event::Act(act), .. } = window.until(done(&fed)).await else {
+  let Some(Event::Act(act)) = event_of(&window.until(done(&fed)).await).cloned() else {
     panic!("no act")
   };
   assert!(act.value().is_some_and(|exit| exit.to_string().contains("fed")), "{act:?}");
@@ -2505,7 +2511,7 @@ fn stall(frame: &Frame) -> bool {
 
 /// Whether a frame is the fact of a prompt of None, the message of a stall to the root.
 fn message(frame: &Frame) -> bool {
-  matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+  matches!(event_of(frame), Some(Event::Fact(fact))
     if fact[0] == "prompt" && fact[3] == "chain1" && fact[4] == "None")
 }
 
@@ -2550,7 +2556,7 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
   assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
   assert!(acts.iter().any(|one| one.kind == "run" && one.chain == "chain1"), "{acts:?}");
   assert!(notice.contains("1.5 seconds") && notice.contains(" on chain1"), "{notice}");
-  let Frame::Event { event: Event::Fact(sent), .. } = window.until(message).await else {
+  let Some(Event::Fact(sent)) = event_of(&window.until(message).await).cloned() else {
     unreachable!()
   };
   assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
@@ -2665,7 +2671,7 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
   assert!(!acts.iter().any(|one| one.kind == "run"), "no run is open: {acts:?}");
   let told = |frame: &Frame| {
     message(frame)
-      && matches!(frame, Frame::Event { event: Event::Fact(sent), .. } if sent[5] == notice.as_str())
+      && matches!(event_of(frame), Some(Event::Fact(sent)) if sent[5] == notice.as_str())
   };
   window.until(told).await;
   window.left(&life).await;
@@ -2689,10 +2695,10 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
   assert!(side != "chain1" && acts.iter().all(|one| one.chain == side), "{acts:?}");
   assert!(acts.iter().any(|one| one.kind == "rung"), "{acts:?}");
   let taken = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+    matches!(event_of(frame), Some(Event::Fact(fact))
       if fact[0] == "prompt" && fact[3] == side.as_str() && fact[4] == "None")
   };
-  let Frame::Event { event: Event::Fact(sent), .. } = window.until(taken).await else {
+  let Some(Event::Fact(sent)) = event_of(&window.until(taken).await).cloned() else {
     unreachable!()
   };
   assert_eq!(sent[5], notice.as_str(), "the stuck chain takes the notice as its message");
@@ -2717,16 +2723,14 @@ async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_
               rung(\"x = 1\", q, on=chain(\"held\"))\nawait q\nawait bash(\"sleep 20\", timeout=60)";
   let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
   let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
-  let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "prompt" && fact[5] == "q");
+  let asked = |frame: &Frame| matches!(event_of(frame), Some(Event::Fact(fact)) if fact[0] == "prompt" && fact[5] == "q");
   let mut heard = window.heard_until(asked).await;
-  let Some(Frame::Event { event: Event::Fact(q), .. }) = heard.last().cloned() else {
-    unreachable!()
-  };
+  let Some(Event::Fact(q)) = heard.last().and_then(event_of).cloned() else { unreachable!() };
   let waits = window.during(QUIET * 2).await;
   assert!(!waits.iter().any(stall), "work that waits for the operator never stalls: {waits:?}");
   heard.extend(waits);
-  let stopped = heard.iter().find_map(|frame| match frame {
-    Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "rung" && fact[4] == "x = 2" => {
+  let stopped = heard.iter().find_map(|frame| match event_of(frame) {
+    Some(Event::Fact(fact)) if fact[0] == "rung" && fact[4] == "x = 2" => {
       fact[3].as_str().map(str::to_owned)
     }
     _ => None,
@@ -2757,7 +2761,7 @@ async fn a_command_that_keeps_writing_for_longer_than_the_bound_never_stalls() {
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
   let ran = |word: &str| Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
-  let ended = |id: &'static str| move |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "done" && fact[1] == id);
+  let ended = |id: &'static str| move |frame: &Frame| matches!(event_of(frame), Some(Event::Fact(fact)) if fact[0] == "done" && fact[1] == id);
   // The first command of a process waits for the PATH of the login shell of the user, which a
   // loaded machine gives in seconds, with no fact: the command that writes runs after it.
   let Ok(Answer::Act(_)) = window.ask(ran("await bash(\"true\")")).await else { panic!("no rung") };
@@ -2815,11 +2819,11 @@ async fn a_reply_that_writes_nothing_for_the_bound_stalls_its_chain_and_what_it_
   let side = side.expect("the stall names the reply");
   assert!(side != "chain1" && acts.iter().all(|one| one.chain == side), "{acts:?}");
   let taken = |frame: &Frame| {
-    matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+    matches!(event_of(frame), Some(Event::Fact(fact))
       if fact[0] == "prompt" && fact[3] == side.as_str() && fact[4] == "None")
   };
   let heard = window.heard_until(taken).await;
-  let Some(Frame::Event { event: Event::Fact(sent), .. }) = heard.last() else { unreachable!() };
+  let Some(Event::Fact(sent)) = heard.last().and_then(event_of) else { unreachable!() };
   let chain =
     |frame: &Frame| matches!(frame, Frame::Stalled { notice, .. } if sent[5] == notice.as_str());
   assert!(heard.iter().any(chain), "the chain of the reply takes the notice of its own stall");

@@ -312,13 +312,13 @@ impl Window {
       .iter()
       .position(|frame| matches!(frame, Frame::Event { event, .. } if wanted(event)));
     if let Some(Frame::Event { event, .. }) = at.map(|at| self.pushed.remove(at)) {
-      return event;
+      return Event::clone(&event);
     }
     loop {
       if let Frame::Event { event, .. } = self.read().await {
-        assert!(!matches!(&event, Event::Ended(Some(fault)) if !fault.is_empty()), "{event:?}");
+        assert!(!matches!(&*event, Event::Ended(Some(fault)) if !fault.is_empty()), "{event:?}");
         if wanted(&event) {
-          return event;
+          return Event::clone(&event);
         }
       }
     }

@@ -1,6 +1,8 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
+use std::sync::Arc;
+
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
@@ -707,7 +709,8 @@ pub enum Frame {
   /// text that a person reads.
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
-  Event { life: String, seq: Seq, event: Event },
+  // The frame shares the event that the log holds, so the frame of each window copies none of it.
+  Event { life: String, seq: Seq, event: Arc<Event> },
   /// Each operator that a window of a life holds now, pushed to each of its windows after each
   /// attach, detach and draft.
   Presence { life: String, operators: Vec<Present> },

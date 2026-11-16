@@ -2,7 +2,7 @@
 //! order of the cards of every machine in one list.
 
 use furb_wire::{
-  Event, FollowUp, Part, Standing,
+  FollowUp, Part, Standing,
   card::Skill,
   protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Role, Verb},
 };
@@ -123,8 +123,7 @@ impl Client {
       if self.viewed(at, frame) {
         return Listing::Changed;
       }
-      if let Frame::Event { life, event: event @ Event::Queued { .. }, .. } = frame {
-        self.queued(at, life.clone(), event);
+      if self.queued(at, frame) {
         return Listing::Changed;
       }
     }
