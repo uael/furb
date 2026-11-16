@@ -1,5 +1,5 @@
 ---
-source: tests/suite/screens.rs
+source: crates/window/tests/suite/screens.rs
 ---
 ● furb-try · one (the model works on it)           Resolve     All projects ▾        This computer
 ┃
@@ -12,13 +12,13 @@ source: tests/suite/screens.rs
 ┃
 ┃ two (the model works on it)
 ┃
-                                                opus/high
+
     …
 
 ┃
 ┃ three (the model works on it)
 ┃
-                                                opus/high
+
     …
 
 

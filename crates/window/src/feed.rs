@@ -68,7 +68,7 @@ impl Feed<'_> {
     let mut rows = match item {
       Item::Head => self.before(),
       Item::At(at) => {
-        self.opened.thread.exchanges.get(&at).map(|one| self.exchange(one)).unwrap_or_default()
+        self.opened.thread.exchanges.get(&at).map(|one| self.exchange(at, one)).unwrap_or_default()
       }
     };
     if self.items().last() == Some(item) {
@@ -359,7 +359,7 @@ impl Feed<'_> {
   /// The rows of one exchange: the message of the operator on its band, the block, the thought,
   /// and what the answer said. A word of Python that he ran is his message as code: its block on
   /// the band of his messages, with no head.
-  fn exchange(&self, exchange: &Exchange) -> Vec<Row> {
+  fn exchange(&self, at: usize, exchange: &Exchange) -> Vec<Row> {
     let his = matches!(exchange.by, Maker::Operator | Maker::Member { .. });
     let mut rows = Vec::new();
     match &exchange.block {
@@ -369,7 +369,12 @@ impl Feed<'_> {
         if let Some(block) = block {
           // The head of the block takes the blank row under the message.
           rows.pop();
-          rows.extend(self.block(&exchange.message, block));
+          // The model heads a block where it differs from the model of the block before, as a
+          // chat names a sender once for his messages in a row.
+          let before = self.opened.thread.exchanges.range(..at).rev();
+          let before = before.filter(|one| !one.1.python).find_map(|one| one.1.block.as_ref());
+          let named = before.is_none_or(|one| one.maker != block.maker);
+          rows.extend(self.block(&exchange.message, block, named));
         }
       }
     }
@@ -565,12 +570,13 @@ impl Feed<'_> {
     rows
   }
 
-  /// The block of an answer, as a block of code of the markdown: the model as its head, on the
-  /// row above the box at its right, where the times of its lines end, then the window of seven
-  /// rows that rolls, or each line once the operator opened it, each with its number in the
-  /// thread, close to the left of the box. The thought stands under it.
-  fn block(&self, message: &str, block: &Block) -> Vec<Row> {
-    let maker = vec![run(block.maker.shown(), self.style(Role::Muted))];
+  /// The block of an answer, as a block of code of the markdown: the model as its head where it is
+  /// named, on the row above the box at its right, where the times of its lines end, then the
+  /// window of seven rows that rolls, or each line once the operator opened it, each with its
+  /// number in the thread, close to the left of the box. The thought stands under it.
+  fn block(&self, message: &str, block: &Block, named: bool) -> Vec<Row> {
+    let maker =
+      if named { vec![run(block.maker.shown(), self.style(Role::Muted))] } else { Vec::new() };
     let mut head = spread(Vec::new(), maker.clone(), Gutter::inside(self.inner()), Style::new());
     head.insert(0, run(" ".repeat(PAD), Style::new()));
     let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
