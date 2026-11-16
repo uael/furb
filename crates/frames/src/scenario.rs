@@ -568,7 +568,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-named", &[Act::Type("and @")], "Files of demo"),
         // A draft that he empties goes into the stash, and the key of the stash takes it back.
         step("x-empty", &[Act::Key("Escape"), Act::Key("C-c")], "A reply opens this thread"),
-        step("x-unstash", &[Act::Key("C-x"), Act::Key("u")], "and @"),
+        step("x-unstash", &[Act::Key("C-s")], "and @"),
       ],
     }),
   },

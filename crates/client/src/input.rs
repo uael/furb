@@ -274,11 +274,24 @@ impl Client {
     }
   }
 
+  /// The input put aside, or brought back, by one key: a text with nothing put aside goes into the
+  /// stash, else the last text of the stash comes back and a text of the input takes its place, so
+  /// the two trade places. Whether the input went aside, which the client then empties.
+  pub fn toggle_stash(&mut self) -> bool {
+    let aside = self.stash.is_empty() && !self.draft.text.trim().is_empty();
+    if aside {
+      self.stash_draft();
+    } else {
+      self.unstash();
+    }
+    aside
+  }
+
   /// The last draft that he emptied taken back into the input, and a draft that the input holds
   /// then goes into the stash in its place.
-  pub fn unstash(&mut self) {
+  fn unstash(&mut self) {
     let Some(last) = self.stash.pop() else {
-      self.notice = Some("No draft was emptied.".to_owned());
+      self.notice = Some("Nothing is put aside.".to_owned());
       return;
     };
     self.stash_draft();

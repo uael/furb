@@ -528,6 +528,8 @@ fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   }
   let back = window.borrow_mut().screen.model.client.restore.take();
   if let Some(text) = back {
+    // The editor tells no change that the window makes, so the draft takes the text too.
+    window.borrow_mut().screen.model.client.draft.text.clone_from(&text);
     window.borrow().area.set_text(text);
     colored(window);
   }
@@ -626,14 +628,18 @@ fn keep(app: &App, window: &Shared) {
   });
 }
 
-/// The draft emptied into the stash, or the last that he emptied taken back, and the stash
-/// written to the file of the window at once, so a draft outlives a window that ends.
+/// The draft emptied into the stash, or put aside or brought back by the key of the stash, and
+/// the stash written to the file of the window at once, so a draft outlives a window that ends.
 fn stashed(app: &App, window: &Shared, does: Does) {
   if does == Does::Empty {
     window.borrow().area.set_text("");
     tell(app, window, |model| model.client.stash_draft());
-  } else {
-    tell(app, window, |model| model.client.unstash());
+  } else if tell(app, window, |model| model.client.toggle_stash()) {
+    window.borrow().area.set_text("");
+    tell(app, window, |model| {
+      let key = model.key(Does::Stash);
+      model.client.notice = Some(format!("The input is put aside. {key} brings it back."));
+    });
   }
   let written = {
     let held = window.borrow();
@@ -1219,7 +1225,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Send => return sent(app, window),
     Does::Queue => return queued(app, window),
     Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
-    Does::Unstash => return stashed(app, window, does),
+    Does::Stash => return stashed(app, window, does),
     Does::Picture => return clipboard(app, window),
     Does::Copy => return copied(app, window),
     Does::Empty => {

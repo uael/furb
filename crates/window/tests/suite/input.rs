@@ -1197,3 +1197,28 @@ fn a_long_paste_folds_into_its_mark_and_the_message_says_it_whole() {
   assert!(said.len() == 1 && said[0].contains("frame 40 of the trace"), "{said:?}");
   assert!(!said[0].contains("≡ paste-1"), "{said:?}");
 }
+
+#[test]
+fn ctrl_s_puts_the_input_aside_brings_it_back_and_trades_it_with_a_new_text() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.project("furb");
+  daemon.served();
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.paste("draft one");
+  typed(&app, "draft one");
+  app.press("ctrl+s");
+  shows(&app, "The input is put aside. ⌃S brings it back.");
+  // An empty input shows its hint.
+  typed(&app, "Ask for a change, a review or an answer");
+  app.press("ctrl+s");
+  typed(&app, "draft one");
+  // A key with a text in the input and a text put aside trades the two.
+  app.press("ctrl+s");
+  app.paste("draft two");
+  typed(&app, "draft two");
+  app.press("ctrl+s");
+  typed(&app, "draft one");
+  app.press("ctrl+s");
+  typed(&app, "draft two");
+}
