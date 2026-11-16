@@ -157,10 +157,10 @@ impl Client {
     if self.holds.get(&key).is_some_and(|hold| hold.ask == Ask::Answered) {
       self.holds.remove(&key);
     }
+    // A page that the client asked still comes, so the thread waits for it before it asks again.
     let read =
       self.thread.as_mut().filter(|one| one.thread.key.0 == at && one.thread.key.1 == life);
     if let Some(opened) = read {
-      opened.thread.asked.clear();
       opened.thread.again = true;
     }
   }
