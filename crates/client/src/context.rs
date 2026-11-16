@@ -121,22 +121,9 @@ fn kinds(turns: &[Value], system: &str) -> Vec<(Content, u64)> {
   let mut characters = [0.0; Content::ALL.len()];
   characters[slot(Content::Engine)] = count(system);
   let mut before = count(system);
-  let mut kit = false;
-  for (at, turn) in turns[..last].iter().enumerate() {
-    let python = turn[1].as_str().unwrap_or_default();
-    let parts = if turn[0] == "assistant" {
-      // The setup reads the code of each kit in a rung of its own, and tells it whole.
-      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
-      vec![(Content::Turns, python)]
-    } else if mem::take(&mut kit) {
-      vec![(Content::Kits, python)]
-    } else {
-      paragraphs(python).into_iter().map(|paragraph| (kind(paragraph), paragraph)).collect()
-    };
-    for (kind, text) in parts {
-      characters[slot(kind)] += count(text);
-      before += if at < first { count(text) } else { 0.0 };
-    }
+  for (at, _, kind, text) in pieces(&turns[..last]) {
+    characters[slot(kind)] += count(text);
+    before += if at < first { count(text) } else { 0.0 };
   }
   let rate = if before > 0.0 { opened / before } else { 1.0 / CHARACTERS };
   let mut kinds: Vec<(Content, u64)> =
@@ -147,6 +134,27 @@ fn kinds(turns: &[Value], system: &str) -> Vec<(Content, u64)> {
   kinds[turns].1 = tokens(read).saturating_sub(others);
   kinds.retain(|one| one.1 > 0);
   kinds
+}
+
+/// Each piece of turns with its kind, in their order: the place of its turn, whether the model
+/// wrote it, its kind and its text. A turn of the model is one piece of the work; a turn that tells
+/// the code of a kit is one piece of the kits; any other turn is a piece for each paragraph.
+pub(crate) fn pieces(turns: &[Value]) -> Vec<(usize, bool, Content, &str)> {
+  let mut pieces = Vec::new();
+  let mut kit = false;
+  for (at, turn) in turns.iter().enumerate() {
+    let python = turn[1].as_str().unwrap_or_default();
+    if turn[0] == "assistant" {
+      // The setup reads the code of each kit in a rung of its own, and tells it whole.
+      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
+      pieces.push((at, true, Content::Turns, python));
+    } else if mem::take(&mut kit) {
+      pieces.push((at, false, Content::Kits, python));
+    } else {
+      pieces.extend(paragraphs(python).into_iter().map(|one| (at, false, kind(one), one)));
+    }
+  }
+  pieces
 }
 
 /// The place of a kind in the order of the bar.
