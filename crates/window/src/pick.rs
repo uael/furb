@@ -243,11 +243,10 @@ impl Pick {
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models | Self::Efforts => "take it",
       Self::History => "write it",
-      Self::Session | Self::Leave => "do it",
+      Self::Session | Self::Leave | Self::Extension(_) => "do it",
       Self::Settings => "change it",
       Self::Value(_) => "set it",
       Self::Skills => "open it",
-      Self::Extension(_) => "do it",
     }
   }
 }
@@ -856,14 +855,7 @@ impl Model {
         self.client.write_setting(place, &filter);
         self.set_back(place);
       }
-      Choice::Skill(place) => match self.client.skill_at(place) {
-        Some(one) if one.turned_by.is_null() => {
-          let mention = format!("/{}", one.name);
-          self.client.added(&mention);
-        }
-        Some(_) => self.opened_extension(place),
-        None => {}
-      },
+      Choice::Skill(place) => self.took_skill(place),
       Choice::Turn(place) => {
         self.client.turn_skill(place);
         self.opened_extension(place);
@@ -887,6 +879,19 @@ impl Model {
       }
     }
     None
+  }
+
+  /// A skill taken from the extensions: the view of an extension opens, and the mention of a skill
+  /// with no code goes to the draft.
+  fn took_skill(&mut self, place: usize) {
+    match self.client.skill_at(place) {
+      Some(one) if one.turned_by.is_null() => {
+        let mention = format!("/{}", one.name);
+        self.client.added(&mention);
+      }
+      Some(_) => self.opened_extension(place),
+      None => {}
+    }
   }
 
   /// The view of an extension open, on its first action.
