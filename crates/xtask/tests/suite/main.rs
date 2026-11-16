@@ -20,6 +20,7 @@ mod tree;
 mod unused;
 mod watch;
 mod width;
+mod window;
 
 use std::{
   env,

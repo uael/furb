@@ -89,6 +89,17 @@ enum Task {
     #[arg(last = true, requires = "suite")]
     words: Vec<String>,
   },
+  /// Build the window and its daemon from committed work alone, as the window of the owner takes
+  /// it.
+  ///
+  /// The window and its daemon follow each build of their programs, so a build in the tree that
+  /// the owner runs carries each change of that tree into his window, done or not. The task
+  /// refuses while git shows a change of a tracked file, and names each one.
+  Window {
+    /// The options of cargo build, as -j 4.
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    words: Vec<String>,
+  },
   /// Capture, replay, compare and probe the frames of the window, with the commands of furb-frames.
   #[command(disable_help_flag = true)]
   Frames {
@@ -439,6 +450,11 @@ enum Fault {
   Conflict(String),
   #[error("{0} moved 5 times while the head landed: land again")]
   Moved(String),
+  #[error(
+    "the window would take changes that no commit holds: commit them, or build in a worktree of \
+     your own\n{0}"
+  )]
+  Uncommitted(String),
 }
 
 /// A script of `crates/xtask/python/` or `script/` that runs on its own, as a task.
@@ -535,6 +551,7 @@ impl Task {
         search(command, &words);
         Ok(ExitCode::SUCCESS)
       }
+      Self::Window { words } => window(root, &words),
       Self::Frames { words } => spawn(
         root,
         "cargo",
@@ -593,6 +610,15 @@ fn written(file: &str, language: &str) -> bool {
 fn root() -> PathBuf {
   git(Path::new("."), &["rev-parse", "--show-toplevel"])
     .map_or_else(|_| PathBuf::from("."), |top| PathBuf::from(top.trim()))
+}
+
+fn window(root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
+  let changed = git(root, &["status", "--porcelain", "--untracked-files=no"])?;
+  if !changed.trim().is_empty() {
+    return Err(Fault::Uncommitted(changed.trim_end().to_owned()));
+  }
+  let build = ["build", "-p", "furb-cli", "-p", "furb-window"];
+  spawn(root, "cargo", &[&build[..], &strs(words)[..]].concat())
 }
 
 fn check(root: &Path, base: Option<&str>) -> Result<ExitCode, Fault> {

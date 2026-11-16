@@ -11,12 +11,15 @@ Rust file.
 
 ## Build
 
-Build the programs that the window and its daemon run, at the lowest priority and with few jobs, since the window
-of the owner runs on the same machine:
+Commit, then build the programs that the window and its daemon run, at the lowest priority and with few jobs, since
+the window of the owner runs on the same machine:
 
 ```sh
-nice -n 19 cargo build -j 4 -p furb-cli -p furb-window
+cargo xtask window -j 4
 ```
+
+The window takes each build at once, so the task refuses while git shows a change of a tracked file: a build of
+half-done work would cut the owner off. A commit is instant with `--no-verify`.
 
 A change of the engine, of a kit or of the crate reaches the Python suite at the next `uv run`, which builds the
 package again.
