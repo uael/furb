@@ -33,20 +33,18 @@
 use serde::{Deserialize, Serialize};
 use std::{
   borrow::Cow,
-  cell::RefCell,
   collections::HashSet,
   fmt::Display,
   fs::{File, OpenOptions},
   io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write},
   ops::RangeInclusive,
   path::{Path, PathBuf},
-  rc::Rc,
 };
 
 use serde_json::Value;
 
 use crate::{
-  ear::{Co, Ear, Hooks, With, ear, hear},
+  ear::{Co, Ear, Kept, ear, hear},
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
@@ -133,16 +131,16 @@ pub(crate) fn logging_on(record: impl AsRef<Path>, tail: usize) -> Box<dyn Ear> 
 /// The ear that writes a log, on a record that holds `tail` entries after those that its lines
 /// count.
 fn heard(mut log: Log, tail: usize) -> Box<dyn Ear> {
-  let sink = Rc::clone(&log.sink);
-  let ear = ear(move |mut co| async move {
-    let first = log.tip.take();
-    log.tip = co.keeps(first)?;
+  ear(move |mut co| async move {
+    if let Some(tip) = co.given()? {
+      log.tip = tip;
+    }
     // A log that never took its place holds no line of the life before, so no line goes after.
     // A life that went on from the image and wrote no later one left lines after those that the
     // image counts, and this life says their facts again, so the log is cut back to those lines.
     if log.fresh.is_none() {
-      let (placed, bytes) = (log.tip.borrow().placed, log.tip.borrow().bytes);
-      let mut sink = log.sink.borrow_mut();
+      let (placed, bytes) = (log.tip.placed, log.tip.bytes);
+      let sink = &mut log.sink;
       let cut = sink.out.as_mut().is_some_and(|out| {
         let file = out.get_mut();
         let short = file.metadata().is_ok_and(|held| held.len() <= bytes);
@@ -157,22 +155,27 @@ fn heard(mut log: Log, tail: usize) -> Box<dyn Ear> {
     for _ in 0..tail {
       log.kept();
     }
+    co.keep(log);
     loop {
       let a = hear(&mut co).await;
       match a.kind() {
-        "keep" => log.kept(),
-        _ => log.heard(&mut co, &a).await,
+        "keep" => co.kept::<Log>()?.kept(),
+        _ => Log::heard(&mut co, &a).await?,
       }
     }
-  });
-  With::ear(ear, sink)
+  })
 }
 
-/// The ear of a log hands the lines to the file at the end of each run, and says when lines wait.
-impl Hooks for Rc<RefCell<Sink>> {
+/// The ear keeps its log, whose image is what it knows of the lines, and which hands the lines to the file at the
+/// end of each run.
+impl Kept for Log {
+  fn image(&self) -> Option<Value> {
+    serde_json::to_value(&self.tip).ok()
+  }
+
   /// A fault of the file ends no run: the lines wait and the ear writes them again.
-  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
-    self.borrow_mut().flush();
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.sink.flush();
     Ok(())
   }
 }
@@ -217,11 +220,11 @@ impl Sink {
 /// The log file, and what the ear knows of it.
 struct Log {
   path: PathBuf,
-  sink: Rc<RefCell<Sink>>,
+  sink: Sink,
   /// The file that a life writes the log again in, beside the log, until it keeps its first entry.
   fresh: Option<PathBuf>,
   /// What the ear knows of the lines of the log, which the image of the life holds.
-  tip: Rc<RefCell<Tip>>,
+  tip: Tip,
   /// The entries of the record about each act that an ear of the outside made, by the name of that act, in the order
   /// of the record, which the log writes when the life keeps its first entry and no line shows that act.
   owed: Vec<(String, Value)>,
@@ -336,18 +339,18 @@ impl Log {
       path,
       sink: Self::sink(file),
       fresh: Some(fresh),
-      tip: Rc::new(RefCell::new(Tip { entries, ..Tip::default() })),
+      tip: Tip { entries, ..Tip::default() },
       owed: owed(held[from..].iter()),
     };
     match earlier {
       Some((at, mut text, seen)) => {
-        log.tip.borrow_mut().seen = seen;
+        log.tip.seen = seen;
         for n in at + 1..=entries {
           text.push_str(&keep(n));
           text.push('\n');
         }
         log.put(&text);
-        log.sink.borrow_mut().flush();
+        log.sink.flush();
       }
       None => log.line(&serde_json::json!({ "entries": entries })),
     }
@@ -361,44 +364,47 @@ impl Log {
     // Not an append handle, which cannot cut the file on Windows: the ear cuts the log back to the
     // lines of the image, then writes after them.
     let file = OpenOptions::new().write(true).open(&path).ok();
-    Self { path, sink: Self::sink(file), fresh: None, tip: Rc::default(), owed: Vec::new() }
+    Self { path, sink: Self::sink(file), fresh: None, tip: Tip::default(), owed: Vec::new() }
   }
 
   /// The sink of a log file, when it opened.
-  fn sink(file: Option<File>) -> Rc<RefCell<Sink>> {
+  fn sink(file: Option<File>) -> Sink {
     let out = file.map(|file| BufWriter::with_capacity(BUFFER, file));
-    Rc::new(RefCell::new(Sink { out, waiting: String::new() }))
+    Sink { out, waiting: String::new() }
   }
 
   /// Whether the log can be written.
   fn live(&self) -> bool {
-    self.sink.borrow().out.is_some()
+    self.sink.out.is_some()
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
-  async fn heard(&mut self, co: &mut Co, a: &Fact) {
-    if !self.live() {
-      return;
+  async fn heard(co: &mut Co, a: &Fact) -> Result<(), Fault> {
+    let log = co.kept::<Self>()?;
+    if !log.live() {
+      return Ok(());
     }
     let about = a.about();
     if a.question() {
-      if self.tip.borrow_mut().seen.insert(about.to_owned()) {
-        self.line(&outward(a.0.as_ref()));
+      if log.tip.seen.insert(about.to_owned()) {
+        log.line(&outward(a.0.as_ref()));
       }
-      return;
+      return Ok(());
     }
-    if !about.is_empty() && self.tip.borrow_mut().seen.insert(about.to_owned()) {
+    if !about.is_empty() && log.tip.seen.insert(about.to_owned()) {
       let made = co.call("get", vec![Object::string(about)], vec![]).await;
       if let Ok(made) = made.as_ref().map(Object::as_ref)
         && made.type_name() != "NoneType"
       {
-        self.line(&outward(made));
+        co.kept::<Self>()?.line(&outward(made));
       }
     }
+    let log = co.kept::<Self>()?;
     match a.kind() {
-      "module" => self.line(&serde_json::json!(["module", about, a.by()])),
-      _ => self.line(&outward(a.0.as_ref())),
+      "module" => log.line(&serde_json::json!(["module", about, a.by()])),
+      _ => log.line(&outward(a.0.as_ref())),
     }
+    Ok(())
   }
 
   /// The line that says the record kept its next entry.
@@ -407,11 +413,11 @@ impl Log {
       .owed
       .iter()
       .map(|(about, _)| about.clone())
-      .filter(|one| !self.tip.borrow().seen.contains(one))
+      .filter(|one| !self.tip.seen.contains(one))
       .collect();
     for (about, line) in mem::take(&mut self.owed) {
       if missed.contains(&about) {
-        self.tip.borrow_mut().seen.insert(about);
+        self.tip.seen.insert(about);
         self.line(&line);
       }
     }
@@ -419,13 +425,14 @@ impl Log {
       && self.live()
       && fs::rename(&fresh, &self.path).is_err()
     {
-      self.sink.borrow_mut().out = None;
+      self.sink.out = None;
       // The next life truncates the file, so one that stays does no harm.
       fs::remove_file(&fresh).unwrap_or_default();
     }
     let entries = {
-      let mut tip = self.tip.borrow_mut();
-      (tip.entries, tip.placed) = (tip.entries + 1, self.live());
+      let live = self.live();
+      let tip = &mut self.tip;
+      (tip.entries, tip.placed) = (tip.entries + 1, live);
       tip.entries
     };
     self.line(&keep(entries));
@@ -440,8 +447,8 @@ impl Log {
   /// Lines, each with its end, written after each line that waits, and counted.
   fn put(&mut self, lines: &str) {
     if self.live() {
-      self.tip.borrow_mut().bytes += lines.len() as u64;
-      self.sink.borrow_mut().put(lines);
+      self.tip.bytes += lines.len() as u64;
+      self.sink.put(lines);
     }
   }
 }
@@ -450,7 +457,7 @@ impl Drop for Log {
   /// The file that the life wrote the log again in goes when it never took the place of the log.
   fn drop(&mut self) {
     if let Some(fresh) = self.fresh.take() {
-      self.sink.borrow_mut().out = None;
+      self.sink.out = None;
       // The next life truncates the file, so one that stays does no harm.
       fs::remove_file(fresh).unwrap_or_default();
     }

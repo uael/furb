@@ -145,8 +145,8 @@ pub(crate) fn kits(
   ear(move |mut co: Co<Worked>| async move {
     let mut kits =
       Kits { life, here, images, places, played: Vec::new(), held: HashMap::new(), seq: 0 };
-    let kept = co.keeps(Vec::<(String, Option<String>)>::new())?;
-    for (name, program) in kept.borrow().iter() {
+    co.keeps(Programs::new())?;
+    for (name, program) in co.kept::<Programs>()?.iter() {
       kits.learn(name, program.as_deref());
     }
     loop {
@@ -155,7 +155,7 @@ pub(crate) fn kits(
         Next::Resumed(a) if kits.answering(a.kind()).is_some() => interrupted(&mut co, &a).await?,
         Next::Heard(a) | Next::Resumed(a) => {
           if let Some(one) = enabled_by(&a) {
-            let mut known = kept.borrow_mut();
+            let known = co.kept::<Programs>()?;
             known.retain(|(name, _)| *name != one.name);
             known.push((one.name.clone(), one.program.clone()));
             kits.learn(&one.name, one.program.as_deref());
@@ -168,6 +168,9 @@ pub(crate) fn kits(
     }
   })
 }
+
+/// The program of each kit that the life enabled, by its name, in order.
+type Programs = Vec<(String, Option<String>)>;
 
 /// What the ear holds: the life, its folder, the places of the skills, each kit that the life
 /// plays in the order of its enables, the kit of each act that a process holds, and how many facts

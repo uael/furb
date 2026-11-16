@@ -1,9 +1,7 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
 use std::{
-  cell::RefCell,
   collections::{HashMap, HashSet},
-  rc::Rc,
   sync::{Arc, PoisonError, RwLock},
 };
 
@@ -64,8 +62,6 @@ pub(super) struct Hearer {
   systems: Systems,
   native: Search,
   replies: Replies,
-  /// What the ear keeps of the stands that it heard, which the image of a life holds.
-  stood: Rc<RefCell<Stood>>,
   /// The stand that the ear answers next with the standing, and whether a word made it.
   stands: Option<(String, bool)>,
 }
@@ -88,7 +84,7 @@ pub(super) struct Stood {
 pub(super) const WOKEN: u32 = 3;
 
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String, stood: Rc<RefCell<Stood>>) -> Self {
+  pub(super) fn new(provider: Provider, life: String) -> Self {
     let native = provider.search();
     let Provider {
       directory,
@@ -135,7 +131,6 @@ impl Hearer {
       systems,
       native,
       replies: Replies::default(),
-      stood,
       stands: None,
     }
   }
@@ -168,7 +163,8 @@ impl Hearer {
       return;
     }
     let word = fact::named(a.by(), "rung");
-    let first = !mem::replace(&mut self.stood.borrow_mut().first, true);
+    // What the ear keeps of the stands that it heard, which the image of a life holds.
+    let first = co.kept::<Stood>().is_ok_and(|stood| !mem::replace(&mut stood.first, true));
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -184,7 +180,8 @@ impl Hearer {
       );
       return;
     }
-    if !self.gone.is_empty() && self.stood.borrow_mut().lacked.insert(a.on().to_owned()) {
+    let lacked = |stood: &mut Stood| stood.lacked.insert(a.on().to_owned());
+    if !self.gone.is_empty() && co.kept::<Stood>().is_ok_and(lacked) {
       told(co, a.on(), &departed(&about, &self.gone));
     }
     self.stands = Some((about, word));

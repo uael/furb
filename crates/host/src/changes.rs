@@ -74,17 +74,17 @@ impl Journal {
     ear(move |mut co| async move {
       // The change that each write that is not done began, with its chain, which the image of a
       // life holds, so a write that a later life ends keeps its change.
-      let before = co.keeps(HashMap::<String, (String, Value)>::new())?;
+      co.keeps(Before::new())?;
       loop {
         let a = hear(&mut co).await;
         let fact = json_of(&a);
         if a.question() && a.kind() == "write" {
           if let Some(change) = replaced(&mut co, &folder, &fact).await? {
             let chain = fact[3].as_str().unwrap_or_default().to_owned();
-            before.borrow_mut().insert(a.about().to_owned(), (chain, change));
+            co.kept::<Before>()?.insert(a.about().to_owned(), (chain, change));
           }
         } else if a.kind() == "done"
-          && let Some((chain, mut change)) = before.borrow_mut().remove(a.about())
+          && let Some((chain, mut change)) = co.kept::<Before>()?.remove(a.about())
           && fact[3]["is"] == "Text"
           && let Some(after) = fact[3]["content"].as_str()
         {
@@ -98,6 +98,9 @@ impl Journal {
     })
   }
 }
+
+/// The change that each write that is not done began, with its chain, by its act.
+type Before = HashMap<String, (String, Value)>;
 
 /// The task of a journal: each line taken in order, until the journal and each of its ears are
 /// gone.

@@ -27,11 +27,12 @@ fn tilded(path: &Path) -> String {
 }
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   fs,
-  rc::Rc,
-  sync::Arc,
+  sync::{
+    Arc,
+    mpsc::{self, Receiver, Sender},
+  },
   task::{Wake, Waker},
   thread,
   time::{Duration, Instant},
@@ -63,7 +64,6 @@ use crate::{
 };
 use furb::{value::ObjectRef, wire};
 use std::{
-  cell::Cell,
   collections::HashSet,
   env, future,
   path::{self, Path},
@@ -653,15 +653,14 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 #[test]
 fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_it() {
   let mut lived = Lived::new("callables", &[], true).unwrap();
-  let seen = Rc::new(RefCell::new(0usize));
-  let held = Rc::clone(&seen);
+  let (tell, seen) = mpsc::channel();
   let show = callable(move |args| {
-    *held.borrow_mut() =
-      args.first().and_then(|one| one.as_ref().items()).map_or(0, |lines| lines.len());
+    let lines = args.first().and_then(|one| one.as_ref().items()).map_or(0, |lines| lines.len());
+    tell.send(lines).unwrap();
     Ok(Object::list([Object::int(2)]))
   });
   let got = lived.engine.word("show(['one', 'two', 'three'])", vec![("show", show)]).unwrap();
-  assert_eq!(*seen.borrow(), 3, "the function was given the lines");
+  assert_eq!(seen.try_iter().collect::<Vec<_>>(), [3], "the function was given the lines");
   assert_eq!(got.py_repr(), "[2]", "the word got what the function gave");
   let bad = callable(|_| Err(Fault::refused("not lines")));
   let no = lived.engine.word("show(1)", vec![("show", bad)]);
@@ -734,13 +733,13 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
 
 #[test]
 fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
-  let ledger = Rc::new(RefCell::new(Vec::new()));
-  let (record, store) = world::keeping(Ledger(Rc::clone(&ledger))).unwrap();
+  let (writes, ledger) = mpsc::channel();
+  let (record, store) = world::keeping(Ledger(writes)).unwrap();
   let at = Yard::new(format!("furb-engine-ledger-{}", process::id()));
-  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned()])));
+  let words = VecDeque::from(["close(1)".to_owned()]);
   let scratch = world::Scratch::own();
   let ears = [
-    ("provider", provider(at.to_path_buf(), words, Rc::default())),
+    ("provider", provider(at.to_path_buf(), words, mpsc::channel().0)),
     ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
     ("bash", world::bash(scratch, Places::here().home)),
     ("time", world::time()),
@@ -751,7 +750,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
-  let ledger = ledger.borrow();
+  let ledger: Vec<&str> = ledger.try_iter().collect();
   let (keeps, syncs) =
     ["keep", "sync"].map(|one| ledger.iter().filter(|it| **it == one).count()).into();
   assert_eq!(ledger.last(), Some(&"sync"), "the last run synced what it kept: {ledger:?}");
@@ -760,16 +759,15 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
 
 #[test]
 fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator() {
-  let full = Rc::new(Cell::new(true));
-  let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
-  let store =
-    Full { refusing: Rc::clone(&full), kept: Rc::clone(&kept), refused: Rc::clone(&refused) };
+  let ((fills, filled), (lands, landed), (refusals, denied)) =
+    (mpsc::channel(), mpsc::channel(), mpsc::channel());
+  let store = Full { disk: Disk { full: true, rooms: filled }, kept: lands, refused: refusals };
   let (record, store) = world::keeping(store).unwrap();
   let at = Yard::new(format!("furb-engine-full-{}", process::id()));
-  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
+  let words = VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()]);
   let scratch = world::Scratch::own();
   let ears = [
-    ("provider", provider(at.to_path_buf(), words, Rc::default())),
+    ("provider", provider(at.to_path_buf(), words, mpsc::channel().0)),
     ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
     ("bash", world::bash(scratch, Places::here().home)),
     ("time", world::time()),
@@ -792,22 +790,25 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = engine.prompt(Object::string("int"), with.clone()).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
-  assert!(kept.borrow().is_empty(), "{:?}", kept.borrow());
-  assert!(!refused.borrow().is_empty());
+  let (mut were_kept, mut were_refused): (Vec<String>, Vec<String>) =
+    (landed.try_iter().collect(), denied.try_iter().collect());
+  assert_eq!(were_kept, Vec::<String>::new());
+  assert_ne!(were_refused, Vec::<String>::new());
   let first = told(&mut engine);
   assert_eq!(first.len(), 1, "{first:?}");
   assert!(first[0].contains("cannot be written: No space left on device"), "{first:?}");
   // The disk has room again: each entry lands once, in order, and the operator hears it.
-  full.set(false);
+  fills.send(false).unwrap();
   let act = engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
   settle(&mut engine);
-  let kept = kept.borrow();
+  were_kept.extend(landed.try_iter());
+  were_refused.extend(denied.try_iter());
+  let (kept, refused) = (were_kept, were_refused);
   let once: HashSet<_> = kept.iter().collect();
   assert_eq!(once.len(), kept.len(), "an entry was kept twice: {kept:?}");
-  let refused = refused.borrow();
   let mut waited: Vec<&String> = Vec::new();
-  for one in refused.iter() {
+  for one in &refused {
     if !waited.contains(&one) {
       waited.push(one);
     }
@@ -837,8 +838,8 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
     let id = act.id().to_owned();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
     // The provider asks for the turns while it hears, and they hold the message of the prompt.
-    assert_eq!(first.read.borrow().len(), 1);
-    assert!(first.read.borrow()[0].contains("count the lines"));
+    assert_eq!(first.read().len(), 1);
+    assert!(first.read()[0].contains("count the lines"));
     (root, id, first.end())
   };
   let mut second = Lived::new("again", &[], false).unwrap();
@@ -848,7 +849,7 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
     second.engine.get(&id).unwrap().map(|one| one.kind().to_owned()).as_deref(),
     Some("prompt")
   );
-  assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
+  assert_eq!(second.read().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
   let turn =
     second.engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
@@ -1078,7 +1079,7 @@ fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
 #[test]
 fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
   let at = env::temp_dir().join(format!("furb-engine-landed-{}", process::id()));
-  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
+  let ears = [("provider", provider(at, VecDeque::new(), mpsc::channel().0)), ("quick", quick())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
   let word = Some("w = wait(9, __name__)".to_owned());
@@ -1104,7 +1105,7 @@ fn the_work_of_an_ear_speaks_when_the_life_drives_it_and_never_while_the_ear_hea
   let life = |at: &Path| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
-      ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+      ("provider", provider(at.to_path_buf(), VecDeque::new(), mpsc::channel().0)),
       ("quick", quick()),
       ("store", store),
     ];
@@ -1150,7 +1151,7 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
   // all that the done of wait2 made.
   let at = env::temp_dir().join(format!("furb-engine-answered-{}", process::id()));
   let ears = [
-    ("provider", provider(at, Rc::default(), Rc::default())),
+    ("provider", provider(at, VecDeque::new(), mpsc::channel().0)),
     ("early", early()),
     ("caller", caller()),
     ("seer", seer()),
@@ -1188,8 +1189,8 @@ fn an_ear_of_the_host_hears_the_read_of_a_generator_that_map_walks() {
   let mut lived = Lived::new("reached", &[word], true).unwrap();
   fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
   let root = lived.root();
-  let heard = Rc::new(RefCell::new(Vec::new()));
-  lived.engine.drive(spy(Rc::clone(&heard)), "spy").unwrap();
+  let (spies, heard) = mpsc::channel();
+  lived.engine.drive(spy(spies), "spy").unwrap();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
   let id = act.id().to_owned();
@@ -1200,7 +1201,7 @@ fn an_ear_of_the_host_hears_the_read_of_a_generator_that_map_walks() {
   let raised = raised.and_then(|one| one.word(0)).and_then(|one| Fault::of(one));
   // The word ends at its close, which ends its own step.
   assert_eq!(raised.map(|one| one.name).as_deref(), Some("CancelledError"));
-  let heard = heard.borrow();
+  let heard: Vec<(String, String)> = heard.try_iter().collect();
   assert!(heard.contains(&("read".to_owned(), "read1".to_owned())), "the spy heard the read");
   assert!(heard.contains(&("done".to_owned(), id)), "the spy heard the done of the prompt");
 }
@@ -1233,10 +1234,7 @@ fn an_overflow_that_an_ear_gives_comes_into_the_life_as_the_class_of_the_engine_
 
 #[test]
 fn an_ear_of_the_crate_that_raises_refuses_that_act_starts_again_and_tells_the_operator_once() {
-  let count = Rc::new(RefCell::new(0));
-  let made = Rc::clone(&count);
-  let first = prober(Rc::clone(&count), &[1, 3]);
-  let ears = vec![("probe", lasting(first, move || prober(Rc::clone(&made), &[1, 3])))];
+  let ears = vec![("probe", lasting(prober(&[1, 3]), || prober(&[1, 3])))];
   let (_yard, mut engine, root) = probed("lasting", ears);
   let no = probe(&mut engine, &root).unwrap_err();
   assert_eq!(no.name, "Refused");
@@ -1251,7 +1249,7 @@ fn an_ear_of_the_crate_that_raises_refuses_that_act_starts_again_and_tells_the_o
 
 #[test]
 fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
-  let ears = vec![("probe", prober(Rc::new(RefCell::new(0)), &[1]))];
+  let ears = vec![("probe", prober(&[1]))];
   let (_yard, mut engine, root) = probed("unlasting", ears);
   assert!(probe(&mut engine, &root).unwrap_err().message().contains("probe 1 broke"));
   let no = probe(&mut engine, &root).unwrap_err();
@@ -1323,7 +1321,7 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
   // the note makes.
   let at = env::temp_dir().join(format!("furb-engine-yield-{}", process::id()));
   let ears = [
-    ("provider", provider(at, Rc::default(), Rc::default())),
+    ("provider", provider(at, VecDeque::new(), mpsc::channel().0)),
     ("teller", teller()),
     ("noter", noter()),
   ];
@@ -1428,9 +1426,9 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
 #[test]
 fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_says_it() {
   let at = env::temp_dir().join(format!("furb-engine-taken-{}", process::id()));
-  let ends = Rc::new(Cell::new(0));
+  let (end, ends) = mpsc::channel();
   let ears =
-    [("provider", provider(at, Rc::default(), Rc::default())), ("twice", twice(Rc::clone(&ends)))];
+    [("provider", provider(at, VecDeque::new(), mpsc::channel().0)), ("twice", twice(end))];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
   let wait = engine
@@ -1439,10 +1437,10 @@ fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_s
     .id()
     .to_owned();
   engine.pump(Waker::noop()).unwrap();
-  assert_eq!(ends.get(), 1, "the second take ended the first work");
+  assert_eq!(ends.try_iter().count(), 1, "the second take ended the first work");
   engine.cancel(&wait, verbs::Cancel::default()).unwrap();
   engine.pump(Waker::noop()).unwrap();
-  assert_eq!(ends.get(), 2, "the done that the cancel said ended the second work");
+  assert_eq!(ends.try_iter().count(), 1, "the done that the cancel said ended the second work");
 }
 
 #[test]
@@ -1451,7 +1449,7 @@ fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took()
   let life = |ends: bool| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
-      ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+      ("provider", provider(at.to_path_buf(), VecDeque::new(), mpsc::channel().0)),
       ("holder", holder(ends)),
       ("store", store),
     ];
@@ -1472,18 +1470,19 @@ fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took()
 fn the_work_of_an_act_starts_only_once_the_record_holds_the_act() {
   let at = Yard::new(format!("furb-engine-unkept-{}", process::id()));
   let record = at.join("record.jsonl");
-  let full = Rc::new(Cell::new(false));
-  let filled = Filled { lines: world::Lines::open(&record).unwrap(), full: Rc::clone(&full) };
+  let (fills, rooms) = mpsc::channel();
+  let filled =
+    Filled { lines: world::Lines::open(&record).unwrap(), disk: Disk { full: false, rooms } };
   let (entries, store) = world::keeping(filled).unwrap();
-  let began = Rc::new(Cell::new(false));
+  let (begins, began) = mpsc::channel();
   let ears = [
-    ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
-    ("waiter", waiter(Rc::clone(&began))),
+    ("provider", provider(at.to_path_buf(), VecDeque::new(), mpsc::channel().0)),
+    ("waiter", waiter(begins)),
     ("store", store),
   ];
   let mut engine = Engine::boot(entries, ears).unwrap();
   let root = engine.root().to_owned();
-  full.set(true);
+  fills.send(true).unwrap();
   let wait = verbs::Wait { seconds: Some(1.0), on: on(&root) };
   let id = engine.wait(&[root.as_str()], wait).unwrap().id().to_owned();
   let wake = waker();
@@ -1492,10 +1491,10 @@ fn the_work_of_an_act_starts_only_once_the_record_holds_the_act() {
   }
   // A later life makes again each act that its record lacks, so a work that began now could run
   // twice.
-  assert!(!began.get(), "a work began whose act the record does not hold");
-  full.set(false);
+  assert_eq!(began.try_iter().count(), 0, "a work began whose act the record does not hold");
+  fills.send(false).unwrap();
   block_on(Act::<Object>::of(&mut engine, &id)).unwrap();
-  assert!(began.get());
+  assert_eq!(began.try_iter().count(), 1);
   let kept: Vec<String> = world::kept(&record)
     .unwrap()
     .iter()
@@ -1507,7 +1506,7 @@ fn the_work_of_an_act_starts_only_once_the_record_holds_the_act() {
 }
 
 /// A store that keeps nothing and writes in a ledger each entry that it keeps and each sync.
-struct Ledger(Rc<RefCell<Vec<&'static str>>>);
+struct Ledger(Sender<&'static str>);
 
 impl world::Store for Ledger {
   fn entries(&mut self) -> Result<Vec<Object>, Fault> {
@@ -1515,22 +1514,36 @@ impl world::Store for Ledger {
   }
 
   fn keep(&mut self, _: ObjectRef<'_>) -> Result<(), Fault> {
-    self.0.borrow_mut().push("keep");
+    self.0.send("keep").unwrap();
     Ok(())
   }
 
   fn sync(&mut self) -> Result<(), Fault> {
-    self.0.borrow_mut().push("sync");
+    self.0.send("sync").unwrap();
     Ok(())
   }
 }
 
-/// A store whose disk can be full: while it is, it refuses each entry and each sync. It writes in a
-/// ledger each entry that it keeps and each entry that it refuses.
+/// A disk of a test store, which the test fills and empties by a message.
+struct Disk {
+  full: bool,
+  rooms: Receiver<bool>,
+}
+
+impl Disk {
+  /// Whether the disk is full, as the test said last.
+  fn full(&mut self) -> bool {
+    self.full = self.rooms.try_iter().last().unwrap_or(self.full);
+    self.full
+  }
+}
+
+/// A store whose disk can be full: while it is, it refuses each entry and each sync. It sends each
+/// entry that it keeps and each entry that it refuses.
 struct Full {
-  refusing: Rc<Cell<bool>>,
-  kept: Rc<RefCell<Vec<String>>>,
-  refused: Rc<RefCell<Vec<String>>>,
+  disk: Disk,
+  kept: Sender<String>,
+  refused: Sender<String>,
 }
 
 impl world::Store for Full {
@@ -1540,16 +1553,16 @@ impl world::Store for Full {
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
     let line = wire::record(entry).to_string();
-    if self.refusing.get() {
-      self.refused.borrow_mut().push(line);
+    if self.disk.full() {
+      self.refused.send(line).unwrap();
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }
-    self.kept.borrow_mut().push(line);
+    self.kept.send(line).unwrap();
     Ok(())
   }
 
   fn sync(&mut self) -> Result<(), Fault> {
-    if self.refusing.get() {
+    if self.disk.full() {
       Err(Fault::refused("No space left on device (os error 28): the record"))
     } else {
       Ok(())
@@ -1645,29 +1658,25 @@ impl Wake for Counted {
 }
 
 /// An ear that keeps the kind and the subject of every fact it hears.
-fn spy(heard: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
+fn spy(heard: Sender<(String, String)>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
-      heard.borrow_mut().push((a.kind().to_owned(), a.about().to_owned()));
+      heard.send((a.kind().to_owned(), a.about().to_owned())).unwrap();
     }
   })
 }
 
 /// An ear of the test that takes each probe, and raises at the probes that `raises` names, by their
-/// count.
-fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
+/// count, which the name of each probe holds.
+fn prober(raises: &'static [i64]) -> Box<dyn Ear> {
   hearing(&["probe"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if a.kind() != "probe" || !a.question() {
         continue;
       }
-      let n = {
-        let mut held = count.borrow_mut();
-        *held += 1;
-        *held
-      };
+      let n: i64 = a.about().trim_start_matches("probe").parse().unwrap();
       if raises.contains(&n) {
         return Err(Fault::refused(format!("probe {n} broke")));
       }
@@ -1679,7 +1688,7 @@ fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
 /// A life on the provider of the test and on these ears, and its root.
 fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Yard, Engine, String) {
   let at = Yard::new(format!("furb-engine-{yard}-{}", process::id()));
-  let mut all = vec![("provider", provider(at.to_path_buf(), Rc::default(), Rc::default()))];
+  let mut all = vec![("provider", provider(at.to_path_buf(), VecDeque::new(), mpsc::channel().0))];
   all.extend(ears);
   let engine = Engine::boot(Vec::new(), all).unwrap_or_else(|no| panic!("{no}"));
   let root = engine.root().to_owned();
@@ -1890,23 +1899,23 @@ fn lived_once(yard: &str, word: &str) -> (Option<Yard>, String, String) {
   (first.yard.take(), root, record)
 }
 
-/// A work that gives nothing, and counts its end in `ends` as it drops.
-fn counted(ends: &Rc<Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
+/// A work that gives nothing, and tells `ends` its end as it drops.
+fn counted(ends: &Sender<()>) -> impl futures::Stream<Item = ()> + 'static {
   /// What ends with the work.
-  struct Ends(Rc<Cell<u8>>);
+  struct Ends(Sender<()>);
   impl Drop for Ends {
     fn drop(&mut self) {
-      self.0.set(self.0.get() + 1);
+      self.0.send(()).unwrap();
     }
   }
-  stream::unfold(Ends(Rc::clone(ends)), |held| async move {
+  stream::unfold(Ends(ends.clone()), |held| async move {
     future::pending::<()>().await;
     Some(((), held))
   })
 }
 
 /// An ear that takes each wait twice, each time with a work that gives nothing.
-fn twice(ends: Rc<Cell<u8>>) -> Box<dyn Ear> {
+fn twice(ends: Sender<()>) -> Box<dyn Ear> {
   ear(move |mut co: Co<()>| async move {
     loop {
       if let Next::Heard(a) = co.next().await
@@ -1939,7 +1948,7 @@ fn holder(ends: bool) -> Box<dyn Ear> {
 /// A file of lines on a disk that the test fills: each keep and each sync fails while it is full.
 struct Filled {
   lines: world::Lines,
-  full: Rc<Cell<bool>>,
+  disk: Disk,
 }
 
 impl world::Store for Filled {
@@ -1948,14 +1957,14 @@ impl world::Store for Filled {
   }
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
-    if self.full.get() {
+    if self.disk.full() {
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }
     self.lines.keep(entry)
   }
 
   fn sync(&mut self) -> Result<(), Fault> {
-    if self.full.get() {
+    if self.disk.full() {
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }
     self.lines.sync()
@@ -1963,14 +1972,17 @@ impl world::Store for Filled {
 }
 
 /// An ear that takes each wait and ends it by its work, which notes that it began.
-fn waiter(began: Rc<Cell<bool>>) -> Box<dyn Ear> {
+fn waiter(began: Sender<()>) -> Box<dyn Ear> {
   hearing(&["wait"], move |mut co: Co<String>| async move {
     loop {
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) if a.kind() == "wait" && a.question() => {
           say(&mut co, Fact::says("started", a.about(), []));
-          let (about, began) = (a.about().to_owned(), Rc::clone(&began));
-          co.take(&about.clone(), stream::once(lazy(move |_| began.set(true)).map(|()| about)));
+          let (about, began) = (a.about().to_owned(), began.clone());
+          co.take(
+            &about.clone(),
+            stream::once(lazy(move |_| began.send(()).unwrap()).map(|()| about)),
+          );
         }
         Next::Worked(about) => say(&mut co, done(&about, Object::none())),
         _ => {}
@@ -1993,7 +2005,8 @@ fn a_generator_that_a_builtin_steps_waits_on_an_act() {
 #[test]
 fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let at = env::temp_dir().join(format!("furb-engine-briefly-{}", process::id()));
-  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("briefly", briefly())];
+  let ears =
+    [("provider", provider(at, VecDeque::new(), mpsc::channel().0)), ("briefly", briefly())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
   let act =

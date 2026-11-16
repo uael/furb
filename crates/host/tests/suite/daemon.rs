@@ -16,7 +16,6 @@ use std::net::TcpListener;
 use yard::Yard;
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   env,
   fs::{self, File},
@@ -89,31 +88,16 @@ impl Drop for Place {
   fn drop(&mut self) {
     let entries = fs::read_dir(&*self.0).into_iter().flatten().flatten();
     // Each lease is open before the yard goes, since a lock holds the file and not its name.
-    let leases = entries
+    let leases: Vec<File> = entries
       .map(|one| one.path())
       .filter(|one| one.extension().is_some_and(|ext| ext == "lock"))
       .filter_map(|one| File::open(one).ok())
       .collect();
-    HELD.with(|held| held.0.borrow_mut().push((self.0.to_path_buf(), leases)));
-  }
-}
-
-thread_local! {
-  static HELD: Held = const { Held(RefCell::new(Vec::new())) };
-}
-
-/// The folder of each test of this thread, and the leases of its records, which go again when
-/// the thread ends, once no life holds them.
-struct Held(RefCell<Vec<(PathBuf, Vec<File>)>>);
-
-impl Drop for Held {
-  /// The folders go on a thread of their own: the harness joins the thread of each test before it
-  /// starts the next one, so a wait here would hold every test of the suite.
-  fn drop(&mut self) {
-    let kept = env::var_os("FURB_KEEP_YARDS").is_some();
-    for (folder, leases) in self.0.take() {
-      thread::spawn(move || reaped(&folder, &leases, kept));
-    }
+    // The folder goes on a thread of their own, once no life holds it: the harness joins the
+    // thread of each test before it starts the next one, so a wait here would hold every test of
+    // the suite.
+    let (folder, kept) = (self.0.to_path_buf(), env::var_os("FURB_KEEP_YARDS").is_some());
+    thread::spawn(move || reaped(&folder, &leases, kept));
   }
 }
 

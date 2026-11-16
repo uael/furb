@@ -7,13 +7,11 @@ pub(super) mod schema;
 mod sqlite;
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   ffi::OsStr,
   fs::{self, File, OpenOptions, TryLockError, create_dir_all},
   io::{BufRead, BufReader, Read, Seek, SeekFrom},
   path::Path,
-  rc::Rc,
   slice,
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -22,7 +20,7 @@ use std::{
 use futures::stream;
 
 use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
+use serde_json::{Value, value::RawValue};
 use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
@@ -31,7 +29,7 @@ use self::error::StoreError;
 use super::{beside, free};
 use crate::{
   CHECKPOINTER, ENGINE, KERNEL,
-  ear::{Co, Ear, Hooks, Next, With, hearing, say},
+  ear::{Co, Ear, Kept, Next, hearing, say},
   engine::ROOT,
   fact::Fact,
   value::{Fault, Object, ObjectRef},
@@ -541,21 +539,20 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
 
 /// The record and the ear of [`keeping`], for a store whose entries were read. A store that read
 /// none, of a record that names its engine, gives no record.
-fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
-  let store = Held { store, waiting: VecDeque::new(), fault: None };
-  let store = Rc::new(RefCell::new(store));
-  let held = Rc::clone(&store);
+fn kept_by<S: Store + 'static>(store: S, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
+  let held = Held { store, waiting: VecDeque::new(), fault: None };
   let new = read.as_deref().is_some_and(unnamed);
   let entries: Vec<Object> = read.into_iter().flatten().map(streamed).collect();
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
-    let (mut said, mut again, mut cut) = (Told::Room, false, held.borrow().store.cut());
+    let (mut said, mut again, mut cut) = (Told::Room, false, held.store.cut());
+    co.keep(held);
     loop {
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => match a.kind() {
           "keep" => {
             let Some(entry) = a.word(0) else { continue };
-            held.borrow_mut().waiting.push_back(entry.to_owned());
+            co.kept::<Held<S>>()?.waiting.push_back(entry.to_owned());
           }
           "chain" if new && a.about() == ROOT => {
             say(&mut co, named());
@@ -570,7 +567,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
       {
         cut = None;
       }
-      let fault = held.borrow_mut().flushed();
+      let fault = co.kept::<Held<S>>()?.flushed();
       match fault {
         Some(fault) => {
           if !again {
@@ -592,7 +589,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
           }
         }
         None => {
-          let low = held.borrow().low(&mut said);
+          let low = co.kept::<Held<S>>()?.low(&mut said);
           if let Some(message) = low
             && told(&mut co, message).await.is_ok()
           {
@@ -602,7 +599,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
       }
     }
   });
-  (entries, With::ear(kept, store))
+  (entries, kept)
 }
 
 /// Whether a record names no engine for the build that goes on from it: no fact made stands after
@@ -685,17 +682,22 @@ impl<S: Store> Held<S> {
   }
 }
 
-/// The ear that keeps the record syncs its store at the end of each run.
-impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
+/// The ear that keeps the record keeps its store, which the image of a life holds nothing of, and
+/// syncs it at the end of each run.
+impl<S: Store + 'static> Kept for Held<S> {
+  fn image(&self) -> Option<Value> {
+    Some(Value::Null)
+  }
+
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
-  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
-    self.borrow_mut().synced();
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.synced();
     Ok(())
   }
 
   /// Each entry that waits for the store, which no keep took yet.
-  fn unkept(&self, _: &dyn Ear) -> usize {
-    self.borrow().waiting.len()
+  fn unkept(&self) -> usize {
+    self.waiting.len()
   }
 }
 

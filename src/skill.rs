@@ -913,12 +913,12 @@ struct Told {
 pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
   let heard = ["chain", "stand", "rung", "write", ENABLE, TEACH, config::CONFIGURED];
   hearing(&heard, move |mut co| async move {
-    let kept = co.keeps(Told { refused, ..Told::default() })?;
+    co.keeps(Told { refused, ..Told::default() })?;
     loop {
       let a = hear(&mut co).await;
       // The ear holds what it keeps while it steps, and gives it back before it waits again,
       // where the image of the life reads it, between two runs.
-      let mut held = kept.take();
+      let mut held: Told = co.held()?;
       let stepped: Result<(), Fault> = async {
         let Told { refused, enabled, chains, teach, taught } = &mut held;
         let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
@@ -1120,7 +1120,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
         Ok(())
       }
       .await;
-      kept.replace(held);
+      co.keep(held);
       stepped?;
     }
   })

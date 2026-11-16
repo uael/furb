@@ -5,7 +5,13 @@
 
 #![allow(dead_code, reason = "each side takes the part of the harness that it needs")]
 
-use std::{cell::RefCell, collections::VecDeque, env, fs, path::PathBuf, process, rc::Rc};
+use std::{
+  collections::VecDeque,
+  env, fs,
+  path::PathBuf,
+  process,
+  sync::mpsc::{self, Receiver, Sender},
+};
 
 use futures::{FutureExt, stream};
 use unsync::oneshot;
@@ -25,13 +31,15 @@ pub(crate) fn done(about: &str, value: Object) -> Fact {
 }
 
 /// The provider of the test: it answers what the chains stand on, and each reply with the next word
-/// of its script, but for the word WAIT, which leaves the reply started and not done.
+/// of its script, but for the word WAIT, which leaves the reply started and not done. It sends the
+/// turns that each reply read.
 pub(crate) fn provider(
   at: PathBuf,
-  words: Rc<RefCell<VecDeque<String>>>,
-  read: Rc<RefCell<Vec<String>>>,
+  mut words: VecDeque<String>,
+  read: Sender<String>,
 ) -> Box<dyn Ear> {
   ear(move |mut co| async move {
+    let mut replies = 0;
     loop {
       let a = hear(&mut co).await;
       if !a.question() {
@@ -57,9 +65,10 @@ pub(crate) fn provider(
         "reply" => {
           say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
-          read.borrow_mut().push(turns.py_repr());
-          answered(read.borrow().len());
-          let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+          read.send(turns.py_repr()).ok();
+          replies += 1;
+          answered(replies);
+          let word = words.pop_front().unwrap_or_else(|| "close(None)".to_owned());
           if word == "WAIT" {
             continue;
           }
@@ -81,7 +90,9 @@ pub(crate) fn provider(
 pub(crate) struct Lived {
   pub(crate) engine: Engine,
   pub(crate) at: PathBuf,
-  pub(crate) read: Rc<RefCell<Vec<String>>>,
+  /// The turns that each reply read, in order, and those that the provider sent since.
+  read: Vec<String>,
+  turns: Receiver<String>,
   /// The folder of a fresh life, which goes after its engine; a later life on it holds none.
   pub(crate) yard: Option<Yard>,
 }
@@ -94,18 +105,24 @@ impl Lived {
     let at = env::temp_dir().join(name);
     fs::create_dir_all(&at).unwrap_or_else(|no| panic!("a yard of the test: {no}"));
     let (record, store) = world::store(at.join("record.jsonl"))?;
-    let read = Rc::default();
-    let words = Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect()));
+    let (sends, turns) = mpsc::channel();
+    let words = words.iter().map(|one| (*one).to_owned()).collect();
     let scratch = world::Scratch::own();
     let ears = [
-      ("provider", provider(at.clone(), words, Rc::clone(&read))),
+      ("provider", provider(at.clone(), words, sends)),
       ("files", world::files(scratch.clone(), Places::under(at.join("config")), None)),
       ("bash", world::bash(scratch, Places::here().home)),
       ("time", world::time()),
       ("store", store),
     ];
     let engine = Engine::boot(record, ears)?;
-    Ok(Self { engine, at, read, yard })
+    Ok(Self { engine, at, read: Vec::new(), turns, yard })
+  }
+
+  /// The turns that each reply read, in order.
+  pub(crate) fn read(&mut self) -> &[String] {
+    self.read.extend(self.turns.try_iter());
+    &self.read
   }
 
   /// The end of a fresh life, and its folder, for a later life on what the store kept there.
@@ -168,6 +185,7 @@ pub(crate) fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
 pub(crate) fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
   let at = env::temp_dir().join(format!("furb-engine-{yard}-{}", process::id()));
   let (gate, opens) = oneshot::channel();
-  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("pauser", pauser(opens))];
+  let ears =
+    [("provider", provider(at, VecDeque::new(), mpsc::channel().0)), ("pauser", pauser(opens))];
   (Engine::boot(Vec::<Object>::new(), ears).unwrap_or_else(|no| panic!("{no}")), gate)
 }

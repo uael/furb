@@ -22,7 +22,7 @@ fn a_line_reaches_the_file_when_the_run_ends() {
   log.line(&json!(["stand", "stand1", "operator", "chain1"]));
   let fresh = format!("{}.log.new", record.display());
   assert_eq!(fs::read_to_string(&fresh).unwrap(), "", "the lines wait in the buffer");
-  log.sink.borrow_mut().flush();
+  log.sink.flush();
   assert_eq!(
     fs::read_to_string(&fresh).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n"
@@ -34,9 +34,9 @@ fn a_line_that_the_buffer_did_not_take_waits_and_lands_after_the_lines_before_it
   let record = place("waiting");
   let mut log = Log::open(&record, &[], None);
   log.line(&json!(["stand", "stand1", "operator", "chain1"]));
-  log.sink.borrow_mut().waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
+  log.sink.waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
   log.line(&json!(["stand", "stand2", "operator", "chain1"]));
-  log.sink.borrow_mut().flush();
+  log.sink.flush();
   assert_eq!(
     fs::read_to_string(format!("{}.log.new", record.display())).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"done\",\"stand1\",\"journal\",[]]\n[\"stand\",\"stand2\",\"operator\",\"chain1\"]\n"

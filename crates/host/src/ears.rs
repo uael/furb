@@ -130,14 +130,14 @@ struct Heard {
 /// first fact tells it first, as the log of a life shows it.
 fn events(told: UnboundedSender<Event>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
-    let kept = co.keeps(Heard::default())?;
+    co.keeps(Heard::default())?;
     loop {
       let a = hear(&mut co).await;
       // The ear holds what it keeps while it steps, and gives it back before it waits again,
       // where the image of the life reads it, between two runs.
-      let mut heard = kept.take();
+      let mut heard: Heard = co.held()?;
       let goes = stepped(&mut co, &mut heard, a, &told).await;
-      kept.replace(heard);
+      co.keep(heard);
       if !goes? {
         return Ok(());
       }
