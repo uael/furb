@@ -9,7 +9,7 @@ use furb_window::open;
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{DRAWS, Daemon, PATIENCE},
+  daemon::{ANSWERS, DRAWS, Daemon, PATIENCE},
   thread::clicked,
 };
 
@@ -80,4 +80,33 @@ fn a_view_that_the_word_of_a_thread_draws_is_no_question_of_that_thread() {
   assert!(!shown.contains("opus/high asks") && !shown.contains("⏎ answer"), "{shown}");
   let card = peer.card(|card| card.thread.title.contains("keep a list"));
   assert_ne!(serde_json::json!(card.thread.standing)["is"], "asks");
+}
+
+#[test]
+fn a_message_after_a_pause_opens_a_new_life_whose_thread_and_view_go_on() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("paused.jsonl"), true);
+  peer.said(&life, "keep my list");
+  peer.ask(Verb::Run { life: life.clone(), word: VIEW.to_owned(), on: None });
+  peer.left(&life);
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "keep my list"));
+  shows(&app, "buy milk");
+  app.press("ctrl+x");
+  app.press("s");
+  shows(&app, "Pause it");
+  app.type_text("pause");
+  app.press("enter");
+  let ended = app.wait_until(PATIENCE, || !app.text().starts_with('●'));
+  assert!(ended, "{}", app.text());
+  // The message opens a new life on the record, whose thread tells the answer of its model, and
+  // the view of the record stands again.
+  app.type_text(&format!("what is left {ANSWERS}"));
+  app.press("enter");
+  let shown = shows(&app, "The open takes");
+  assert!(shown.starts_with('●') && shown.contains("buy milk"), "{shown}");
 }

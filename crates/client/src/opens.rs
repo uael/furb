@@ -150,11 +150,18 @@ impl Client {
   }
 
   /// The life of a record let go, once its machine says that no life holds it: its life ended, and
-  /// a later verb opens it again.
+  /// a later verb opens it again. The thread that the operator reads there asks its page again
+  /// once a new life stands, since that life tells no change of it until the client reads its end.
   pub fn let_go(&mut self, at: usize, life: &str) {
     let key = (at, life.to_owned());
     if self.holds.get(&key).is_some_and(|hold| hold.ask == Ask::Answered) {
       self.holds.remove(&key);
+    }
+    let read =
+      self.thread.as_mut().filter(|one| one.thread.key.0 == at && one.thread.key.1 == life);
+    if let Some(opened) = read {
+      opened.thread.asked.clear();
+      opened.thread.again = true;
     }
   }
 }
