@@ -899,7 +899,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a thread"),
-        step("d", &[WHEEL_DOWN; 26], "The model of the input"),
+        step("d", &[WHEEL_DOWN; 40], "The model of the input"),
         step("e", &[Act::Pointer { on: "The model of the input", button: 0 }], "Search a model"),
       ],
     }),
