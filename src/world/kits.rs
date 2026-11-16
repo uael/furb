@@ -248,7 +248,7 @@ impl Kits {
       {
         Ok((runtime, (mut child, group))) => {
           runtime.spawn(written(child.stdin.take(), lines));
-          ran(&runtime, (name, program), (child, group), ending)
+          ran(&runtime, name, program, (child, group), ending)
         }
         Err(no) => {
           let why = format!("The process {} of the kit {name} {no}", program.display());
@@ -462,9 +462,14 @@ async fn written(input: Option<ChildStdin>, mut lines: mpsc::UnboundedReceiver<S
 /// The lines that a process writes on its stdout, then its end, told with its exit and the last
 /// lines of its stderr. A stop of the work ends the process with each process that it started, as
 /// [`waited`] says.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the process of a kit takes the runtime of its tasks, the name of the kit, its program, the child with its group, and the stop of its work"
+)]
 fn ran(
   runtime: &Handle,
-  (name, program): (String, PathBuf),
+  name: String,
+  program: PathBuf,
   (mut child, group): (Child, Group),
   stopped: Shared<oneshot::Receiver<()>>,
 ) -> stream::LocalBoxStream<'static, Worked> {

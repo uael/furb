@@ -1,9 +1,5 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::HashMap,
   fs, io,
@@ -397,6 +393,10 @@ pub(crate) struct Beneath<'a> {
 /// the entries of a folder, one on each line, each folder with `/` at its end. Each text and each
 /// refusal names the path under the scheme, and never as the machine names it, and a path that
 /// leaves the directory, by `..` or by a link, is refused.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a read or a write takes the directory, the path, the content of a write, the gallery of the images, and how the scheme makes its directory, and each scheme gives them apart"
+)]
 pub(crate) fn beneath(
   dir: Beneath<'_>,
   path: &str,

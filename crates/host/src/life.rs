@@ -8,10 +8,6 @@
 //! from it.
 //! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
   fs::File,
@@ -36,7 +32,7 @@ use furb::{
   skill::ENABLE,
   verbs,
   view::{
-    self, Act, Desk, Fold, Held, Kind, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown,
+    self, Act, Asked, Desk, Fold, Held, Kind, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown,
     Streamed, ThreadNode, Threads,
   },
   wire::{outward, parsed},
@@ -1217,6 +1213,10 @@ struct End {
 /// of each entry after it, as after an image at rest. Each other life tells the past of its record
 /// first, as [`Life::recalled`] says, and opens by the record. A life whose image does not load
 /// opens by the record once, and tells its past after that open and before its birth.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the thread of a life owns the opening, the lease of its record, the engine, the inbox, the events and the journal, and lends each to this open"
+)]
 async fn lives(
   opening: Opening,
   lease: Option<world::Lease>,
@@ -1283,6 +1283,10 @@ async fn lives(
 /// boots on that carry and tells each chain the lines of the engine that differ, as an open of its
 /// own, whose stages each window shows. Each command waits in the
 /// inbox meanwhile, so no word runs on the texts that the life leaves.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a crossing takes the engine and the opening that it leaves, the lease of the record, the life, the events, the journal and the progress of the open"
+)]
 async fn moved(
   engine: Engine,
   opening: Opening,
@@ -1645,19 +1649,14 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
     Command::Desk { notices } => Ok(Reply::Desk(life.kept.held.desk(&notices))),
     Command::Threads { on, at, read, site } => {
       let site = site.as_deref().unwrap_or("operator");
-      Ok(Reply::Threads(life.kept.held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
+      let reader = view::Reader { site, read: read.unwrap_or_default() };
+      Ok(Reply::Threads(life.kept.held.threads_as(&chain(on), at, reader)))
     }
     Command::Rail { hidden, at } => Ok(Reply::Rail(life.kept.held.rail(&hidden, at))),
     Command::Ladder { on, at, opened, owed, taken, shown } => {
       let shown = shown.unwrap_or(SHOWN);
-      Ok(Reply::Ladder(life.kept.held.ladder(
-        &chain(on),
-        at,
-        &opened,
-        &owed,
-        taken.as_deref(),
-        shown,
-      )))
+      let asked = Asked { opened: &opened, owed: &owed, taken: taken.as_deref(), shown };
+      Ok(Reply::Ladder(life.kept.held.ladder(&chain(on), at, asked)))
     }
     Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
     Command::Folded { id } => match life.kept.held.shared(&id) {

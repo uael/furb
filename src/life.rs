@@ -619,7 +619,7 @@ impl Opening {
       .keep(roster().as_deref(), actor.as_deref())
       .map_err(|no| Fault::refused(no.to_string()))?;
     let mut provider = catalog
-      .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
+      .provider(directory.clone(), &kept, answer.clone())
       .map_err(|no| Fault::refused(no.to_string()))?
       .gone(kept.left);
     let preferred = actor;
@@ -635,8 +635,7 @@ impl Opening {
           .configure(Path::new(&directory), config.as_deref())
           .await?;
         let kept = fresh.keeping(names.as_deref(), preferred.as_deref()).await;
-        let (names, actor) = (kept.names.as_deref(), kept.actor.as_deref());
-        let candidate = fresh.provided(directory, names, actor, answer).await?;
+        let candidate = fresh.provided(directory, &kept, answer).await?;
         Ok(candidate.into_settings())
       })
     }));

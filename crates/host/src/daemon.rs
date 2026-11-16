@@ -28,10 +28,6 @@
 //! An ask of the system to stop, as SIGTERM, ends each life with its image before the daemon ends,
 //! as [`crate::stops`] says.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   cmp::Reverse,
   collections::{BTreeSet, HashMap, HashSet},
@@ -1009,6 +1005,10 @@ async fn signed(
 /// it connects, the user config turns codex on, checked against the catalog of the folder of an
 /// opening, each life stands again, so each project offers its models, and the answer gives the
 /// models that the catalog of the opening offers now.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the sign-in takes the opening whose catalog it checks, the kind of sign-in, the outbox that tells its steps, the asks of the daemon that stand each life again, and the reply"
+)]
 async fn signed_in(
   opening: Opening,
   device: bool,
@@ -1191,6 +1191,10 @@ impl Lives {
   }
 
   #[expect(clippy::too_many_lines, reason = "the match gives each verb of the daemon its arm")]
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "each verb takes the peer that asked it, the verb, the outbox of the peer, and the reply that it answers"
+  )]
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
       Verb::Open { life, cwd, actor, roster, skills, config, claude, answers, attach } => {
@@ -1405,6 +1409,10 @@ impl Lives {
 
   /// A peer attached to a life, which hears each event of the life from a place in its log. A
   /// window holds the life, and a skill, under its name, serves views of it and holds nothing.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "an attach takes the life, the place in its log, the peer, and the outbox that the events go to"
+  )]
   fn attach(
     &mut self,
     life: &str,
@@ -2000,6 +2008,10 @@ impl Watch {
 
 /// The message of a stall sent to a chain of a life, or to its root with no chain, as a prompt of
 /// None, or the report of why the life refused it.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a wake takes the life, its record and the notice that it says, the chain that it goes to, and the log that tells a refusal"
+)]
 async fn woken(
   life: LifeHandle,
   record: String,

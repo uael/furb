@@ -1,9 +1,5 @@
 //! What a command writes: each stream kept at its head and its tail, and read to its end as it
 //! comes.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{fmt, mem, time::Duration};
 
 use futures::channel::mpsc::UnboundedSender;
@@ -127,6 +123,10 @@ const GATHER: Duration = Duration::from_millis(100);
 /// in utf-8, as far as its head holds, and kept in `all` until the stream ends. The stream is read
 /// to its end, whatever it holds, so the command never blocks on a full pipe. A read that fails is
 /// no end of the stream: it is the fault of the command, after the ear said what came before it.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a stream of a command takes its pipe, its name, the act that it tells, where it tells, and where it keeps what came"
+)]
 pub(super) async fn read(
   stream: Option<impl AsyncRead + Unpin>,
   name: Stream,

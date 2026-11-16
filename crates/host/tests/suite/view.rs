@@ -2,10 +2,6 @@
 //! threads, the spend, and the acts as they stood at a moment, each with the values that the views
 //! of TypeScript give.
 #![expect(clippy::panic, reason = "a panic is how a test fails")]
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::collections::HashMap;
 use std::iter;
 
@@ -19,6 +15,10 @@ use serde_json::{Value, json};
 
 /// An act of a life, made at a moment, and done at another when it is done, in the state that this
 /// gives it.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "each test writes an act as one row of the six fields that the views read"
+)]
 fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>) -> Act {
   let mut made = Act {
     kind: Kind::from(kind),

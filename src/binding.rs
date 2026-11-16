@@ -49,7 +49,7 @@ use crate::{
   life::Opening,
   skill::{self, Skill},
   view::{
-    Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, quotes as quotes_of, restate,
+    Act as ViewAct, Asked, Fold, Held, Pause, SHOWN, Shown, quotes as quotes_of, restate,
     writing as writing_of,
   },
   wire,
@@ -969,7 +969,9 @@ impl Meaning {
   ) -> Result<Value, Fault> {
     let at = at.map(moment).transpose()?;
     let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
-    meant(&self.held.ladder(&chain, at, &opened, &owed, taken.as_deref(), counted(shown)?))
+    let asked =
+      Asked { opened: &opened, owed: &owed, taken: taken.as_deref(), shown: counted(shown)? };
+    meant(&self.held.ladder(&chain, at, asked))
   }
 
   /// The acts as they stood just after a moment.

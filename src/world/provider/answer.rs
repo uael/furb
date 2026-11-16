@@ -1,8 +1,4 @@
 //! The call of a model for a reply, and the turn that its answer gives.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::HashSet,
   time::{Duration, SystemTime},
@@ -118,6 +114,10 @@ pub(super) fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
 /// the settings of its budget, which turn its thought off, so it writes its word at once. The turn
 /// holds that thought, under the id [`CUT`], and the word, and what the model wrote counts each
 /// part of that thought.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the turn takes the streams of the model, the request, the settings of the budget, the thought and the count of its parts that it gives back, and where it tells what it writes, and no type of the provider holds them together"
+)]
 pub(super) async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,

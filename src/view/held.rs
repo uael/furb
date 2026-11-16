@@ -1,10 +1,6 @@
 //! The acts of a life as a window last heard them, which the life keeps as it tells them, so a
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{BTreeSet, HashMap},
   mem,
@@ -19,14 +15,14 @@ use crate::engine::OPERATOR;
 use furb_wire::{
   act::{Act, Kind, Phase},
   desk::Desk,
-  ladder::{Rung, Shown},
+  ladder::Rung,
   state::State,
   threads::{Began, ChainTrack, ThreadNode, Threads},
 };
 
 use super::{
   desk::desk,
-  ladder::{Index, folded, lives},
+  ladder::{Asked, Index, folded, lives},
   threads::{
     Lookup, Rows, Works, attention, chain_asides, chain_notes, chain_threads, chain_tree,
     nest_threads, order_threads, works,
@@ -67,6 +63,14 @@ impl<'a> Works<'a> for &'a Held {
   fn works(&self, chain: &str, at: u64) -> bool {
     works(self.on_chain(chain), at)
   }
+}
+
+/// The window that reads the threads of a chain: its site, and the place up to which it read the
+/// chain, from which its runs of notes count the notes not yet read.
+#[derive(Debug, Clone, Copy)]
+pub struct Reader<'a> {
+  pub site: &'a str,
+  pub read: u64,
 }
 
 impl Held {
@@ -155,24 +159,14 @@ impl Held {
     self.at.get(id).and_then(|at| self.acts.get(*at))
   }
 
-  /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
-  /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
-  /// them.
-  pub fn ladder(
-    &self,
-    chain: &str,
-    at: Option<u64>,
-    opened: &[String],
-    owed: &[String],
-    taken: Option<&[String]>,
-    shown: Shown,
-  ) -> Vec<Rung> {
+  /// The ladder of a chain, now or as it stood just after a moment, as a window asks it.
+  pub fn ladder(&self, chain: &str, at: Option<u64>, asked: Asked<'_>) -> Vec<Rung> {
     let Some(at) = at else {
       let index =
         Index { acts: &self.acts, at: &self.at, made: &self.made, on: &self.on, live: &self.live };
-      return folded(&index, chain, opened, owed, taken, shown);
+      return folded(&index, chain, asked);
     };
-    self.past(at).ladder(chain, None, opened, owed, taken, shown)
+    self.past(at).ladder(chain, None, asked)
   }
 
   /// The acts as they stood just after a moment, held in the order they began, so each read of
@@ -215,7 +209,7 @@ impl Held {
   /// each, now or as they stood just after a moment. `read` is the place up to which the window
   /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
-    self.threads_as(OPERATOR, chain, at, read)
+    self.threads_as(chain, at, Reader { site: OPERATOR, read })
   }
 
   /// The acts that an act or a person made, in the order they were first told.
@@ -287,7 +281,8 @@ impl Held {
 
   /// The threads of a chain as the window of a site reads them: the mark of what it has not seen
   /// counts the seen of that site alone.
-  pub fn threads_as(&self, site: &str, chain: &str, at: Option<u64>, read: u64) -> Threads {
+  pub fn threads_as(&self, chain: &str, at: Option<u64>, reader: Reader<'_>) -> Threads {
+    let Reader { site, read } = reader;
     self.then(at, |acts| {
       let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
       let on: Vec<&Act> =

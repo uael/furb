@@ -1,8 +1,4 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   fmt, fs,
   io::{self, ErrorKind},
@@ -42,6 +38,7 @@ use crate::{
 /// `stored` says, so no reader sees a torn file. A read of an image keeps it in the directory of
 /// the images of the life, the gallery, as `seen` says.
 pub fn files(scratch: Scratch, places: Places, gallery: Option<PathBuf>) -> Box<dyn Ear> {
+  let files = Files { scratch, places, gallery };
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -56,10 +53,8 @@ pub fn files(scratch: Scratch, places: Places, gallery: Option<PathBuf>) -> Box<
         continue;
       }
       let answer = match a.kind() {
-        "cd" => moved(&mut co, &a, places.home.as_deref()).await.map(Object::string),
-        _ => {
-          served(&mut co, &a, &scratch, &places, gallery.as_deref()).await.map(|text| text.object())
-        }
+        "cd" => moved(&mut co, &a, files.places.home.as_deref()).await.map(Object::string),
+        _ => files.served(&mut co, &a).await.map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
@@ -85,52 +80,59 @@ async fn moved(co: &mut Co, a: &Fact, home: Option<&Path>) -> Result<String, Fau
   Ok(shown)
 }
 
-/// What a read or a write came to.
-async fn served(
-  co: &mut Co,
-  a: &Fact,
-  scratch: &Scratch,
-  places: &Places,
-  gallery: Option<&Path>,
-) -> Result<Text, Fault> {
-  let (path, content) = if a.kind() == "read" {
-    (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None)
-  } else {
-    let text =
-      a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
-    (text.path, Some(text.content))
-  };
-  let path = native(&path);
-  if let Some(path) = path.strip_prefix(SCRATCH) {
-    return scratch.served(path, content, gallery);
+/// What the ear of the files serves: the scratch directory, the places of the life, and the gallery
+/// of its images.
+struct Files {
+  scratch: Scratch,
+  places: Places,
+  gallery: Option<PathBuf>,
+}
+
+impl Files {
+  /// What a read or a write came to.
+  async fn served(&self, co: &mut Co, a: &Fact) -> Result<Text, Fault> {
+    let Self { scratch, places, gallery } = self;
+    let gallery = gallery.as_deref();
+    let (path, content) = if a.kind() == "read" {
+      (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None)
+    } else {
+      let text =
+        a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
+      (text.path, Some(text.content))
+    };
+    let path = native(&path);
+    if let Some(path) = path.strip_prefix(SCRATCH) {
+      return scratch.served(path, content, gallery);
+    }
+    if let Some(path) = path.strip_prefix(CONFIG) {
+      let dir = Beneath { root: &places.config, scheme: CONFIG, place: "the config directory" };
+      return beneath(dir, path, content, gallery, || Ok(()));
+    }
+    if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one)))
+    {
+      return Err(Fault::refused(format!(
+        "{path} is no path of {scheme}, which starts with two slashes."
+      )));
+    }
+    if path.contains("://") {
+      return Err(Fault::refused(format!("No file at {path}.")));
+    }
+    let head = path.split('/').next().unwrap_or_default();
+    if !co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().is_none() {
+      let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
+      let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
+      return Err(Fault::refused(format!(
+        "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
+        a.kind()
+      )));
+    }
+    let home = places.home.as_deref();
+    let at = placed(&here(co, a.on(), home).await?, &path, home)?;
+    if let Some(content) = content {
+      filed(&at, content, at.display())?;
+    }
+    text(&at, tilded(&at, home), gallery)
   }
-  if let Some(path) = path.strip_prefix(CONFIG) {
-    let dir = Beneath { root: &places.config, scheme: CONFIG, place: "the config directory" };
-    return beneath(dir, path, content, gallery, || Ok(()));
-  }
-  if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one))) {
-    return Err(Fault::refused(format!(
-      "{path} is no path of {scheme}, which starts with two slashes."
-    )));
-  }
-  if path.contains("://") {
-    return Err(Fault::refused(format!("No file at {path}.")));
-  }
-  let head = path.split('/').next().unwrap_or_default();
-  if !co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().is_none() {
-    let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
-    let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
-    return Err(Fault::refused(format!(
-      "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
-      a.kind()
-    )));
-  }
-  let home = places.home.as_deref();
-  let at = placed(&here(co, a.on(), home).await?, &path, home)?;
-  if let Some(content) = content {
-    filed(&at, content, at.display())?;
-  }
-  text(&at, tilded(&at, home), gallery)
 }
 
 /// The content of a write put at a path, with the folders above it made, in one write as

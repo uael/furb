@@ -29,10 +29,6 @@
 //! of the local server only when the catalog offers no other model.
 //!
 //! [`local`]: super::local
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 mod config;
 mod error;
 mod update;
@@ -610,28 +606,27 @@ impl Catalog {
     }
   }
 
-  /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
-  /// function of the host answers in place of the models when it gives one, and whose model thinks at most the tokens
-  /// in one turn that the environment gives, else the config of the project in the directory, else 32768.
+  /// The provider of the roster that the catalog keeps of what a host named, on a directory, with
+  /// the default actor of the roster, whose models a function of the host answers in place of the
+  /// models when it gives one, and whose model thinks at most the tokens in one turn that the
+  /// environment gives, else the config of the project in the directory, else 32768.
   pub fn provider(
     &self,
     directory: impl Into<String>,
-    names: Option<&[String]>,
-    actor: Option<&str>,
+    kept: &Kept,
     host: Option<Hosted>,
   ) -> Result<Provider, Unknown> {
-    blocking(self.provided(directory.into(), names, actor, host))?
+    blocking(self.provided(directory.into(), kept, host))?
   }
 
   /// The provider of a roster, as [`Catalog::provider`] gives it, for a caller that awaits.
   pub async fn provided(
     &self,
     directory: String,
-    names: Option<&[String]>,
-    actor: Option<&str>,
+    kept: &Kept,
     host: Option<Hosted>,
   ) -> Result<Provider, Unknown> {
-    let (models, actor) = self.rostered(names, actor).await?;
+    let (models, actor) = self.rostered(kept.names.as_deref(), kept.actor.as_deref()).await?;
     let models = match host {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
@@ -860,6 +855,10 @@ impl Listed {
   /// Where a model of the provider is asked, with its credential: its address, with each place filled from the
   /// environment, the name that Azure knows it by, and the project and the location of Google; or why the
   /// environment does not say it.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "where a model is asked takes its id, its listing, its client, the credential of its provider and the environment, each from another part of the catalog"
+  )]
   fn reach(
     &self,
     id: &str,
@@ -934,6 +933,10 @@ impl Client {
 
 /// A model of a provider of the network. A model of Anthropic, of Amazon or of pi-ai counts what it read of the cache
 /// apart, and is told the most it writes.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a model of the network takes its provider, its id, its listing, its client and where it is asked, each from another part of the catalog"
+)]
 fn model(
   provider: &str,
   id: &str,

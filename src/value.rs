@@ -10,14 +10,10 @@
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 use serde_json::Value;
-use std::{error, fmt, fmt::Write as _};
+use std::{error, fmt, fmt::Write as _, mem};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
@@ -333,47 +329,41 @@ pub(crate) fn carried(value: Object) -> Object {
   if high.is_some_and(|high| *high < DEEPEST) && many.is_some_and(|many| *many <= limit) {
     return value;
   }
-  let (mut cut, mut left) = (MontyGraph::new(), limit);
-  let root = cutting(graph, root, 0, &mut left, &mut cut, false);
-  unstable::object_from_graph(cut, root).unwrap_or_else(|_| Object::repr(NESTED))
+  let mut cut = Cut { graph, into: MontyGraph::new(), left: limit };
+  let root = cut.part(root, 0, false);
+  unstable::object_from_graph(cut.into, root).unwrap_or_else(|_| Object::repr(NESTED))
 }
 
-/// One part of a value as `carried` cuts it into the arena of the cut, at a level, from what is left of its bound.
-/// The class of an instance stays a class, since an instance names a class, and only what the class holds is cut.
-fn cutting(
-  graph: &MontyGraph,
-  id: NodeId,
-  level: usize,
-  left: &mut usize,
-  cut: &mut MontyGraph,
-  class: bool,
-) -> NodeId {
-  let node = graph.node(id);
-  if !node.is_leaf() && !class {
-    if level + 1 >= DEEPEST {
-      return cut.push(MontyNode::Repr(NESTED.to_owned()));
+/// The cut that `carried` makes of a value: the arena of the value, the arena of the cut, and what
+/// is left of the bound of its parts.
+struct Cut<'a> {
+  graph: &'a MontyGraph,
+  into: MontyGraph,
+  left: usize,
+}
+
+impl Cut<'_> {
+  /// One part of the value, cut into the arena of the cut at a level, after the parts that it
+  /// holds. The class of an instance stays a class, since an instance names a class, and only what
+  /// the class holds is cut.
+  fn part(&mut self, id: NodeId, level: usize, class: bool) -> NodeId {
+    let graph = self.graph;
+    let node = graph.node(id);
+    if !node.is_leaf() && !class {
+      if level + 1 >= DEEPEST {
+        return self.into.push(MontyNode::Repr(NESTED.to_owned()));
+      }
+      if self.left == 0 {
+        return self.into.push(MontyNode::Repr(REPEATED.to_owned()));
+      }
     }
-    if *left == 0 {
-      return cut.push(MontyNode::Repr(REPEATED.to_owned()));
-    }
+    self.left = self.left.saturating_sub(1);
+    let instance = matches!(node, MontyNode::ClassInstance { .. });
+    let mut node = node.clone();
+    let mut first = instance;
+    node.for_each_child_mut(|one| *one = self.part(*one, level + 1, mem::take(&mut first)));
+    self.into.push(node)
   }
-  *left = left.saturating_sub(1);
-  let mut held = Vec::new();
-  node.for_each_child(|one| held.push(one));
-  let instance = matches!(node, MontyNode::ClassInstance { .. });
-  let held: Vec<NodeId> = held
-    .into_iter()
-    .enumerate()
-    .map(|(at, one)| cutting(graph, one, level + 1, left, cut, instance && at == 0))
-    .collect();
-  let mut node = node.clone();
-  let mut each = held.into_iter();
-  node.for_each_child_mut(|one| {
-    if let Some(made) = each.next() {
-      *one = made;
-    }
-  });
-  cut.push(node)
 }
 
 fn walk(graph: &MontyGraph, id: NodeId) -> Object {

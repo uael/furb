@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use furb::view::{Act, Fold, Held, State};
+use furb::view::{Act, Fold, Held, Reader, State};
 use furb::view::{
   Aside, Attention, NoteRun, Rows, ThreadNode, chain_asides, chain_notes, chain_threads,
   chain_tree, open,
@@ -619,7 +619,9 @@ fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
     json!(["seen", "chain1", "operator/ann"]),
   ];
   let got = held(facts);
-  let unread = |operator: &str| got.threads_as(operator, "chain1", None, 0).attention.unread;
+  let unread = |operator: &str| {
+    got.threads_as("chain1", None, Reader { site: operator, read: 0 }).attention.unread
+  };
   // Ann read the chain, so it is no unread mark of hers, and Bob has not read it, so it stays his.
   assert_eq!(unread("operator/ann"), 0);
   assert_eq!(unread("operator/bob"), 1);

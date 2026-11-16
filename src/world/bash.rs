@@ -2,10 +2,6 @@
 //! it writes as it writes it, and ends at its exit, at its timeout, or at the done that a control
 //! said of it first.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 mod kept;
 mod shell;
 
@@ -340,6 +336,10 @@ enum Phase {
 /// The wait on a command through its three phases. A fault of a stream or a signal that cannot
 /// reach the group ends it with that fault, and the timeout of the command ends its processes at
 /// any time.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the watch selects over the four futures of one command, its shell, its streams, its timeout and its stdin, and ends its group"
+)]
 async fn watch(
   shell: impl Future<Output = io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,

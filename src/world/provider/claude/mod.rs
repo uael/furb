@@ -11,10 +11,6 @@
 //! process that is gone leaves its conversation on the disk under its id, so a later turn resumes
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   env, io,
   path::{Path, PathBuf},
@@ -214,6 +210,10 @@ impl Claude {
   /// account and ends as a failure that passes, so the turn that asks again runs as another
   /// account: a limit parks an account until its reset, and a failed sign in until a new command
   /// line stands, as after a reload. With one account or none, nothing is parked.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the command line takes its program, its words, its accounts, the policy that switches them and its stall, each that a config gives apart"
+  )]
   pub fn with_accounts(
     bin: Option<PathBuf>,
     args: Vec<String>,

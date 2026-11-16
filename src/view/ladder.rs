@@ -5,10 +5,6 @@
 //! step under which a prompt or a rung asks the operator or works stays shown, and a fold holds
 //! two steps in a row at least. It reads the lists of the acts that the window holds by maker and
 //! by chain, and the acts that live, so it takes the time of what it shows and not of the life.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{BTreeSet, HashMap, HashSet},
   sync::Arc,
@@ -58,6 +54,17 @@ pub(super) fn lives(act: &Act) -> bool {
   !act.done() || act.run == Some(RunState::Running)
 }
 
+/// What a window asks of a ladder beside its chain and its moment: the folds that it opened, the
+/// prompts that the operator owes, the only acts at its top when it names them, and how many of
+/// the last steps of a level show.
+#[derive(Debug, Clone, Copy)]
+pub struct Asked<'a> {
+  pub opened: &'a [String],
+  pub owed: &'a [String],
+  pub taken: Option<&'a [String]>,
+  pub shown: Shown,
+}
+
 /// What a ladder takes of an act of a level: a step, a rung of an ear, or nothing.
 #[derive(PartialEq)]
 enum Take {
@@ -100,6 +107,15 @@ fn listed<'a>(acts: impl IntoIterator<Item = &'a Act>, take: impl Fn(&Act) -> Ta
   held
 }
 
+/// One level of a ladder: its steps, its depth, the key that opens its fold, and the step that it
+/// stands under, none at the top.
+struct Level<'a, 'k> {
+  list: Listed<'a>,
+  depth: usize,
+  key: &'k str,
+  above: &'k str,
+}
+
 /// What a ladder reads to fold a chain.
 struct Walk<'a, 's> {
   chain: &'s str,
@@ -124,7 +140,9 @@ impl<'a> Walk<'a, '_> {
     }
   }
 
-  fn level(&mut self, list: &Listed<'a>, depth: usize, key: &str, above: &str) {
+  fn level(&mut self, level: &Level<'a, '_>) {
+    let Level { list, depth, key, above } = level;
+    let (depth, key, above) = (*depth, *key, *above);
     let rungs = key.starts_with("rungs:");
     let count = list.steps.len();
     let keep = if rungs { self.shown.rungs } else { self.shown.prompts };
@@ -181,7 +199,8 @@ impl<'a> Walk<'a, '_> {
     self.out.push(Rung::Step { id: act.id.clone(), depth });
     let under = self.under(act);
     let of = if act.kind == Kind::Prompt { "rungs" } else { "prompts" };
-    self.level(&under, depth + 1, &format!("{of}:{}", act.id), &act.id);
+    let key = format!("{of}:{}", act.id);
+    self.level(&Level { list: under, depth: depth + 1, key: &key, above: &act.id });
   }
 }
 
@@ -192,14 +211,8 @@ fn blank(word: Option<&Value>) -> bool {
 
 /// The ladder of a chain from the index of the acts that a window holds, as
 /// [`super::Held::ladder`] reads it.
-pub(super) fn folded(
-  index: &Index<'_>,
-  chain: &str,
-  opened: &[String],
-  owed: &[String],
-  taken: Option<&[String]>,
-  shown: Shown,
-) -> Vec<Rung> {
+pub(super) fn folded(index: &Index<'_>, chain: &str, asked: Asked<'_>) -> Vec<Rung> {
+  let Asked { opened, owed, taken, shown } = asked;
   let local =
     |id: &str| index.get(id).is_some_and(|act| act.chain == chain && act.kind != Kind::Chain);
   // A rung that no act wrote: an ear of the outside wrote it, or the chain wrote it on itself and
@@ -253,6 +266,6 @@ pub(super) fn folded(
   let key = format!("prompts:{}", top.steps.first().map_or("", |one| one.0.chain.as_str()));
   let opened = opened.iter().map(String::as_str).collect();
   let mut walk = Walk { chain, index, alive, opened, shown, out: Vec::new() };
-  walk.level(&top, 0, &key, "");
+  walk.level(&Level { list: top, depth: 0, key: &key, above: "" });
   walk.out
 }

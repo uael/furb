@@ -1,10 +1,6 @@
 //! One conversation of the claude command line: what it is fixed at, where it stands, the turns
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   env,
   path::PathBuf,
@@ -424,6 +420,10 @@ impl Conversation {
   /// a process at what the turn spends, and the reply that it streams, with that process. The
   /// process stands apart from the conversation until the turn settles, so a turn that is dropped
   /// drops its process, and keeps what the command line heard.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a flight takes the messages that the command line has not heard and what the turn spends, beside the run and the outcome that each flight shares"
+  )]
   async fn flight(
     &mut self,
     delta: &[Message],
@@ -530,6 +530,10 @@ impl Conversation {
   /// The reply that a process streams for the line that it heard, with that process. A process that
   /// found no program to run heard nothing, and the conversation is resumed as it was before the
   /// turn.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the reply takes the process that writes it and whether the conversation was resumed before the turn, beside the run and the outcome that each flight shares"
+  )]
   async fn listened(
     &mut self,
     mut process: Process,
