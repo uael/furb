@@ -157,8 +157,9 @@ fn started(program: &Path) -> io::Error {
   }
   #[cfg(not(unix))]
   {
+    use std::process;
     match command.status() {
-      Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+      Ok(status) => process::exit(status.code().unwrap_or(1)),
       Err(fault) => fault,
     }
   }
