@@ -1,7 +1,6 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
 //! messages and what it asks the operator, nested under the thread whose ladder made it, or under
 //! the thread that it is on when its message carries an anchor, as a sub thread.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 
 use std::{
   collections::{HashMap, HashSet},
@@ -451,7 +450,7 @@ pub fn nest_threads(list: Vec<ChainThread>, rows: &Rows<'_>) -> Vec<ThreadNode> 
     })
     .collect();
   let mut threads: Vec<Option<ChainThread>> = list.into_iter().map(Some).collect();
-  let tops: Vec<usize> = (0..threads.len()).filter(|n| parents[*n].is_none()).collect();
+  let tops: Vec<usize> = (0..threads.len()).filter(|n| parents.get(*n) == Some(&None)).collect();
   tops.into_iter().filter_map(|top| node(top, &parents, &mut threads)).collect()
 }
 
@@ -461,9 +460,9 @@ fn node(
   parents: &[Option<usize>],
   threads: &mut [Option<ChainThread>],
 ) -> Option<ThreadNode> {
-  let thread = threads[n].take()?;
+  let thread = threads.get_mut(n)?.take()?;
   let agents: Vec<ThreadNode> = (0..parents.len())
-    .filter(|one| parents[*one] == Some(n))
+    .filter(|one| parents.get(*one) == Some(&Some(n)))
     .filter_map(|one| node(one, parents, threads))
     .collect();
   let asks = agents.iter().any(|one| one.state == State::Asks);

@@ -1,7 +1,5 @@
 //! The desk of the operator: each question that waits for him and each notice that he did not
 //! dismiss, with what the line of his answer is for the shape that each one asks.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use crate::{
   value::{Fault, Object},
@@ -119,7 +117,7 @@ fn sample(form: &Shape, n: usize) -> String {
     Shape::Float => two("1.5", "2.5"),
     Shape::Bool => two("true", "false"),
     Shape::None => "null".to_owned(),
-    Shape::Choice(values) => json_of(&values[n % values.len()]),
+    Shape::Choice(values) => values.get(n % values.len().max(1)).map_or_else(String::new, json_of),
     Shape::List(of) => of
       .as_ref()
       .map_or("[\"a\", 1]".to_owned(), |of| format!("[{}, {}]", sample(of, 0), sample(of, 1))),
@@ -153,7 +151,10 @@ fn line(form: &Shape) -> String {
       };
       format!("a JSON {noun}{of}, as {}", sample(form, 0))
     }
-    Shape::Tuple(_) => format!("a JSON {}, as {}", &said(form)[2..], sample(form, 0)),
+    Shape::Tuple(_) => {
+      let said = said(form);
+      format!("a JSON {}, as {}", said.get(2..).unwrap_or(&said), sample(form, 0))
+    }
     Shape::Either(of) => {
       let arms: Vec<&Shape> = of.iter().filter(|one| !matches!(one, Shape::None)).collect();
       let words: Vec<String> = arms

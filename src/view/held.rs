@@ -1,7 +1,6 @@
 //! The acts of a life as a window last heard them, which the life keeps as it tells them, so a
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -60,7 +59,7 @@ pub struct Held {
 
 impl<'a> Lookup<'a> for &'a Held {
   fn act(&self, id: &str) -> Option<&'a Act> {
-    self.at.get(id).map(|at| &*self.acts[*at])
+    self.at.get(id).and_then(|at| self.acts.get(*at)).map(|act| &**act)
   }
 }
 
@@ -97,8 +96,8 @@ impl Held {
   /// act as it holds it.
   pub fn took(&mut self, act: impl Into<Arc<Act>>) -> Option<Arc<Act>> {
     let mut act = act.into();
-    let (at, before) = if let Some(&at) = self.at.get(&act.id) {
-      let was = &self.acts[at];
+    let known = self.at.get(&act.id).and_then(|at| Some((*at, self.acts.get_mut(*at)?)));
+    let (at, before) = if let Some((at, was)) = known {
       if was.done() && !act.done() {
         return None;
       }
@@ -110,7 +109,7 @@ impl Held {
         one.began = was.began;
         one.ended = ended;
       }
-      (at, Some(mem::replace(&mut self.acts[at], act)))
+      (at, Some(mem::replace(was, act)))
     } else {
       let at = self.acts.len();
       // A read of now takes the acts in place as the order they began, which a host and a record
@@ -125,12 +124,13 @@ impl Held {
       self.acts.push(act);
       (at, None)
     };
-    if lives(&self.acts[at]) {
+    let Some(now) = self.acts.get(at) else { return before };
+    if lives(now) {
       self.live.insert(at);
     } else {
       self.live.remove(&at);
     }
-    if self.acts[at].kind == Kind::Stand && self.acts[at].done() {
+    if now.kind == Kind::Stand && now.done() {
       self.stood = self.stood.max(Some(at));
     }
     before
@@ -152,7 +152,7 @@ impl Held {
 
   /// The act of an id as the last event of it told it.
   pub fn shared(&self, id: &str) -> Option<&Arc<Act>> {
-    self.at.get(id).map(|at| &self.acts[*at])
+    self.at.get(id).and_then(|at| self.acts.get(*at))
   }
 
   /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
@@ -220,7 +220,7 @@ impl Held {
 
   /// The acts that an act or a person made, in the order they were first told.
   pub(super) fn made_by<'a>(&'a self, id: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.made.get(id).into_iter().flatten().map(|at| &*self.acts[*at])
+    self.made.get(id).into_iter().flatten().filter_map(|at| self.acts.get(*at)).map(|act| &**act)
   }
 
   /// The text to write back at each path that a list of writes wrote, to revert them: the text
@@ -245,7 +245,8 @@ impl Held {
   /// lines it tells, so its text is what stood there.
   pub(super) fn text_before(&self, path: &str, act: &str) -> Option<&str> {
     let place = *self.at.get(act)?;
-    let mut texts = self.acts[..place].iter().rev().filter_map(|one| self.filed(one));
+    let before = self.acts.get(..place).unwrap_or_default();
+    let mut texts = before.iter().rev().filter_map(|one| self.filed(one));
     texts.find(|(at, _)| *at == path).map(|(_, content)| content)
   }
 
@@ -262,7 +263,7 @@ impl Held {
 
   /// The acts of a chain, in the order they were first told.
   pub(super) fn on_chain<'a>(&'a self, chain: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.on.get(chain).into_iter().flatten().map(|at| &*self.acts[*at])
+    self.on.get(chain).into_iter().flatten().filter_map(|at| self.acts.get(*at)).map(|act| &**act)
   }
 
   /// Each site that said what it saw, and the operator with no login, who saw what the journal
@@ -324,8 +325,11 @@ impl Held {
         });
         on.entry(chain).or_default().push(act);
       }
-      let mut list: Vec<_> =
-        chains.iter().flat_map(|chain| chain_threads(&on[chain], &rows)).collect();
+      let mut list: Vec<_> = chains
+        .iter()
+        .filter_map(|chain| on.get(chain))
+        .flat_map(|acts| chain_threads(acts, &rows))
+        .collect();
       list.sort_by_key(|one| rows.get(one.prompt.as_str()).map_or(0, |act| act.began));
       order_threads(nest_threads(list, &rows), &rows)
     })
@@ -335,7 +339,7 @@ impl Held {
   /// made, in the order the acts were first told. A cancel of each ends what each made too.
   pub fn open_work(&self) -> Vec<String> {
     let open = |act: &Act| !act.done() && act.kind != Kind::Chain;
-    let work = |at: &usize| Some(&*self.acts[*at]).filter(|act| open(act));
+    let work = |at: &usize| self.acts.get(*at).map(|act| &**act).filter(|act| open(act));
     let made_by_work = |act: &Act| self.act(&act.by).is_some_and(open);
     self
       .live
@@ -348,7 +352,7 @@ impl Held {
 
   /// Each act that is not done, in the order the acts were first told.
   pub(super) fn open(&self) -> impl Iterator<Item = &Act> {
-    self.live.iter().map(|at| &*self.acts[*at]).filter(|act| !act.done())
+    self.live.iter().filter_map(|at| self.acts.get(*at)).map(|act| &**act).filter(|act| !act.done())
   }
 
   /// The id of each command of the life that runs.
@@ -359,7 +363,8 @@ impl Held {
 
   /// Each run of a word that is not done, in the order the acts were first told.
   pub fn running(&self) -> impl Iterator<Item = &Arc<Act>> {
-    self.live.iter().map(|at| &self.acts[*at]).filter(|act| act.kind == Kind::Run && !act.done())
+    let running = |act: &&Arc<Act>| act.kind == Kind::Run && !act.done();
+    self.live.iter().filter_map(|at| self.acts.get(*at)).filter(running)
   }
 
   /// The acts as they stood just after a moment, in the order they began.

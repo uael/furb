@@ -5,7 +5,6 @@
 //! step under which a prompt or a rung asks the operator or works stays shown, and a fold holds
 //! two steps in a row at least. It reads the lists of the acts that the window holds by maker and
 //! by chain, and the acts that live, so it takes the time of what it shows and not of the life.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
 #![expect(
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
@@ -38,7 +37,7 @@ pub(super) struct Index<'a> {
 
 impl<'a> Index<'a> {
   fn get(&self, id: &str) -> Option<&'a Act> {
-    self.at.get(id).map(|place| &*self.acts[*place])
+    self.at.get(id).and_then(|place| self.acts.get(*place)).map(|act| &**act)
   }
 
   /// The acts of a list of places, in order, but the questions on the way to what an act does,
@@ -48,7 +47,8 @@ impl<'a> Index<'a> {
     places
       .into_iter()
       .flatten()
-      .map(move |place| &*acts[*place])
+      .filter_map(move |place| acts.get(*place))
+      .map(|act| &**act)
       .filter(|act| followed(act.kind.as_str()))
   }
 }
@@ -141,7 +141,9 @@ impl<'a> Walk<'a, '_> {
     shows.extend(end..=count);
     let mut from = 0;
     for place in shows {
-      if place >= from + 2 {
+      if let Some((head, _)) = list.steps.get(from)
+        && place >= from + 2
+      {
         let mut heads: Vec<(usize, &str)> = list
           .kinds
           .iter()
@@ -152,7 +154,7 @@ impl<'a> Walk<'a, '_> {
           .collect();
         heads.sort_unstable();
         self.out.push(Rung::More {
-          head: list.steps[from].0.id.clone(),
+          head: head.id.clone(),
           depth,
           count: place - from,
           of: (if rungs { "rungs" } else { "prompts" }).to_owned(),
@@ -170,7 +172,7 @@ impl<'a> Walk<'a, '_> {
   }
 
   fn show(&mut self, list: &Listed<'a>, place: usize, depth: usize) {
-    let (act, ear) = &list.steps[place];
+    let Some((act, ear)) = list.steps.get(place) else { return };
     if let Some(ear) = ear {
       let rungs = ear.iter().map(|id| (*id).to_owned()).collect();
       self.out.push(Rung::Ear { rungs, depth });
@@ -210,7 +212,7 @@ pub(super) fn folded(
   // A step stays shown when a prompt or a rung under it asks the operator or works: each such act
   // marks each step from it up to the top, in the level of the step above it.
   let mut alive: HashMap<&str, Vec<&str>> = HashMap::new();
-  let live = index.live.iter().map(|place| &*index.acts[*place]);
+  let live = index.live.iter().filter_map(|place| index.acts.get(*place)).map(|act| &**act);
   let asked = owed.iter().filter_map(|id| index.get(id));
   for act in live.chain(asked) {
     let working = matches!(act.state, State::Asks | State::Thinks | State::Runs | State::Idle);

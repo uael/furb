@@ -2,8 +2,6 @@
 //! answers it, the block of code of each answer as its lines, the thought of its model, and the
 //! agents that the thread made. A page reads the acts of its thread through the lists of the
 //! acts by maker, so it takes the time of the thread and not of the life.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use std::{
   collections::{HashMap, HashSet},
@@ -50,7 +48,7 @@ fn output_of([stdout, stderr]: &[Kept; 2], took: Option<u64>, act: &str) -> Opti
   let lines: Vec<&str> = stdout.end.lines().chain(stderr.end.lines()).collect();
   let skip = lines.len().saturating_sub(TAIL);
   let more = stdout.before + stderr.before + skip;
-  let tail: Vec<String> = lines[skip..].iter().map(|line| shown_line(line)).collect();
+  let tail: Vec<String> = lines.iter().skip(skip).map(|line| shown_line(line)).collect();
   let acts = vec![act.to_owned()];
   (!tail.is_empty() || took.is_some()).then_some(Output { tail, more, took, acts })
 }
@@ -85,7 +83,8 @@ impl Kept {
         start += 1;
       }
     }
-    Self { end: text[start..].to_owned(), before: text[..start].matches('\n').count() }
+    let (before, end) = text.split_at_checked(start).unwrap_or((text, ""));
+    Self { end: end.to_owned(), before: before.matches('\n').count() }
   }
 
   /// The end once the stream wrote a text more.
@@ -179,7 +178,10 @@ impl Streamed {
     let word = |at: usize| fact.get(at).and_then(Value::as_str);
     let (true, Some(about), Some(text)) = (wrote(fact), word(1), word(3)) else { return };
     let stream = usize::from(word(4) == Some("stderr"));
-    self.outs.entry(about.to_owned()).or_default()[stream].push(text);
+    let streams = self.outs.entry(about.to_owned()).or_default();
+    if let Some(one) = streams.get_mut(stream) {
+      one.push(text);
+    }
   }
 
   /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
@@ -299,8 +301,9 @@ impl<'a> Reader<'a> {
     };
     let end = before.unwrap_or(answers.len()).min(answers.len());
     let start = end.saturating_sub(limit);
-    let mut number: usize = answers[..start]
+    let mut number: usize = answers
       .iter()
+      .take(start)
       .flat_map(|one| &one.rungs)
       .map(|rung| count(rung, self.streams))
       .sum();
@@ -310,7 +313,8 @@ impl<'a> Reader<'a> {
     for (at, one) in answers.iter_mut().enumerate() {
       one.more = busy && (at + 1 == messages || one.rungs.last().is_some_and(|rung| lives(rung)));
     }
-    let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
+    let shown = answers.iter().enumerate().take(end).skip(start);
+    let exchanges = shown.map(|(at, one)| self.exchange(at, one, &mut number)).collect();
     // The count of the lines of the thread before each rung, which numbers each line of its word.
     let mut before: HashMap<&str, usize> = HashMap::new();
     let mut lined = 0;
@@ -338,9 +342,11 @@ impl<'a> Reader<'a> {
         && anchor_of(act).is_some()
         && parent_of(act, &self.held) == Some(thread)
     };
-    agents.extend(self.held.on_chain(&prompts[0].chain).filter(sub).map(|act| self.agent(act)));
-    let sub = anchor_of(prompts[0]).map(|_| Box::new(self.agent(prompts[0])));
-    let (context, folder) = (self.context(&prompts[0].chain), self.folder(&prompts[0].chain));
+    // A thread is told with its first prompt, which `told` gives first.
+    let Some(first) = prompts.first().copied() else { return Page::default() };
+    agents.extend(self.held.on_chain(&first.chain).filter(sub).map(|act| self.agent(act)));
+    let sub = anchor_of(first).map(|_| Box::new(self.agent(first)));
+    let (context, folder) = (self.context(&first.chain), self.folder(&first.chain));
     Page { exchanges, above: start, agents, context, sub, folder, views: self.views() }
   }
 
@@ -348,7 +354,7 @@ impl<'a> Reader<'a> {
   fn made_at(self, rung: &Act, before: usize, made: &Act) -> Option<usize> {
     let source = self.source(made)?;
     let lines = self.lines(rung, before);
-    at_line(&lines, before, source).map(|at| lines[at].number)
+    at_line(&lines, before, source).and_then(|at| lines.get(at)).map(|line| line.number)
   }
 
   /// The context of a chain at its last answer, and none before it: of the chain that it stands
@@ -431,19 +437,28 @@ impl<'a> Reader<'a> {
     rungs.extend(words);
     rungs.sort_by_key(|rung| rung.began);
     // A sub thread that asks the operator about a line is its own first question.
-    if prompt.asks_operator() {
-      answers[0].asked.push(prompt);
+    // Each act goes to the message that it answers, which `after` finds among the messages.
+    if prompt.asks_operator()
+      && let Some(first) = answers.first_mut()
+    {
+      first.asked.push(prompt);
     }
     for rung in &rungs {
-      answers[after(rung.began)].rungs.push(rung);
+      if let Some(one) = answers.get_mut(after(rung.began)) {
+        one.rungs.push(rung);
+      }
       let asks = |act: &&Act| act.asks_operator() && anchor_of(act).is_none();
       for asked in self.held.made_by(&rung.id).filter(asks) {
-        answers[after(asked.began)].asked.push(asked);
+        if let Some(one) = answers.get_mut(after(asked.began)) {
+          one.asked.push(asked);
+        }
       }
     }
     for message in messages.iter().filter(|one| one.kind == Kind::Prompt) {
-      if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string)) {
-        answers[after(ended)].closes.push(message);
+      if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string))
+        && let Some(one) = answers.get_mut(after(ended))
+      {
+        one.closes.push(message);
       }
     }
     Some(Told { prompts, answers, rungs })
@@ -536,17 +551,18 @@ impl<'a> Reader<'a> {
     let made: Vec<(&Act, Option<usize>)> = acts.map(|act| (act, self.source(act))).collect();
     let mut lines = self.marked(rung, before, &made);
     for (act, place) in &made {
-      let Some(at) = place.and_then(|source| at_line(&lines, before, source)) else { continue };
+      let at = place.and_then(|source| at_line(&lines, before, source));
+      let Some(line) = at.and_then(|at| lines.get_mut(at)) else { continue };
       // A chain is where an act runs, not what the line came to.
       if act.kind != Kind::Chain {
-        lines[at].made.push(outcome(act));
+        line.made.push(outcome(act));
       }
       if let Phase::Done(value) = &act.phase {
         let named = images::references(&literal(value)).into_iter().map(|one| one.text);
-        lines[at].pictures.extend(named);
+        line.pictures.extend(named);
       }
       if let Some(output) = self.output(act) {
-        lines[at].output = Some(match lines[at].output.take() {
+        line.output = Some(match line.output.take() {
           Some(before) => joined(before, output),
           None => output,
         });
@@ -554,11 +570,7 @@ impl<'a> Reader<'a> {
       if act.kind == Kind::Other("write".to_owned())
         && let Some((path, after)) = self.held.filed(act)
       {
-        lines[at].writes.push(changed(
-          &act.id,
-          (path, self.held.text_before(path, &act.id)),
-          after,
-        ));
+        line.writes.push(changed(&act.id, (path, self.held.text_before(path, &act.id)), after));
       }
     }
     lines
@@ -597,23 +609,23 @@ impl<'a> Reader<'a> {
       let raised = made.iter().rposition(|(act, _)| act.failed()).or(made.len().checked_sub(1));
       let source = line_of(why)
         .map(|at| at.saturating_sub(1))
-        .or_else(|| raised.and_then(|at| made[at].1))
+        .or_else(|| raised.and_then(|at| made.get(at)?.1))
         .unwrap_or_else(|| word.split('\n').count());
-      if let Some(at) = line(&lines, Some(source)) {
-        lines[at].mark = Mark::Failed { why: readable(why, made) };
+      if let Some(one) = line(&lines, Some(source)).and_then(|at| lines.get_mut(at)) {
+        one.mark = Mark::Failed { why: readable(why, made) };
       }
     } else if let RunState::Cancelled(_) = run {
       // The stop ended the word on the line of the act that it cut, else where the word stood,
       // else, while its model still wrote it, on its last line.
-      let cut = made.iter().rposition(|(act, _)| act.cancelled()).and_then(|at| made[at].1);
+      let cut = made.iter().rev().find(|(act, _)| act.cancelled()).and_then(|(_, place)| *place);
       let stood = rung.word.as_ref().map(|_| next.unwrap_or_default());
       let cut = cut.or(stood);
-      if let Some(at) = line(&lines, cut) {
-        lines[at].mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
+      if let Some(one) = line(&lines, cut).and_then(|at| lines.get_mut(at)) {
+        one.mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
       }
     } else {
-      let open = made.iter().rposition(|(act, _)| !act.done());
-      let mark = match open.map(|at| made[at].0) {
+      let open = made.iter().rev().find(|(act, _)| !act.done());
+      let mark = match open.map(|(act, _)| *act) {
         Some(act) if act.asks_operator() => Mark::Asks,
         Some(act) if act.kind == Kind::Prompt => {
           Mark::Runs { work: Work::Agent, began: began(&act.id) }
@@ -627,19 +639,19 @@ impl<'a> Reader<'a> {
         .filter(|(act, _)| act.asks_operator() && !act.done())
         .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
         .collect();
-      let awaits = open.map(|at| awaited(made[at].0)).unwrap_or_default();
-      let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
+      let awaits = open.map(|(act, _)| awaited(act)).unwrap_or_default();
+      let source = open.map_or(Some(next.unwrap_or_default()), |(_, place)| *place);
       let stands = line(&lines, source);
-      if let Some(at) = stands {
-        (lines[at].mark, lines[at].awaits) = (mark, awaits);
+      if let Some(one) = stands.and_then(|at| lines.get_mut(at)) {
+        (one.mark, one.awaits) = (mark, awaits);
       }
       // The lines under the last line where the word stands have not run in this pass: they wait.
       let last = asking.iter().copied().chain(stands).max();
-      for one in last.map_or(&mut [][..], |at| &mut lines[at + 1..]) {
+      for one in lines.iter_mut().skip(last.map_or(usize::MAX, |at| at.saturating_add(1))) {
         one.mark = Mark::Waits;
       }
-      for at in asking {
-        lines[at].mark = Mark::Asks;
+      for (_, one) in lines.iter_mut().enumerate().filter(|(at, _)| asking.contains(at)) {
+        one.mark = Mark::Asks;
       }
     }
     lines
@@ -695,8 +707,8 @@ impl<'a> Reader<'a> {
       mark => mark.unwrap_or(Mark::Runs { work: Work::Writes, began }),
     };
     lines.push(Line::of(before + came.count + 1, came.tail, mark));
-    if whole {
-      lines[0].mark =
+    if whole && let Some(first) = lines.first_mut() {
+      first.mark =
         Mark::Runs { work: Work::Command, began: self.streams.began.get(&rung.id).copied() };
     }
     lines
@@ -748,7 +760,7 @@ impl<'a> Reader<'a> {
       card,
       began: began.copied(),
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
-      line: stands(&lines).map(|at| lines[at].clone()),
+      line: stands(&lines).and_then(|at| lines.get(at)).cloned(),
       at: None,
       thought: thought.map(|line| line.trim().to_owned()),
       anchor,
@@ -796,7 +808,7 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     .collect();
   let mut out = Vec::new();
   let mut at = 0;
-  while at < source.len() {
+  while let Some(first) = source.get(at) {
     if let Some((end, binding)) = quoted.get(&at) {
       out.push((at, binding.clone()));
       at = end + 1;
@@ -805,13 +817,13 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     let mut end = at;
     let opens =
       |line: &str| ["\"\"\"", "'''"].iter().any(|mark| line.matches(mark).count() % 2 == 1);
-    if opens(source[at]) {
-      while end + 1 < source.len() && !opens(source[end + 1]) {
+    if opens(first) {
+      while source.get(end + 1).is_some_and(|one| !opens(one)) {
         end += 1;
       }
-      end = (end + 1).min(source.len() - 1);
+      end = (end + 1).min(source.len().saturating_sub(1));
     }
-    out.push((at, source[at..=end].join("\\n")));
+    out.push((at, source.get(at..=end).unwrap_or_default().join("\\n")));
     at = end + 1;
   }
   out
@@ -824,7 +836,10 @@ fn outcome(act: &Act) -> Made {
     Phase::Done(value) => {
       let literal = literal(value);
       let cut = literal.char_indices().nth(LITERAL - 1).map_or(literal.len(), |(at, _)| at);
-      Made::Done(if cut < literal.len() { format!("{}…", &literal[..cut]) } else { literal })
+      Made::Done(match literal.get(..cut) {
+        Some(head) if cut < literal.len() => format!("{head}…"),
+        _ => literal,
+      })
     }
     Phase::Asked | Phase::Started => Made::Works,
   }
@@ -865,8 +880,9 @@ fn at_line(lines: &[Line], before: usize, source: usize) -> Option<usize> {
 /// after it, which the interpreter puts at the end of the reason.
 fn line_of(why: &str) -> Option<usize> {
   why.rmatch_indices("line ").find_map(|(at, mark)| {
-    let starts = why[..at].chars().next_back().is_none_or(|one| !one.is_alphanumeric());
-    let number = why[at + mark.len()..].split(|one: char| !one.is_ascii_digit()).next()?;
+    let (head, rest) = why.split_at_checked(at)?;
+    let starts = head.chars().next_back().is_none_or(|one| !one.is_alphanumeric());
+    let number = rest.get(mark.len()..)?.split(|one: char| !one.is_ascii_digit()).next()?;
     starts.then(|| number.parse().ok()).flatten()
   })
 }

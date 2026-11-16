@@ -1,8 +1,6 @@
 //! The quotes of a word: `<s:name>` at the start of a line, its text, and `</s:name>` at the end of
 //! a line, which bind the name to the text as one string. A window reads each quote of a word that
 //! ran, and of a word that a model still writes, from here.
-#![expect(clippy::indexing_slicing, reason = "debt: an index or a slice that can panic")]
-#![expect(clippy::string_slice, reason = "debt: a slice of a string that can cut a character")]
 
 use serde::Serialize;
 use std::iter;
@@ -43,14 +41,18 @@ fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
   }
   let end = found.unwrap_or(source.len() - 1);
   // The word binds the text between the marks, less the line break that follows the opening mark.
-  let mut body =
-    iter::once(head).chain(source[index + 1..=end].iter().copied()).collect::<Vec<_>>().join("\n");
+  let mut body = iter::once(head)
+    .chain(source.iter().take(end + 1).skip(index + 1).copied())
+    .collect::<Vec<_>>()
+    .join("\n");
   if body.starts_with('\n') {
     body.remove(0);
   }
   if found.is_some() {
     body.truncate(body.len() - close.len());
-  } else if let Some(size) = (2..close.len()).rev().find(|size| body.ends_with(&close[..*size])) {
+  } else if let Some(size) =
+    (2..close.len()).rev().find(|size| close.get(..*size).is_some_and(|part| body.ends_with(part)))
+  {
     body.truncate(body.len() - size);
   }
   let binding = format!("{name} = {}", repr(&body));
@@ -103,8 +105,10 @@ pub fn writing(text: &str, thinking: &str) -> Writing {
         tail = "";
       }
       index = quote.end;
-    } else if index < source.len() - 1 {
-      rows.push((source[index].to_owned(), index + 1, index + 1));
+    } else if index + 1 < source.len()
+      && let Some(line) = source.get(index)
+    {
+      rows.push(((*line).to_owned(), index + 1, index + 1));
     }
     index += 1;
   }
