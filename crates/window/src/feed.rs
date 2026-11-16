@@ -8,7 +8,7 @@ use std::{cell::OnceCell, collections::HashMap, mem, path::Path};
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
-  Standing, Thought, Work, lines, operator, timer,
+  Standing, Thought, Work, homed, lines, operator, timer,
 };
 use furb::world::images;
 use furb_client::{Anchor, Fold, Opened, PICTURE, Picture, Shown, Target, rests};
@@ -926,15 +926,20 @@ impl Feed<'_> {
     let muted = self.style(Role::Muted);
     let pad = |lead: &str| run(format!("{:gutter$}  {lead}", ""), muted);
     let key = &self.opened.thread.key;
-    // A record writes a path under the home of its machine from `~`, so both sides compare so.
-    let folder = self.model.client.cwd(key.0, &key.1).map(|one| self.model.homed(&one));
+    // The World writes a path under the home of the user of its machine from `~`, so the folder
+    // takes that home too, which may not be the home of the window. The folder is the checkout
+    // whose sessions hold the record, from the one name of the record, with no link and no short
+    // name in it as the World writes its paths, where the project of a card stands as its list
+    // names it, as `/var` for `/private/var` or a short name on Windows.
+    let home = self.model.client.machines.get(key.0).and_then(|one| one.home.as_deref());
+    let checkout = Path::new(&key.1).ancestors().nth(3).map(|one| one.display().to_string());
+    let folder = checkout.map(|one| home.map_or_else(|| one.clone(), |home| homed(&one, home)));
     let mut rows = Vec::new();
     for one in &line.writes {
-      let path = self.model.homed(&one.path);
       let path = folder
         .as_deref()
-        .and_then(|folder| path.strip_prefix(folder)?.strip_prefix(['/', '\\']))
-        .map_or_else(|| path.clone(), str::to_owned);
+        .and_then(|folder| one.path.strip_prefix(folder)?.strip_prefix(['/', '\\']))
+        .map_or_else(|| self.model.homed(&one.path), str::to_owned);
       let counts = if one.known {
         self.model.counts(one.added, one.removed)
       } else {
