@@ -618,7 +618,9 @@ impl Suite {
       let args = head.iter().map(|one| (*one).to_owned()).chain(tail.iter().cloned()).collect();
       (program.to_owned(), args)
     };
-    // A whole suite runs within the limit of its part, through the task budget of this program.
+    // A whole suite runs within the limit of its part, through the task budget of this program,
+    // after a build of its own, which no limit holds: a tree that a change of the lock or a move
+    // makes cold builds for minutes, as the hooks of the tests build first.
     let limited = |part: &str, (program, args): (String, Vec<String>)| {
       let budget = env::current_exe().ok().filter(|_| words.is_empty());
       match budget {
@@ -631,8 +633,14 @@ impl Suite {
     };
     let crates = if words.is_empty() { &["--workspace".to_owned()][..] } else { words };
     match self {
-      Self::Rust => vec![limited("cargo", with("cargo", &["nextest", "run"], crates))],
-      Self::Python => vec![limited("pytest", with("uv", &["run", "pytest", "-q"], words))],
+      Self::Rust => vec![
+        with("cargo", &["nextest", "run", "--no-run"], crates),
+        limited("cargo", with("cargo", &["nextest", "run"], crates)),
+      ],
+      Self::Python => vec![
+        with("uv", &["sync", "--inexact"], &[]),
+        limited("pytest", with("uv", &["run", "--no-sync", "pytest", "-q"], words)),
+      ],
       Self::Typescript => {
         vec![with("bun", &["run", "build"], &[]), with("bun", &["run", "test"], words)]
       }
