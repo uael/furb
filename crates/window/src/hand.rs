@@ -862,6 +862,8 @@ fn pump(askers: &mut [Asker], model: &mut Model) -> bool {
   said(askers, model);
   let pictures = model.feed().map(|feed| feed.pictures()).unwrap_or_default();
   model.client.show_pictures(pictures);
+  let wholes = model.feed().map(|feed| feed.wholes()).unwrap_or_default();
+  model.client.show_wholes(&wholes);
   let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
   for (at, verb, asked) in model.client.asks_due(listing) {
     if let Some(id) = ask(askers, model, at, verb) {
@@ -1395,6 +1397,7 @@ fn change_of(does: Does) -> Option<fn(&mut Model)> {
     Does::Agent => Model::next_agent,
     Does::Back => |model| model.walk(true),
     Does::Forward => |model| model.walk(false),
+    Does::Output => Model::whole_output,
     _ => return None,
   })
 }

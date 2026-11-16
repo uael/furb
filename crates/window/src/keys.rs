@@ -77,6 +77,7 @@ pub(crate) enum Does {
   Copy,
   Cd,
   Views,
+  Output,
 }
 
 /// One stroke of a key: whether it holds control, alt and command, and its key. Command is the
@@ -140,7 +141,7 @@ const GO: &[Bound] = &[
     Does::GoTo,
     "go to anything, or run a command",
     Some("go"),
-    &[&[ctrl('p')], &[cmd('p')], &[ctrl('o')]],
+    &[&[ctrl('p')], &[cmd('p')]],
   ),
   bound(Does::Keys, "each key", Some("keys"), &[&led('?'), &[plain(KeyCode::F(1))]]),
   bound(
@@ -185,6 +186,12 @@ const THREAD: &[Bound] = &[
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
   bound(Does::Resolve, "resolve the thread", Some("resolve"), &[&led('r')]),
+  bound(
+    Does::Output,
+    "the whole of what the last command wrote, and fold it",
+    Some("output"),
+    &[&[ctrl('o')]],
+  ),
   bound(Does::Revert, "revert the files that the last answer wrote", Some("revert"), &[&led('d')]),
   bound(Does::Pause, "pause the thread, or resume it", Some("pause"), &[&led('z')]),
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
