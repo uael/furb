@@ -4,7 +4,7 @@
 # [local] holds the limits of this machine, [ci] those of a runner of the gates, which is slower. A part with no limit
 # here has none that its run fits yet: it reports its time and fails never.
 # <part> is the wall time in seconds, and <part>_cpu the CPU time of the run and its children: a run past its wall limit on
-# a loaded machine is judged by its CPU time, which the load does not stretch. `cargo xtask budget --help` says how.
+# a loaded machine is judged by its CPU time, scaled by the speed of the machine as below. `cargo xtask budget --help` says how.
 # Measured on 11-08, pytest: 37 to 45 s of wall and 160 s of CPU alone on this machine, 74 to 80 s of wall and 160 s of CPU
 # beside 28 busy processes; on the runners, 54 to 117 s on ubuntu and macOS and 68 to 153 s on windows (the gates of 11-06 to
 # 11-08). A limit is never raised to pass: make the run faster.
@@ -14,11 +14,17 @@
 # named in the report of suite-time-regression-r1 stand in the way of.
 # cargo nextest run --workspace, 11-15, warm, at a load of 5 to 20 on 14 cores: 38 to 49 s of wall and 281 s of CPU, since
 # each test runs in a process of its own and no test program waits for another.
+# The CPU time of the same work grows with the load on a Mac, whose load moves part of a run from its 10 cores of
+# performance to its 4 cores of efficiency, where it costs 3 to 4 times as many CPU seconds. So each run measures the speed
+# of the machine with a probe of fixed work, at its start and at its end, and scales each CPU limit by the ratio of the
+# probe to probe_ms, the CPU milliseconds that the probe takes on this machine when quiet: the least of 10 probes on 11-16,
+# at a load of 40 to 51. A quieter measure only lowers it.
 [local]
 pytest = 60
 pytest_cpu = 240
 cargo = 60
 cargo_cpu = 360
+probe_ms = 560
 
 [ci]
 pytest = 180

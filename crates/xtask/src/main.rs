@@ -290,10 +290,12 @@ enum Task {
   ///
   /// The limits stand in crates/xtask/budgets.toml: the table local for this machine and ci for a
   /// runner of the gates. A part has a limit of wall time, <part>, in seconds, and may have one of
-  /// CPU time, <part>_cpu, that the command and its children use. A run past its wall limit while
-  /// the load at its start was over the cores is judged by its CPU time, when the part has a limit
-  /// of it. A run that fails names its slowest tests, and a command that fails gives its own code.
-  /// A kill that the log of the guard of memory holds for this run is named as one of the guard.
+  /// CPU time, <part>_cpu, that the command and its children use. The CPU limit scales by the speed
+  /// that a probe of fixed work measures at the start and at the end of the run, against
+  /// `probe_ms`, the CPU milliseconds of the probe on the machine when quiet, since the load moves
+  /// work to slower cores. A run past its wall limit while the load at its start was over the cores
+  /// is judged by its CPU time, when the part has a limit of it. A run that fails names its slowest
+  /// tests, and a command that fails gives its own code.
   Budget {
     /// The part, as pytest or cargo.
     part: String,

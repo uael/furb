@@ -130,3 +130,19 @@ fn the_hooks_and_the_gates_run_each_part_through_the_one_home_of_its_limits() {
     read(".github/workflows/system.yml").contains("cargo xtask budget pytest -- uv run pytest")
   );
 }
+
+#[cfg(unix)]
+#[test]
+fn the_speed_that_a_probe_measures_during_a_run_scales_its_cpu_limit() {
+  let yard = Yard::new(format!("xtask-budget-probe-{}", process::id()));
+  // A probe always takes more than 1 ms of CPU, so this machine reads as slower than its quiet
+  // time, and the limit of 1 s of CPU grows past the 1.2 s that the command uses.
+  let limits = "pytest = 100\npytest_cpu = 1\nprobe_ms = 1\n";
+  let (code, said) = ran(&yard, (limits, "0"), "pytest", &BUSY);
+  assert!(code == Some(0) && said.contains("the probe of the speed took"), "{said}");
+  // A quiet time far over any probe makes the limit far smaller than the 1 s that the table holds,
+  // so even the start of python passes it.
+  let limits = "pytest = 100\npytest_cpu = 1\nprobe_ms = 1000000\n";
+  let (code, said) = ran(&yard, (limits, "0"), "pytest", &["python3", "-c", "pass"]);
+  assert!(code == Some(1) && said.contains("the CPU limit of pytest is 0 s"), "{said}");
+}

@@ -3,8 +3,9 @@
 //! `ci` for a runner of the gates.
 
 use std::{
-  env, fs,
+  env, fs, hint,
   io::{self, BufRead, BufReader, Write},
+  num::NonZero,
   path::{Path, PathBuf},
   process::{Command as Process, ExitCode},
   thread,
@@ -41,10 +42,12 @@ struct Machine {
   folder: PathBuf,
 }
 
-/// The limits of a part, in seconds of wall and of CPU; none is 0.
+/// The limits of a part, in seconds of wall and of CPU, and the CPU seconds of the probe of the
+/// speed on this machine when it was quiet; none is 0.
 struct Limits {
   wall: f64,
   cpu: f64,
+  quiet: f64,
 }
 
 impl Limits {
@@ -111,13 +114,26 @@ impl Machine {
   /// when the load at its start was over the cores. A command that fails gives its own code.
   fn run(&self, part: &str, command: &[String]) -> Result<Verdict, Fault> {
     let limits = self.limits(part)?;
-    let (began, start, used) = (epoch(), Instant::now(), cpu());
+    let first = probed();
+    let (began, start, used) = (epoch(), Instant::now(), cpu(Of::Children));
     let (status, lines) = streamed(command)?;
     let took = start.elapsed().as_secs_f64();
-    let worked = cpu().zip(used).map(|(now, before)| now - before);
+    let worked = cpu(Of::Children).zip(used).map(|(now, before)| now - before);
+    let speed = first.zip(probed()).map(|(one, other)| f64::midpoint(one, other));
     // With no count of CPU, as on Windows, the wall time alone judges.
-    let limits = Limits { cpu: if worked.is_some() { limits.cpu } else { 0.0 }, ..limits };
+    let mut limits = Limits { cpu: if worked.is_some() { limits.cpu } else { 0.0 }, ..limits };
+    let mut scaled = None;
+    if let Some(probe) = speed.filter(|_| limits.cpu > 0.0 && limits.quiet > 0.0) {
+      scaled = Some(format!(
+        "budget: the probe of the speed took {:.0} ms of CPU, against {:.0} ms on this machine when quiet, so the CPU limit of {part} is {:.0} s.",
+        probe * 1000.0,
+        limits.quiet * 1000.0,
+        limits.cpu * probe / limits.quiet
+      ));
+      limits.cpu *= probe / limits.quiet;
+    }
     let mut said = vec![limits.heading(part, took, worked)];
+    said.extend(scaled);
     if status != Some(0) {
       let ended = self.watched(began, epoch(), &lines.join("\n"))?;
       if !ended.is_empty() {
@@ -145,12 +161,13 @@ impl Machine {
       let seconds = table.as_ref().and_then(|one| one.get(key)).and_then(toml::Value::as_integer);
       seconds.and_then(|one| u32::try_from(one).ok()).map_or(0.0, f64::from)
     };
-    Ok(Limits { wall: limit(part), cpu: limit(&format!("{part}_cpu")) })
+    let quiet = limit("probe_ms") / 1000.0;
+    Ok(Limits { wall: limit(part), cpu: limit(&format!("{part}_cpu")), quiet })
   }
 
-  /// Whether a run that ended well passed its limits, with what says so: a run past its CPU limit
-  /// fails whatever the load, and a run past its wall limit fails unless the load at its start was
-  /// over the cores and its CPU time fits.
+  /// Whether a run that ended well passed its limits, with what says so: a run past its CPU limit,
+  /// which the speed of the machine during the run scales, fails whatever the load, and a run past
+  /// its wall limit fails unless the load at its start was over the cores and its CPU time fits.
   fn judged(&self, part: &str, ran: &Ran, said: &mut Vec<String>) -> Result<u8, Fault> {
     let over_cpu = ran.limits.cpu > 0.0 && ran.worked > ran.limits.cpu;
     let mut over_wall = ran.limits.wall > 0.0 && ran.took > ran.limits.wall;
@@ -262,10 +279,21 @@ fn epoch() -> u64 {
   SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs())
 }
 
-/// The CPU seconds that the waited children of this process have used.
+/// Whose CPU time a count is: this process, or its waited children.
+#[derive(Clone, Copy)]
+enum Of {
+  Own,
+  Children,
+}
+
+/// The CPU seconds that this process, or its waited children, have used.
 #[cfg(unix)]
-fn cpu() -> Option<f64> {
-  let used = getrusage(UsageWho::RUSAGE_CHILDREN).ok()?;
+fn cpu(of: Of) -> Option<f64> {
+  let who = match of {
+    Of::Own => UsageWho::RUSAGE_SELF,
+    Of::Children => UsageWho::RUSAGE_CHILDREN,
+  };
+  let used = getrusage(who).ok()?;
   let seconds = |one: TimeVal| {
     let micros = u32::try_from(one.tv_usec()).unwrap_or(0);
     Duration::new(u64::try_from(one.tv_sec()).unwrap_or(0), micros * 1000).as_secs_f64()
@@ -275,8 +303,34 @@ fn cpu() -> Option<f64> {
 
 /// Windows counts no CPU time of waited children, so a run there is judged by its wall time.
 #[cfg(not(unix))]
-fn cpu() -> Option<f64> {
+fn cpu(_: Of) -> Option<f64> {
   None
+}
+
+/// The steps of the fixed work of the probe on each core, and the entries of the table that it
+/// walks.
+const PROBE: u64 = 1_000_000;
+const TABLE: u32 = 1 << 20;
+
+/// The CPU seconds of a fixed work on each core at once. The same work costs more CPU seconds when
+/// the load moves it to slower cores, as the cores of efficiency of a Mac, so the probe measures
+/// the speed that the machine gives a run, which scales its CPU limit.
+fn probed() -> Option<f64> {
+  let cores = thread::available_parallelism().map_or(1, NonZero::get);
+  let before = cpu(Of::Own)?;
+  thread::scope(|scope| {
+    for _ in 0..cores {
+      scope.spawn(|| {
+        // A walk of a table larger than the caches of a core, which waits on memory and on the
+        // branches as the work of an interpreter does, and so slows as that work does on a core
+        // that is slower or shared.
+        let table: Vec<u32> =
+          (0..TABLE).map(|at| (at.wrapping_mul(5).wrapping_add(1)) % TABLE).collect();
+        (0..PROBE).fold(0_u32, |at, _| hint::black_box(table[at as usize]))
+      });
+    }
+  });
+  Some(cpu(Of::Own)? - before)
 }
 
 /// The load average of the last minute: Linux gives it in a file and macOS by sysctl; no other
