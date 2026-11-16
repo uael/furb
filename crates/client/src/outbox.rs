@@ -140,6 +140,10 @@ pub enum Asked {
   Picture(Shown),
   /// The whole of what a command wrote, which the open thread shows.
   Whole(Command),
+  /// The turns of the chain of a thread, for its transcript.
+  Transcript(Key),
+  /// The page of the conversation of a thread about lines, by its prompt, which the review shows.
+  Talk(String),
 }
 
 impl Asked {
@@ -154,6 +158,8 @@ impl Asked {
         | Self::Inspect(..)
         | Self::Picture(_)
         | Self::Whole(_)
+        | Self::Transcript(_)
+        | Self::Talk(_)
     )
   }
 }
@@ -168,6 +174,8 @@ impl Client {
       Asked::Inspect(key, name) => self.told_inspected((&key, &name), heard),
       Asked::Picture(shown) => self.pictured(&shown, heard),
       Asked::Whole(command) => self.told_whole(command, heard),
+      Asked::Transcript(key) => self.transcribe(&key, heard),
+      Asked::Talk(prompt) => self.told_talk(&prompt, heard),
       _ => {}
     }
   }
@@ -198,6 +206,7 @@ impl Client {
     due.extend(self.controls_due());
     due.extend(self.changes_due());
     due.extend(self.parts_due());
+    due.extend(self.transcript_due());
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
@@ -205,6 +214,7 @@ impl Client {
     due.extend(self.inspect_due());
     due.extend(self.pictures_due());
     due.extend(self.wholes_due());
+    due.extend(self.talks_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {

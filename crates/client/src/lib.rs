@@ -23,9 +23,11 @@ mod question;
 mod running;
 mod settings;
 mod sign_in;
+mod talks;
 mod thread;
 mod time;
 mod trail;
+mod transcript;
 mod views;
 mod whole;
 
@@ -56,9 +58,11 @@ pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
 pub use sign_in::SignIn;
+pub use talks::Talk;
 pub use thread::{ENDS, Fold, Opened, PAGE, Pending, Place, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
 pub use trail::Trail;
+pub use transcript::{Piece, Transcript};
 pub use views::{Filled, View, ViewControl};
 pub use whole::{Command, Whole};
 
@@ -104,6 +108,8 @@ pub struct Client {
   pub system: &'static str,
   /// The review of the changes of a project, while the operator reads it.
   pub review: Option<Review>,
+  /// The transcript of the chain of the open thread, while the operator reads it.
+  pub transcript: Option<Transcript>,
   /// The views that the client mounted, in the order that it mounted them.
   pub views: Vec<View>,
   /// What the operator did to the nodes of views, with the machine of each, until it goes: an
@@ -120,6 +126,8 @@ pub struct Client {
   pub signing: Option<SignIn>,
   /// The name of the code of a thread that the pointer is on, and what its machine told of it.
   pub inspected: Option<Inspection>,
+  /// The conversations of the threads about lines that the review shows.
+  pub talks: Vec<Talk>,
   /// The images that the open thread shows, by machine, life and uri, and where each stands.
   pub pictures: HashMap<Shown, Picture>,
   /// The whole of what each command wrote that the open thread shows open, and where each stands.

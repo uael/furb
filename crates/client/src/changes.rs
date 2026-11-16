@@ -17,13 +17,19 @@ pub struct Seen {
 }
 
 /// The review of the changes of the project of a folder of a machine: the file that he reads, by
-/// its place among the changed files, and its diff once the machine gave it, with its path.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// its place among the changed files, and its diff once the machine gave it, with its path; each
+/// thread about its lines whose conversation he folded or opened against how it stands, by its
+/// prompt; the thread that he replies to under its lines; and the place that the review opens on,
+/// a path and a line, until it reads that file.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Review {
   pub at: usize,
   pub folder: String,
   pub chosen: usize,
   pub diff: Option<(String, String)>,
+  pub toggled: Vec<String>,
+  pub replying: Option<String>,
+  pub wanted: Option<(String, u64)>,
 }
 
 impl Client {
@@ -109,6 +115,7 @@ impl Client {
     if let Some(told) = self.machines.get_mut(at) {
       told.changes.insert(folder, Seen { changes, fresh: true });
     }
+    self.chose_wanted();
   }
 
   /// The changes of the project of each card of a life that a frame changed, which the client asks
@@ -148,7 +155,41 @@ impl Client {
     }
     let Some((at, folder)) = self.target_folder() else { return };
     self.stale(|one| one == folder);
-    self.review = Some(Review { at, folder, chosen: 0, diff: None });
+    self.review = Some(Review { at, folder, ..Review::default() });
+  }
+
+  /// The review opened on the file of a place and on its line, as a click on the head of a thread
+  /// about lines opens it: the file once the changes of its project came.
+  pub fn review_at(&mut self, path: &str, line: u64) {
+    if self.review.is_none() {
+      self.review();
+    }
+    if let Some(review) = self.review.as_mut() {
+      review.wanted = Some((path.to_owned(), line));
+    }
+    self.chose_wanted();
+  }
+
+  /// The file that the review was opened on chosen, once the changes of its project hold it.
+  fn chose_wanted(&mut self) {
+    let Some(review) = self.review.as_ref() else { return };
+    let Some((path, _)) = review.wanted.as_ref() else { return };
+    let files = self.changes(review.at, &review.folder).map(|one| &one.files[..]);
+    let Some(at) = files.and_then(|files| files.iter().position(|one| one.path == *path)) else {
+      return;
+    };
+    if let Some(review) = self.review.as_mut() {
+      review.chosen = at;
+    }
+  }
+
+  /// The conversation of a thread about lines folded when it showed, or shown when it was folded.
+  pub fn toggle_talk(&mut self, prompt: &str) {
+    let Some(review) = self.review.as_mut() else { return };
+    match review.toggled.iter().position(|one| one == prompt) {
+      Some(at) => drop(review.toggled.remove(at)),
+      None => review.toggled.push(prompt.to_owned()),
+    }
   }
 
   /// The file that the review reads, among the changed files of its project.
