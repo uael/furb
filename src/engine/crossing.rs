@@ -1,10 +1,6 @@
 //! How each value crosses between the sandbox and the host, both ways, and the numbers by which the
 //! host holds what has no way back.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{HashMap, HashSet},
   sync::{
@@ -114,6 +110,10 @@ impl Outside {
   /// fields under its class, a map that holds the key `is` as its pairs, and the entries of a
   /// container each as they go out. Anything else goes out as the interpreter carries it, but a
   /// value with no data form that is not callable, which goes out as its representation.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a walk of a value holds its arena, its node and the handles that it showed"
+  )]
   pub(super) fn goes(
     &mut self,
     sand: &mut Sand,
@@ -178,6 +178,10 @@ impl Outside {
   }
 
   /// The entries of a container, each as it goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a walk of a value holds its arena, its node and the handles that it showed"
+  )]
   pub(super) fn going(
     &mut self,
     sand: &mut Sand,
@@ -191,6 +195,10 @@ impl Outside {
   /// A class of the sandbox as it goes out: a class of the engine as its name, and a class a word
   /// defined as the number the host holds it by, with its name and the class it was made with as it
   /// goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a class is its value, its handle and its name, which its node holds apart"
+  )]
   pub(super) fn class(
     &mut self,
     sand: &mut Sand,
@@ -258,6 +266,10 @@ impl Outside {
 
   /// What a map that names what it is under `is` is made again as, or nothing when it names nothing
   /// the engine makes, so it comes in as the map it is.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a map of a value is its arena, its mark and its pairs"
+  )]
   pub(super) fn remade(
     &mut self,
     sand: &mut Sand,
@@ -333,6 +345,10 @@ impl Outside {
   /// made with, and its fields. An exception takes what it was made with by position, and by
   /// position alone: the interpreter makes a builtin one from at most one string. A dataclass takes
   /// its fields by name.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a map of a value is its arena, its mark and its pairs"
+  )]
   pub(super) fn made_of(
     &mut self,
     sand: &mut Sand,

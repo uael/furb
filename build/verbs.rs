@@ -468,6 +468,13 @@ pub(crate) fn methods(verbs: &[Verb]) -> String {
       given.push(format!("with: verbs::{with}"));
     }
     out!(out, "  /// {}", verb.doc);
+    // 4 is the too-many-arguments-threshold of clippy.toml, the one home of the bound.
+    if given.len() + 1 > 4 {
+      out!(
+        out,
+        "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
+      );
+    }
     out!(
       out,
       "  pub fn {}(&mut self, {}) -> Result<{}, Fault> {{",

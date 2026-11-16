@@ -26,10 +26,6 @@
   clippy::unreadable_literal,
   reason = "debt: a constant that the build makes is a long literal with no separator"
 )]
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 
 mod crossing;
 mod hosted;
@@ -357,6 +353,10 @@ impl Outside {
   }
 
   /// A name of the engine, called with values of the sandbox where it stands now, and what it gave.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn named_call(
     &mut self,
     sand: &mut Sand,
@@ -372,6 +372,10 @@ impl Outside {
   /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
   /// engine with values of the host, and what it gave, as it goes out: the checkpointer of the
   /// record, or the one whose text `by` holds.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a function of the checkpointer is its name, its values and the text that it runs on"
+  )]
   fn checkpointed(
     &mut self,
     sand: &mut Sand,
@@ -403,6 +407,10 @@ impl Outside {
   }
 
   /// One verb of the engine, said by its name with values of the host, and what it gave, as it goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn verb(
     &mut self,
     sand: &mut Sand,
@@ -416,6 +424,10 @@ impl Outside {
   }
 
   /// One callable the engine made, called back by the number it went out under.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn called_back(
     &mut self,
     sand: &mut Sand,
@@ -1100,6 +1112,10 @@ impl Engine {
   /// is the first question that the operator makes on that chain after it. When the chain holds such an act, it is
   /// given back and nothing is made. When it holds none, as when the host crashed after it kept the key and before it
   /// kept the act, the key is said again and the act is made. The chain is the one that `on` names, or the root.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a verb said once by its key: the key, the kind of its act, and its values and keyword values as the verb takes them"
+  )]
   pub fn keyed(
     &mut self,
     key: &str,

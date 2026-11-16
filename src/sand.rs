@@ -9,10 +9,6 @@
 //! each call with a [`Host`], and while it answers, it may call into the sandbox again through the same [`Sand`], to
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{mem, time::Duration};
 
 use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
@@ -71,6 +67,10 @@ const ENTER: &str = "__enter";
 pub(crate) trait Host {
   /// One call of the sandbox, answered: the object of the host it is on, by its id, the method or function it called,
   /// and what it handed over. The host may call into the sandbox with `sand` while it answers.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a call of the sandbox lends it to the host apart, with the object that the call is on, its name and its values"
+  )]
   fn answer(
     &mut self,
     sand: &mut Sand,
@@ -256,6 +256,10 @@ impl Sand {
   }
 
   /// A callable of the sandbox, called with these words while the host answers a call, and what it gave.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the host is lent apart to answer each call back, and a call is its callee, its values and its keyword values"
+  )]
   pub(crate) fn call<H: Host>(
     &mut self,
     host: &mut H,

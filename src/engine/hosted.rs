@@ -465,6 +465,10 @@ impl Outside {
   /// once for all the ears that hear it, and the refusal raises in the word. A word that asks again
   /// past that refusal goes on in its loop, so its step ends there, as a second excess of the bound
   /// of monty ends it.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a refusal names the object of the ear, the question that it heard and the bound that it passed"
+  )]
   fn refused(&mut self, sand: &mut Sand, on: MontyUuid, fact: &Fact, bound: Duration) -> Answer {
     let asked = (fact.about().to_owned(), fact.by().to_owned());
     match self.past.replace(asked.clone()) {
