@@ -41,6 +41,18 @@ impl<M: 'static> Screen<M> {
     self.parts.push(Box::new(part));
   }
 
+  /// Parts that show one value, which `shown` reads from the model once for each change, as one
+  /// part does: each part of `of` then reads its own value from it, by the same rule. A value that
+  /// costs its parts much to read stands here once, not once for each part.
+  pub(crate) fn split<S: 'static>(&mut self, shown: impl Fn(&M) -> S + 'static, mut of: Screen<S>) {
+    let mut part = move |model: &M| {
+      let now = shown(model);
+      of.tell(|value| *value = now);
+    };
+    part(&self.model);
+    self.parts.push(Box::new(part));
+  }
+
   /// A change of the model, which each part hears, and what the change gives.
   pub(crate) fn tell<T>(&mut self, change: impl FnOnce(&mut M) -> T) -> T {
     let given = change(&mut self.model);

@@ -22,7 +22,7 @@ use opentui::{
     Modifiers, MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId,
     View, Widget, WrapMode,
   },
-  style::Style,
+  style::{Color, Style},
 };
 
 use furb_host::protocol::Verb;
@@ -294,15 +294,17 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
 
   let mut screen = Screen::new(model);
   staged(&mut screen, &stage);
-  screen.part(
-    |model: &Model| model.left().rows,
+  let mut left = Screen::new(sides(&screen.model));
+  left.part(
+    |sides: &Sides| sides.rows.clone(),
     move |lines| {
       home.set_text(written(lines));
     },
   );
   placed(app, &stage, &mut screen, area);
-  loaded(app, &stage, &mut screen);
-  imaged(app, &stage, &mut screen);
+  loaded(app, &stage, &mut left);
+  imaged(app, &stage, &mut left);
+  screen.split(sides, left);
   screen.part(Model::list, move |lines| {
     list.set_text(written(lines));
   });
@@ -321,22 +323,44 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
   screen
 }
 
+/// What the left side shows, read from the model in one build of its rows for each change: the
+/// rows, the frame of each loader, and each image that the client holds.
+struct Sides {
+  rows: Vec<Line>,
+  loaders: Vec<(Spot, Vec<(&'static str, Color)>)>,
+  pictures: Vec<Drawn>,
+}
+
+fn sides(model: &Model) -> Sides {
+  let left = model.left();
+  let frame = |spot: Spot| {
+    let color = spot.style.fg.unwrap_or(model.tokens.accent);
+    (spot, spot.loader.cells(model.client.moved, color, &model.tokens))
+  };
+  let key = model.client.thread.as_ref().map(|one| &one.thread.key);
+  let held = |one: Boxed| {
+    let (at, life, _) = key?;
+    match model.client.pictures.get(&(*at, life.clone(), one.source.clone())) {
+      Some(Picture::Held(held)) => Some(Drawn(one, Arc::clone(&held.bytes))),
+      _ => None,
+    }
+  };
+  Sides {
+    loaders: left.loaders.into_iter().map(frame).collect(),
+    pictures: left.pictures.into_iter().filter_map(held).take(PICTURES).collect(),
+    rows: left.rows,
+  }
+}
+
 /// The loaders of the left side on its stage: a loader is a cell of its own, so its step draws no
 /// other cell.
-fn loaded(app: &App, stage: &View, screen: &mut Screen<Model>) {
+fn loaded(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   let cells: Vec<Text> =
     (0..LOADERS).map(|_| Text::new(app, "").absolute().visible(false)).collect();
   for cell in &cells {
     stage.child(cell);
   }
-  let frames = |model: &Model| {
-    let spots = model.left().loaders;
-    let shown = |spot: Spot| {
-      let color = spot.style.fg.unwrap_or(model.tokens.accent);
-      (spot, spot.loader.cells(model.client.moved, color, &model.tokens))
-    };
-    spots.into_iter().map(shown).collect::<Vec<_>>()
-  };
+  let frames = |sides: &Sides| sides.loaders.clone();
   screen.part(frames, move |shown| {
     for (at, cell) in cells.iter().enumerate() {
       match shown.get(at) {
@@ -367,24 +391,14 @@ impl PartialEq for Drawn {
 
 /// The images of the left side on its stage, each over the rows of its box. An image that does
 /// not decode leaves its box blank, over the row that names it.
-fn imaged(app: &App, stage: &View, screen: &mut Screen<Model>) {
+fn imaged(app: &App, stage: &View, screen: &mut Screen<Sides>) {
   let views = (0..PICTURES)
     .map(|_| (ImageView::new(app).absolute().visible(false), RefCell::new(None)))
     .collect::<Vec<(ImageView, RefCell<Option<Arc<[u8]>>>)>>();
   for (view, _) in &views {
     stage.child(view);
   }
-  let shown = |model: &Model| {
-    let Some((at, life, _)) = model.client.thread.as_ref().map(|one| &one.thread.key) else {
-      return Vec::new();
-    };
-    let held =
-      |one: Boxed| match model.client.pictures.get(&(*at, life.clone(), one.source.clone())) {
-        Some(Picture::Held(held)) => Some(Drawn(one, Arc::clone(&held.bytes))),
-        _ => None,
-      };
-    model.left().pictures.into_iter().filter_map(held).take(PICTURES).collect::<Vec<_>>()
-  };
+  let shown = |sides: &Sides| sides.pictures.clone();
   screen.part(shown, move |shown| {
     for (at, (view, loaded)) in views.iter().enumerate() {
       let Some(Drawn(boxed, bytes)) = shown.get(at) else {
