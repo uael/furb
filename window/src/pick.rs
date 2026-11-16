@@ -58,13 +58,15 @@ pub(crate) enum Pick {
   Skills,
 }
 
-/// The list part, while it is open: what it lists, the text that filters it, and the place of the
-/// chosen row among those that pass the filter.
+/// The list part, while it is open: what it lists, the text that filters it, the place of the
+/// chosen row among those that pass the filter, and in the list of the models the effort that the
+/// arrows chose for a model, by its name, which the model takes with its row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Picker {
   pub(crate) of: Pick,
   pub(crate) filter: String,
   pub(crate) at: usize,
+  pub(crate) effort: Option<(String, String)>,
 }
 
 /// What a row of a list part takes.
@@ -239,7 +241,7 @@ impl Model {
       self.client.notice = Some(why);
       return;
     }
-    self.picker = Some(Picker { of, filter, at: 0 });
+    self.picker = Some(Picker { of, filter, at: 0, effort: None });
     self.chose(0);
     // The sessions open on the one that the input sends to, and the models on the one in use.
     let now = match self.client.target() {
@@ -554,14 +556,16 @@ impl Model {
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
     let (using, effort) = self.actor().unzip();
     let effort = effort.flatten();
+    let leaned = self.picker.as_ref().and_then(|one| one.effort.as_ref());
     // What each model holds stands in one column, past the longest name.
     let named =
       |model: &Offered| model.name.split_once(':').map_or(&*model.name, |one| one.1).width();
     let wide = offered.into_iter().flatten().map(named).max().unwrap_or_default();
     let entry = |model: &Offered| {
       let (provider, name) = model.name.split_once(':').unwrap_or(("", &model.name));
-      let taken =
-        effort.as_ref().filter(|one| model.efforts.contains(one)).or(model.effort.as_ref());
+      let leaned = leaned.filter(|(name, _)| *name == model.name).map(|(_, one)| one);
+      let spoken = effort.as_ref().filter(|one| model.efforts.contains(one));
+      let taken = leaned.or(spoken).or(model.effort.as_ref());
       let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
       let used = using.as_deref() == Some(model.name.as_str());
       let images = if model.images { " · images" } else { "" };
@@ -581,6 +585,32 @@ impl Model {
       entries.extend(self.sign_in_rows());
     }
     entries
+  }
+
+  /// The chosen model of the list of the models at a lower or a higher effort, among those that the
+  /// catalog of its machine gives, which its row then shows and takes. Whether the list took the
+  /// key: a row of another list leaves it to the input.
+  pub(crate) fn leaned(&mut self, by: isize) -> bool {
+    let Some(at) = self.picker.as_ref().filter(|one| one.of == Pick::Models).map(|one| one.at)
+    else {
+      return false;
+    };
+    let Some(entry) = self.entries().into_iter().nth(at) else { return true };
+    let Choice::Actor(actor) = &entry.choice else { return true };
+    let offered = self.client.machines.get(self.client.target().machine());
+    let offered = offered.and_then(|told| told.models.as_ref()).into_iter().flatten();
+    let named = |model: &&Offered| {
+      let effort = actor.strip_prefix(model.name.as_str()).map(|rest| rest.strip_prefix('/'));
+      effort.is_some_and(|effort| effort.is_none_or(|one| model.efforts.iter().any(|e| e == one)))
+    };
+    let Some(model) = offered.into_iter().find(named) else { return true };
+    let Some(last) = model.efforts.len().checked_sub(1) else { return true };
+    let now = model.efforts.iter().position(|one| *one == entry.right).unwrap_or_default();
+    let next = model.efforts[now.saturating_add_signed(by).min(last)].clone();
+    if let Some(picker) = self.picker.as_mut() {
+      picker.effort = Some((model.name.clone(), next));
+    }
+    true
   }
 
   /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in in the
@@ -664,7 +694,7 @@ impl Model {
       Choice::Visit(at, life) => self.visited(at, life),
       Choice::Added(text) => self.client.added(&text),
       Choice::Project(name) => {
-        self.picker = Some(Picker { of, filter: name, at: 0 });
+        self.picker = Some(Picker { of, filter: name, at: 0, effort: None });
       }
       Choice::Actor(actor) => self.took_actor(actor),
       Choice::Sent(sent) => self.client.recall(&sent),
@@ -674,18 +704,24 @@ impl Model {
       Choice::Leave(control) => self.left_with(control),
       Choice::Setting(place) => {
         self.picker = Some(if self.client.step_setting(place) {
-          Picker { of, filter, at }
+          Picker { of, filter, at, effort: None }
         } else {
-          Picker { of: Pick::Value(place), filter: self.client.setting_text(place), at: 0 }
+          Picker {
+            of: Pick::Value(place),
+            filter: self.client.setting_text(place),
+            at: 0,
+            effort: None,
+          }
         });
       }
       Choice::Value(place) => {
         self.client.write_setting(place, &filter);
-        self.picker = Some(Picker { of: Pick::Settings, filter: String::new(), at: place });
+        self.picker =
+          Some(Picker { of: Pick::Settings, filter: String::new(), at: place, effort: None });
       }
       Choice::Skill(place) => {
         if self.client.turn_skill(place) {
-          self.picker = Some(Picker { of, filter, at });
+          self.picker = Some(Picker { of, filter, at, effort: None });
         } else if let Some(one) = self.client.skill_at(place) {
           let mention = format!("/{}", one.name);
           self.client.added(&mention);
@@ -705,7 +741,7 @@ impl Model {
         }
         self.sign_in_shown(of);
       }
-      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
+      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at, effort: None }),
     }
     None
   }
@@ -714,9 +750,9 @@ impl Model {
   /// filter hides them, with its first row chosen: the page of the sign-in once the machine gives
   /// it, and never its cancel, which an enter would take.
   fn sign_in_shown(&mut self, of: Pick) {
-    self.picker = Some(Picker { of, filter: String::new(), at: 0 });
+    self.picker = Some(Picker { of, filter: String::new(), at: 0, effort: None });
     let at = self.entries().iter().position(|one| one.part == "Codex").unwrap_or_default();
-    self.picker = Some(Picker { of, filter: String::new(), at });
+    self.picker = Some(Picker { of, filter: String::new(), at, effort: None });
   }
 
   /// The thread of a card opened in the window.
@@ -822,7 +858,7 @@ impl Model {
       rows.extend([filter, Row::default()]);
     }
     let chosen = entries.get(picker.at);
-    rows.push(Row::of(padded(vec![run(self.foot(picker, chosen), muted)])));
+    rows.push(Row::of(padded(vec![run(self.foot(picker, chosen, room), muted)])));
     rows.push(Row::default());
     if rises {
       // Its foot stands on the last row of the input, over the row of hints.
@@ -864,9 +900,11 @@ impl Model {
     shown.into_iter().enumerate().map(row).collect()
   }
 
-  /// The keys that the foot of a list part names: to move, to take the chosen row, to close. A
-  /// model is taken for what the input sends to: its session, or the new session.
-  fn foot(&self, picker: &Picker, chosen: Option<&Entry>) -> String {
+  /// The keys that the foot of a list part names, in its room: to move, to change the effort of a
+  /// chosen model that takes one, to take the chosen row, to close. A model is taken for what the
+  /// input sends to: its session, or the new session. The key to move, which each list shares,
+  /// gives way first.
+  fn foot(&self, picker: &Picker, chosen: Option<&Entry>, room: usize) -> String {
     let model = chosen.is_some_and(|one| matches!(one.choice, Choice::Actor(_)));
     let link = chosen.is_some_and(|one| matches!(one.choice, Choice::Link(_)));
     let scope = match self.client.target() {
@@ -874,13 +912,15 @@ impl Model {
       Target::New(..) => " for the new session",
       _ => " for this session",
     };
-    format!(
-      "{} move · {} {}{scope} · {} close",
-      [Does::Up, Does::Down].map(|one| self.key(one)).join(""),
-      self.key(Does::Send),
-      if link { "open the page" } else { picker.of.takes() },
-      self.key(Does::Close),
-    )
+    let moves = format!("{} move", [Does::Up, Does::Down].map(|one| self.key(one)).join(""));
+    let effort = chosen.filter(|one| model && !one.right.is_empty());
+    let effort = effort.map(|_| format!("{} effort", keys::drawn_each(Does::Lean, self.system)));
+    let takes = if link { "open the page" } else { picker.of.takes() };
+    let takes = format!("{} {takes}{scope}", self.key(Does::Send));
+    let close = format!("{} close", self.key(Does::Close));
+    let rest = effort.into_iter().chain([takes, close]).collect::<Vec<_>>().join(" · ");
+    let whole = format!("{moves} · {rest}");
+    if whole.width() <= room { whole } else { rest }
   }
 
   /// The rows of the entries that the part shows: a head before the first entry of each part of the

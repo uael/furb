@@ -958,6 +958,29 @@ fn the_models_open_on_the_model_in_use_and_say_what_each_holds_and_what_a_choice
   screen("part-models", &app);
 }
 
+#[test]
+fn the_arrows_change_the_effort_of_the_chosen_model_which_takes_it_with_its_row() {
+  let (app, _daemon, _) = started();
+  shows(&app, "with opus at high effort");
+  app.press("ctrl+x");
+  app.press("m");
+  shows(&app, "←→ effort · ⏎ take it for the new session · ⎋ close");
+  // The effort steps from the one that the row shows, and stops at the most and the least.
+  for _ in 0..3 {
+    app.press("right");
+  }
+  shows(&app, "▌opus    1M context · images · in use            max");
+  for _ in 0..3 {
+    app.press("left");
+  }
+  shows(&app, "▌opus    1M context · images · in use         medium");
+  // A row takes the effort that it shows, and the other rows keep theirs.
+  let frame = app.text();
+  assert!(frame.contains(" sonnet  1M context · images                    high"), "{frame}");
+  app.press("enter");
+  shows(&app, "opus  medium");
+}
+
 /// Each address that a window of a test opened in the browser, the first first.
 static BROWSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 

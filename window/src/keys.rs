@@ -44,6 +44,7 @@ pub(crate) enum Does {
   Keys,
   Up,
   Down,
+  Lean,
   Tick,
   NextQuestion,
   Agent,
@@ -221,6 +222,12 @@ const FORM: &[Bound] = &[
   bound(Does::Close, "close a list, or go back", None, &[&[plain(KeyCode::Escape)]]),
   bound(Does::Up, "the row above", None, &[&[plain(KeyCode::Up)]]),
   bound(Does::Down, "the row below", None, &[&[plain(KeyCode::Down)]]),
+  bound(
+    Does::Lean,
+    "a lower or a higher effort of the chosen model",
+    None,
+    &[&[plain(KeyCode::Left)], &[plain(KeyCode::Right)]],
+  ),
   bound(Does::Tick, "tick a choice of a question", None, &[&[plain(KeyCode::Char(' '))]]),
   bound(Does::NextQuestion, "the next question of the thread", None, &[&[plain(KeyCode::Tab)]]),
 ];
@@ -257,6 +264,7 @@ impl Stroke {
       (KeyCode::Char(letter), _) => letter.to_uppercase().to_string(),
       (KeyCode::Up, _) => "↑".to_owned(),
       (KeyCode::Down, _) => "↓".to_owned(),
+      (KeyCode::Left, _) => "←".to_owned(),
       (KeyCode::Right, _) => "→".to_owned(),
       (KeyCode::Escape, true) => "⎋".to_owned(),
       (KeyCode::Enter, true) => "⏎".to_owned(),
@@ -290,6 +298,11 @@ fn form(strokes: &[Stroke], system: System) -> String {
 /// The key that does a thing, as a system writes it.
 pub(crate) fn drawn(does: Does, system: System) -> String {
   form(forms(does).first().copied().unwrap_or_default(), system)
+}
+
+/// Each form of a key, one after the other, as `←→`.
+pub(crate) fn drawn_each(does: Does, system: System) -> String {
+  forms(does).iter().map(|one| form(one, system)).collect()
 }
 
 /// What a key does, as a text of the window says it.

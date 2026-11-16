@@ -784,7 +784,7 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     // The grey rest, which the editor hears as a move when none shows.
     Some(Does::Take | Does::TakeWord) => took(window, does == Some(Does::TakeWord)),
     // The keys of a form, which the editor hears when no form takes them.
-    Some(Does::Up | Does::Down | Does::Tick | Does::NextQuestion) => false,
+    Some(Does::Up | Does::Down | Does::Lean | Does::Tick | Does::NextQuestion) => false,
     Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
     Some(does) => {
       act(app, window, does);
@@ -834,6 +834,11 @@ fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
       (KeyCode::Enter, _) => return Some(model.took(at)),
       (KeyCode::Up, _) => model.chose(-1),
       (KeyCode::Down, _) => model.chose(1),
+      (KeyCode::Left | KeyCode::Right, _) => {
+        if !model.leaned(if key.code == KeyCode::Left { -1 } else { 1 }) {
+          return None;
+        }
+      }
       (KeyCode::Backspace, _) => model.filtered(|filter| {
         filter.pop();
       }),
@@ -1057,6 +1062,15 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
   }
 }
 
+/// The feed a page up or down. A page keeps two rows of the screen before it in view.
+fn paged(app: &App, window: &Shared, up: bool) {
+  let verb = tell(app, window, |model| {
+    let rows = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
+    model.scroll_feed(if up { -rows } else { rows })
+  });
+  older(window, verb);
+}
+
 /// What a key does, which a click on its text does too. Any other key leaves what a first press of
 /// a key named, and what the key before did not do.
 fn act(app: &App, window: &Shared, does: Does) {
@@ -1103,16 +1117,15 @@ fn act(app: &App, window: &Shared, does: Does) {
       });
     }
     Does::Leave => return left(app, window),
-    Does::PageUp | Does::PageDown => {
-      // A page keeps two rows of the screen before it in view.
-      let verb = tell(app, window, |model| {
-        let rows = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
-        model.scroll_feed(if does == Does::PageUp { -rows } else { rows })
-      });
-      return older(window, verb);
-    }
+    Does::PageUp | Does::PageDown => return paged(app, window, does == Does::PageUp),
     // The keys of a form, of a list part and of the input, which the key that heard them did.
-    Does::Up | Does::Down | Does::Tick | Does::NextQuestion | Does::Take | Does::TakeWord => return,
+    Does::Up
+    | Does::Down
+    | Does::Lean
+    | Does::Tick
+    | Does::NextQuestion
+    | Does::Take
+    | Does::TakeWord => return,
   };
   if matches!(does, Does::Next | Does::Previous | Does::Needed) {
     window.borrow_mut().touched = Some(app.now());

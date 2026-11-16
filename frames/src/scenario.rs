@@ -845,6 +845,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // A model of Codex taken in the list that stays open, for the new session, which its first
         // message starts. No message goes.
         step("d", &[Act::Type("gpt"), Act::Key("Enter")], "gpt-5.5"),
+        // The arrows change the effort of the chosen model in the list, which takes it with its
+        // row: the left one lowers it.
+        step("e", &[Act::Key("C-x"), Act::Key("m"), Act::Key("Left")], "in use         medium"),
+        step("f", &[Act::Key("Enter")], "gpt-5.5  medium"),
       ],
     }),
   },
