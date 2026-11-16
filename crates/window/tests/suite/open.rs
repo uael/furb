@@ -436,6 +436,50 @@ fn a_window_gives_its_place_to_a_new_build_of_its_program_where_it_stood() {
   shows(&second, "┃ and the seed?");
 }
 
+#[test]
+fn a_long_draft_comes_back_whole_in_the_window_of_the_new_build() {
+  let title = "remove the gate from the engine";
+  let (first, host, second) = (app(), app(), app());
+  let mut daemon = Daemon::bound(&host);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  peer.rested(&sessions.join("gate.jsonl"), &message(title), None);
+  let program = daemon.file("furb-window");
+  fs::write(&program, "the build before").unwrap();
+  let watched = Options { program: Some(program.clone()), ..homed(&daemon) };
+  open(&first, vec![daemon.machine("mac")], watched);
+  card(&first, title);
+  shows(&first, "Two stages hold most");
+  // A draft of many lines, each typed, as he writes a long message.
+  for line in 1..=40 {
+    first.type_text(&format!("the line {line} of a long draft that he wrote by hand"));
+    first.press("shift+enter");
+  }
+  first.type_text("the last line of the draft");
+  let stood = daemon.file("reload.json");
+  fs::write(&program, "the new build, which is longer").unwrap();
+  first.advance(Duration::from_secs(1));
+  first.advance(Duration::from_secs(1));
+  assert!(stood.is_file());
+  drop(first);
+  // The new build opens with the whole draft in its input, and the place of the window before
+  // goes only once the draft stands there.
+  open(&second, vec![daemon.machine("mac")], Options { reloaded: true, ..homed(&daemon) });
+  shows(&second, "the last line of the draft");
+  assert!(!stood.exists());
+  second.press("enter");
+  shows(&second, "┃ the last line of the draft");
+  // The message that he sent is the whole draft, from its first line.
+  let record = sessions.join("gate.jsonl");
+  let said = || fs::read_to_string(&record).unwrap_or_default();
+  let whole = second.wait_until(PATIENCE, || {
+    let said = said();
+    said.contains("the line 1 of a long draft") && said.contains("the last line of the draft")
+  });
+  assert!(whole, "{}", said());
+}
+
 #[cfg(unix)]
 #[test]
 fn a_window_starts_no_handover_of_the_daemon_of_its_machine_on_a_new_build_of_furb() {

@@ -27,7 +27,7 @@ impl<M: 'static> Screen<M> {
   pub(crate) fn part<S: PartialEq + 'static>(
     &mut self,
     shown: impl Fn(&M) -> S + 'static,
-    draw: impl Fn(&S) + 'static,
+    mut draw: impl FnMut(&S) + 'static,
   ) {
     let mut last = None;
     let mut part = move |model: &M| {
