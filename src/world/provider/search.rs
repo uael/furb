@@ -1,8 +1,9 @@
 //! The search of the web, which the provider answers for the actor of a chain: the native search of
 //! each provider that has one, the claude command line with its tool `WebSearch` alone, the web
 //! search of the Messages API of Anthropic and of the Responses API of `OpenAI` and of xAI, the
-//! grounding of Gemini in Google Search, and the search API of `DeepSeek`; else a free search. A
-//! search answers with text in Markdown, which ends with its sources.
+//! grounding of Gemini in Google Search, and the search API of `DeepSeek`. A search answers with
+//! text in Markdown, which ends with its sources. The provider leaves the search of an actor whose
+//! provider has none to the ears after it, as the process of the kit `web`, which asks a free search.
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
@@ -23,7 +24,7 @@ use tokio::time;
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
 
-/// Why a work of the network ended before it came to an answer.
+/// Why a search ended before it came to an answer.
 #[derive(Debug, thiserror::Error)]
 pub enum Cut {
   #[error("it took more than {} seconds", TIMEOUT.as_secs())]
@@ -49,17 +50,13 @@ pub enum Error {
   Status { url: String, status: StatusCode, text: String },
   #[error("the search answered no JSON: {0}")]
   NotJson(serde_json::Error),
-  #[error("the free search answered no JSON: {0}")]
-  FreeNotJson(serde_json::Error),
   #[error("the search answered with no text: {0}")]
   NoText(Value),
-  #[error("{0}")]
-  Server(String),
   #[error(transparent)]
   Cut(#[from] Cut),
 }
 
-/// How long a search or a fetch may take.
+/// How long a search may take.
 const TIMEOUT: Duration = Duration::from_secs(300);
 
 /// What a model that searches for a query is told.
@@ -69,12 +66,11 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
 
-/// The work of a search or a fetch, as a task of the runtime of the ears, so that a client of HTTP
-/// and a process have the runtime they need, which ends after [`TIMEOUT`], and when what awaits it
-/// goes.
-pub(crate) fn timed<T: Send + 'static, E: From<Cut> + Send + 'static>(
-  work: impl Future<Output = Result<T, E>> + Send + 'static,
-) -> BoxFuture<'static, Result<T, E>> {
+/// The work of a search, as a task of the runtime of the ears, so that a client of HTTP and a
+/// process have the runtime they need, which ends after [`TIMEOUT`], and when what awaits it goes.
+fn timed(
+  work: impl Future<Output = Result<String, Error>> + Send + 'static,
+) -> BoxFuture<'static, Result<String, Error>> {
   spawned(async move { time::timeout(TIMEOUT, work).await })
     .map(|got| match got {
       Ok(Ok(got)) => got,
@@ -418,65 +414,3 @@ fn deepseek(got: &Value) -> String {
     .collect();
   if lines.is_empty() { "No result.".to_owned() } else { lines.join("\n") }
 }
-
-/// The free search, which needs no key: the server of Parallel for agents, which answers the
-/// protocol of MCP.
-const FREE: &str = "https://search.parallel.ai/mcp";
-
-/// The most of the excerpts of one result of the free search that an answer holds, in characters.
-const EXCERPT: usize = 1500;
-
-/// The free search, which asks the tool `web_search` of [`FREE`] for the query.
-pub(crate) fn free() -> Searches {
-  Arc::new(|query| {
-    timed(async move {
-      let arguments = json!({"objective": query, "search_queries": [query]});
-      let call = json!({"name": "web_search", "arguments": arguments});
-      let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call});
-      let got = posted(FREE, &[("accept", "application/json, text/event-stream")], &body).await?;
-      found(&got)
-    })
-  })
-}
-
-/// The answer of the free search, from what its server answered: each result under its title and
-/// its address, with its excerpts cut at [`EXCERPT`] characters; or why it gives none. A server of
-/// MCP answers in JSON, or in a stream of events whose data is that JSON.
-fn found(got: &str) -> Result<String, Error> {
-  let data: String = if got.trim_start().starts_with('{') {
-    got.to_owned()
-  } else {
-    got.lines().filter_map(|line| line.strip_prefix("data:")).map(str::trim).collect()
-  };
-  let reply: Value = serde_json::from_str(&data).map_err(Error::FreeNotJson)?;
-  if let Some(error) = reply.get("error") {
-    let said = error.get("message").and_then(Value::as_str);
-    return Err(Error::Server(said.map_or_else(|| error.to_string(), str::to_owned)));
-  }
-  let result = &reply["result"];
-  let parts = result["content"].as_array().map_or(&[][..], Vec::as_slice);
-  let said: String = parts.iter().filter_map(|one| one["text"].as_str()).collect();
-  if result["isError"] == true {
-    return Err(Error::Server(said));
-  }
-  let Ok(listed) = serde_json::from_str::<Value>(&said) else { return Ok(said) };
-  let results = listed["results"].as_array().map_or(&[][..], Vec::as_slice);
-  let answers: Vec<String> = results
-    .iter()
-    .map(|one| {
-      let (url, title) =
-        (one["url"].as_str().unwrap_or_default(), one["title"].as_str().unwrap_or_default());
-      let excerpts = one["excerpts"].as_array().map_or(&[][..], Vec::as_slice);
-      let excerpts: Vec<&str> = excerpts.iter().filter_map(Value::as_str).collect();
-      let excerpts = excerpts.join("\n\n");
-      let cut: String = excerpts.chars().take(EXCERPT).collect();
-      let more = if cut.len() < excerpts.len() { "…" } else { "" };
-      format!("## [{}]({url})\n\n{}{more}", if title.is_empty() { url } else { title }, cut.trim())
-    })
-    .collect();
-  Ok(if answers.is_empty() { "No result.".to_owned() } else { answers.join("\n\n") })
-}
-
-#[cfg(test)]
-#[path = "search.test.rs"]
-mod test;

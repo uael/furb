@@ -101,8 +101,9 @@ reads it.
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
   agents, which needs no key. `web_fetch(url)` reads a page, as Markdown when it is HTML. Each is an act to await, as a
-  command is, since a page takes seconds. The extension has no life word and no ear of its own: `web_search` asks the
-  question `search`, which the provider answers, and `web_fetch` asks the question `fetch`, which the World answers.
+  command is, since a page takes seconds. The extension has no life word: `web_search` asks the question `search`,
+  which the provider answers when it has a search of its own, and the process of the kit answers the rest and each
+  question `fetch` of `web_fetch`.
 - **`mcp`** connects the chain to the servers of the Model Context Protocol. A server comes from three configs, and the
   later wins for a name: `mcp.json` in the config directory of the user, `.mcp.json` of the project, which has the form
   of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a command, its `args`, `env` and
@@ -289,7 +290,7 @@ limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/world/<name>.rs` when it reads the disk or
-the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World.
+the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the process of the kit answer, and the client of `mcp` is the process of its kit.
 
 Turn on only the extensions that you trust. A word runs in the sandbox of monty with the engine of the crate, and with
 the rights of your user with the engine of CPython, as a word of a model does there.

@@ -24,7 +24,7 @@ use super::{
   images::Images,
   model::{Ask, Model, Tells, requested, standing},
   retry::{Backoff, Retry, failure, overflows, recoverable},
-  search::{Error as Unsearched, free},
+  search::Error as Unsearched,
   thinking::{Thinking, thinks},
   watch::{self, Watch},
   word::{AFTER, RAN, STOPPED, ending, kept, unpython, unquoted, writing},
@@ -527,9 +527,10 @@ impl Hearer {
     }
   }
 
-  /// A search of the web: the native search of the provider of its actor, else the free search,
-  /// as a work of the ear, so every chain of the life goes on meanwhile. A life that inspects
-  /// searches nothing.
+  /// A search of the web by the native search of the provider of its actor, as a work of the ear,
+  /// so every chain of the life goes on meanwhile. The ear does not take the search of an actor
+  /// whose provider has none, which the ears after it answer. A life that inspects searches
+  /// nothing.
   fn search(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
@@ -539,8 +540,8 @@ impl Hearer {
       say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
       return;
     }
+    let Some(search) = (self.native)(&actor) else { return };
     say(co, Fact::says("started", &about, []));
-    let search = (self.native)(&actor).unwrap_or_else(free);
     let id = about.clone();
     let asked = async move {
       let got = search(query.clone()).await;

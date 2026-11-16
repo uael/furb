@@ -3,8 +3,8 @@
 //!
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These
 //! are the ones every host shares, written once in rust: [`files`] reads and writes a path, the
-//! files of the [`Scratch`] directory of the life among them, [`bash`] runs a command, [`fetch`]
-//! gets a page of the web, [`kits`] hosts the process of each kit, as the one of MCP,
+//! files of the [`Scratch`] directory of the life among them, [`bash`] runs a command, [`kits`]
+//! hosts the process of each kit, as the ones of the web and of MCP,
 //! [`time`] reads the clock, draws a chance and ends a wait, [`store`]
 //! keeps the record on the disk under a lease, as a file of lines or a database of SQLite, [`log`]
 //! writes the log of the life beside the record, which [`logged`] reads, [`retold`]
@@ -22,7 +22,6 @@ mod bash;
 mod child;
 pub mod config;
 pub(crate) mod disk;
-mod fetch;
 pub(crate) mod files;
 pub(crate) mod kits;
 mod log;
@@ -42,7 +41,6 @@ use std::{
 
 pub use bash::{bash, program, shell};
 pub use child::{Group, Unborn, spawn};
-pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub(crate) use furb_wire::interruption;
 pub use log::{log, logged};
@@ -55,7 +53,7 @@ pub use provider::{
   claude, codex, images,
   search::Searches,
 };
-pub(crate) use provider::{Mode, Systems, search::timed};
+pub(crate) use provider::{Mode, Systems};
 pub use reader::{Retold, retold, retold_live, retold_with};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::{

@@ -441,7 +441,10 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
 
 /// The program of the process of each official extension that has one, by the name of the
 /// extension.
-const PROCESSES: [(&str, &str); 1] = [("mcp", include_str!("../.agents/skills/mcp/process.py"))];
+const PROCESSES: [(&str, &str); 2] = [
+  ("web", include_str!("../.agents/skills/web/process.py")),
+  ("mcp", include_str!("../.agents/skills/mcp/process.py")),
+];
 
 /// The client of the protocol of a kit in Python, which the crate writes beside the copy of the
 /// process of an official extension in Python, so that process imports the `furb.skill` of the

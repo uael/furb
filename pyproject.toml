@@ -33,7 +33,9 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+  "beautifulsoup4>=4.13",
   "datamodel-code-generator>=0.96.0",
+  "markdownify>=1.2",
   "mcp>=2.3.0",
   "pre-commit>=4.6.2",
   "pytest>=9.1.1",

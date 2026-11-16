@@ -1,9 +1,8 @@
 //! The native search of a model of the network: a search of an actor asks the API of its provider
 //! at the address that the config of the project names, and answers with the text of the response
 //! and the sources that it cites. Each test runs again as a child of itself, whose credentials
-//! offer each provider, and whose model stands in the snapshot with its native search, so no test
-//! falls back to the free search on the network. The free search asks an address that no config
-//! names, so its answers stand beside the module, in `src/world/provider/search.test.rs`.
+//! offer each provider, and whose model stands in the snapshot with its native search, so no search
+//! goes to the free search of the kit `web`, whose suite is `test/outside/test_web.py`.
 
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
