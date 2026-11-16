@@ -1345,7 +1345,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3120,7 +3120,7 @@ dependencies = [
 [[package]]
 name = "monty"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
+source = "git+https://github.com/uael/monty?rev=2376814d#2376814d92b28804c5d3c23ae79e3ac070f899aa"
 dependencies = [
  "ahash",
  "chrono",
@@ -3161,7 +3161,7 @@ dependencies = [
 [[package]]
 name = "monty-macros"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
+source = "git+https://github.com/uael/monty?rev=2376814d#2376814d92b28804c5d3c23ae79e3ac070f899aa"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3171,7 +3171,7 @@ dependencies = [
 [[package]]
 name = "monty-types"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
+source = "git+https://github.com/uael/monty?rev=2376814d#2376814d92b28804c5d3c23ae79e3ac070f899aa"
 dependencies = [
  "chrono",
  "jiff",
@@ -4014,7 +4014,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4657,7 +4657,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4715,7 +4715,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6179,7 +6179,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

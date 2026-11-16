@@ -14,6 +14,7 @@ of a word in their order, says that each ran, with what it raised, and the run o
 left of the word, so a statement of a word runs once, wherever the word came from.
 """
 
+import asyncio
 import re
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
@@ -65,8 +66,11 @@ def refusing(names: Names, why: str) -> BaseException:
 
 def unsettled(names: Names, rung: str, got: object) -> BaseException | None:
   """Why a wait for what is awaited cannot end, as the refusal that the awaiter raises where it waited, or nothing: a
-  rung awaits an act and nothing else, a chain and a name of no act never settle, and the end of its own rung or of
-  its own run depends on the word itself. The operator awaits from no rung, so its rung is empty."""
+  rung awaits an act, or a future of the loop of the words, as the bare yield of asyncio.sleep(0) is the next turn of
+  that loop, and nothing else, a chain and a name of no act never settle, and the end of its own rung or of its own run
+  depends on the word itself. The operator awaits from no rung, so its rung is empty."""
+  if got is None or getattr(got, "_asyncio_future_blocking", None) is not None:
+    return None
   if not isinstance(got, str):
     return refusing(names, f"a rung awaits an act, and {got!r} is none")
   made = verb(names, "get")(got)
@@ -85,6 +89,195 @@ def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
   awaits gives back what carries it forward, and a word that does not is over where it began.
   """
   return eval(compile(word, rung, "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT), module)  # noqa: S307
+
+
+class Future:
+  """A future of the loop of the words of a life, which takes the methods of asyncio.Future that gather and a task
+  read, so the asyncio of each engine takes it: a task waits on it, and gather settles one. The callbacks of a future
+  that is done run on its loop, each in the order that it came."""
+
+  _asyncio_future_blocking = False
+  _log_destroy_pending = False
+
+  def __init__(self, loop: Loop) -> None:
+    self._loop = loop
+    self._cancel_message: object = None
+    self.state = ""
+    self.value: object = None
+    self.callbacks: list[Callable[[Future], object]] = []
+
+  def get_loop(self) -> Loop:
+    return self._loop
+
+  def done(self) -> bool:
+    return self.state != ""
+
+  def cancelled(self) -> bool:
+    return self.state == "cancelled"
+
+  def _make_cancelled_error(self) -> BaseException:
+    return asyncio.CancelledError(*[x for x in [self._cancel_message] if x is not None])
+
+  def result(self) -> object:
+    if self.exception() is not None:
+      raise self.value  # ty: ignore[invalid-raise]
+    return self.value
+
+  def exception(self) -> BaseException | None:
+    if self.state == "":
+      why = "the future is not done"
+      raise RuntimeError(why)
+    if self.state == "cancelled":
+      raise self._make_cancelled_error()
+    return self.value if self.state == "raised" else None  # ty: ignore[invalid-return-type]
+
+  def add_done_callback(self, fn: Callable[[Future], object], *, context: object = None) -> None:  # noqa: ARG002
+    if self.done():
+      self._loop.call_soon(fn, self)
+    else:
+      self.callbacks.append(fn)
+
+  def remove_done_callback(self, fn: Callable[[Future], object]) -> int:
+    kept = [x for x in self.callbacks if x != fn]
+    removed, self.callbacks = len(self.callbacks) - len(kept), kept
+    return removed
+
+  def set_result(self, value: object) -> None:
+    self.settle("result", value)
+
+  def set_exception(self, raised: BaseException) -> None:
+    self.settle("raised", raised)
+
+  def cancel(self, msg: object = None) -> bool:
+    if self.done():
+      return False
+    self._cancel_message = msg
+    self.settle("cancelled", None)
+    return True
+
+  def settle(self, state: str, value: object) -> None:
+    if self.done():
+      why = "the future is done already"
+      raise RuntimeError(why)
+    self.state, self.value, done = state, value, self.callbacks
+    self.callbacks = []
+    for fn in done:
+      self._loop.call_soon(fn, self)
+
+  def __await__(self) -> Generator[Future, object, object]:
+    if not self.done():
+      self._asyncio_future_blocking = True
+      yield self
+    return self.result()
+
+  __iter__ = __await__
+
+
+class Task(Future):
+  """A coroutine that a word gave the loop of the words, as asyncio.create_task and asyncio.gather make one: the Kernel
+  steps it as it steps the word, as a job of the rung of that word, and the task is done with what the coroutine gave.
+  A task that is cancelled raises CancelledError where it waits at its next step, as in CPython; an act that it waits
+  for goes on, since only a cancel that the transcript shows ends an act."""
+
+  def __init__(self, loop: Loop, awaitable: object, rung: str) -> None:
+    Future.__init__(self, loop)
+    self.rung, self.gave, self.inner = rung, None, awaitable
+    self.coro = self.ran(awaitable)
+    self.waiting: object = None
+    self.cancelling: BaseException | None = None
+    loop.call_soon(loop.held.carry, self, None)
+
+  async def ran(self, awaitable: object) -> None:
+    """What the task awaits, whose value it keeps: monty gives the loop an act of a gather as it is, and its
+    StopIteration carries no value."""
+    self.gave = await awaitable  # ty: ignore[invalid-await]
+
+  def cancel(self, msg: object = None) -> bool:
+    """The task, cancelled at its next step: a future that it waits on is cancelled, and a task that waits for an act
+    steps at the next turn of the loop."""
+    if self.done():
+      return False
+    self.cancelling = asyncio.CancelledError(*[x for x in [msg] if x is not None])
+    if getattr(self.waiting, "_asyncio_future_blocking", None) is not None:
+      getattr(self.waiting, "cancel")(msg)  # noqa: B009
+    elif self.waiting is not None:
+      self.waiting = None
+      self._loop.call_soon(self._loop.held.carry, self, None)
+    return True
+
+
+class Loop:
+  """The loop of the words of a life, which the Kernel runs as the running loop of asyncio while it steps a word, so
+  asyncio.gather and asyncio.create_task of a word make tasks that the Kernel steps. It runs what is ready at the end of
+  each fact that the Kernel hears, in the order that it came, so the order in which the tasks of a word run is a
+  function of the record alone, and a later life runs them in the same order. What an ear asks of the running loop
+  while a word makes an act goes to the loop that ran before, which is that ear's own."""
+
+  def __init__(self, held: Running) -> None:
+    self.held = held
+    self.ready: list[tuple[Callable[..., object], tuple]] = []
+    self.outer: object = None
+
+  def mine(self) -> bool:
+    """Whether the Kernel or a word speaks, and not an ear that a word made an act of."""
+    site = self.held.site.get()
+    return site == self.held.me or bool(verb(self.held.names, "question")(("rung", site)))
+
+  def get_debug(self) -> bool:
+    return False
+
+  def is_running(self) -> bool:
+    return True
+
+  def is_closed(self) -> bool:
+    return False
+
+  def call_exception_handler(self, context: object) -> None:
+    """A future that no one read raised: the word that awaited nothing of it lost it, as CPython only logs it."""
+
+  def call_soon(self, callback: Callable[..., object], *args: object, context: object = None) -> None:
+    if not self.mine():
+      return getattr(self.outer, "call_soon")(callback, *args, context=context)  # noqa: B009
+    self.ready.append((callback, args))
+    return None
+
+  def create_future(self) -> object:
+    return Future(self) if self.mine() else getattr(self.outer, "create_future")()  # noqa: B009
+
+  def create_task(self, coro: object, *, name: object = None, context: object = None) -> object:
+    if not self.mine():
+      return getattr(self.outer, "create_task")(coro, name=name, context=context)  # noqa: B009
+    task = Task(self, coro, self.held.site.get())
+    self.held.tasks.append(task)
+    return task
+
+  def __getattr__(self, name: str) -> object:
+    if self.outer is None or self.mine():
+      why = f"the loop of a word has no {name}: a word awaits acts, as wait(seconds, act)"
+      raise AttributeError(why)
+    return getattr(self.outer, name)
+
+  def rest(self) -> None:
+    """What is ready, run in the order that it came, until nothing is."""
+    while self.ready:
+      callback, args = self.ready.pop(0)
+      callback(*args)
+
+  def enter(self) -> object:
+    """The loop set as the running loop of asyncio for a step of a word, where the engine lets a program set one, and
+    the loop that ran before it, which leave sets again."""
+    setting = getattr(asyncio, "_set_running_loop", None)
+    if setting is None:
+      return None
+    outer = getattr(asyncio, "_get_running_loop")()  # noqa: B009
+    if outer is not self:
+      self.outer = outer
+    setting(self)
+    return outer
+
+  def leave(self, outer: object) -> None:
+    if (setting := getattr(asyncio, "_set_running_loop", None)) is not None:
+      setting(outer)
 
 
 class Running:
@@ -126,6 +319,15 @@ class Running:
     self.parts: dict[str, tuple[str, str, int]] = {}
     self.heard = 0
     self.lingers: dict[str, str] = {}
+    # The Kernel speaks as its ear when it runs what its loop holds, and a word speaks as its rung.
+    self.me = self.site.get()
+    self.loop = Loop(self)
+    self.tasks: list[Task] = []
+    self.holding: dict[str, tuple[str, BaseException | None]] = {}
+
+  def rung_of(self, job: str | Task) -> str:
+    """The rung of a job or of a task."""
+    return job.rung if isinstance(job, Task) else self.of(job)[2]
 
   def of(self, job: str) -> tuple[str, str, str, str, int]:
     """The job, as the life holds it: its kind, its chain, its rung, its word, and how many characters of the word
@@ -165,15 +367,23 @@ class Running:
     line = self.line.get(rung) or []
     if run in line:
       line.remove(run)
-    if kind == "run" and got is None and self.linger(run, rung):
-      return
     if kind == "run":
-      self.finish(run, rung, got)
+      self.close(run, rung, got)
     else:
       del self.parts[run]
       with self.site.set(rung):
         verb(self.names, "say")("ran", rung, before, got)
     self.drives(rung)
+
+  def close(self, run: str, rung: str, got: BaseException | None) -> None:
+    """The word of a run is over: the run is done once each task that the word made is over too, and then once each
+    command that it did not await ends, as linger says."""
+    if any(x.rung == rung and not x.done() for x in self.tasks):
+      self.holding[rung] = (run, got)
+      return
+    if got is None and self.linger(run, rung):
+      return
+    self.finish(run, rung, got)
 
   def linger(self, run: str, rung: str) -> bool:
     """The word of a turn of a model that is over with each command that it started and did not await still open
@@ -213,47 +423,128 @@ class Running:
     self.line.pop(rung, None)
     self.broke.pop(rung, None)
 
-  def carry(self, run: str, given: object) -> None:
-    """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done. A
-    run that is over, as one whose end the record keeps, steps no more."""
-    peek, rung = verb(self.names, "peek"), self.of(run)[2]
-    with self.site.set(rung):
-      while True:
-        if peek(run, ...) is not ...:
-          self.frames[run].close()
-          return self.ended(run, self.cancelled())
-        try:
-          frame = self.frames[run]
-          got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
-          while (no := unsettled(self.names, rung, got)) is not None:
-            got = frame.throw(no)
-          assert isinstance(got, str)
-        except StopIteration:
-          return self.ended(run, None)
-        except BaseException as raised:
-          return self.ended(run, raised)
-        # A word goes on at the done of a wants even for an act that is over, so it never holds the bus: each ear
-        # hears between two of its steps, and the journal keeps each fact in its order.
-        if self.wants(run, got):
-          return None
-        if peek(got, ...) is ...:
-          # The rung of a part waits for the turn of its model, which a wants would keep it from hearing, so the
-          # part waits for its act with no wants, and goes on at the done of that act.
-          self.awaits.setdefault(got, []).append(run)
-          return None
-        given = self.given(got, peek(got))
+  def carry(self, job: str | Task, given: object) -> None:
+    """The word, or a task of it, stepped as its rung with what it waited for, and stepped again while what it waits
+    for is done. A run that is over, as one whose end the record keeps, steps no more, and nor does a task that is
+    done. A word waits for an act, for a future of the loop of the words, or, with a bare yield, for the next turn of
+    that loop."""
+    task = job if isinstance(job, Task) else None
+    if (task.done() if task else job not in self.frames) or (task and task.waiting is not None):
+      return None
+    if task and task.cancelling is not None:
+      given, task.cancelling = task.cancelling, None
+    peek, rung = verb(self.names, "peek"), self.rung_of(job)
+    frame = task.coro if task else self.frames[job]  # ty: ignore[invalid-argument-type]
+    outer = self.loop.enter()
+    try:
+      with self.site.set(rung):
+        while True:
+          if not task and peek(job, ...) is not ...:
+            frame.close()
+            return self.ended(job, self.cancelled())  # ty: ignore[invalid-argument-type]
+          try:
+            got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
+            while (no := unsettled(self.names, rung, got)) is not None:
+              got = frame.throw(no)
+          except StopIteration:
+            return self.over(job, None)
+          except BaseException as raised:
+            return self.over(job, raised)
+          if not isinstance(got, str):
+            self.waits_on(job, got)
+            return None
+          # A word goes on at the done of a wants even for an act that is over, so it never holds the bus: each ear
+          # hears between two of its steps, and the journal keeps each fact in its order.
+          if self.wait(job, got):
+            return None
+          given = self.given(got, peek(got))
+    finally:
+      self.loop.leave(outer)
 
-  def wants(self, job: str, made: str) -> bool:
-    """A wants for the act that a job waits for, made as the run of its rung, once that run stands in the line of
-    the rung; or nothing, while the model of the rung writes and no run of it stands."""
-    run = next((x for x in self.line.get(self.of(job)[2], []) if x not in self.parts), "")
-    if not run:
+  def waits_on(self, job: str | Task, got: object) -> None:
+    """A job that waits on a future of the loop goes on with nothing once it is done, as asyncio steps a task, and
+    one that yields bare goes on at the next turn of the loop."""
+    if isinstance(job, Task):
+      job.waiting = got
+    if got is None:
+      self.loop.call_soon(self.resume, job, None, None)
+      return
+    setattr(got, "_asyncio_future_blocking", False)  # noqa: B010
+    getattr(got, "add_done_callback")(lambda done: self.resume(job, done, None))  # noqa: B009
+
+  def resume(self, job: str | Task, made: object, value: object) -> None:
+    """A job stepped with what it waited for, which a task takes only while it still waits for it."""
+    if isinstance(job, Task):
+      if job.waiting != made:
+        return
+      job.waiting = None
+    self.carry(job, value)
+
+  def over(self, job: str | Task, raised: BaseException | None) -> None:
+    """A word or a task is over: a task is done with what its coroutine gave, as in CPython, and the run whose word is
+    over and that waited for its tasks is done once the last of them is."""
+    if not isinstance(job, Task):
+      return self.ended(job, raised)
+    if isinstance(raised, asyncio.CancelledError):
+      # A task cancelled before its first step never awaited its coroutine, which is closed so that nothing says so.
+      getattr(job.inner, "close", lambda: None)()
+      Future.cancel(job, raised.args[0] if raised.args else None)
+    elif raised is not None:
+      job.set_exception(raised)
+    else:
+      job.set_result(job.gave)
+    self.tasks.remove(job)
+    held = self.holding.get(job.rung)
+    if held and not any(x.rung == job.rung for x in self.tasks):
+      del self.holding[job.rung]
+      self.close(held[0], job.rung, held[1])
+    return None
+
+  def wait(self, job: str | Task, made: str) -> bool:
+    """A job that waits for an act: through a wants, as through says, else with no wants while the act is not over.
+    Nothing waits when the act is over and no wants can take it."""
+    if isinstance(job, Task):
+      job.waiting = made
+    if self.through(job, made):
+      return True
+    if verb(self.names, "peek")(made, ...) is ...:
+      self.awaits.setdefault(made, []).append(job)  # ty: ignore[invalid-argument-type]
+      return True
+    if isinstance(job, Task):
+      job.waiting = None
+    return False
+
+  def through(self, job: str | Task, made: str) -> bool:
+    """A wants for the act that a job waits for, made as the run of its rung once that run stands in the line of the
+    rung, or nothing. The chain counts a run as a word that waits from the start of a wants to its done, so while a task
+    of the run waits through a wants, no other job of the run makes one, and a task makes one only while no job does."""
+    run = self.standing(job)
+    if not run or any(
+      self.standing(x) == run and (isinstance(x, Task) or isinstance(job, Task)) for x in self.waits.values()
+    ):
       return False
     with self.site.set(run):
       wants = verb(self.names, "act")("wants", "", None, made)
     assert isinstance(wants, str)
-    self.waits[wants] = job
+    self.waits[wants] = job  # ty: ignore[invalid-assignment]
     return True
+
+  def standing(self, job: str | Task) -> str:
+    """The run that stands in the line of the rung of a job, or nothing while the model of the rung writes."""
+    return self.stands(self.rung_of(job))
+
+  def stands(self, rung: str) -> str:
+    """The run that stands in the line of a rung, or nothing while the model of the rung writes."""
+    return next((x for x in self.line.get(rung, []) if x not in self.parts), "")
+
+  def settle(self, rung: str) -> None:
+    """Each job of a rung that waits for an act with no wants, in the order that it came, waits through a wants once
+    through lets it, as when a run of the rung stands, or the wants of a task of that run is done."""
+    for made, ones in list(self.awaits.items()):
+      for one in [x for x in ones if self.rung_of(x) == rung and self.through(x, made)]:
+        ones.remove(one)
+      if not ones:
+        del self.awaits[made]
 
   def given(self, made: str, value: object) -> object:
     """What a word that awaits the act made is given of what that act came to: a Refused in the place of the Exit of a
@@ -285,18 +576,14 @@ class Running:
   def begin(self, run: str) -> None:
     """A job taken, put in the line of its rung: it runs when the jobs of that rung before it are over. The job of a
     rung that is done already, or of a run that is over, as one whose end the record keeps, is done with
-    CancelledError, since its word never begins. Once a run stands in the line, each part of its rung that waits for an
-    act with no wants waits with a wants as that run."""
+    CancelledError, since its word never begins. Once a run stands in the line, a job of its rung that waits for an act
+    with no wants waits through a wants of that run, as settle says."""
     rung, peek = self.of(run)[2], verb(self.names, "peek")
     self.taken.discard(run)
     if peek(rung, ...) is not ... or peek(run, ...) is not ...:
       return self.ended(run, self.cancelled())
     self.line.setdefault(rung, []).append(run)
-    for made, ones in list(self.awaits.items()):
-      for one in [x for x in ones if self.of(x)[2] == rung and self.wants(x, made)]:
-        ones.remove(one)
-      if not ones:
-        del self.awaits[made]
+    self.settle(rung)
     return self.drives(rung)
 
   def drives(self, rung: str) -> None:
@@ -361,11 +648,18 @@ class Running:
     return got
 
   def dropped(self, control: tuple) -> None:
-    """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
+    """Every run whose rung a control is over, dropped, with each task of its word: the frame of a word that is mid step
+    is never closed."""
     covers = verb(self.names, "covers")
     for waited, one in list(self.lingers.items()):
       if covers(control, self.of(one)[2]) and self.lingers.pop(waited, None):
         self.finish(one, self.of(one)[2], None)
+    for task in [x for x in self.tasks if covers(control, x.rung) and not getattr(x.coro, "cr_running", False)]:
+      self.tasks.remove(task)
+      task.coro.close()
+      Future.cancel(task)
+    for rung in [x for x in self.holding if covers(control, x)]:
+      self.finish(self.holding.pop(rung)[0], rung, self.cancelled())
     for one in [x for x in self.frames if covers(control, self.of(x)[2])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
@@ -422,12 +716,16 @@ def kernel(names: Names) -> Ear:
         held.begin(run)
       case ("done", made, _, value) if made in held.awaits:
         for one in held.awaits.pop(made):
-          held.carry(one, held.given(made, value))
+          held.resume(one, made, held.given(made, value))
       case ("done", waited, _, value) if waited in held.lingers:
         held.lingered(waited, value)
       case ("done", wants, _, value) if wants in held.waits:
         asked = verb(names, "get")(wants)
         assert isinstance(asked, tuple)
-        held.carry(held.waits.pop(wants), held.given(str(asked[4]), value))
+        one = held.waits.pop(wants)
+        rung = held.rung_of(one)
+        held.resume(one, asked[4], held.given(str(asked[4]), value))
+        held.settle(rung)
       case ("cancel" | "close", *_) as control:
         held.dropped(control)
+    held.loop.rest()

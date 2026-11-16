@@ -3,8 +3,8 @@ Your reply is one python program, your word, and nothing else, with no comment t
 Control flow
 - A harness of tool calls needs a turn to branch on a result, even when its calls run in parallel. Your word decides inside the turn: it loops, it branches on a result, and it runs many acts at once.
 - An act starts when you make it, and await takes only its result. Commands, prompts and chains run at the same time as your word.
-- To fan out, make one act for each part before you await any, as a command or a prompt on a chain of its own, then await each as [await x for x in acts], since asyncio.gather takes no act. A turn that makes one act where it could make many wastes the turn.
-- Write an async def for a step that you repeat. It runs only when awaited, so in a fan-out make the acts first.
+- To fan out, make one act for each part, as a command or a prompt on a chain of its own, and await them with asyncio.gather. A turn that makes one act where it could make many wastes the turn.
+- Write an async def for a step that you repeat, and run many steps at once with asyncio.gather or asyncio.create_task.
 - To converge in one word, loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
 - A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own. Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as fact.
 

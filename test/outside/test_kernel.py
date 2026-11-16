@@ -67,13 +67,15 @@ async def test_a_word_compares_sets_as_python_does_on_both_engines(which: object
 
 
 async def test_a_word_awaits_an_act_and_nothing_else() -> None:
-  """A rung awaits an act and nothing else, so anything else it awaits is refused where it waited, and a word that
-  catches the refusal carries on."""
+  """A rung awaits an act, a future of the loop of its word or the next turn of that loop, and nothing else, so
+  anything else it awaits is refused where it waited, and a word that catches the refusal carries on."""
   root = booted(worlds(STANDS))
+  odd = "class Odd:\n  def __await__(self):\n    yield 1\n"
   with pytest.raises(Refused, match="a rung awaits an act"):
-    await engine.rung("import asyncio\nawait asyncio.sleep(0)", on=root)
-  word = "import asyncio\ntry:\n  await asyncio.sleep(0)\nexcept Refused as no:\n  why = str(no)\nclose(why)"
+    await engine.rung(odd + "await Odd()", on=root)
+  word = odd + "try:\n  await Odd()\nexcept Refused as no:\n  why = str(no)\nclose(why)"
   assert "a rung awaits an act" in str(await engine.rung(word, on=root))
+  assert await engine.rung("import asyncio\nawait asyncio.sleep(0)\nclose('next turn')", on=root) == "next turn"
 
 
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:

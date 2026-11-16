@@ -747,7 +747,9 @@ class Act[T = object](str):
     """To await an act gives the value of the act when the act completes.
     An act is awaited from any chain.
     A rung that awaits an act reads the result of the act.
-    A rung awaits an act and nothing else.
+    A rung awaits an act, or a future of the loop of its word, and nothing else.
+    A word runs coroutines at once as tasks, with asyncio.gather and asyncio.create_task, which await acts as the word does, in an order that the record alone sets, and its run is done once the word and each of its tasks are over.
+    A task that raises, or that is cancelled, raises that exception, or CancelledError, where it is awaited, as in CPython.
     To await an act raises the exception that the act completed with.
     To await a cancelled act raises CancelledError.
     A word that awaits a command whose code is not one that the command accepts raises Refused where it waited, and the command keeps its Exit, which peek gives.

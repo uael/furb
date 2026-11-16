@@ -43,8 +43,12 @@ meanings. The entry of such a name here gives only its form in the engine.
 - checkpointer: the module of the outside, `checkpoint.py`, that gathers the data of a carry and seeds the next engine
   from it, on the names of the engine; the sandbox loads it as it loads the Kernel, and the fact made holds its text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
-  an act that is not done, and says the run done with what the word gave. It refuses, where the word waited, an await
-  that cannot settle: of what is no act, of a chain, of a name of no act, and of the rung or the run of the word itself.
+  an act that is not done, and says the run done with what the word gave. It is the loop of asyncio of each word
+  while it steps it, so the tasks that asyncio.gather and asyncio.create_task make are its own: it steps them in the
+  order that the facts come, a task waits through a wants only while no other job of its run does, and the run is
+  done once the word and each of its tasks are over. It refuses, where the word waited, an await that cannot settle:
+  of what is neither an act nor a future of that loop, of a chain, of a name of no act, and of the rung or the run of
+  the word itself.
 - boot: the life, given the journal and the generators of the outside, which binds say, act, drive, get, peek,
   transcript, numbered, offers and lives, binds numbered, offers, drive and lives again to what the journal gives, and
   gives the root. It brings the ear of the journal to life last, so the journal says its record again before boot

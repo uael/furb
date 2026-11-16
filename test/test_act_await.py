@@ -2,6 +2,7 @@
 
 import asyncio
 from asyncio import CancelledError
+from dataclasses import replace
 
 import pytest
 
@@ -32,13 +33,77 @@ async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
   assert await engine.prompt(list, "run it", on=root) == [0, "ran echo hi\n"]
 
 
-async def test_a_rung_awaits_an_act_and_nothing_else() -> None:
-  """A rung awaits an act and nothing else."""
+async def test_a_rung_awaits_an_act_or_a_future_of_the_loop_of_its_word_and_nothing_else() -> None:
+  """A rung awaits an act, or a future of the loop of its word, and nothing else."""
   _, log, root, one, _, command = await stalled()
   assert [a[4] for a in said(log, "wants")] == [command]
   engine.cancel(one)
   with pytest.raises(Refused, match="a rung awaits an act, and 1 is none"):
     await engine.rung("class Nothing:\n  def __await__(self):\n    yield 1\n\nawait Nothing()", on=root)
+  word = "import asyncio\nready = asyncio.get_running_loop().create_future()\nready.set_result(2)\n"
+  assert await engine.rung(word + "close(await ready)", on=root) == 2
+
+
+async def test_a_word_runs_coroutines_at_once_as_tasks_in_an_order_that_the_record_alone_sets() -> None:
+  """A word runs coroutines at once as tasks, with asyncio.gather and asyncio.create_task, which await acts as the word does, in an order that the record alone sets, and its run is done once the word and each of its tasks are over."""
+  word = (
+    "import asyncio\n"
+    "async def step(command):\n"
+    "  await bash(command)\n"
+    "  return command\n"
+    "later = asyncio.create_task(step('three'))\n"
+    "both = await asyncio.gather(step('one'), step('two'), bash('four'))\n"
+    "debug(t'{both[:2]}')"
+  )
+  sand, log, root = born(word, auto=False)
+  engine.prompt(list, "go", on=root)
+  await settle()
+  commands = {a[4]: a[1] for a in said(log, "bash")}
+  # An argument of gather is made at the call, and each task runs from the next turn of the loop, in its order.
+  assert list(commands) == ["four", "three", "one", "two"]
+  # Each task waits through one wants of the run at a time, so the chain counts the run as a word that waits.
+  assert [a[4] for a in said(log, "wants")] == [commands["three"]]
+  for command in ["two", "four", "one"]:
+    sand.exits(commands[command], 0)
+    await settle()
+  (run,) = [a[1] for a in said(log, "run") if "gather" in a[5]]
+  assert "['one', 'two']" in paragraphs(engine.turns(on=root))[-1] and engine.peek(run, ...) is ...
+  sand.exits(commands["three"], 0)
+  await settle()
+  assert engine.peek(run, ...) is None
+  before = engine.turns(on=root)
+  again, _ = await relived(replace(sand, record=[], calls=[]), plain(sand.record))
+  assert engine.turns(on=root) == before and engine.peek(run, ...) is None
+  assert [a[1:] for a in again if a[0] == "wants"] == [a[1:] for a in log if a[0] == "wants"]
+
+
+async def test_a_task_that_raises_or_that_is_cancelled_raises_that_exception_or_cancellederror_where_it_is_awaited() -> (
+  None
+):
+  """A task that raises, or that is cancelled, raises that exception, or CancelledError, where it is awaited, as in CPython."""
+  word = (
+    "import asyncio\n"
+    "async def fails():\n"
+    "  raise ValueError('no')\n"
+    "async def waits():\n"
+    "  return (await bash('slow')).code\n"
+    "async def gives():\n"
+    "  return 1\n"
+    "try:\n"
+    "  await asyncio.gather(gives(), fails())\n"
+    "except ValueError as no:\n"
+    "  raised = str(no)\n"
+    "task = asyncio.create_task(waits())\n"
+    "task.cancel()\n"
+    "try:\n"
+    "  await task\n"
+    "except asyncio.CancelledError:\n"
+    "  close(raised)"
+  )
+  _, log, root = born(word, auto=False)
+  asked = engine.prompt(str, "go", on=root)
+  await settle()
+  assert engine.peek(asked) == "no" and said(log, "bash") == []
 
 
 async def test_to_await_an_act_raises_the_exception_that_the_act_completed_with() -> None:
