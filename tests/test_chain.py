@@ -2277,3 +2277,24 @@ async def test_an_act_of_a_step_is_each_question_that_it_made_and_each_control_t
   for _ in range(12):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one)) == (4, True)
+
+
+async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears_on() -> None:
+  """The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run."""
+  sand, log, root = born()
+  await engine.rung("try:\n  read(5)\nexcept Refused as no:\n  why = str(no)", on=root)
+  raised = "chain1 raised TypeError(\"expected string or bytes-like object, got 'int'\")"
+  assert engine.module(root)["why"] == raised
+  asked = engine.prompt(int, "n", on=root)
+  await settle()
+  first = said(log, "reply")[-1]
+  world_says("done", first[1], ("assistant", 5, (0, 0, 0, 0, 0.0), []))
+  await settle()
+  assert repr(engine.peek(first[2])) == repr(Refused(raised)) and not engine.over(root)
+  world_says("done", said(log, "reply")[-1][1], ("assistant", "close(3)", (0, 0, 0, 0, 0.0), []))
+  assert await asyncio.wait_for(engine.Act(asked), 2) == 3
+  assert engine.read(asked, on=root).content == "close(3)"
+  assert await asyncio.wait_for(engine.rung("close(2)", on=root), 2) == 2
+  _, over = await relived(Sand(), plain(sand.record))
+  assert engine.module(over)["why"] == raised and engine.peek(asked) == 3
+  assert await asyncio.wait_for(engine.rung("close(4)", on=over), 2) == 4

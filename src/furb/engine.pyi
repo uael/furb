@@ -532,6 +532,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
   A chain is chainN whether boot or chain opened it, and the root is chain1.
   A chain is an act of Never, so the chain never completes.
+  The ear of a chain that raises while it hears a fact says the done of the open act of the chain that the fact names, with a refusal that names the chain and what it raised, and hears on, so the chain stays and its later rungs run.
   The turns of a chain tell the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
   Nothing leaves a transcript once the transcript holds it.
@@ -777,7 +778,7 @@ class Refused(Exception):
 class Overflow(Refused):
   """What a reply is refused with when its prompt passes the window of its model, so the chain can cut its acts before its next reply."""
 
-class Drift(Exception):
+class Drift(BaseException):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
   Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs.

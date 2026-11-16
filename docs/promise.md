@@ -130,6 +130,7 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `src/furb/engine.pyi Gate: the alias goes`: as gate.
 - `src/furb/engine.pyi boot: the type of record changes from Sequence[Entry] to Iterable[Entry]`: boot says each entry again as it reads it, so a host gives the lines of a record as they come.
 - `src/furb/engine.pyi Entry: the alias changes from tuple[Fact] to tuple[Fact, int, bool] | tuple[Fact]`: an entry holds the place of its fact and whether the life rested when it said it, so a replay says it at that place; a record of an earlier major opens in no life.
+- `src/furb/engine.pyi Drift: the base Exception goes`: Drift is a BaseException, so no `except Exception` of a word or of an ear holds a drift, which ends what the life keeps; a word that held one ran on with a journal that keeps nothing.
 - `src/furb/engine.pyi grant: the def goes`: grant is the official kit grant, off by default; a word loads it with `await skill("grant")`, and the grant of each door, and the `Grant` door of the host, load it in the word that they run.
 - `src/furb/engine.pyi Grant: the alias goes`: as grant; the contract of the kit holds it.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
