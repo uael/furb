@@ -47,20 +47,18 @@ async def test_a_word_and_its_replay_take_a_time_that_grows_with_their_length_al
     assert min(one[part] for one in large) < 8 * min(one[part] for one in small)
 
 
-@pytest.mark.xfail(
-  raises=AssertionError,
-  reason="H3 of the register of defects: the reminder of an owed message is said at each quiet step; carrier engine:advance-one-rule-r3, then engine:threads-question",
-)
 async def test_the_reminder_of_a_message_owed_to_the_operator_is_said_once() -> None:
-  """The reminder of a message of the operator that a thread owes is said once, however many quiet steps follow."""
+  """The reminder of a message of the operator that a thread owes is said once, however many quiet steps follow: the
+  message asks the chain one step, and a step that answers it with no act asks none more."""
   _, log, root = born("await wait(60, __name__)", "x = 1", "y = 2", "z = 3", "close(1)", auto=False)
   first = engine.prompt(int, "work", on=root)
   await settle()
   engine.prompt(None, "use this", on=first)
-  await settle()
-  await settle()
-  reminders = [a for a in said(log, "prompt") if a[3] == first and a[2] == first]
-  assert len(reminders) == 1, [a[1] for a in reminders]
+  for _ in range(4):
+    await settle()
+  told = [turn for turn in engine.turns(on=root) if turn[0] == "user" and "'use this'" in turn[1]]
+  assert len(told) == 1, told
+  assert [a[1] for a in said(log, "rung")] == ["rung1", "rung2"]
 
 
 @pytest.mark.xfail(
