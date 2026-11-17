@@ -173,7 +173,7 @@ fn kind(paragraph: &str) -> Content {
   match (path, name) {
     (Some("skills://"), _) => Content::Skills,
     (_, Some("DOCTRINE.md")) => Content::Doctrine,
-    (_, Some("AGENTS.md" | "CLAUDE.md")) => Content::Memory,
+    (_, Some("AGENTS.md" | "CLAUDE.md" | "AGENTS.local.md" | "CLAUDE.local.md")) => Content::Memory,
     _ => Content::Turns,
   }
 }

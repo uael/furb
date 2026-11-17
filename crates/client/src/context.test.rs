@@ -17,3 +17,16 @@ fn the_engine_counts_the_system_prompt_at_the_tokens_of_a_character_that_the_fir
   ];
   assert_eq!(kinds(&turns, &"s".repeat(300)), vec![(Content::Engine, 300), (Content::Turns, 1200)]);
 }
+
+#[test]
+fn a_local_memory_file_counts_as_memory() {
+  // The answer read a paragraph of the local memory file of a folder and a paragraph of a file,
+  // one token for each character.
+  let local = "#read1\nread1_path = '~/w/AGENTS.local.md'\nread1_text = 'x'\n\n";
+  let told = format!("{local}#read2\nread2_path = '~/w/a.txt'\nread2_text = 'y'");
+  let (local, all) = (u64::try_from(local.len()).unwrap(), u64::try_from(told.len()).unwrap());
+  #[expect(clippy::cast_precision_loss, reason = "the turn holds far fewer characters than 2^52")]
+  let turns =
+    [json!(["user", told, null, null]), json!(["assistant", "", [all as f64, 0, 0, 0, 0.0], null])];
+  assert_eq!(kinds(&turns, ""), vec![(Content::Memory, local), (Content::Turns, all - local)]);
+}
