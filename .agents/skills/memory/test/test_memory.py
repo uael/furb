@@ -21,28 +21,29 @@ async def paths(root: str, at: Path, path: str) -> list[str]:
 
 
 async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
-  """The memory of a path, told to its chain: each memory file that applies to the path and whose content the chain does not hold, told whole when the chain holds no text at its path, and else by the lines that differ from the text the chain holds there, as differs picks them, so the chain holds the whole file."""
+  """The memory of a path, told to its chain: each memory file that applies to the path and whose content the chain does not hold, told whole when the chain holds no text at its path, and else by the lines that the text the chain holds there does not hold, with removed bound to the lines of that text that the file no longer holds, so the chain holds each line of the file and knows each line that left it."""
   text = "".join(f"{n}\n" for n in range(1, 2101))
   top = noted(tmp_path / "work", text)
   _, root = extended("memory", tmp_path)
   await engine.rung("memory()", on=root)
   assert recalled(root, tmp_path) == [memorized(top, text)]
-  top.write_text(text.replace("\n5\n", "\nfive\n"), encoding="utf-8", newline="")
+  top.write_text(text.replace("\n4\n", "\n4\nfour\n").replace("\n2000\n", "\n"), encoding="utf-8", newline="")
   await engine.rung("memory()", on=root)
-  assert recalled(root, tmp_path)[1:] == [f"#read\nread_path = {tilded(top)!r}\nread_text = 'five'"]
+  told = f"#read\nread_path = {tilded(top)!r}\nread_removed = ['2000']\nread_text = 'four'"
+  assert recalled(root, tmp_path)[1:] == [told]
 
 
 async def test_a_text_that_shares_most_lines_with_a_text_at_another_path_is_told_by_the_lines_the_chain_lacks(
   tmp_path: Path,
 ) -> None:
-  """A text whose lines a text that the chain holds at another path shares for the most part, as a checkout and its worktree hold one file, is told by the lines that the chain does not hold, so the chain holds the whole file."""
+  """A text whose lines a text that the chain holds at another path shares for the most part, as a checkout and its worktree hold one file, is told the same way against that text."""
   text = "".join(f"{n}\n" for n in range(1, 2101))
   other = noted(tmp_path / "other", text)
   top = noted(tmp_path / "work", text.replace("\n5\n", "\nfive\n"))
   _, root = extended("memory", tmp_path)
   await engine.rung(f"read({str(other)!r}, HIDDEN)", on=root)
   await engine.rung("memory()", on=root)
-  assert recalled(root, tmp_path) == [f"#read\nread_path = {tilded(top)!r}\nread_text = 'five'"]
+  assert recalled(root, tmp_path) == [f"#read\nread_path = {tilded(top)!r}\nread_removed = ['5']\nread_text = 'five'"]
 
 
 async def test_memory_reads_each_memory_file_with_a_hidden_show_and_tells_each_in_its_order(tmp_path: Path) -> None:

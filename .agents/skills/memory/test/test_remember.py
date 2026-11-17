@@ -30,7 +30,9 @@ async def test_the_memory_of_a_chain_kept(tmp_path: Path) -> None:
   assert made(watcher, root) == asked, "a path of a scheme is no folder"
   top.write_text("three\n", encoding="utf-8", newline="")
   engine.stand(engine.ROOT)
-  assert recalled(root, tmp_path)[2:] == [memorized(top, "three\n")]
+  assert recalled(root, tmp_path)[2:] == [
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['one']\nread_text = 'three'"
+  ]
   assert engine.peek(watcher, "living") == "living"
 
 
@@ -93,7 +95,7 @@ async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(
   engine.stand(engine.ROOT)
   assert recalled(root, tmp_path) == [
     memorized(top, "one\ntwo\n"),
-    f"#read\nread_path = {tilded(top)!r}\nread_text = 'three'",
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['two']\nread_text = 'three'",
   ]
 
 
@@ -109,7 +111,9 @@ async def test_it_tells_the_memory_that_changed_at_each_stand_from_outside_an_ac
   assert made(watcher, root) == asked
   assert recalled(root, tmp_path) == [memorized(top, "one\n")]
   engine.stand(engine.ROOT)
-  assert recalled(root, tmp_path)[1:] == [memorized(top, "three\n")]
+  assert recalled(root, tmp_path)[1:] == [
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['one']\nread_text = 'three'"
+  ]
 
 
 async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
@@ -121,7 +125,10 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   top.write_text("one\nthree\n", encoding="utf-8", newline="")
   _, root = extended("memory", tmp_path, record=plain(sand.record))
   await settle()
-  assert recalled(root, tmp_path) == [*first, f"#read\nread_path = {tilded(top)!r}\nread_text = 'three'"]
+  assert recalled(root, tmp_path) == [
+    *first,
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['two']\nread_text = 'three'",
+  ]
   assert first == [memorized(top, "one\ntwo\n")]
 
 
@@ -165,7 +172,7 @@ async def test_remember_tells_the_memory_of_the_folder_of_a_text_after_a_write_o
 
 
 async def test_between_two_stands_remember_asks_once_for_each_memory_file_and_each_folder(tmp_path: Path) -> None:
-  """Between two stands from outside an act, remember asks the World at most once for each memory file and each folder on the chain, whether the World gave it or refused it, and asks again for a folder after a write or a cd of a word on the chain, so a word that reads many files under one working directory reads its memory once, and a memory file that appears or changes outside a word enters the chain at the next stand."""
+  """Between two stands from outside an act, remember asks the World at most once for each memory file and each folder on the chain, whether the World gave it or refused it, asks again for a folder after a write or a cd of a word on the chain, and asks again for a memory file that it gave and that the chain does not hold, as after a jump that dropped its read, so each paragraph follows its own read on the chain, so a word that reads many files under one working directory reads its memory once, and a memory file that appears or changes outside a word enters the chain at the next stand."""
   for name in ("a.txt", "b.txt"):
     (tmp_path / "work" / name).parent.mkdir(parents=True, exist_ok=True)
     (tmp_path / "work" / name).write_text("x\n", encoding="utf-8", newline="")
@@ -186,7 +193,21 @@ async def test_between_two_stands_remember_asks_once_for_each_memory_file_and_ea
   await engine.rung('read("b.txt")', on=root)
   assert recalled(root, tmp_path) == [memorized(top, "one\n")]
   engine.stand(engine.ROOT)
-  assert recalled(root, tmp_path)[1:] == [memorized(up, "up\n"), memorized(top, "two\n")]
+  assert recalled(root, tmp_path)[1:] == [
+    memorized(up, "up\n"),
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['one']\nread_text = 'two'",
+  ]
+  # A jump that drops each read of remember leaves its cache with a text that the new chain does not hold.
+  dropped = [watcher, *(a[1] for a in engine.transcript(root) if a[0] == "read" and a[2] == watcher)]
+  went = await engine.rung(f"close(jump({dropped!r}))", on=root)
+  assert isinstance(went, str)
+  await settle()
+  new = engine.peek(went)
+  assert isinstance(new, str)
+  await engine.rung('cd(".")', on=new)
+  await engine.rung('read("a.txt")', on=new)
+  told = [one for one in paragraphs(engine.turns(on=new)) if f"_path = {tilded(top)!r}\n" in one]
+  assert [engine.get(one.split("\n")[0][1:])[4] for one in told] == [tilded(top)]
 
 
 async def test_a_life_born_on_a_checkpoint_tells_no_memory_file_again_that_a_carried_turn_gave_whole(

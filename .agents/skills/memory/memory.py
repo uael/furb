@@ -8,7 +8,6 @@ from furb.engine import (
   Text,
   act,
   controlled,
-  differs,
   get,
   question,
   read,
@@ -140,27 +139,29 @@ def holding(on: str) -> tuple[dict[str, list[str]], set[str]]:
 
 def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
   was, held = holding(on)
+  cached = {*seen}
   got: list[Text] = []
   for folder, names in folders(path, on, seen):
     for group in NAMES, LOCAL:
-      found = None
+      found = at = None
       for entry in group:
-        if (names is None or entry in names) and (found := looked(joined(folder, entry), on, seen)) is not None:
+        if (names is None or entry in names) and (found := looked(at := joined(folder, entry), on, seen)) is not None:
           break
-      if found is None:
-        continue
-      if "\n".join(found.lines) in held or any(one.path == found.path or one.content == found.content for one in got):
+      if found is not None and at in cached and "\n".join(found.lines) not in held:
+        del seen[at]
+        found = looked(at, on, seen)
+      if (
+        found is None
+        or "\n".join(found.lines) in held
+        or any(one.path == found.path or one.content == found.content for one in got)
+      ):
         continue
       got.append(found)
       mine = set(found.lines)
-      near = max(was.values(), key=lambda kept: len(set(kept) & mine), default=[]) if found.path not in was else []
-      if found.path in was:
-        show = differs(was[found.path])
-      elif mine and 2 * len(set(near) & mine) > len(mine):
-        show = lacking(set(near))
-      else:
-        show = span(1, -1)
-      tell(on, found.path, found, show)
+      near = was.get(found.path, max(was.values(), key=lambda kept: len(set(kept) & mine), default=[]))
+      changed = found.path in was or 2 * len(set(near) & mine) > len(mine) > 0
+      removed = [*dict.fromkeys(one for one in near if one not in mine)] if changed else []
+      tell(on, found.path, found, lacking(set(near)) if changed else span(1, -1), removed=removed or None)
   return got
 
 
