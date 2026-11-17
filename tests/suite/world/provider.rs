@@ -43,8 +43,9 @@ use crate::{
   opened,
   yard::Yard,
 };
+use furb::value::entry;
 #[cfg(unix)]
-use furb::value::{entry, items};
+use furb::value::items;
 #[cfg(unix)]
 use furb::{SYSTEM, world::Thinking};
 use futures::stream;
