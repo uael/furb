@@ -34,7 +34,7 @@ use crate::{
   picture, prose,
   question::{closed, person},
   review::shown_at,
-  thread::{Boxed, Click, Item, Items, Row, width},
+  thread::{Boxed, Click, Item, Items, Row, Rows, width},
   tokens::{APART, Loader, PROMPT, PROSE, Role, WORKS, mixed},
 };
 
@@ -85,18 +85,18 @@ pub(crate) struct Read {
 impl<'a> Feed<'a> {
   /// The rows of a part of the feed, laid out once for what it shows, so a scroll lays out only the
   /// parts that come into sight.
-  pub(crate) fn part_rows(&mut self, item: Item) -> Vec<Row> {
+  pub(crate) fn part_rows(&mut self, item: Item) -> Rows {
     let stamp = Some((self.model.shows, self.model.clock()));
     if self.kept.parts.0 == stamp
       && let Some(rows) = self.kept.parts.1.get(&item)
     {
-      return rows.clone();
+      return Rc::clone(rows);
     }
-    let rows = self.rows(item);
+    let rows: Rows = self.rows(item).into_iter().map(Rc::new).collect();
     if self.kept.parts.0 != stamp {
       self.kept.parts = (stamp, HashMap::new());
     }
-    self.kept.parts.1.insert(item, rows.clone());
+    self.kept.parts.1.insert(item, Rc::clone(&rows));
     rows
   }
 

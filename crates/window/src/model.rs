@@ -45,7 +45,7 @@ const PINNED: usize = 2;
 
 /// The rows of the left side, with the count of changes, the clock and the place of the pointer
 /// that they show.
-pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
+pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<Rc<thread::Row>>);
 
 /// What the rows of the list show: the count of changes that it can show, the moment or the second,
 /// the scroll, the size of the window and the row under the pointer.
@@ -67,7 +67,7 @@ pub(crate) struct Kept {
 }
 
 /// The rows of each part of the feed, with the count of changes and the clock that they show.
-pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, Vec<thread::Row>>);
+pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, thread::Rows>);
 
 #[expect(
   clippy::struct_excessive_bools,

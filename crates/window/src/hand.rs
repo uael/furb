@@ -6,7 +6,6 @@ use std::{
   ops::Range,
   path::{Path, PathBuf},
   process,
-  rc::Rc,
   sync::{
     Arc,
     mpsc::{self, Receiver, Sender},
@@ -54,7 +53,7 @@ use crate::{
   question::Keyed,
   reload::{self, Seen, Watch},
   review::{MARKS, NEXT, PREVIOUS},
-  thread::{Boxed, Click, Spot},
+  thread::{Boxed, Click, Rows, Spot},
   tokens::{AWAY, Role, Tokens},
   voice::{self, RELEASED, Record, Run, STOPPED, Said, Space, Stage, Voice},
 };
@@ -365,9 +364,9 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   staged(&mut screen, &stage);
   let mut left = Screen::new(sides(&mut screen.model));
   left.held(
-    |sides: &Sides| -> &Rc<[Line]> { &sides.rows },
-    move |lines| {
-      home.set_text(written(lines));
+    |sides: &Sides| -> &Rows { &sides.rows },
+    move |rows| {
+      home.set_text(written(rows.iter().map(|row| &row.line)));
     },
   );
   placed(app, &stage, &mut screen, area);
@@ -375,7 +374,7 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   imaged(app, &stage, &mut left);
   screen.split(sides, left);
   screen.part(Model::list, move |lines| {
-    list.set_text(written(lines));
+    list.set_text(written(lines.iter()));
   });
   screen.part(|model| model.listed(), {
     let side = side.clone();
@@ -412,7 +411,7 @@ fn transcribed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, pages: &S
     page.visible(shown.is_some());
     if let Some(shown) = shown {
       head.set_text(shown.head.clone());
-      body.set_text(written(&shown.body));
+      body.set_text(written(shown.body.iter()));
       foot.set_text(shown.foot.clone());
     }
   });
@@ -421,7 +420,7 @@ fn transcribed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, pages: &S
 /// What the left side shows, read from the model in one build of its rows for each change: the
 /// rows, the frame of each loader, and each image that the client holds.
 struct Sides {
-  rows: Rc<[Line]>,
+  rows: Rows,
   loaders: Vec<(Spot, Vec<(&'static str, Color)>)>,
   pictures: Vec<Drawn>,
 }
@@ -546,7 +545,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
       note.visible(shown.is_some());
       if let Some((row, lines)) = shown {
         note.position(Edge::Top, *row);
-        note.set_text(written(lines));
+        note.set_text(written(lines.iter()));
       }
     },
   );
@@ -568,12 +567,12 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
     if let Some(shown) = shown {
       head.set_text(shown.head.clone());
       panel.visible(shown.side.is_some());
-      side.set_text(written(shown.side.as_deref().unwrap_or_default()));
+      side.set_text(written(shown.side.iter().flatten()));
       scroll.position(Edge::Right, if shown.side.is_some() { width + 2 } else { 2 });
       foot.set_text(shown.foot.clone());
       let view = if shown.split { DiffView::Split } else { DiffView::Unified };
       diff.set_diff(shown.diff.clone()).filetype(shown.kind).view(view);
-      marks.set_text(written(&shown.marks));
+      marks.set_text(written(shown.marks.iter()));
     }
   });
 }
@@ -591,7 +590,7 @@ fn completion(app: &App, stage: &View, screen: &mut Screen<Model>, tokens: &Toke
       if let Some((x, y, width, lines)) = shown {
         let height = u16::try_from(lines.len()).unwrap_or_default();
         part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
-        rows.set_text(written(lines));
+        rows.set_text(written(lines.iter()));
       }
     },
   );
@@ -612,15 +611,15 @@ fn veiled(app: &App, screen: &mut Screen<Model>, tokens: &Tokens) {
       if let Some((x, y, width, lines)) = over {
         let height = u16::try_from(lines.len()).unwrap_or_default();
         part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
-        rows.set_text(written(lines));
+        rows.set_text(written(lines.iter()));
       }
     },
   );
 }
 
 /// The lines of a text widget, one row each.
-fn written(lines: &[Line]) -> Vec<Span<'static>> {
-  let rows = lines.iter().enumerate().flat_map(|(n, line)| {
+fn written<'a>(lines: impl IntoIterator<Item = &'a Line>) -> Vec<Span<'static>> {
+  let rows = lines.into_iter().enumerate().flat_map(|(n, line)| {
     let ended = (n > 0).then(|| Span::raw("\n"));
     ended.into_iter().chain(line.iter().cloned())
   });

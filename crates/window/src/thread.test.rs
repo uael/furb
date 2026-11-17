@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
 use super::{Item, Items, Place, Row};
 
@@ -14,7 +14,7 @@ fn a_frame_makes_the_rows_of_the_exchanges_that_show_and_of_no_other() {
     let mut made = 0;
     let shown = items.shown(place, 20, |_: Item| {
       made += 1;
-      vec![Row::default(); 4]
+      (0..4).map(|_| Rc::new(Row::default())).collect()
     });
     (shown, made)
   };
