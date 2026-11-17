@@ -139,8 +139,8 @@ jobs:
           UV_NO_SYNC: "1"
 
   system:
-    # Each system builds once, and its jobs run what it built: the workflow system holds them, called once for each
-    # system that the change needs.
+    # Each system builds each artifact once, and its jobs run what a build made: the workflow system holds them, called
+    # once for each system that the change needs.
     name: the jobs on ${{ matrix.os }}
     needs: scope
     if: needs.scope.outputs.code == 'true'
