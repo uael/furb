@@ -33,7 +33,7 @@ use sha2::{Digest, Sha256};
 use crate::{
   checkpoint::CHECKPOINT,
   fact::{Fact, named},
-  value::{Fault, IS, Object, ObjectRef, entry, field},
+  value::{Fault, IS, Object, ObjectRef, entry, field, items, pairs},
   view::Named,
   wire::{outward, parsed},
 };
@@ -453,7 +453,7 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
 
 /// The fact of an entry of a record, with its values as the engine gives them.
 fn kept(entry: &Object) -> Option<Fact> {
-  Fact::owned(plain(entry.as_ref().items()?.into_iter().next()?))
+  Fact::owned(plain(items(entry.as_ref())?.next()?))
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -478,22 +478,17 @@ fn question<'a>(
   Object::list([kind, id, maker].into_iter().chain(words).map(Object::string))
 }
 
-/// The items of a value that is a list or a tuple.
-fn items(said: ObjectRef<'_>) -> Vec<ObjectRef<'_>> {
-  said.items().unwrap_or_default()
-}
-
 /// A value that a record kept, as the engine gives it: a tuple and a whole float, which keep a mark in the record so
 /// that a later life reads them again as they were, come back as a tuple and a float, so a host reads the file of what
 /// a record tells as it reads the log of a life.
 pub(crate) fn plain(said: ObjectRef<'_>) -> Object {
   if said.type_name() == "dict"
-    && let Some(pairs) = said.pairs()
+    && let Some(each) = pairs(said)
   {
     let first = field(&said, "args").and_then(|one| entry(&one, 0));
     match (field(&said, IS).and_then(|one| one.as_str()), first) {
-      (Some("tuple"), Some(args)) if args.items().is_some() => {
-        return Object::tuple(items(args).into_iter().map(plain));
+      (Some("tuple"), Some(args)) if let Some(held) = items(args) => {
+        return Object::tuple(held.map(plain));
       }
       (Some("float"), Some(args)) => {
         if let Some(number) = args.as_str().and_then(|one| one.trim().parse::<f64>().ok()) {
@@ -502,11 +497,11 @@ pub(crate) fn plain(said: ObjectRef<'_>) -> Object {
       }
       _ => {}
     }
-    return Object::dict(pairs.into_iter().map(|(key, one)| (plain(key), plain(one))));
+    return Object::dict(each.map(|(key, one)| (plain(key), plain(one))));
   }
-  match (said.type_name(), said.items()) {
-    ("list", Some(held)) => Object::list(held.into_iter().map(plain)),
-    ("tuple", Some(held)) => Object::tuple(held.into_iter().map(plain)),
+  match (said.type_name(), items(said)) {
+    ("list", Some(held)) => Object::list(held.map(plain)),
+    ("tuple", Some(held)) => Object::tuple(held.map(plain)),
     _ => said.to_owned(),
   }
 }
@@ -817,8 +812,7 @@ impl Reader {
       self.end(&rung, Object::none());
     }
     if let Some(rung) = self.replies.remove(about) {
-      let turn = fact.word(0).map(items).unwrap_or_default();
-      let word = turn.get(1).and_then(|one| one.as_str().map(str::to_owned));
+      let word = fact.word(0).and_then(|turn| entry(&turn, 1)?.as_str().map(str::to_owned));
       if let Some(word) = word {
         self.words.insert(rung, word);
       }
@@ -827,9 +821,9 @@ impl Reader {
     let Some(rung) = self.gates.remove(about) else { return };
     let found: Vec<String> = fact
       .word(0)
-      .map(items)
-      .unwrap_or_default()
-      .iter()
+      .and_then(items)
+      .into_iter()
+      .flatten()
       .map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned))
       .collect();
     if found.is_empty() {

@@ -68,7 +68,7 @@ use unsync::oneshot;
 use crate::{
   engine::Life,
   fact::Fact,
-  value::{Fault, Given, Object, ObjectRef},
+  value::{Fault, Given, Object, field, items, pairs},
 };
 use std::{future, mem};
 use tokio::runtime::Builder;
@@ -123,21 +123,18 @@ impl Step {
     if matches!(got.type_name(), "set" | "frozenset") {
       return Ok(Self::Wait(Some(yielded.clone())));
     }
-    if let Some(pairs) = got.pairs() {
-      let field =
-        |key: &str| pairs.iter().find(|(name, _)| name.as_str() == Some(key)).map(|(_, one)| one);
-      let verb = field("call").and_then(ObjectRef::as_str).map(str::to_owned);
+    if pairs(got).is_some() {
+      let verb = field(&got, "call").and_then(|one| one.as_str()).map(str::to_owned);
       let verb = verb
         .ok_or_else(|| Fault::refused("an ear yields a verb as a map that names it under call"))?;
-      let args = field("args").and_then(ObjectRef::items).unwrap_or_default();
-      let kwargs = field("kwargs").and_then(ObjectRef::pairs).unwrap_or_default();
-      let kwargs =
-        kwargs.iter().filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
-      let args = args.into_iter().map(|one| one.to_owned()).collect();
+      let args = field(&got, "args").and_then(items).into_iter().flatten();
+      let kwargs = field(&got, "kwargs").and_then(pairs).into_iter().flatten();
+      let kwargs = kwargs.filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
+      let args = args.map(|one| one.to_owned()).collect();
       return Ok(Self::Call(Call { verb, args, kwargs: kwargs.collect() }));
     }
-    let items = got.items().ok_or_else(|| Fault::refused("an ear yields a saying or nothing"))?;
-    let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
+    let items = items(got).ok_or_else(|| Fault::refused("an ear yields a saying or nothing"))?;
+    let saying = Object::tuple(items.map(|one| one.to_owned()));
     Fact::of(saying.as_ref())
       .map(Step::Say)
       .ok_or_else(|| Fault::refused("an ear says a kind and what it is about, then its words"))

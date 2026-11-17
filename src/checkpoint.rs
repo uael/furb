@@ -41,7 +41,7 @@ use crate::{
   fact::Fact,
   minify::minified,
   skill::definitions,
-  value::{Fault, Object, ObjectRef, entry, field},
+  value::{Fault, Object, ObjectRef, field, items, pairs},
   view::closes,
   wire,
   world::{self, CHECKPOINT_SCHEMA, Systems},
@@ -75,10 +75,10 @@ pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Faul
       Object::string(world::made(slice::from_ref(engine.running())).unwrap_or_default()),
     ),
   ];
-  for (key, one) in data.as_ref().pairs().unwrap_or_default() {
+  for (key, one) in pairs(data.as_ref()).into_iter().flatten() {
     let one = match key.as_str() {
       Some("chains") => {
-        let chains = one.items().unwrap_or_default().into_iter();
+        let chains = items(one).into_iter().flatten();
         Object::list(chains.map(|chain| next.chain(engine, chain)).collect::<Result<Vec<_>, _>>()?)
       }
       _ => one.to_owned(),
@@ -146,10 +146,10 @@ impl Next {
     let note =
       Object::list([Object::string(format!("#{id} crossed\n<s:{name}>\n{diff}</s:{name}>"))]);
     let tell = Object::tuple(["tell", &id, "store"].map(Object::string).into_iter().chain([note]));
-    let pairs = chain.pairs().unwrap_or_default().into_iter().map(|(key, one)| {
+    let pairs = pairs(chain).into_iter().flatten().map(|(key, one)| {
       let one = match key.as_str() {
         Some("turns") => {
-          let turns = one.items().unwrap_or_default().into_iter().map(|turn| turn.to_owned());
+          let turns = items(one).into_iter().flatten().map(|turn| turn.to_owned());
           Object::list(turns.chain([tell.clone()]))
         }
         _ => one.to_owned(),
@@ -170,14 +170,16 @@ fn system(made: &Object) -> Result<String, Fault> {
 /// `systems` of its data says. With no carry, each chain reads
 /// the engine that the life runs.
 pub(crate) fn systems(record: &[Object]) -> Systems {
-  let data = last(record).and_then(|at| fact(record.get(at)?)?.word(0).map(|one| one.to_owned()));
-  let held = data.as_ref().and_then(|data| field(&data.as_ref(), "systems")?.items());
+  let data =
+    last(record).and_then(|at| Fact::of_entry(record.get(at)?)?.word(0).map(|one| one.to_owned()));
+  let held = data.as_ref().and_then(|data| items(field(&data.as_ref(), "systems")?));
   let read = |one: ObjectRef<'_>| {
-    let [text, chains] = one.items()?[..] else { return None };
-    let chains = chains.items()?.into_iter().filter_map(|one| one.as_str().map(str::to_owned));
+    let mut held = items(one).filter(|held| held.len() == 2)?;
+    let (text, chains) = (held.next()?, held.next()?);
+    let chains = items(chains)?.filter_map(|one| one.as_str().map(str::to_owned));
     Some((text.as_str()?.to_owned(), chains.collect()))
   };
-  Systems(held.unwrap_or_default().into_iter().filter_map(read).collect())
+  Systems(held.into_iter().flatten().filter_map(read).collect())
 }
 
 impl Engine {
@@ -291,7 +293,7 @@ pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
 /// transcripts do not hold each name that the record took, and the carry keeps each of them taken.
 pub(crate) fn taken(record: &[Object]) -> Object {
   let mut most: Vec<(String, i64)> = Vec::new();
-  for a in record.iter().filter_map(fact).filter(Fact::question) {
+  for a in record.iter().filter_map(Fact::of_entry).filter(Fact::question) {
     let Some(n) = a.about().strip_prefix(a.kind()).and_then(|one| one.parse::<i64>().ok()) else {
       continue;
     };
@@ -303,14 +305,9 @@ pub(crate) fn taken(record: &[Object]) -> Object {
   Object::dict(most.into_iter().map(|(kind, n)| (Object::string(kind), Object::int(n))))
 }
 
-/// The fact of an entry.
-fn fact(one: &Object) -> Option<Fact> {
-  entry(&one.as_ref(), 0).and_then(Fact::of)
-}
-
 /// Where the carry of the entries that a life boots on stands, and nothing when they hold none.
 pub(crate) fn last(record: &[Object]) -> Option<usize> {
-  record.iter().rposition(|one| fact(one).is_some_and(|a| a.kind() == CHECKPOINT))
+  record.iter().rposition(|one| Fact::of_entry(one).is_some_and(|a| a.kind() == CHECKPOINT))
 }
 
 /// Whether a fact ends the opening of a life born from a carry: the stand of the root that the

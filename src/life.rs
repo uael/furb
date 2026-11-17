@@ -28,6 +28,7 @@ use crate::{
   image::{self, Image},
   minify,
   skill::{self, Places},
+  value::{entry, items},
   world::{self, Catalog, Mode, Retries, Scratch, Writes, skills::skills},
 };
 
@@ -872,12 +873,15 @@ fn size(path: impl AsRef<Path>) -> u64 {
 /// The default actor of a standing and the name of each model of its roster, each but the operator,
 /// who is no model of the catalog, so a later life never tells that the operator left it.
 fn offered(standing: ObjectRef<'_>) -> (Option<String>, Option<Vec<String>>) {
-  let Some(held) = standing.items() else { return (None, None) };
-  let actor =
-    held.get(2).and_then(ObjectRef::as_str).filter(|one| *one != OPERATOR).map(str::to_owned);
-  let roster = held.first().and_then(ObjectRef::items).map(|models| {
-    let names =
-      models.iter().filter_map(|model| Some(model.items()?.first()?.as_str()?.to_owned()));
+  if items(standing).is_none() {
+    return (None, None);
+  }
+  let actor = entry(&standing, 2)
+    .and_then(|one| one.as_str())
+    .filter(|one| *one != OPERATOR)
+    .map(str::to_owned);
+  let roster = entry(&standing, 0).and_then(items).map(|models| {
+    let names = models.filter_map(|model| Some(entry(&model, 0)?.as_str()?.to_owned()));
     names.filter(|name| name != OPERATOR).collect()
   });
   (actor, roster)

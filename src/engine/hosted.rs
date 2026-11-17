@@ -19,7 +19,7 @@ use crate::{
   fact::Fact,
   sand,
   sand::{Answer, Sand},
-  value::{Fault, Given, Object, entry, marked},
+  value::{Fault, Given, Object, entry, items, marked},
 };
 use std::mem;
 
@@ -355,8 +355,7 @@ impl Outside {
   /// One saying of an ear, said into the life.
   pub(super) fn says(&mut self, sand: &mut Sand, saying: &Fact) -> Result<(), Fault> {
     let words = self.inward(sand, saying.object())?;
-    let words =
-      words.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+    let words = items(words.as_ref()).into_iter().flatten().map(|one| one.to_owned()).collect();
     self.named_call(sand, "say", words, vec![]).map(drop)
   }
 
@@ -515,7 +514,7 @@ impl Outside {
       return None;
     }
     let asker = self.named_call(sand, "get", vec![Object::string(&by)], vec![]).ok()?;
-    let kind = asker.as_ref().items()?.first()?.as_str()?.to_owned();
+    let kind = entry(&asker.as_ref(), 0)?.as_str()?.to_owned();
     let why = format!(
       "{by}, an act of {kind}, asked the World for longer than the bound of a turn of {bound:?} \
        with no step of a word, so the life ends it and refuses its {}",

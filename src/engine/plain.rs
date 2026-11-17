@@ -10,7 +10,7 @@ use std::{
 use super::Engine;
 use crate::{
   fact::Fact,
-  value::{Exit, Fault, Given, Object, Text},
+  value::{Exit, Fault, Given, Object, Text, items},
 };
 use std::fmt;
 
@@ -84,11 +84,9 @@ impl<T: Plain> Plain for Option<T> {
 
 impl<T: Plain> Plain for Vec<T> {
   fn plain(got: Object) -> Result<Self, Fault> {
-    let items = got
-      .as_ref()
-      .items()
-      .ok_or_else(|| Fault::refused(format!("{} is no list", got.py_repr())))?;
-    items.into_iter().map(|one| T::plain(one.to_owned())).collect()
+    let held =
+      items(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no list", got.py_repr())))?;
+    held.map(|one| T::plain(one.to_owned())).collect()
   }
 }
 

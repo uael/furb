@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::value::{Object, ObjectRef, entry};
+use crate::value::{Object, ObjectRef, entry, items};
 
 /// One fact of a life, as the tuple the engine said. Each ear that hears a fact shares it, so a
 /// copy of a fact copies no part of it.
@@ -29,6 +29,11 @@ impl Fact {
   /// it third, and a saying has its first word there.
   pub fn of(said: ObjectRef<'_>) -> Option<Self> {
     fits(&said).then(|| Self(Arc::new(said.to_owned())))
+  }
+
+  /// The fact of an entry of a record, which is its first item.
+  pub fn of_entry(entry: &Object) -> Option<Self> {
+    items(entry.as_ref())?.next().and_then(Self::of)
   }
 
   /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.

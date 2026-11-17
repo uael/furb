@@ -37,7 +37,7 @@ pub(super) async fn kept(
 ) -> Option<Result<Object, CompletionError>> {
   let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran) else { return Some(got) };
   let word =
-    got.as_ref().ok().and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
+    got.as_ref().ok().and_then(|turn| Some(entry(&turn.as_ref(), 1)?.as_str()?.to_owned()));
   let why = match &word {
     Some(word) if word.starts_with(ran.trim()) => match unquoted(co, word).await {
       Some(python) => watch::fault(&python).map(unpython).unwrap_or_default(),

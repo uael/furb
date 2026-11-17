@@ -44,7 +44,7 @@ use crate::{
   yard::Yard,
 };
 #[cfg(unix)]
-use furb::value::entry;
+use furb::value::{entry, items};
 #[cfg(unix)]
 use furb::{SYSTEM, world::Thinking};
 use futures::stream;
@@ -1395,8 +1395,8 @@ fn turn(engine: &mut Engine) -> String {
   let done = facts.iter().find(|one| {
     one.by() == "provider" && one.kind() == "done" && fact::named(one.about(), "reply")
   });
-  let items = done.and_then(|one| one.word(0)).and_then(|word| word.items());
-  items.and_then(|items| items.get(1)?.as_str().map(str::to_owned)).expect("a turn has a word")
+  let word = done.and_then(|one| entry(&one.word(0)?, 1)?.as_str().map(str::to_owned));
+  word.expect("a turn has a word")
 }
 
 /// A life whose model streams this text as its reply in one part, and the word of the turn that
@@ -2392,9 +2392,9 @@ fn a_reply_of_a_named_account_has_numbers_alone_in_its_usage_and_a_fact_that_nam
   );
   let (reply, _) = taken(&mut engine);
   let turn = engine.peek(&reply, verbs::Peek::default()).unwrap();
-  let usage = entry(&turn.as_ref(), 2).and_then(|one| one.items()).unwrap();
+  let usage = entry(&turn.as_ref(), 2).and_then(items).unwrap();
   assert_eq!(usage.len(), 5, "the usage holds the five counts");
-  assert!(usage.iter().all(|one| one.as_str().is_none()), "the usage holds numbers alone");
+  assert!(usage.clone().all(|one| one.as_str().is_none()), "the usage holds numbers alone");
 }
 
 #[test]

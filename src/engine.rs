@@ -64,7 +64,7 @@ use crate::{
   sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value,
-  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
+  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry, field, items, pairs},
   world,
   world::{CHECKPOINT_SCHEMA, Systems},
 };
@@ -120,11 +120,9 @@ fn seeded(
   else {
     return Ok((record, 0));
   };
-  let pairs = data.as_ref().pairs().unwrap_or_default();
-  let field =
-    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|one| one.1);
-  CHECKPOINT_SCHEMA.opens("checkpoint", field("schema"))?;
-  let lines = field("lines").and_then(|one| one.pairs()).unwrap_or_default().into_iter();
+  let data_field = |name: &str| field(&data.as_ref(), name);
+  CHECKPOINT_SCHEMA.opens("checkpoint", data_field("schema"))?;
+  let lines = data_field("lines").and_then(pairs).into_iter().flatten();
   sand.lined(
     lines
       .filter_map(|(name, line)| {
@@ -140,11 +138,10 @@ fn seeded(
   // The sandbox gives a part that many heads share as one part, and a copy of a head walks the
   // arena down to its lowest part, so each head is made here from its two texts.
   let head = |one: ObjectRef<'_>| {
-    let texts = one.items().unwrap_or_default().into_iter().filter_map(|text| text.as_str());
+    let texts = items(one).into_iter().flatten().filter_map(|text| text.as_str());
     Object::list([Object::tuple(texts.map(Object::string))])
   };
-  let heads: Vec<Object> =
-    heads.as_ref().items().unwrap_or_default().into_iter().map(head).collect();
+  let heads: Vec<Object> = items(heads.as_ref()).into_iter().flatten().map(head).collect();
   let born = heads.len();
   record.splice(..1, heads);
   Ok((record, born))
@@ -161,11 +158,11 @@ fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result
   let mut entries = Vec::new();
   for one in record {
     let one = outside.inward(sand, one)?;
-    let held = one.as_ref().items().unwrap_or_default();
-    let fact = held.first().and_then(ObjectRef::items);
+    let mut held = items(one.as_ref()).into_iter().flatten();
+    let fact = held.next().and_then(items);
     let fact = fact.ok_or_else(|| Fault::refused("a record holds a fact first in each entry"))?;
-    let fact = Object::tuple(fact.into_iter().map(|one| one.to_owned()));
-    let rest = held.iter().skip(1).map(ObjectRef::to_owned);
+    let fact = Object::tuple(fact.map(|one| one.to_owned()));
+    let rest = held.map(|one| one.to_owned());
     entries.push(Object::tuple(iter::once(fact).chain(rest)));
   }
   Ok(Object::list(entries))
@@ -271,8 +268,9 @@ impl Outside {
   /// The side of the host, on what the opening gave: a dict of its callables by name, each of which
   /// the engine keeps.
   fn new(handed: Handed, opened: &Object) -> Result<Self, Fault> {
-    let mut held: HashMap<String, Object> = (opened.as_ref().pairs().unwrap_or_default())
+    let mut held: HashMap<String, Object> = pairs(opened.as_ref())
       .into_iter()
+      .flatten()
       .filter_map(|(name, one)| Some((name.as_str()?.to_owned(), one.to_owned())))
       .collect();
     let kept = held.values().filter_map(|one| one.as_ref().handle()).collect();
@@ -337,7 +335,7 @@ impl Outside {
     let got = sand.call(self, &opened.names, vec![], vec![])?;
     self.crossing.names.clear();
     self.crossing.named.clear();
-    for (name, one) in got.as_ref().pairs().unwrap_or_default() {
+    for (name, one) in pairs(got.as_ref()).into_iter().flatten() {
       let (Some(name), one) = (name.as_str(), one.to_owned()) else { continue };
       if let Some(handle) = one.as_ref().handle() {
         self.crossing.kept.insert(handle);
@@ -485,11 +483,10 @@ impl Outside {
         let n = n.ok_or_else(|| {
           Fault::refused("a callable the engine made is called back by its number")
         })?;
-        let words = args.get(1).and_then(|one| one.as_ref().items()).unwrap_or_default();
-        let words: Vec<Object> = words.into_iter().map(|one| one.to_owned()).collect();
-        let pairs = args.get(2).and_then(|one| one.as_ref().pairs()).unwrap_or_default();
-        let named =
-          pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
+        let words = args.get(1).and_then(|one| items(one.as_ref())).into_iter().flatten();
+        let words: Vec<Object> = words.map(|one| one.to_owned()).collect();
+        let named = args.get(2).and_then(|one| pairs(one.as_ref())).into_iter().flatten();
+        let named = named.filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
         self.called_back(sand, n, &words, named)
       }
       _ => self.verb(sand, &verb, &args, kwargs),
@@ -539,40 +536,41 @@ fn fields(value: ObjectRef<'_>, depth: usize) -> String {
   if depth >= FIELDS {
     return "…".to_owned();
   }
-  let pairs = value.pairs().unwrap_or_default();
-  let at = |name: &str| pairs.iter().find(|one| one.0.as_str() == Some(name)).map(|one| one.1);
+  let at = |name: &str| field(&value, name);
   if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("instance") {
-    let inner = at("value").and_then(|one| Some((one.pairs()?, one.type_name().to_owned())));
+    let inner = at("value").and_then(|one| Some((pairs(one)?, one.type_name())));
     let Some((attributes, class)) = inner else { return value.py_repr() };
-    let shown = attributes.iter().map(|(name, one)| {
-      format!("{}={}", name.as_str().unwrap_or_default(), fields(*one, depth + 1))
+    let shown = attributes.map(|(name, one)| {
+      format!("{}={}", name.as_str().unwrap_or_default(), fields(one, depth + 1))
     });
     return format!("{class}({})", shown.collect::<Vec<_>>().join(", "));
   }
   // A map that holds the key `is` goes out as its pairs, under the mark `dict`.
   if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("dict") {
-    let held = at("args").and_then(|one| one.items()?.first()?.items()).unwrap_or_default();
-    let pairs = held.iter().filter_map(|pair| {
-      let items = pair.items()?;
-      let [key, one] = items[..] else { return None };
+    let held = at("args").and_then(|one| items(entry(&one, 0)?)).into_iter().flatten();
+    let pairs = held.filter_map(|pair| {
+      let mut held = items(pair).filter(|held| held.len() == 2)?;
+      let (key, one) = (held.next()?, held.next()?);
       Some(format!("{}: {}", fields(key, depth + 1), fields(one, depth + 1)))
     });
     return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
   }
-  let shown = |items: Vec<ObjectRef<'_>>| -> Vec<String> {
-    items.into_iter().map(|one| fields(one, depth + 1)).collect()
+  let shown = |held: &mut dyn Iterator<Item = ObjectRef<'_>>| -> Vec<String> {
+    held.map(|one| fields(one, depth + 1)).collect()
   };
-  match (value.type_name(), value.items()) {
-    ("list", Some(items)) => return format!("[{}]", shown(items).join(", ")),
-    ("tuple", Some(items)) => return format!("({})", shown(items).join(", ")),
-    ("set" | "frozenset", Some(items)) => return format!("{{{}}}", shown(items).join(", ")),
+  match (value.type_name(), items(value)) {
+    ("list", Some(mut held)) => return format!("[{}]", shown(&mut held).join(", ")),
+    ("tuple", Some(mut held)) => return format!("({})", shown(&mut held).join(", ")),
+    ("set" | "frozenset", Some(mut held)) => {
+      return format!("{{{}}}", shown(&mut held).join(", "));
+    }
     _ => {}
   }
   if value.type_name() == "dict" {
-    let pairs = pairs
-      .iter()
-      .map(|(key, one)| format!("{}: {}", fields(*key, depth + 1), fields(*one, depth + 1)));
-    return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
+    let each = pairs(value).into_iter().flatten();
+    let each =
+      each.map(|(key, one)| format!("{}: {}", fields(key, depth + 1), fields(one, depth + 1)));
+    return format!("{{{}}}", each.collect::<Vec<_>>().join(", "));
   }
   value.py_repr()
 }
@@ -863,7 +861,7 @@ impl Engine {
     loop {
       let last = lineage.last().map(|one| Object::string(one.as_str()));
       let act = self.verb("get", last.as_slice(), vec![])?;
-      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      let source = entry(&act.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
       match source.filter(|one| !one.is_empty()) {
         Some(source) => lineage.push(source),
         None => return Ok(lineage),
@@ -1060,8 +1058,8 @@ impl Engine {
   /// the outside took and that is not done.
   pub(crate) fn flight(&mut self) -> Result<(), Fault> {
     let held = self.held()?;
-    let ids = held.as_ref().items().unwrap_or_default();
-    self.woken(ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect())
+    let ids = items(held.as_ref()).into_iter().flatten();
+    self.woken(ids.filter_map(|one| one.as_str().map(str::to_owned)).collect())
   }
 
   /// A wake of each act of a list that waits and that no pause holds, which puts it to the outside

@@ -32,7 +32,7 @@ use crate::{
   ear::{Co, Ear, Kept, Next, hearing, say},
   engine::ROOT,
   fact::Fact,
-  value::{Fault, Object, ObjectRef},
+  value::{Fault, Object, ObjectRef, items},
   wire::{built, whole},
 };
 
@@ -167,8 +167,7 @@ pub(crate) fn stored_after(
     return Ok(None);
   }
   let (entries, tail) = lines::after(path, bytes)?;
-  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  if entries.iter().any(|entry| fact(entry).is_some_and(|one| born(one.kind()))) {
+  if entries.iter().any(|entry| Fact::of_entry(entry).is_some_and(|one| born(one.kind()))) {
     return Ok(None);
   }
   if let Some(store) = &mut store {
@@ -330,10 +329,9 @@ fn made_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
 /// The standing that an entry gives, when it is the done of a stand of the root: the value of that
 /// done, when it is a list. This is the one place that finds the answer of a stand.
 pub fn stood(entry: &Object) -> Option<Object> {
-  let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+  let fact = Fact::of_entry(entry)?;
   let value = fact.word(0)?;
-  let stood =
-    fact.kind() == "done" && fact::named(fact.about(), "stand") && value.items().is_some();
+  let stood = fact.kind() == "done" && fact::named(fact.about(), "stand") && items(value).is_some();
   stood.then(|| value.to_owned())
 }
 
@@ -372,7 +370,7 @@ fn digest(texts: &[&str]) -> String {
 /// The engine that a record names, and nothing when it names none, as a new record.
 pub fn made(record: &[Object]) -> Option<String> {
   record.iter().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     (fact.kind() == MADE).then(|| fact.word(0)?.as_str().map(str::to_owned)).flatten()
   })
 }
@@ -397,13 +395,7 @@ pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
 /// build. A crossing writes it at the tip of the record, so the life born across that crossing
 /// runs the same texts.
 pub fn running(record: &[Object]) -> Object {
-  let made = |entry: &&Object| {
-    entry
-      .as_ref()
-      .items()
-      .and_then(|held| Fact::of(*held.first()?))
-      .is_some_and(|one| one.kind() == MADE)
-  };
+  let made = |entry: &&Object| Fact::of_entry(entry).is_some_and(|one| one.kind() == MADE);
   match record.iter().rev().find(made) {
     Some(last) if matches!(held(slice::from_ref(last)), Some([Some(_), Some(_), Some(_), _])) => {
       last.clone()
@@ -419,7 +411,7 @@ pub fn running(record: &[Object]) -> Object {
 /// names and holds.
 fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
   record.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
     (fact.kind() == MADE).then(|| [word(0), word(4), word(5), word(6)])
   })
@@ -429,7 +421,7 @@ fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
 /// of a build before the release was in the fact made.
 pub fn release(record: &[Object]) -> Option<String> {
   record.iter().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     (fact.kind() == MADE).then(|| fact.word(3)?.as_str().map(str::to_owned)).flatten()
   })
 }
@@ -446,8 +438,7 @@ pub fn unopened(path: &Path) -> Option<SchemaError> {
 /// build wrote, and a record that names a schema of another major, or one from before the stable
 /// cut, is refused, as [`Schema::opens`] says.
 pub fn readable(record: &[Object]) -> Result<(), SchemaError> {
-  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  let made = record.iter().filter_map(fact).filter(|one| one.kind() == MADE);
+  let made = record.iter().filter_map(Fact::of_entry).filter(|one| one.kind() == MADE);
   made.into_iter().try_for_each(|fact| RECORD_SCHEMA.opens("record", fact.word(2)))
 }
 
@@ -460,8 +451,8 @@ const WRITING: &str = "writing";
 /// part where the life ran it, and the replay drifts. The entry of such a question is read as the writing that a
 /// provider says now, `("writing", rung, by, part, before)`, which the journal says again where the life said it.
 fn streamed(entry: Object) -> Object {
-  let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  let Some(fact) = fact.filter(|one| one.kind() == WRITING && one.question()) else {
+  let Some(fact) = Fact::of_entry(&entry).filter(|one| one.kind() == WRITING && one.question())
+  else {
     return entry;
   };
   let (Some(rung), Some(part), Some(before)) = (fact.word(1), fact.word(2), fact.word(3)) else {
@@ -798,9 +789,10 @@ fn entry_of(held: &[&RawValue]) -> Result<Object, Unread> {
   let nodes = held.iter().map(|one| built(&mut graph, one, 1)).collect::<Result<Vec<_>, _>>();
   let root = graph.push(MontyNode::List(nodes.map_err(|_no| Unread::Fact)?));
   let entry = whole(graph, root).map_err(|_no| Unread::Fact)?;
-  let fact = entry.as_ref().items().and_then(|held| held.first().and_then(ObjectRef::items));
-  let holds = fact
-    .is_some_and(|fact| fact.len() >= 3 && fact.first().is_some_and(|one| one.as_str().is_some()));
+  let fact = items(entry.as_ref()).and_then(|mut held| items(held.next()?));
+  let holds = fact.is_some_and(|mut fact| {
+    fact.len() >= 3 && fact.next().is_some_and(|one| one.as_str().is_some())
+  });
   holds.then_some(entry).ok_or(Unread::Fact)
 }
 

@@ -17,7 +17,7 @@ use monty_types::{
 use super::{Outside, hosted::At};
 use crate::{
   sand::{Sand, object},
-  value::{Fault, IS, Object, ObjectRef, carried, entry, inward, marked},
+  value::{Fault, IS, Object, ObjectRef, carried, entry, inward, items, marked},
 };
 
 /// The next number a callable or a class goes out under, in this process.
@@ -375,8 +375,8 @@ impl Outside {
     }
     let args: Vec<Object> = args
       .as_ref()
-      .and_then(|one| one.as_ref().items())
-      .map(|held| held.into_iter().map(|one| one.to_owned()).collect())
+      .and_then(|one| items(one.as_ref()))
+      .map(|held| held.map(|one| one.to_owned()).collect())
       .unwrap_or_default();
     if self.crossing.names.contains_key(mark) {
       let named = fields.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
@@ -466,15 +466,15 @@ fn builtin_of(mark: &str, first: Option<ObjectRef<'_>>) -> Result<Option<Object>
         .map(Object::float),
     },
     "dict" => {
-      let pairs = first.and_then(|one| one.items()).unwrap_or_default();
-      let pairs = pairs.into_iter().map(|pair| entry(&pair, 0).zip(entry(&pair, 1)));
+      let pairs = first.and_then(items).into_iter().flatten();
+      let pairs = pairs.map(|pair| entry(&pair, 0).zip(entry(&pair, 1)));
       let pairs = pairs.map(|pair| pair.map(|(key, one)| (key.to_owned(), one.to_owned())));
       let pairs = pairs.collect::<Option<Vec<_>>>();
       Some(Object::dict(pairs.ok_or_else(|| Fault::refused("a map comes in as its pairs of two"))?))
     }
     "tuple" => {
-      let items = first.and_then(|one| one.items()).unwrap_or_default();
-      Some(Object::tuple(items.into_iter().map(|one| one.to_owned())))
+      let held = first.and_then(items).into_iter().flatten();
+      Some(Object::tuple(held.map(|one| one.to_owned())))
     }
     _ => mark.parse::<ExcType>().ok().map(|kind| {
       Object::exception(

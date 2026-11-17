@@ -26,7 +26,7 @@ use super::{
 };
 use crate::value;
 use crate::{
-  value::{Object, ObjectRef, entry},
+  value::{Object, ObjectRef, entry, items},
   wire,
 };
 use std::future;
@@ -435,16 +435,18 @@ pub(super) fn cut(word: &str, usage: Object) -> Result<Object, CompletionError> 
 /// of their own.
 pub(super) fn paying(turn: Object, owed: f64) -> Object {
   let said = turn.as_ref();
-  let (Some(items), true) = (said.items(), owed > 0.0) else { return turn };
-  let usage = items.get(2).and_then(ObjectRef::items).map(|usage| {
-    let each = usage.iter().enumerate().map(|(at, one)| match (at, one.as_float()) {
+  if owed <= 0.0 || items(said).is_none() {
+    return turn;
+  }
+  let usage = entry(&said, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_float()) {
       (4, Some(dollars)) => Object::float(dollars + owed),
       _ => one.to_owned(),
     });
     Object::tuple(each)
   });
   let Some(usage) = usage else { return turn };
-  let at = |at: usize| items.get(at).map_or_else(Object::none, ObjectRef::to_owned);
+  let at = |at: usize| entry(&said, at).map_or_else(Object::none, |one| one.to_owned());
   Object::tuple([at(0), at(1), usage, at(3)])
 }
 
@@ -563,7 +565,7 @@ pub(super) fn counted(tokens: u64) -> f64 {
 pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
   let part = |at: usize| entry(&turn, at).map_or_else(Object::none, |one| one.to_owned());
   let (role, python) = (entry(&turn, 0), entry(&turn, 1));
-  let whole = turn.items().is_some_and(|items| items.len() == 4)
+  let whole = items(turn).is_some_and(|held| held.len() == 4)
     && role.and_then(|one| one.as_str()) == Some("assistant")
     && python.is_some_and(|one| one.as_str().is_some());
   if !whole {
@@ -573,8 +575,8 @@ pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
     );
     return Err(CompletionError::ResponseError(why));
   }
-  let usage = entry(&turn, 2).and_then(|one| one.items()).map(|usage| {
-    let each = usage.into_iter().enumerate().map(|(at, one)| match (at, one.as_int()) {
+  let usage = entry(&turn, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_int()) {
       (4, Some(whole)) => Object::float(
         i32::try_from(whole)
           .map_or(if whole < 0 { f64::from(i32::MIN) } else { f64::from(i32::MAX) }, f64::from),

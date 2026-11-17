@@ -14,6 +14,8 @@ disallowed-methods = [
   { path = "tokio::task::LocalSet::block_on", reason = "never block the life or the reactor" },
   { path = "std::thread::park_timeout", reason = "an ear awaits; a park on a timer hides a hang" },
   { path = "std::process::Child::try_wait", reason = "await tokio::process::Child::wait under a timeout" },
+  { path = "monty_types::ObjectRef::items", reason = "it lists the items at each call: value::items reads them in place" },
+  { path = "monty_types::ObjectRef::pairs", reason = "it lists the pairs at each call: value::pairs reads them in place" },
 ]
 absolute-paths-max-segments = 2
 # The names of products that a doc comment writes as they are, beside the names that clippy knows.

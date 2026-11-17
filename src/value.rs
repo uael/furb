@@ -241,7 +241,7 @@ impl Fault {
     if matches!(said.type_name(), "dict" | "list" | "tuple") {
       return None;
     }
-    let args = field(&said, "args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
+    let args = items(field(&said, "args")?)?.map(|one| one.to_owned()).collect();
     Some(Self::new(said.type_name(), args))
   }
 
@@ -271,23 +271,47 @@ impl error::Error for Fault {}
 
 /// One field of an instance or a map, by its name.
 pub fn field<'a>(said: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {
-  said.pairs()?.into_iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| one)
+  pairs(*said)?.find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| one)
 }
 
 /// One entry of a list or a tuple, by its place.
 pub fn entry<'a>(said: &ObjectRef<'a>, at: usize) -> Option<ObjectRef<'a>> {
-  // The item by its place in the arena of the value, with no list of the items, which `items` of
-  // monty allocates at each call: a fact reads its kind, its act and its maker this way.
-  match unstable::node(*said) {
+  held(*said)?.get(at).map(|id| unstable::child(*said, *id))
+}
+
+/// The items of a list, a tuple, a set or a namedtuple, each where it stands in the arena of the
+/// value, with no list of them, which `items` of monty allocates at each call.
+pub fn items(said: ObjectRef<'_>) -> Option<impl ExactSizeIterator<Item = ObjectRef<'_>> + Clone> {
+  Some(held(said)?.iter().map(move |id| unstable::child(said, *id)))
+}
+
+/// The places of the items of a list, a tuple, a set or a namedtuple in the arena of the value.
+fn held(said: ObjectRef<'_>) -> Option<&[NodeId]> {
+  match unstable::node(said) {
     MontyNode::List(ids)
     | MontyNode::Tuple(ids)
     | MontyNode::Set(ids)
     | MontyNode::FrozenSet(ids)
-    | MontyNode::NamedTuple { values: ids, .. } => {
-      ids.get(at).map(|id| unstable::child(*said, *id))
-    }
+    | MontyNode::NamedTuple { values: ids, .. } => Some(ids),
     _ => None,
   }
+}
+
+/// The pairs of a dict, or the fields of an instance, a class or a module, each where it stands in
+/// the arena of the value, with no list of them, which `pairs` of monty allocates at each call.
+pub fn pairs(
+  said: ObjectRef<'_>,
+) -> Option<impl ExactSizeIterator<Item = (ObjectRef<'_>, ObjectRef<'_>)> + Clone> {
+  let held = match unstable::node(said) {
+    MontyNode::Dict(held)
+    | MontyNode::ClassInstance { attrs: held, .. }
+    | MontyNode::Module { attrs: held, .. } => held,
+    MontyNode::ClassType(class) => &class.attrs,
+    _ => return None,
+  };
+  Some(
+    held.iter().map(move |(key, one)| (unstable::child(said, *key), unstable::child(said, *one))),
+  )
 }
 
 /// A value as it goes in: every instance of a class of a sandbox in it, wherever it came from, as its name and

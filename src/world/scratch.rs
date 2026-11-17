@@ -20,7 +20,7 @@ use super::{
 };
 use crate::{
   fact::named,
-  value::{Fault, Object, Text, hex},
+  value::{Fault, Object, Text, entry, hex},
 };
 use std::env;
 use std::process;
@@ -351,12 +351,11 @@ fn gone(at: &Path, log: &dyn Fn(&str)) {
 }
 
 /// The text that the done of a write in an entry of a record came to, read before anything of the entry is copied.
-fn written(entry: &Object) -> Option<Text> {
-  let entry = entry.as_ref();
-  let held = entry.items()?;
-  let fact = held.first()?.items()?;
-  let kind = fact.first()?.as_str()? == "done";
-  (kind && named(fact.get(1)?.as_str()?, "write")).then(|| Text::of(*fact.get(3)?)).flatten()
+fn written(kept: &Object) -> Option<Text> {
+  let fact = entry(&kept.as_ref(), 0)?;
+  let word = |at: usize| entry(&fact, at);
+  let kind = word(0)?.as_str()? == "done";
+  (kind && named(word(1)?.as_str()?, "write")).then(|| Text::of(word(3)?)).flatten()
 }
 
 /// A file put at a path of a directory, with its folders, where a file or a folder that stands in its way goes.

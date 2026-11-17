@@ -14,7 +14,7 @@ use super::{
 };
 use crate::fact;
 use crate::{
-  value::{ObjectRef, entry},
+  value::{ObjectRef, entry, items},
   view::closes,
   wire,
 };
@@ -76,12 +76,11 @@ pub(super) fn messages(
   // The word of the turn of the model that the gate of an earlier build refused, which the next
   // user turn holds under its finding.
   let mut quoted: Option<(String, usize)> = None;
-  let all = turns.items().unwrap_or_default();
-  for (at, turn) in all.iter().enumerate() {
-    let Some(role) = entry(turn, 0).and_then(|one| one.as_str()) else { continue };
-    let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
+  for (at, turn) in items(turns).into_iter().flatten().enumerate() {
+    let Some(role) = entry(&turn, 0).and_then(|one| one.as_str()) else { continue };
+    let python = entry(&turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
     if role == "assistant" {
-      let next = all.get(at + 1).and_then(|one| entry(one, 1)?.as_str().map(str::to_owned));
+      let next = entry(&turns, at + 1).and_then(|one| entry(&one, 1)?.as_str().map(str::to_owned));
       if let Some(place) = next.as_deref().and_then(refusal) {
         // The quote holds the word less the marks of a fence or of a tool call, which the model
         // would write again.
@@ -90,7 +89,7 @@ pub(super) fn messages(
         joins = true;
         continue;
       }
-      let blocks = entry(turn, 3)
+      let blocks = entry(&turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
         .map(|blocks| if model.forgets { forgotten(blocks) } else { blocks })
         .filter(|blocks| !blocks.is_empty())

@@ -28,12 +28,12 @@ use super::{
 };
 use crate::fact;
 use crate::skill;
-use crate::value::{self, ObjectRef};
+use crate::value;
 use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Object, entry, items},
 };
 use std::fmt;
 use std::mem;
@@ -306,7 +306,7 @@ impl Hearer {
     loop {
       let last = lineage.last().map(|one| Object::string(one.as_str()));
       let act = co.call("get", last.into_iter().collect(), vec![]).await?;
-      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      let source = entry(&act.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
       match source.filter(|one| !one.is_empty()) {
         Some(source) => lineage.push(source),
         None => break,
@@ -570,8 +570,9 @@ impl Hearer {
 /// Whether a fact is a done that ended a reply with a turn of the model.
 fn turned(a: &Fact) -> bool {
   a.kind() == "done"
-    && a.word(0).and_then(|one| one.items()).is_some_and(|turn| {
-      turn.len() == 4 && turn.first().and_then(ObjectRef::as_str) == Some("assistant")
+    && a.word(0).is_some_and(|turn| {
+      items(turn).is_some_and(|held| held.len() == 4)
+        && entry(&turn, 0).and_then(|one| one.as_str()) == Some("assistant")
     })
 }
 
@@ -579,7 +580,7 @@ fn turned(a: &Fact) -> bool {
 async fn said_by(co: &mut Co<Replied>, chain: &str, by: &str) -> Vec<Fact> {
   let of = [chain, by].map(Object::string).to_vec();
   let Ok(got) = co.call("transcript", of, vec![]).await else { return Vec::new() };
-  (0..).map_while(|at| value::entry(&got.as_ref(), at)).filter_map(Fact::of).collect()
+  items(got.as_ref()).into_iter().flatten().filter_map(Fact::of).collect()
 }
 
 /// How many wakes the provider gave a chain since its last turn, while the last pause or wake of

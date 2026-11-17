@@ -306,7 +306,7 @@ fn owed<'a>(held: impl Iterator<Item = &'a Object>) -> Vec<(String, Value)> {
   let mut theirs = HashSet::new();
   let mut owed = Vec::new();
   for entry in held {
-    let Some(fact) = entry.as_ref().items().and_then(|one| Fact::of(*one.first()?)) else {
+    let Some(fact) = Fact::of_entry(entry) else {
       continue;
     };
     if fact.question() && outside(fact.by()) {
@@ -327,8 +327,7 @@ impl Log {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
     let earlier = tip.and_then(|at| {
-      let facts =
-        held.iter().take(at).filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+      let facts = held.iter().take(at).filter_map(Fact::of_entry);
       let asked = facts.filter(Fact::question).map(|one| one.about().to_owned()).collect();
       earlier(&path, at, asked).map(|(text, seen)| (at, text, seen))
     });
@@ -475,7 +474,7 @@ impl Drop for Log {
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
   let record = kept(path)?;
-  let facts = record.iter().map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+  let facts = record.iter().map(Fact::of_entry);
   let last = facts.clone().fold(0, |before, fact| sealed(before, fact.as_ref()));
   let asked: HashSet<String> =
     facts.flatten().filter(Fact::question).map(|one| one.about().to_owned()).collect();

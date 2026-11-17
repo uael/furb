@@ -34,7 +34,7 @@ use crate::{
   ear::{Call, Spoken},
   engine::{Hands, Life},
   life::{Answer, Log, Opening, Retrying, Stream},
-  value::{IS, entry, field, marked, templated},
+  value::{IS, entry, field, items, marked, pairs, templated},
   world::{Members, Roster},
 };
 use tokio::task;
@@ -1010,23 +1010,26 @@ fn to_python<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Bound<'py, P
   match said.type_name() {
     "NoneType" | "None" => Ok(py.None().into_bound(py)),
     "ellipsis" => Ok(py.Ellipsis().into_bound(py)),
-    "list" => Ok(PyList::new(py, items(py, said)?)?.into_any()),
-    "tuple" => Ok(PyTuple::new(py, items(py, said)?)?.into_any()),
-    "set" => Ok(PySet::new(py, items(py, said)?)?.into_any()),
-    "frozenset" => Ok(PyFrozenSet::new(py, items(py, said)?)?.into_any()),
+    "list" => Ok(PyList::new(py, listed(py, said)?)?.into_any()),
+    "tuple" => Ok(PyTuple::new(py, listed(py, said)?)?.into_any()),
+    "set" => Ok(PySet::new(py, listed(py, said)?)?.into_any()),
+    "frozenset" => Ok(PyFrozenSet::new(py, listed(py, said)?)?.into_any()),
     "dict" => mapping(py, said, made),
     _ => other(py, said, made),
   }
 }
 
 /// Each of these values of the sandbox, as python holds it.
-fn each<'py>(py: Python<'py>, held: Vec<ObjectRef<'_>>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+fn each<'py, 'a>(
+  py: Python<'py>,
+  held: impl IntoIterator<Item = ObjectRef<'a>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
   held.into_iter().map(|one| to_python(py, one)).collect()
 }
 
 /// The entries of a list, a tuple or a set of the sandbox, as python holds them.
-fn items<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-  each(py, said.items().unwrap_or_default())
+fn listed<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+  each(py, items(said).into_iter().flatten())
 }
 
 /// A bool, a number or a string of the sandbox, which python holds as itself.
@@ -1045,7 +1048,7 @@ fn plain<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py
 
 /// A map of the sandbox: the object its mark says, else the map it is.
 fn mapping<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
-  let pairs = said.pairs().unwrap_or_default();
+  let fields = pairs(said).into_iter().flatten();
   if let Some(mark) = field(&said, IS).and_then(|one| one.as_str()) {
     let held = match mark {
       "dict" => pairs_map(py, said)?,
@@ -1058,20 +1061,19 @@ fn mapping<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<B
     if let Some(held) = held {
       return Ok(held);
     }
-    if let Some(held) = recorded(py, said, &pairs, mark, made)? {
+    if let Some(held) = recorded(py, said, fields.clone(), mark, made)? {
       return Ok(held);
     }
   }
-  Ok(dict(py, pairs)?.into_any())
+  Ok(dict(py, fields)?.into_any())
 }
 
 /// A map that holds the key of the mark goes out as its pairs, and is the map it is here.
 fn pairs_map<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
-  let Some(held) = field(&said, "args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
-  else {
+  let Some(held) = field(&said, "args").and_then(|one| entry(&one, 0)).and_then(items) else {
     return Ok(None);
   };
-  let pairs = held.iter().map(|pair| entry(pair, 0).zip(entry(pair, 1)));
+  let pairs = held.map(|pair| entry(&pair, 0).zip(entry(&pair, 1)));
   let pairs = pairs
     .collect::<Option<Vec<_>>>()
     .ok_or_else(|| PyTypeError::new_err("a map that goes out as its pairs holds pairs of two"))?;
@@ -1119,41 +1121,41 @@ fn instanced<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound
     return Ok(None);
   };
   let class = to_python(py, class)?;
-  let fields = dict(py, value.pairs().unwrap_or_default())?;
+  let fields = dict(py, pairs(value).into_iter().flatten())?;
   py.import("furb_monty.engine")?.call_method1("instanced", (class, fields)).map(Some)
 }
 
 /// A value as the record keeps it: an instance of a class of the engine or of the interpreter, by
 /// the name of its class, what it was made with and its fields.
-fn recorded<'py>(
+fn recorded<'py, 'a>(
   py: Python<'py>,
   said: ObjectRef<'_>,
-  pairs: &[(ObjectRef<'_>, ObjectRef<'_>)],
+  fields: impl Iterator<Item = (ObjectRef<'a>, ObjectRef<'a>)>,
   mark: &str,
   made: &Made,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
   let Ok(class) = made.class(py, mark) else {
     return Ok(None);
   };
-  let args = each(py, field(&said, "args").and_then(|one| one.items()).unwrap_or_default())?;
+  let args = each(py, field(&said, "args").and_then(items).into_iter().flatten())?;
   if class
     .cast::<PyType>()
     .is_ok_and(|one| one.is_subclass_of::<PyBaseException>().unwrap_or_default())
   {
     return made.fault(py, mark, args).map(Some);
   }
-  let fields = pairs.iter().filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
-  let kwargs = dict(py, fields.copied())?;
+  let fields = fields.filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
+  let kwargs = dict(py, fields)?;
   class.call(PyTuple::new(py, args)?, Some(&kwargs)).map(Some)
 }
 
 /// A value that is no plain data and no map: an exception, an instance with fields, or a class.
 fn other<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
   if let Some(fault) = Fault::of(said) {
-    let args = each(py, fault.args.iter().map(Object::as_ref).collect())?;
+    let args = each(py, fault.args.iter().map(Object::as_ref))?;
     return made.fault(py, &fault.name, args);
   }
-  match said.pairs() {
+  match pairs(said) {
     Some(fields) => made.class(py, said.type_name())?.call((), Some(&dict(py, fields)?)),
     None => classified(py, said, made),
   }

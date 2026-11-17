@@ -375,7 +375,7 @@ fn a_life_enables_at_its_tip_each_skill_it_is_given_and_plays_its_word_then_its_
   let full = format!("{NOTE}\n\nnote()");
   assert_eq!(rungs(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
   let turns = engine.turns(verbs::Turns { on: Some("chain1".to_owned()) }).unwrap();
-  let told = turns.last().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned();
+  let told = entry(&turns.last().unwrap().as_ref(), 1).unwrap().as_str().unwrap().to_owned();
   assert!(told.contains(&format!("{full}\n\n#read1\nread1_path = 'note.txt'\n")), "{told}");
 }
 
@@ -699,7 +699,7 @@ fn the_setup_of_the_root_ends_with_the_skills_of_the_root_alone_and_a_chain_with
   let rooted = at.join("rooted.py").display().to_string();
   let texts = |engine: &mut Engine, chain: &str| -> Vec<String> {
     let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
-    turns.iter().map(|one| one.as_ref().items().unwrap()[1].as_str().unwrap().to_owned()).collect()
+    turns.iter().map(|one| entry(&one.as_ref(), 1).unwrap().as_str().unwrap().to_owned()).collect()
   };
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
@@ -770,14 +770,14 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
   let last = |engine: &mut Engine, chain: &str| -> String {
     let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
     let mut said =
-      turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
-    said.next_back().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
+      turns.iter().filter(|one| entry(&one.as_ref(), 0).unwrap().as_str() == Some("assistant"));
+    entry(&said.next_back().unwrap().as_ref(), 1).unwrap().as_str().unwrap().to_owned()
   };
   let stand = |engine: &mut Engine, chain: &str| -> String {
     let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
     let said =
-      turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
-    let mut words = said.map(|one| one.as_ref().items().unwrap()[1].as_str().unwrap().to_owned());
+      turns.iter().filter(|one| entry(&one.as_ref(), 0).unwrap().as_str() == Some("assistant"));
+    let mut words = said.map(|one| entry(&one.as_ref(), 1).unwrap().as_str().unwrap().to_owned());
     words.find(|one| one.starts_with("stand()")).unwrap()
   };
   let mut engine = set_up(&at, vec![]);

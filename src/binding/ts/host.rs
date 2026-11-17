@@ -29,7 +29,7 @@ use super::{JsAct, native, refused};
 use crate::binding::Shared;
 use crate::{
   Ear, Engine, Fault, Hands, Heard, Life, Object, Step,
-  value::{field, paired},
+  value::{entry, field, items, paired},
   wire,
 };
 use std::mem;
@@ -121,7 +121,7 @@ fn fault(env: Env, no: Unknown<'_>) -> Fault {
 fn marked(held: &Object) -> Option<Fault> {
   let held = held.as_ref();
   let name = field(&held, "is")?.as_str()?.to_owned();
-  let args = field(&held, "args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
+  let args = items(field(&held, "args")?)?.map(|one| one.to_owned()).collect();
   Some(Fault::new(name, args))
 }
 
@@ -214,8 +214,7 @@ fn listed(
   }
   if let Word::Template = word {
     let pairs = held.into_iter().map(|pair| {
-      let items = pair.as_ref().items().unwrap_or_default();
-      let at = |i: usize| items.get(i).map_or_else(Object::none, crate::value::ObjectRef::to_owned);
+      let at = |i: usize| entry(&pair.as_ref(), i).map_or_else(Object::none, |one| one.to_owned());
       let expression = at(0);
       (expression.as_ref().as_str().map_or_else(|| expression.py_repr(), str::to_owned), at(1))
     });
