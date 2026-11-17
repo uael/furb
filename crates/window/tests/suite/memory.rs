@@ -4,7 +4,10 @@
 //! what the window holds is what the process holds more once the window opened the thread.
 #![cfg(test)]
 
-use std::time::{Duration, Instant};
+use std::{
+  env::consts::OS,
+  time::{Duration, Instant},
+};
 
 use furb_host::protocol::{Answer, Verb};
 use furb_window::{open, tokens::AWAY};
@@ -15,6 +18,26 @@ use crate::{
   counted::Counted,
   daemon::{ANSWERS, Daemon, PATIENCE},
 };
+
+/// The most allocations that a gesture makes, on the system that measured it. The count holds each
+/// allocation of the process, std and the allocator of the system among them, which differ from
+/// one system to the next, so a bound holds on its own system alone. A system with no bound yet
+/// prints its count, from which its bound is set, and bounds nothing.
+type Bound = Option<usize>;
+
+/// A bound measured on macOS.
+const fn on_macos(most: usize) -> Bound {
+  if cfg!(target_os = "macos") { Some(most) } else { None }
+}
+
+/// A count of allocations held to its bound on this system, or printed where none is set.
+fn bounded(count: usize, bound: Bound, what: &str) {
+  if let Some(most) = bound {
+    assert!(count <= most, "{what} made {count} allocations on {OS}, past {most}");
+  } else {
+    println!("{what} makes {count} allocations on {OS}, which no bound holds yet");
+  }
+}
 
 /// The bytes by which the heap of a process that does nothing may move.
 const CALM: usize = 64 << 10;
@@ -96,7 +119,7 @@ fn a_window_holds_no_more_on_a_life_four_times_as_large() {
 /// another that lights nothing: 23 on macOS on 11-17, where each such move laid out the list and
 /// the left side again, with 900, and copied the folder and the life of the target of the input,
 /// with 41, before.
-const PER_MOVE: usize = 26;
+const PER_MOVE: Bound = on_macos(26);
 
 #[test]
 fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing() {
@@ -124,7 +147,7 @@ fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing
   }
   let moves = (Counted::calls() - calls) / blank.len();
   println!("a move of the pointer that changes nothing makes {moves} allocations");
-  assert!(moves <= PER_MOVE, "a move of the pointer made {moves} allocations, past {PER_MOVE}");
+  bounded(moves, PER_MOVE, "a move of the pointer");
 }
 
 /// The most allocations that a key typed in the input makes, with its frame, on a thread at rest:
@@ -133,7 +156,7 @@ fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing
 /// folder and the life of the target of the input, with 413, and copied each run of a row that
 /// fits its room, laid out the box of the context to find the row under the pointer, and wrote
 /// each line of the input to count them, with 296, before.
-const PER_KEY: usize = 190;
+const PER_KEY: Bound = on_macos(190);
 
 #[test]
 fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {
@@ -164,5 +187,5 @@ fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {
   let typed = typed.min().unwrap_or_default();
   println!("a key typed in the input makes {typed} allocations");
   assert!(app.text().contains("abcdefghijk"), "{}", app.text());
-  assert!(typed <= PER_KEY, "a key typed in the input made {typed} allocations, past {PER_KEY}");
+  bounded(typed, PER_KEY, "a key typed in the input");
 }
