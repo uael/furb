@@ -82,7 +82,8 @@ async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   name = engine.act("note", root, lambda one: keeping(its, ("done", one, "one")), "one")
   assert engine.get(name) == ("note", name, OPERATOR, root, "one") and engine.peek(name) == "one"
   assert [a for a in heard if a[0] in ("tell", "done", "note")] == [told, engine.get(name), ("done", name, name, "one")]
-  assert told in engine.transcript(root) and ("done", name, name, "one") in its
+  # The ear of an act that says its own done is dropped at that done, so it never hears it.
+  assert told in engine.transcript(root) and its == []
   second, over = await relived(sown(), [])
   assert root == over and said(second, "note") == [] and engine.get(name) is None
   engine.bash("echo more", on=over)

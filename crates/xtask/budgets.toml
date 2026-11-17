@@ -50,10 +50,11 @@ memory_heap_mib = 512
 # of an earlier build gave 1252.27 to 1252.28 for each fact, and 8 runs at once 1251.98 to 1252.29. A load only
 # lowered it, so each bound is the top of the spread of runs at rest (4 runs gave 1197 each, and 2 runs of the bench
 # 1207 each), and one more allocation for each fact passes it.
-# 799b6b260 reads whether an act is over at each hear: 1227 in each of 4 runs at the sizes of the suite, and 1231 in
-# each of 2 runs of the bench, where they gave 1197 and 1207 before it.
-memory_allocs_per_fact = 1227
-memory_allocs_per_fact_large = 1231
+# 799b6b260 reads whether an act is over at each hear, and its ear hears the fact that ended it before it goes: 1229
+# in each of 4 runs at the sizes of the suite, and 1233 in each of 2 runs of the bench, where they gave 1197 and
+# 1207 before it.
+memory_allocs_per_fact = 1229
+memory_allocs_per_fact_large = 1233
 memory_allocs_per_frame = 18
 # A part of a reply that comes alone: 10 in each of 3 runs (42 when each poll listed the names of the ears).
 memory_allocs_per_part = 10

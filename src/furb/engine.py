@@ -1077,8 +1077,8 @@ def boot(record=(), **outside):
       with site.set(name), hearer.set(name):
         busy.add(name)
         try:
-          heed[name] = w = (name in lasts or not over(name)) and lives(g, a)
-          w is False and alive.pop(name)
+          heed[name] = w = lives(g, a)
+          (w is False or name not in lasts and over(name)) and alive.pop(name)
         except (Exception, CancelledError) as fault:
           alive.pop(name)
           stop = isinstance(fault, CancelledError)
