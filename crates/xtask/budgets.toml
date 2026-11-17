@@ -44,10 +44,11 @@ memory_heap_mib = 512
 # its image each 10 000 facts. memory_allocs_per_frame: the daemon and the window, for each frame that a window reads
 # when it attaches at the start of the log of a life, in the test of the slow window.
 [bench.macos]
-# Measured on 11-17, macOS 26, dev profile: 1252; 1294, 1255 and 1263; 18.
+# Measured on 11-17, macOS 26, dev profile: 1202; 1244, 1206 and 1213; 18.
 # The count holds each thread of the process, so it moves with how the threads are scheduled: 20 runs one at a time
-# gave 1252.27 to 1252.28 for each fact, and 8 runs at once 1251.98 to 1252.29. A load only lowered it, so each bound
-# is the top of the spread of runs at rest (1252.28 and 1263.23), and one more allocation for each fact passes it.
-memory_allocs_per_fact = 1252
-memory_allocs_per_fact_large = 1263
+# gave 1252.27 to 1252.28 for each fact before the last cut, and 8 runs at once 1251.98 to 1252.29. A load only
+# lowered it, so each bound is the top of the spread of runs at rest (5 runs gave 1202 each, and 2 runs of the bench
+# 1213 each), and one more allocation for each fact passes it.
+memory_allocs_per_fact = 1202
+memory_allocs_per_fact_large = 1213
 memory_allocs_per_frame = 18
