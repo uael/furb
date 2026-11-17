@@ -221,6 +221,48 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 }
 
 #[test]
+fn a_command_on_a_record_of_another_engine_moves_it_to_this_build_once() {
+  let yard = Yard::new("crosses");
+  assert_eq!(printed(yard.kept(&["run", "k = 1"]), ""), "None\n");
+  let made = |text: &str| -> Vec<Value> {
+    let entries = text.lines().map(|line| serde_json::from_str::<Value>(line).expect("an entry"));
+    entries.map(|entry| entry[0].clone()).filter(|fact| fact[0] == "made").collect()
+  };
+  let held = fs::read_to_string(yard.record()).expect("the record");
+  let ours = made(&held).last().expect("the fact made of this build")[3].clone();
+  // The last segment runs another engine, as a build of the program of this one with a line of
+  // comment more names it, and the image of this build goes, as another build would hold none.
+  let mut text = String::new();
+  for line in held.split_inclusive('\n') {
+    let mut entry: Value = serde_json::from_str(line).expect("an entry");
+    if entry[0][0] != "made" {
+      text.push_str(line);
+      continue;
+    }
+    let fact = &mut entry[0];
+    let engine = format!("{}# Another engine.\n", fact[7].as_str().expect("the engine"));
+    let texts = [
+      engine.as_str(),
+      fact[8].as_str().expect("the kernel"),
+      fact[9].as_str().expect("the checkpointer"),
+    ];
+    fact[3] = json!(sha256(format!("{}\0", texts.join("\0")).as_bytes()));
+    fact[7] = json!(engine);
+    text.push_str(&entry.to_string());
+    text.push('\n');
+  }
+  fs::write(yard.record(), text).expect("the record of another engine");
+  fs::remove_file(yard.record().with_extension("jsonl.image")).expect("the image of this build");
+  assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "2\n");
+  let crossed = made(&fs::read_to_string(yard.record()).expect("the record"));
+  assert_eq!(crossed.len(), 2, "the life moved to this build before its word ran: {crossed:?}");
+  assert_eq!(crossed[1][3], ours, "the second fact made names this build");
+  assert_eq!(printed(yard.kept(&["run", "close(k + 2)"]), ""), "3\n");
+  let again = made(&fs::read_to_string(yard.record()).expect("the record"));
+  assert_eq!(again.len(), 2, "a life of this build on its own record moves no more");
+}
+
+#[test]
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");

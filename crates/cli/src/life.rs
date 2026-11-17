@@ -17,7 +17,7 @@ use furb::{
   value::items,
   verbs,
   wire::outward,
-  world::Catalog,
+  world::{self, Catalog},
 };
 
 use crate::{console, error::CliError};
@@ -45,10 +45,24 @@ impl Life {
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its
   /// record here, and a life whose record drifted is refused, since it would keep nothing more.
+  ///
+  /// A life that keeps its record and opened on the texts of another build moves to this build
+  /// before any word runs, as each host moves it: [`Engine::cross`], then an open again under the
+  /// same lease, which boots on the carry of the crossing.
   pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
     let record = opening.record.as_ref().filter(|_| opening.keeps()).map(PathBuf::from);
-    let ears = [("console", console::terminal())];
-    let (engine, _) = opening.open(ears, Progress::default(), &mut |_| true, None).await?;
+    let lease = record.as_deref().map(world::Lease::of).transpose()?;
+    let again = opening.clone();
+    let ears = || [("console", console::terminal())];
+    let (engine, _) =
+      opening.open(ears(), Progress::default(), &mut |_| true, lease.clone()).await?;
+    let engine = match record.as_deref().filter(|_| engine.crosses()) {
+      Some(at) => {
+        engine.cross()?.keep(at)?;
+        again.open(ears(), Progress::default(), &mut |_| false, lease).await?.0
+      }
+      None => engine,
+    };
     let root = engine.root().to_owned();
     Ok(Self { engine, root, record })
   }
