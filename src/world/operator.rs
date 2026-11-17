@@ -160,13 +160,13 @@ impl Shape {
   }
 
   /// The lines that answer a shape that is a choice: yes and no for a bool, each value of a
-  /// Literal as `named` gives it, and each of those of the arms of a union. Any other shape gives
-  /// none.
+  /// Literal as `named` gives it, and each of those of the arms of a union that holds no None. A
+  /// union that holds None takes a line of no word, so it is no choice. Any other shape gives none.
   pub fn choices(&self) -> Vec<String> {
     match self {
       Self::Bool => vec!["yes".to_owned(), "no".to_owned()],
       Self::Choice(values) => values.iter().map(named).collect(),
-      Self::Either(arms) => arms.iter().flat_map(Self::choices).collect(),
+      Self::Either(arms) if !self.takes_nothing() => arms.iter().flat_map(Self::choices).collect(),
       _ => Vec::new(),
     }
   }

@@ -108,6 +108,7 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
       ("automatic".to_owned(), json!([]), None),
       ("scratch_days".to_owned(), json!(7), None),
       ("classes".to_owned(), json!({}), None),
+      ("voice".to_owned(), json!({"language": "auto", "task": "transcribe"}), None),
       ("providers".to_owned(), json!({"b": false}), None),
       ("providers.b".to_owned(), json!(false), Some(Layer::Project)),
       ("skills".to_owned(), json!({}), None),
