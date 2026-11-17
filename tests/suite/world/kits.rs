@@ -40,21 +40,23 @@ fn noted(folder: &Path, module: &str) -> PathBuf {
 }
 
 /// A kit that says its hello and its attach, marks its start in the file `started` beside it, and
-/// closes each act `note_add` with the text `added`.
+/// closes each act `note_add` with the text `added`, once it wrote in the file `heard` beside it
+/// how many frames it read up to that act.
 const ADDS: &str = r#"import json, os, subprocess, sys
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
-started = os.path.join(os.path.dirname(os.path.abspath(__file__)), "started")
-open(started, "a").write(f"{os.getpid()} {child.pid}\n")
+here = os.path.dirname(os.path.abspath(__file__))
+open(os.path.join(here, "started"), "a").write(f"{os.getpid()} {child.pid}\n")
 def say(verb):
   sys.stdout.write(json.dumps(verb) + "\n")
   sys.stdout.flush()
 say({"id": 0, "verb": "hello", "protocol": 44, "kind": "skill", "name": "note"})
 say({"id": 1, "verb": "attach", "life": "", "from": 0})
 n = 2
-for line in sys.stdin:
+for read, line in enumerate(sys.stdin, 1):
   frame = json.loads(line)
   fact = frame.get("event", {}).get("data") or [""]
   if fact[0] == "note_add":
+    open(os.path.join(here, "heard"), "a").write(f"{read}\n")
     say({"id": n, "verb": "close", "life": "", "act": fact[1], "value": json.dumps("added")})
     n += 1
 "#;
@@ -114,6 +116,26 @@ fn a_kit_starts_at_the_first_act_of_its_kinds_and_its_process_answers_each_one()
     assert_eq!(got.as_ref().as_str(), Some("added"));
   }
   assert_eq!(started(&folder).len(), 1);
+}
+
+/// The law of speed of the kits, in the work that the code does, which no load of the machine
+/// changes where a time does: an act hops to the process of its kit, which stands, on its stdin,
+/// and starts no program; and each act passes that process the same count of frames, however many
+/// acts came before it.
+#[test]
+fn the_hop_to_the_process_of_a_kit_starts_no_program_and_passes_the_same_frames_at_each_act() {
+  let (at, folder) = place("hop");
+  noted(&folder, ADDS);
+  let mut engine = life(&at);
+  for _ in 0..5 {
+    closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
+  }
+  assert_eq!(started(&folder).len(), 1, "the acts hop to the one process of the kit");
+  let heard = fs::read_to_string(folder.join("heard")).unwrap_or_else(|no| panic!("{no}"));
+  let heard: Vec<usize> = heard.lines().map(|one| one.parse().unwrap_or_default()).collect();
+  // The first act also passes the facts of the life before the process attached.
+  let hops: Vec<usize> = heard.windows(2).map(|two| two[1] - two[0]).collect();
+  assert!(hops.len() == 4 && hops.iter().all(|one| *one > 0 && *one == hops[0]), "{heard:?}");
 }
 
 #[test]

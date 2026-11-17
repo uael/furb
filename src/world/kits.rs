@@ -567,7 +567,3 @@ fn beside(name: &str) -> Option<PathBuf> {
   let program = env::current_exe().and_then(fs::canonicalize).ok()?;
   Some(program.parent()?.join(name)).filter(|one| one.is_file())
 }
-
-#[cfg(test)]
-#[path = "kits.test.rs"]
-mod test;
