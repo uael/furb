@@ -509,7 +509,9 @@ def last_journal() -> Sequence[tuple]:
   return JOURNALS[0]
 
 
-def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
+def life(
+  world: Sand, record: Sequence[tuple] = (), **ears: Generator[tuple | set[str] | None, tuple]
+) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory, a generator that keeps
   every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
   """
