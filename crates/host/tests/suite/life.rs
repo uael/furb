@@ -243,6 +243,10 @@ async fn each_command_that_a_reader_hears_start_stands_among_the_commands_of_the
   let at = place("commands");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut events = Box::pin(life.events(0));
+  // The reader reads the log up to a done rung first, so it hears each later event as the life
+  // tells it, and not from the log once the life ended the step that told it.
+  let first = made(&life, rung("x = 1")).await;
+  until(&mut events, done(&first)).await;
   let word = format!("started = [bash('sleep 60') for _ in range({STARTED})]");
   made(&life, rung(&word)).await;
   let starts = |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Bash && !matches!(act.phase, Phase::Done(_)));
