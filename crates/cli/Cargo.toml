@@ -49,6 +49,12 @@ furb-window = { path = "../window" }
 # The numbers of the signals that end the daemon.
 libc = "0.2"
 
+# furb with the features that the workspace turns on, so a build of this package alone makes the program that a build
+# of the workspace makes from the same sources: a daemon takes a new program at its path as a new build. Windows takes
+# furb as it is, since the build of napi looks for the library of node there.
+[target.'cfg(not(windows))'.dependencies]
+furb = { path = "../..", version = "0.4.2", features = ["typescript"] }
+
 [target.'cfg(windows)'.dependencies]
 # The console of Windows, whose Ctrl+C and Ctrl+Break the window handles while furb waits for it.
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

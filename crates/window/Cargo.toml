@@ -53,6 +53,12 @@ pulldown-cmark = { version = "0.13", default-features = false }
 dunce = "1"
 furb-hack = { version = "0.1", path = "../hack" }
 
+# furb with the features that the workspace turns on, so a build of this package alone makes the program that a build
+# of the workspace makes from the same sources: a window takes a new program at its path as a new build. Windows takes
+# furb as it is, since the build of napi looks for the library of node there.
+[target.'cfg(not(windows))'.dependencies]
+furb = { path = "../..", features = ["typescript"] }
+
 [target.'cfg(windows)'.dependencies]
 # The flags of a process that outlives the console of the window.
 windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
