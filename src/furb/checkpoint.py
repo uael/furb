@@ -180,6 +180,18 @@ def gathered(names, define, floor):
           named |= found
         else:
           lost[c].append(key)
+  # The last read or write of each path on a chain holds the text that the chain holds there, which catchup and memory
+  # compare with the file, so it stays known after a crossing. A read of the setup stays a carried turn, which a chain
+  # with a source holds whole whatever its filter.
+  for c in chains:
+    facts = transcript(c)
+    setup = next((n for n, x in enumerate(facts) if x[0] == "setup"), -1)
+    texts = [
+      x
+      for x in facts[setup + 1 :]
+      if x[0] in ("read", "write") and x is get(x[1]) and isinstance(peek(x[1]), names["Text"])
+    ]
+    named |= {*{peek(x[1]).path: x[1] for x in texts}.values()}
   taken = dict(floor)
   for one in asked:
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))

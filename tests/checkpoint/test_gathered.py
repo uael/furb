@@ -101,14 +101,19 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
 async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_command_of_a_chain_in_chains_and_each_act_of_a_verb_that_a_value_names_so_a_later_life_holds_each_thread_of_a_chain_a_closed_one_too() -> (
   None
 ):
-  """acts holds the last stand, the last clock, each prompt and each command of a chain in chains, and each act of a verb that a value names: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why, so a later life holds each thread of a chain, a closed one too, and a prompt on it goes on."""
+  """acts holds the last stand, the last clock, each prompt and each command of a chain in chains, the last read or write of each path on a chain in chains after its setup that gave a text, and each act of a verb that a value names: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why, so a later life holds each thread of a chain, a closed one too, and a prompt on it goes on, and the text that each chain holds at each path, which catchup and memory compare with the file."""
   root, _ = await gather()
   thread = engine.prompt(str, "Done?", to=OPERATOR, on=root)
   engine.close("yes", thread)
+  await engine.rung('read("/w/a.txt", HIDDEN)\nread("/w/a.txt", span(1, 1))', on=root)
   await settle()
   data = checkpoint.gathered(vars(engine), lambda word: word, {"wait": 9})
   acts = {x["id"]: x for x in data["acts"]}
   by = lambda name: engine.get(name)[2]  # noqa: E731
+  last = [a[1] for a in engine.transcript(root) if a[0] == "read"][-1]
+  assert [x for x in data["acts"] if x["kind"] == "read"] == [
+    {"kind": "read", "id": last, "on": root, "by": by(last), "words": engine.get(last)[4:], "value": engine.peek(last)}
+  ]
   assert acts[thread] == {
     "kind": "prompt",
     "id": thread,

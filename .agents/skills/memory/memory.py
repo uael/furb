@@ -1,5 +1,3 @@
-import re
-
 from furb.engine import (
   HIDDEN,
   Act,
@@ -22,7 +20,6 @@ from furb.engine import (
 NAMES = ("AGENTS.md", "CLAUDE.md")
 LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
 HOME = 5
-ESCAPES = {"n": "\n", "t": "\t", "r": "\r"}
 looks: dict[str, dict[str, Text | None]] = {}
 
 
@@ -88,57 +85,21 @@ def folders(path: str, on: str, seen: dict[str, Text | None]) -> list[tuple[str,
   return [*([(user.path, set(user.lines))] if user else []), *found]
 
 
-def unrepr(quoted: str) -> str | None:
-  """The str of the repr of a str, as the engine writes one in a tell, or None for anything else."""
-  got = re.fullmatch(r"'((?:[^'\\\n]|\\.)*)'|\"((?:[^\"\\\n]|\\.)*)\"", quoted)
-  body = None if got is None else got[1] if got[1] is not None else got[2]
-  return None if body is None else re.sub(r"\\(.)", lambda one: ESCAPES.get(one[1], one[1]), body)
-
-
-def shown_whole(about: str, note: str) -> tuple[str, str]:
-  """The path and the text that the tell of a read shows whole, or empty strings when it shows some lines alone."""
-  lines = note.split("\n")
-  if not lines or lines[0] != "#" + about or any(one.startswith(about + "_numbers = ") for one in lines):
-    return "", ""
-  place = next((unrepr(one[len(about) + 8 :]) for one in lines if one.startswith(about + "_path = ")), None)
-  text = next((unrepr(one[len(about) + 8 :]) for one in lines if one.startswith(about + "_text = ")), None)
-  opened = next((one[3:-1] for one in lines if one.startswith("<s:" + about + "_text") and one.endswith(">")), "")
-  if text is None and opened:
-    body = note.split("\n<s:" + opened + ">\n", 1)[-1]
-    text = body[: body.find("</s:" + opened + ">")] if "</s:" + opened + ">" in body else None
-  return (place, text) if place and text is not None else ("", "")
-
-
 def memory(path: str = ".", on: str = "") -> list[Text]:
   return minded(path, on, {})
 
 
-def holding(on: str) -> tuple[dict[str, list[str]], set[str]]:
-  """The lines of each text that the chain holds by its path, and the content of each memory file that it holds."""
+def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
   was: dict[str, list[str]] = {}
   held: set[str] = set()
-  answered: set[str] = set()
   for x in transcript(on):
-    place, text = "", ""
     match x:
-      case ("done", about, _, Text() as got) if (
-        (question(("read", about)) or question(("write", about))) and get(maker := get(about)[2]) and tells(maker)
+      case ("done", about, _, Text(place, content)) if (question(("read", about)) or question(("write", about))) and (
+        (get(maker := get(about)[2]) and tells(maker)) or maker == "journal"
       ):
-        place, text = got.path, got.content
-        answered.add(about)
-      # A read of an earlier life, which a checkpoint carried, or whose done a jump dropped, holds no done on the
-      # chain, but the chain holds the text that its tell gave whole.
-      case ("tell", about, _, [str(note), *_]) if question(("read", about)) and about not in answered:
-        place, text = shown_whole(about, note)
-        place = "" if place in was else place
-    if place:
-      was[place] = text.splitlines()
-      remembered(place) and held.add("\n".join(was[place]))
-  return was, held
-
-
-def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
-  was, held = holding(on)
+        was[place] = content.splitlines()
+        if remembered(place):
+          held.add(content)
   cached = {*seen}
   got: list[Text] = []
   for folder, names in folders(path, on, seen):
@@ -147,12 +108,12 @@ def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
       for entry in group:
         if (names is None or entry in names) and (found := looked(at := joined(folder, entry), on, seen)) is not None:
           break
-      if found is not None and at in cached and "\n".join(found.lines) not in held:
+      if found is not None and at in cached and found.content not in held:
         del seen[at]
         found = looked(at, on, seen)
       if (
         found is None
-        or "\n".join(found.lines) in held
+        or found.content in held
         or any(one.path == found.path or one.content == found.content for one in got)
       ):
         continue

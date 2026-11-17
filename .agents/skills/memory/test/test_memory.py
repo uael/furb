@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import STANDS, Dead, life, settle
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import Text
 from furb_monty import _monty
 from skills.conftest import extended, memorized, noted, recalled, tilded
@@ -119,7 +119,7 @@ async def test_the_memory_of_a_folder_is_its_agents_md_file_or_its_claude_md_fil
 
 
 async def test_memory_leaves_out_a_memory_file_whose_content_the_chain_holds_at_any_path(tmp_path: Path) -> None:
-  """memory leaves out a memory file whose content the chain holds at any path: one that a read or a write from an act that tells gave the chain, its prefix among them, so one text in two folders, as in a checkout and its worktree, enters a chain once."""
+  """memory leaves out a memory file whose content the chain holds at any path: one that a read or a write from an act that tells gave the chain, its prefix among them, or the last read or write of its path that a crossing carried, so one text in two folders, as in a checkout and its worktree, enters a chain once."""
   top = noted(tmp_path / "work", "t\n")
   noted(tmp_path / "work" / "sub", "s\n")
   noted(tmp_path / "work" / "other", "o\n")
@@ -139,6 +139,26 @@ async def test_memory_leaves_out_a_memory_file_whose_content_the_chain_holds_at_
   twin = noted(tmp_path / "work" / "twin", "t2\n")
   assert await paths(root, tmp_path, "twin/c.txt") == []
   assert twin.read_text(encoding="utf-8", newline="") == "t2\n"
+  # A crossing carries the last read of each path, so the later life tells only what changed since.
+  held = recalled(root, tmp_path)
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  _, root = extended("memory", tmp_path, lives=True, record=checkpoint.seed(vars(engine), data))
+  await settle()
+  assert recalled(root, tmp_path) == held
+  top.write_text("t3\n", encoding="utf-8", newline="")
+  engine.stand(engine.ROOT)
+  assert recalled(root, tmp_path)[len(held) :] == [
+    f"#read\nread_path = {tilded(top)!r}\nread_removed = ['t2']\nread_text = 't3'"
+  ]
+  # A jump that drops each read leaves the chain that it makes with no memory file, so that chain is told each once.
+  went = engine.jump([x[1] for x in engine.transcript(root) if x[0] == "read"], on=root)
+  await settle()
+  new = engine.peek(went)
+  assert isinstance(new, str)
+  assert recalled(new, tmp_path) == []
+  await engine.rung("cd('.')", on=new)
+  await engine.rung("cd('.')", on=new)
+  assert recalled(new, tmp_path) == [memorized(top, "t3\n")]
 
 
 async def test_memory_leaves_out_each_folder_and_each_file_whose_read_the_world_refuses() -> None:
