@@ -341,8 +341,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     def bind(whose):
       nonlocal bound
       since = transcript(id, "", bound)
-      bound += len(since)
-      w = "\n\n".join("\n".join(x[3]) for x in since if heard(x))
+      bound += (k := since.index(a) + 1)
+      w = "\n\n".join("\n".join(x[3]) for x in since[:k] if heard(x))
       return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
     def replay(of="", words=""):

@@ -1503,6 +1503,25 @@ async def test_at_the_advance_of_the_next_rung_the_chain_runs_that_text() -> Non
   runs = said(log, "run")
   assert [a[4] for a in runs] == [f"{first}_told", first, f"{second}_told", second]
   assert not runs[2][5].startswith(runs[0][5])
+  _, log, root = born("pass", "pass", "pass", "close(1)")
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(8):
+    await settle()
+  engine.pause(root)
+  engine.rung("x = rung('y = 1')", on=root)
+  await settle()
+  engine.wake(root)
+  for _ in range(6):
+    await settle()
+  readied, advanced = [a[1] for a in said(log, "rung")][-2:]
+  told = {a[4]: a[5] for a in said(log, "run") if a[4].endswith("_told")}
+  order = [a[:2] for a in log].index
+  assert (
+    order(("ready", readied)) < order(("tell", advanced)),
+    told[f"{readied}_told"],
+    told.get(f"{advanced}_told"),
+    engine.peek(one),
+  ) == (True, f"#{root} woke by operator", f"#{advanced} advance on {one}", 1)
 
 
 async def test_each_act_that_a_told_paragraph_opened_and_each_value_that_it_told_is_bound() -> None:

@@ -164,10 +164,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   assert await act == (1, 2, "k = 1\ndebug(t'go')\nok = 2")
   await settle()
   one, writer, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  read = "\n\n".join(
-    f"#read{n}\nread{n}_path = {act!r}\n<s:read{n}_text>\nk = 1\ndebug(t'go')</s:read{n}_text>\n\n#write{n}\nwrite{n}_path = {act!r}"
-    for n in (1, 2)
-  )
+  read = f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\ndebug(t'go')</s:read1_text>"
   assert said(log, "run")[3][4:] == (
     writer,
     "mine = get(acting())[2]\nwrite(read(mine).append('ok = 2'))\nwrite(read(mine))",
