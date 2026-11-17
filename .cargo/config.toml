@@ -3,6 +3,9 @@
 # .github/actions/setup/action.yml.
 [build]
 incremental = true
+# A warning fails each build, here and in CI, which reads this file too: a warning that only CI denied, as one of the
+# manifest of a crate, passed each local gate and failed every job of the gates.
+warnings = "deny"
 
 # The tasks of a developer: `cargo xtask` lists them.
 [alias]

@@ -68,7 +68,6 @@ runs:
         set_default CARGO_INCREMENTAL 0
         set_default CARGO_TERM_COLOR always
         set_default RUST_BACKTRACE short
-        set_default CARGO_BUILD_WARNINGS deny
         set_default CARGO_UNSTABLE_SPARSE_REGISTRY true
         set_default CARGO_REGISTRIES_CRATES_IO_PROTOCOL sparse
         echo "::add-matcher::${{ github.action_path }}/rust.json"
