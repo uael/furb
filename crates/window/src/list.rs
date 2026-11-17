@@ -11,8 +11,9 @@ use crate::{
   input::named,
   keys::Does,
   line::{Line, edged, run, spread},
-  model::{Key, Link, Model},
+  model::{Foot, Key, Link, Model},
   picture,
+  pull::Piece,
   tokens::{CALL, Loader, Role, WORKS, called, mixed, turn},
 };
 
@@ -104,12 +105,24 @@ impl Model {
       was.1 = on;
       return Rc::clone(lines);
     }
-    let lines: Rc<[Line]> = self.shown().map(|row| self.line(row, pointed)).collect();
+    // The foot of the list, laid out once for its count and its rows.
+    let (changes, context) = (self.changes_rows(), self.context_rows());
+    let foot = Foot { changes: changes.len(), context: context.len() };
+    let mut foot_rows = (changes.into_iter(), context.into_iter());
+    let lines: Rc<[Line]> =
+      self.shown(foot).map(|row| self.line(row, pointed, &mut foot_rows)).collect();
     self.kept_list = Some(((shows, on, pointed), Rc::clone(&lines)));
     lines
   }
 
-  fn line(&self, row: Row, pointed: Option<Row>) -> Line {
+  /// The runs of a row of the list, which takes the row of the part of the changes or of the box of
+  /// the context that it shows from the rows of its foot, in their order.
+  fn line(
+    &self,
+    row: Row,
+    pointed: Option<Row>,
+    (changes, context): &mut (impl Iterator<Item = Piece>, impl Iterator<Item = Line>),
+  ) -> Line {
     let t = &self.tokens;
     let at = |row: Option<Row>| match row {
       Some(Row::Card(at, _) | Row::Resolved(at)) => Some(at),
@@ -132,9 +145,14 @@ impl Model {
         if second { then } else { first }
       }
       Row::Resolved(card) => self.resolved(card, self.ground(card, at(pointed))),
-      Row::Changes(at) => self.changes_line(at, pointed == Some(row)),
+      Row::Changes(_) => self.changes_line(changes.next(), pointed == Some(row)),
       Row::Context(at) => {
-        self.context_line(at, (matches!(pointed, Some(Row::Context(_))), pointed == Some(row)))
+        let line = context.next().unwrap_or_default();
+        self.context_line(
+          line,
+          at,
+          (matches!(pointed, Some(Row::Context(_))), pointed == Some(row)),
+        )
       }
     }
   }

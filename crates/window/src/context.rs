@@ -126,8 +126,7 @@ impl Model {
   /// A row of the box as the list draws it: the folded box lights whole under the pointer, as the
   /// one thing that takes a click, and in the open box only the target under the pointer lights.
   /// The colored cells keep their colors.
-  pub(crate) fn context_line(&self, at: usize, (on_box, here): (bool, bool)) -> Line {
-    let line = self.context_rows().into_iter().nth(at).unwrap_or_default();
+  pub(crate) fn context_line(&self, line: Line, at: usize, (on_box, here): (bool, bool)) -> Line {
     let hot = self.context_hot(at);
     let open = self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context));
     let lit = if open {

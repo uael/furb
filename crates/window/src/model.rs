@@ -47,6 +47,21 @@ const PINNED: usize = 2;
 /// that they show.
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<Rc<thread::Row>>);
 
+/// The foot of the list: the rows of the part of the changes and of the box of the context.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Foot {
+  pub(crate) changes: usize,
+  pub(crate) context: usize,
+}
+
+impl Foot {
+  /// The rows that the foot takes, with the blank row above it, as the input has one above it.
+  fn boxed(self) -> usize {
+    let rows = self.changes + self.context;
+    if rows == 0 { 0 } else { rows + 1 }
+  }
+}
+
 /// What the rows of the list show: the count of changes that it can show, the moment or the second,
 /// the scroll and the size of the window; the line of the list under the pointer, and its row.
 pub(crate) type Listed = ((u64, Duration, usize, (u16, u16)), Option<u16>, Option<Row>);
@@ -483,7 +498,8 @@ impl Model {
 
   /// The list moved by a count of rows, as far as it has rows.
   pub(crate) fn scrolled(&mut self, by: isize) {
-    let most = (self.rows().len().saturating_sub(PINNED)).saturating_sub(self.room());
+    let most =
+      (self.rows().len().saturating_sub(PINNED)).saturating_sub(self.room(self.list_foot()));
     self.scroll = self.scroll.saturating_add_signed(by).min(most);
   }
 
@@ -628,37 +644,37 @@ impl Model {
     age(since, self.second())
   }
 
-  /// The rows of the list that scroll, and how many of them show.
-  fn room(&self) -> usize {
-    usize::from(self.size.1).saturating_sub(PINNED + self.boxed() + self.beside_bar())
+  /// The rows of the list that scroll, and how many of them show above its foot.
+  fn room(&self, foot: Foot) -> usize {
+    usize::from(self.size.1).saturating_sub(PINNED + foot.boxed() + self.beside_bar(foot))
   }
 
-  /// The rows at the foot of the list that the part of the changes and the box of the context take,
-  /// with the blank row above them, as the input has one above it.
-  fn boxed(&self) -> usize {
-    let rows = self.changes_rows().len() + self.context_rows().len();
-    if rows == 0 { 0 } else { rows + 1 }
+  /// The foot of the list, by the rows of the part of the changes and of the box of the context,
+  /// which it lays out to count them.
+  pub(crate) fn list_foot(&self) -> Foot {
+    Foot { changes: self.changes_rows().len(), context: self.context_rows().len() }
   }
 
   /// The blank rows of the list under the box of the context, beside the bar of the time, so the
   /// box ends on the row of the hints, as it ends on the row of the input.
-  fn beside_bar(&self) -> usize {
-    if self.boxed() == 0 { 0 } else { self.time_count() }
+  fn beside_bar(&self, foot: Foot) -> usize {
+    if foot.boxed() == 0 { 0 } else { self.time_count() }
   }
 
   /// The row of the list at a row of the window: a row of the box of the context at its foot.
   pub(crate) fn row(&self, y: usize) -> Option<Row> {
-    let bottom = usize::from(self.size.1).saturating_sub(self.beside_bar());
+    let foot = self.list_foot();
+    let bottom = usize::from(self.size.1).saturating_sub(self.beside_bar(foot));
     if y >= bottom {
       return Some(Row::Blank);
     }
-    let foot = bottom.saturating_sub(self.boxed());
-    if y >= foot {
-      let (at, changes) = ((y - foot).saturating_sub(1), self.changes_rows().len());
+    let top = bottom.saturating_sub(foot.boxed());
+    if y >= top {
+      let at = (y - top).saturating_sub(1);
       return Some(match () {
-        () if y == foot => Row::Blank,
-        () if at < changes => Row::Changes(at),
-        () => Row::Context(at - changes),
+        () if y == top => Row::Blank,
+        () if at < foot.changes => Row::Changes(at),
+        () => Row::Context(at - foot.changes),
       });
     }
     let rows = self.rows();
@@ -667,19 +683,18 @@ impl Model {
 
   /// The rows of the list that show, from the top of the window, and the box of the context at
   /// its foot.
-  pub(crate) fn shown(&self) -> impl Iterator<Item = Row> {
+  pub(crate) fn shown(&self, foot: Foot) -> impl Iterator<Item = Row> {
     let rows = self.rows();
     let pinned = rows.len().min(PINNED);
+    let room = self.room(foot);
     let mut scrolled: Vec<Row> =
-      rows.iter().skip(pinned + self.scroll).take(self.room()).copied().collect();
-    let boxed = self.boxed();
-    if boxed > 0 {
-      scrolled.resize(self.room(), Row::Blank);
+      rows.iter().skip(pinned + self.scroll).take(room).copied().collect();
+    if foot.boxed() > 0 {
+      scrolled.resize(room, Row::Blank);
       scrolled.push(Row::Blank);
-      let changes = self.changes_rows().len();
-      scrolled.extend((0..changes).map(Row::Changes));
-      scrolled.extend((0..boxed.saturating_sub(1 + changes)).map(Row::Context));
-      scrolled.extend((0..self.beside_bar()).map(|_| Row::Blank));
+      scrolled.extend((0..foot.changes).map(Row::Changes));
+      scrolled.extend((0..foot.context).map(Row::Context));
+      scrolled.extend((0..self.beside_bar(foot)).map(|_| Row::Blank));
     }
     rows.into_iter().take(pinned).chain(scrolled)
   }
@@ -700,7 +715,7 @@ impl Model {
       return;
     };
     let (above, under) = (first.saturating_sub(PINNED + 1), (last + 2).saturating_sub(PINNED));
-    self.scroll = self.scroll.max(under.saturating_sub(self.room())).min(above);
+    self.scroll = self.scroll.max(under.saturating_sub(self.room(self.list_foot()))).min(above);
   }
 }
 

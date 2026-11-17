@@ -95,8 +95,8 @@ impl Model {
 
   /// A row of the part as the list draws it: the thing under the pointer that takes a click goes
   /// bright.
-  pub(crate) fn changes_line(&self, at: usize, pointed: bool) -> Line {
-    let Some((line, hot)) = self.changes_rows().into_iter().nth(at) else { return Vec::new() };
+  pub(crate) fn changes_line(&self, piece: Option<Piece>, pointed: bool) -> Line {
+    let Some((line, hot)) = piece else { return Vec::new() };
     let column = self.pointer.and_then(|(x, _)| self.list_column(x)).filter(|_| pointed);
     let range =
       column.and_then(|x| hot.iter().find(|one| one.0.contains(&x)).map(|one| one.0.clone()));
