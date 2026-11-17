@@ -707,7 +707,7 @@ fn the_schema_on_disk_is_the_schema_of_the_protocol() {
     fs::write(&place, &made).unwrap();
   }
   let held = fs::read_to_string(&place).unwrap_or_default();
-  assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
+  assert!(held == made, "{} is stale: run bun run protocol", place.display());
 }
 
 /// A daemon that answers each verb with a page of one exchange, whose one line waits to run.

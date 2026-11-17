@@ -9,7 +9,7 @@
     "build": "bun run crates/typescript/build.ts",
     "check": "tsc --noEmit",
     "test": "bun run crates/typescript/script/test.ts",
-    "protocol": "bun run crates/typescript/script/protocol.ts && cargo xtask protocol",
+    "protocol": "FURB_BLESS=1 cargo test -q -p furb-host --test suite protocol::the_schema_on_disk_is_the_schema_of_the_protocol && bun run crates/typescript/script/protocol.ts && cargo xtask protocol",
     "format": "biome format --write crates/typescript docs/examples package.json tsconfig.json biome.json",
     "lint": "biome check crates/typescript docs/examples package.json tsconfig.json biome.json --error-on-warnings"
   },
