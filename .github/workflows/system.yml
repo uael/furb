@@ -285,8 +285,11 @@ jobs:
       # checkout, which stands at the path of the build on each runner of a system: a test runs a program by the path
       # that the build compiled into it, as env!("CARGO_BIN_EXE_furb") says. On macOS the tests of the crate and of
       # the window run, and the kills of the command line alone. A package that the filter names and the workspace
-      # lacks, or a filter that selects no test, fails the job, so a move or a rename hides no suite.
+      # lacks, or a filter that selects no test, fails the job, so a move or a rename hides no suite. insta finds the
+      # snapshots of the window under the root of the workspace, which it asks of cargo when no variable names it: with
+      # no cargo it falls back to the folder of the package, finds no snapshot and fails each test.
       - env:
+          INSTA_WORKSPACE_ROOT: ${{ github.workspace }}
           ONLY: ${{ runner.os == 'macOS' && 'package(furb) | package(furb-window) | (package(furb-cli) & test(/^kills::/))' || 'all()' }}
         run: >-
           cargo-nextest nextest run --archive-file tests.tar.zst --workspace-remap "$GITHUB_WORKSPACE"

@@ -20,7 +20,7 @@ use std::{
   env,
   fs::{self, File},
   ops::Deref,
-  path::{Path, PathBuf},
+  path::{MAIN_SEPARATOR, Path, PathBuf},
   process,
   sync::{
     Arc, Mutex,
@@ -1586,7 +1586,7 @@ async fn a_delete_ends_the_life_and_moves_its_files_to_the_trash_and_keeps_its_l
   fs::create_dir_all(at.join("sessions")).unwrap();
   let (local, _old) = started(&at, SHORT).await;
   let mut window = Window::dialed(&local).await;
-  let life = opened(&mut window, &at, "sessions/a.jsonl").await;
+  let life = opened(&mut window, &at, &format!("sessions{MAIN_SEPARATOR}a.jsonl")).await;
   window.attach(&life).await;
   window.ran(&life, "x = 1").await;
   let deleted = window.ask(Verb::Delete { life: life.clone() }).await;
@@ -1610,7 +1610,7 @@ async fn a_delete_is_refused_while_a_window_of_another_peer_holds_the_life() {
   fs::create_dir_all(at.join("sessions")).unwrap();
   let (local, _old) = started(&at, SHORT).await;
   let mut first = Window::dialed(&local).await;
-  let life = opened(&mut first, &at, "sessions/a.jsonl").await;
+  let life = opened(&mut first, &at, &format!("sessions{MAIN_SEPARATOR}a.jsonl")).await;
   first.attach(&life).await;
   first.ran(&life, "x = 1").await;
   let mut second = Window::dialed(&local).await;
