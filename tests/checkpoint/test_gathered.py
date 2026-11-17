@@ -243,6 +243,23 @@ async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() ->
   assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)
 
 
+async def test_the_definitions_of_a_chain_take_the_word_of_each_extension_that_its_ear_played_on_it() -> None:
+  """The definitions of a chain take the word of each extension that the ear of the extensions played on it, so a life word that a later life plays on that chain finds its names bound, since that life plays no extension again on a chain that had it."""
+  _, root = life(sown(), extensions=engine.idle("extensions"))
+  token = engine.site.set("extensions")
+  try:
+    engine.rung("import json\n\n\ndef kit():\n  return json.dumps(3)\n\nkit()", on=root)
+  finally:
+    engine.site.reset(token)
+  await settle()
+  data = checkpoint.gathered(vars(engine), definitions, {})
+  [one] = [x for x in data["chains"] if x["id"] == root]
+  assert [d for d in one["definitions"] if "def kit():" in d], one["definitions"]
+  _, again = life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  assert engine.module(again)["kit"]() == "3"
+
+
 async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_life_holds_no_reply_that_no_ear_of_it_takes() -> (
   None
 ):

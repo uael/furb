@@ -238,7 +238,7 @@ def gathered(names, define, floor):
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": [
           *filter(None, [define(d) for x in transcript(c, "carried")[-1:] for d in (x[5:] or [()])[0]]),
-          *filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"]),
+          *filter(None, [define(w) for r, w in program(c).items() if get(r)]),
         ],
         "values": values[c],
         "lost": lost[c],
