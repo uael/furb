@@ -24,19 +24,27 @@ def hooks() -> dict[str, dict]:
   return {one["id"]: one for repo in loaded["repos"] for one in repo["hooks"]}
 
 
-def test_the_tests_of_the_crates_run_on_a_cache_of_their_own_and_a_file_left_in_it_fails_the_hook(
-  tmp_path: Path,
+def test_the_tests_of_the_crates_run_on_the_cache_of_the_tests_and_a_scratch_directory_left_in_it_fails_the_hook(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-  scratch = tmp_path / "furb" / "scratch"
-  (scratch / "a").mkdir(parents=True)
-  (scratch / ".reaped").write_text("", encoding="utf-8")
-  assert reach.leaks(tmp_path) == []
-  (scratch / "a" / ".furb-scratch").write_text("", encoding="utf-8")
-  assert reach.leaks(tmp_path) == ["furb/scratch/a/.furb-scratch"]
-  leave = "import os, pathlib; p = pathlib.Path(os.environ['XDG_CACHE_HOME']); (p / 'x').write_text('')"
+  monkeypatch.setattr(reach, "cache", lambda: tmp_path)
+  scratch = "pathlib.Path(os.environ['XDG_CACHE_HOME']) / 'furb' / 'scratch'"
+  leave = f"import os, pathlib; ({scratch} / 'a').mkdir(parents=True); ({scratch} / '.reaped').write_text('')"
   assert reach.private([sys.executable, "-c", leave]) == 1
-  assert reach.private([sys.executable, "-c", "pass"]) == 0
+  # A scratch directory that stood before the run is no part of it, and a cache that a test keeps is no leak.
+  keep = "import os, pathlib; (pathlib.Path(os.environ['XDG_CACHE_HOME']) / 'claude-models.json').write_text('')"
+  assert reach.private([sys.executable, "-c", keep]) == 0
   assert reach.private([sys.executable, "-c", "raise SystemExit(3)"]) == 3
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the runner gives the cache of the tests on unix alone")
+def test_the_runner_of_the_tests_of_the_crates_names_the_cache_that_the_hook_reads(tmp_path: Path) -> None:
+  nextest = tomllib.loads((ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8"))
+  told = tmp_path / "env"
+  told.write_text("", encoding="utf-8")
+  setup = nextest["scripts"]["setup"]["cache"]["command"]
+  subprocess.run(setup, cwd=ROOT, env={**os.environ, "NEXTEST_ENV": str(told)}, check=True)  # noqa: S603
+  assert told.read_text(encoding="utf-8").splitlines() == [f"XDG_CACHE_HOME={reach.cache()}"]
 
 
 def test_the_hooks_of_the_tests_give_all_the_files_of_the_run_to_the_reach_in_one_call() -> None:

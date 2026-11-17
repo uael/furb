@@ -45,10 +45,22 @@ command = [
   'mkdir -p target/data && echo "XDG_DATA_HOME=$(mktemp -d "$PWD/target/data/run-XXXXXX")" >> "$NEXTEST_ENV"',
 ]
 
+# A life of a test keeps its scratch directory and what its claude command line said in the cache of furb, which is the
+# one of the person unless XDG_CACHE_HOME names another: each tree gives its tests a cache of its own in /tmp, under a
+# short name that holds a hash of the root, as the tests of TypeScript name theirs, since a socket that a command makes
+# in a scratch directory takes 104 bytes of path at the most. The hook of the tests names the same folder, and reads
+# there each scratch directory that a run left.
+[scripts.setup.cache]
+command = [
+  "sh",
+  "-c",
+  'cache="/tmp/furb-cache-$(pwd -P | tr -d "\n" | shasum -a 256 | cut -c1-8)" && mkdir -p "$cache" && echo "XDG_CACHE_HOME=$cache" >> "$NEXTEST_ENV"',
+]
+
 [[profile.default.scripts]]
 platform = "cfg(unix)"
 filter = "all()"
-setup = ["claude", "data"]
+setup = ["claude", "data", "cache"]
 
 # The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
 # so a flake never hides behind a retry. `cargo nextest run --profile census`.

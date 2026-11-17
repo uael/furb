@@ -12,9 +12,9 @@ Usage: python3 script/hooks/reach.py pytest|cargo <file>...
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,25 +120,30 @@ def command(kind: str, files: list[str]) -> list[str] | None:
   return ["cargo", "nextest", "run", *chosen, *features]
 
 
-def leaks(cache: Path) -> list[str]:
-  """Each file that a run left in a cache, but the stamp of the reap that a life writes there once a day."""
-  return sorted(
-    one.relative_to(cache).as_posix() for one in cache.rglob("*") if one.is_file() and one.name != ".reaped"
-  )
+def cache() -> Path:
+  """The cache of furb that the tests of the crates read in place of the one of the machine, which the setup of the runner
+  of `.config/nextest.toml` names too: in the temporary folder, under a short name that holds a hash of the root, as the
+  tests of TypeScript name it, since a socket that a command makes in a scratch directory under it takes 104 bytes of
+  path at the most."""
+  folder = Path(tempfile.gettempdir() if os.name == "nt" else "/tmp")  # noqa: S108
+  return folder / f"furb-cache-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:8]}"
+
+
+def scratches(cache: Path) -> set[str]:
+  """The scratch directories of the records in a cache of furb."""
+  folder = cache / "furb" / "scratch"
+  return {one.name for one in folder.iterdir() if one.is_dir()} if folder.is_dir() else set()
 
 
 def private(run: list[str]) -> int:
-  """The run of the tests of the crates on a cache of its own, which no test may leave a file in: a test of cargo reads
-  the cache of the machine unless XDG_CACHE_HOME names another, and what it leaves there stays for ever. The folder is
-  short, since a socket that a command makes in a scratch directory under it takes 104 bytes of path at the most."""
-  cache = tempfile.mkdtemp(prefix="furb-cache-", dir=None if os.name == "nt" else "/tmp")  # noqa: S108
-  try:
-    code = subprocess.run(run, env={**os.environ, "XDG_CACHE_HOME": cache}, check=False).returncode  # noqa: S603
-    left = leaks(Path(cache))
-  finally:
-    shutil.rmtree(cache, ignore_errors=True)
+  """The run of the tests of the crates on the cache of the tests, and the scratch directories that it left there: a
+  life of a test that ends removes its scratch directory, and one that a test cut keeps it."""
+  held = cache()
+  before = scratches(held)
+  code = subprocess.run(run, env={**os.environ, "XDG_CACHE_HOME": str(held)}, check=False).returncode  # noqa: S603
+  left = sorted(scratches(held) - before)
   if left:
-    sys.stderr.write("a test left a file in the cache of the machine:\n" + "".join(f"  {one}\n" for one in left))
+    sys.stderr.write("a test left a scratch directory in the cache:\n" + "".join(f"  {one}\n" for one in left))
   return code or int(bool(left))
 
 

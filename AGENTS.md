@@ -479,10 +479,12 @@ fix what your change broke, and report what was broken before.
   and the tests of the crate and the lint of TypeScript. The gates run each of the four in a job of its own. It exits
   with 1 when a hook fails, and names that hook as the command above does. Name `--files <files>` in place of
   `--all-files` in each of the two commands to run some files: the hooks `pytest` and `cargo-test` then run the tests
-  that those files reach, as `script/hooks/reach.py` says. The hook `cargo-test` runs `cargo nextest` on a cache of
-  its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file there: a test that makes the scratch
-  directory of a record holding a file removes that directory at its end. It runs only when a file that the crate or
-  its tests read is among the files of the run.
+  that those files reach, as `script/hooks/reach.py` says. Each run of `cargo nextest` on unix takes the cache of the
+  tests of its tree, `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, which the tests of
+  TypeScript take too, as `.config/nextest.toml` says, so no Rust test writes the cache of the machine. The hook
+  `cargo-test` fails when a run leaves a scratch directory there: a test whose life makes its scratch directory lets
+  the life end before its own end. It runs only when a file that the crate or its tests read is among the files of
+  the run.
 - `cargo xtask smoke [--to <actor>]`: one real life through `furb prompt`, on the default actor of furb or on the actor
   that `--to` names, as `--to local:qwen3` on the local server that `FURB_LOCAL_URL` names, then a second life that
   its record answers. It is no test of the suite and spends one answer, under a grant of a dollar.
