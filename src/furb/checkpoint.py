@@ -71,14 +71,15 @@ def seed(names, data):
     )
   for kind, most in data["taken"].items():
     put(kind, f"{kind}{most + 1}")
+  # Each life word plays in a rung that the rung of the birth makes before it awaits any, so a life word that never
+  # ends, or that a crash cut, holds no life word after it.
   for c in data["chains"]:
-    i = c["id"]
     word = (
-      f"if not get(acting())[5]:\n for __part in {c.get('lives', [])!r}:\n"
-      "  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
+      f"if not get(acting())[5]:\n for __part in [rung(__part) for __part in {c.get('lives', [])!r}]:\n"
+      "  try: await __part\n  except Exception as __raised: debug(t'{__raised!r}')\n"
       " del __part"
     )
-    c.get("lives") and put("rung", f"rung{numbers['rung'] + 1}", operator, i, word, "", "")
+    c.get("lives") and put("rung", f"rung{numbers['rung'] + 1}", operator, c["id"], word, "", "")
   return entries + [(("wake", y["id"], operator),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 

@@ -408,7 +408,7 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
     assert "__kept" not in engine.module("chain1")
     now = engine.turns(on="chain1")
     assert (now[: len(before) - 1], [engine.get(a[2])[4] for a in held]) == (before[:-1], ["held()"])
-    assert now[-1][1].startswith(before[-1][1]) and "for __part in ['held()']" in now[-1][1]
+    assert now[-1][1].startswith(before[-1][1]) and "for __part in ['held()']]" in now[-1][1]
 
 
 TICKED = [["ticked", "/w/ticked.py", "ticked()", False], ["tocked", "/w/ticked.py", "tocked()", False]]
@@ -461,7 +461,7 @@ DEEP_FILES = {
 async def test_a_birth_makes_again_each_life_word_whose_act_left_an_act_of_its_own_open_or_keeps_a_lasting_ear_after_its_done() -> (
   None
 ):
-  """A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that awaits a rung of each such life word and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain."""
+  """A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that makes a rung of each such life word, then awaits each and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain, and a life word that never ends, or that a crash cut, holds no life word after it."""
   stands = [*STANDS, "/w/DOCTRINE.md", DEEP]
   born(stands=stands, files=DEEP_FILES)
   await settle()
@@ -480,6 +480,14 @@ async def test_a_birth_makes_again_each_life_word_whose_act_left_an_act_of_its_o
     world_says("ping", "chain1")
     await settle()
     assert len(heard()) == len(before) + 1, heard()
+  # A life word that never ends, or that a crash cut, holds no life word after it: each plays in a rung of its own.
+  data = checkpoint.gathered(vars(engine), defined, {})
+  for c in data["chains"]:
+    c["id"] == "chain1" and c["lives"].insert(0, "await wait(3600, 'chain1')")
+  life(sown(stands=stands, files=DEEP_FILES), checkpoint.seed(vars(engine), data))
+  await settle()
+  inner = [a for a in engine.transcript("chain1") if a[0] == "inner" and not engine.over(a[1])]
+  assert [engine.get(engine.get(a[2])[2])[4] for a in inner] == ["deep()"]
 
 
 async def test_a_done_prompt_that_a_module_names_pauses_no_chain_at_a_birth_so_a_word_on_it_runs_with_no_wake() -> None:

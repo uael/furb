@@ -28,7 +28,7 @@ def seed(names: dict[str, object], data: object) -> list[Entry]:
   birth tells after the prefix of each chain, in a note, each name that the checkpoint lost, each value of the fact carried that the born life does not hold and each act that the checkpoint cut, and a birth that holds each such name and cut no act tells no note.
   A birth leaves no name of its own in the module of a chain, whatever raised, so no object of a birth stays held.
   A birth tells no turn of its own but the turn of the rung that plays each life word again: the turns of a chain after it are its turns at the tip, then that turn, and each act that a life word made lives again under a rung whose word is that life word.
-  A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that awaits a rung of each such life word and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain.
+  A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that makes a rung of each such life word, then awaits each and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain, and a life word that never ends, or that a crash cut, holds no life word after it.
   A done prompt that a module names pauses no chain at a birth, so a word on it runs with no wake.
   A birth makes again each life word that asks the clock, and a life that inspects its record hears the clock silent: that clock ends as nothing takes it and the journal reads no drift, because the record holds no fact of it, so the turns are those of a life that answers the clock.
   """
