@@ -116,15 +116,16 @@ reads it.
   of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a command, its `args`, `env` and
   `cwd` for a server over stdio, or a `type` of `http` or `sse` with a `url` and `headers` for a remote one. `${VAR}`
   and `${VAR:-default}` expand in each of them, `"timeout"` bounds a call in seconds, `"deny"` hides tools, and
-  `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the operator approves it. The process
-  of the kit connects each server, ends each server over stdio with the life, connects a lost server again with a
-  backoff, and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on
-  macOS, else in a file that only the user reads, which the key `tokens` of the kit, `{"mcp": {"tokens": "file"}}`,
-  names on macOS too, as on a Mac reached over SSH, whose Keychain is locked. Its life word, `await mcp_index()`, tells each chain one line for each
-  server, with its state and its tools, and binds the tools of each short server as a class of typed functions, so a
-  model writes `await github.create_issue(owner="o", repo="r", title="t")` and reads the name and the type of each
-  argument in the signature. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures and
-  schemas, `mcp_call(server, tool, arguments)` calls a tool by its original names, `mcp_read(server, uri)` reads a
+  `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the operator approves it. The process of
+  the kit connects each server, ends each server over stdio with the life, connects a lost server again with a backoff,
+  and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on macOS,
+  else in a file that only the user reads, which the key `tokens` of the kit, `{"mcp": {"tokens": "file"}}`, names on
+  macOS too, as on a Mac reached over SSH, whose Keychain is locked. Its life word, `mcp_index()`, starts the index and
+  returns, so no ask waits on a server, and the index tells each chain one line for each server, with its state and its
+  tools, and binds the tools of each short server as a class of typed functions, so a model writes
+  `await github.create_issue(owner="o", repo="r", title="t")` and reads the name and the type of each argument in the
+  signature. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures
+  and schemas, `mcp_call(server, tool, arguments)` calls a tool by its original names, `mcp_read(server, uri)` reads a
   resource, `mcp_prompt(server, name, arguments)` expands a prompt, and `mcp_control(action, server)` reconnects,
   enables, disables, approves, logs in or logs out. Each answer of a server stays in the record, so a later life asks no
   server again.
@@ -204,9 +205,11 @@ What the notes are for.
 - `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `skills`, `compaction`
   and `naming`. It can be absent, which is `"false"`: the extension then plays only when a config turns it on or a
   word loads it with `skill(name)`.
-- `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
-  awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
-  stands in the turn of the life words of the setup. It can be absent.
+- `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. A
+  life word that awaits an act holds what that act tells in the turn of the life words of the setup, and holds the
+  first ask of each chain until the World answers it. So a life word whose act waits on a World that can answer late,
+  as a server of MCP, starts it and returns, as `mcp_index()` does, and what the act tells reaches the chain as a fact
+  after the setup. It can be absent.
 - `furb-plays` says where the extension plays: `"every"`, on every chain, which is the default, or `"root"`, on the root
   chain alone. A chain with a source keeps what its source played, so a chain that goes on from the root has an
   extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the

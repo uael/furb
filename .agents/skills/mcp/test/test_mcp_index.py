@@ -1,11 +1,11 @@
-"""mcp_index, the life word of the extension."""
+"""mcp_index, the index of the servers, which the life word of the extension starts."""
 
 from pathlib import Path
 
 from conftest import of, settle, world_says
 from furb import engine
 from furb.engine import Refused
-from skills.conftest import bindings, mcped, quoted, server, tooled
+from skills.conftest import MCP, bindings, extended, mcped, quoted, server, tooled
 
 
 async def changed(root: str, name: str = "a") -> None:
@@ -22,7 +22,7 @@ def told(root: str) -> list[str]:
 async def test_mcp_index_asks_the_world_for_the_servers_when_made_and_at_each_change_and_completes_after_the_first(
   tmp_path: Path,
 ) -> None:
-  """mcp_index() is the life word of the extension, as await mcp_index(): an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that completes once it told the first answer of the World and ran each binding of it, so a word that awaits it holds what it tells, and it goes on after that."""
+  """mcp_index() is an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that completes once it told the first answer of the World and ran each binding of it, so a word that awaits it holds what it tells, and it goes on after that."""
   root, heard = mcped(tmp_path, {"mcp_servers": [server("a")]})[1:]
   assert await engine.rung(
     "await mcp_index()\nclose([x[1] for x in transcript() if x[0] == 'tell' and x[1].startswith('mcp')])", on=root
@@ -93,3 +93,30 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
   await changed(root)
   assert len(told(root)) == 2
   assert len(heard) == 2
+
+
+async def test_the_life_word_starts_the_index_and_returns_so_no_ask_waits_on_a_world_that_answers_late(
+  tmp_path: Path,
+) -> None:
+  """The life word of the extension is mcp_index(), which starts the index and returns, so no ask of a chain waits on a World that answers late, and what the index tells reaches the chain as a fact after the setup."""
+  heard: list[tuple] = []
+
+  def late(_: str):
+    while True:
+      a = yield
+      if a[0] in MCP and engine.question(a):
+        heard.append(a)
+        yield "started", a[1]
+
+  sand, root = extended("mcp", tmp_path, late, lives=True, doctrine="Write python.")
+  sand.script[root] = ["close(1)"]
+  asked = engine.prompt(int, "go", on=root)
+  await settle()
+  ((_, servers, *_),) = heard
+  assert (engine.peek(asked), engine.over(servers)) == (1, False)
+  world_says("done", servers, [server("a")])
+  await settle()
+  facts = engine.transcript(root)
+  setup = next(n for n, x in enumerate(facts) if x[0] == "setup")
+  told = [n for n, x in enumerate(facts) if x[0] == "tell" and x[1].startswith("mcp_index")]
+  assert told and min(told) > setup

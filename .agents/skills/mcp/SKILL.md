@@ -3,7 +3,7 @@ name: mcp
 description: Connects a chain to the servers of the Model Context Protocol, and binds their tools as typed functions.
 metadata:
   furb-word: mcp.py
-  furb-life: await mcp_index()
+  furb-life: mcp_index()
   furb-interface: mcp.pyi
   furb-process: process.py
   furb-acts: mcp_servers mcp_call mcp_read mcp_prompt mcp_control
