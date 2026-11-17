@@ -76,6 +76,8 @@ target-version = "py314"
 src = ["src", "tests", "crates/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
+# The checkpointer that stands in for a listed one replays the records of its builds, so no tool changes a byte of it.
+extend-exclude = ["src/engine/carrier.py"]
 # A word of the project reads the names that a word before it in .furb/config.json defines as builtins. A test holds each
 # of them to a definition.
 builtins = []

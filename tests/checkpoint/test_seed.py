@@ -2,7 +2,7 @@
 
 import ast
 
-from conftest import STANDS, Sand, born, life, said, settle, sown, until, world_says
+from conftest import HELD, HELD_FILES, STANDS, Sand, born, life, said, settle, sown, until, world_says
 from furb import checkpoint, engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
@@ -182,6 +182,17 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_journal_bin
   more = engine.prompt(str, "more", on=thread)
   await until(lambda: engine.over(more))
   assert (engine.peek(thread), engine.peek(more)) == ("on", "more")
+  # A prompt of the root from before its jump names the root, and asks the chain that the root went on as.
+  _, _, root = born("jump()")
+  thread = engine.prompt(str, "work", on=root)
+  await until(lambda: engine.scope(root) != root)
+  went = engine.scope(root)
+  await settle()
+  entries = checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), lambda word: word, {}))
+  assert [x[0][:2] for x in entries if x[0][0] in ("pause", "wake")] == [("pause", went), ("wake", went)]
+  life(sown(script={went: ["close('on')"]}), entries)
+  await until(lambda: engine.over(thread))
+  assert engine.peek(thread) == "on"
 
 
 async def test_the_journal_binds_the_definitions_and_the_values_of_each_chain_before_seed_says_the_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (
@@ -366,18 +377,6 @@ async def test_a_birth_leaves_no_name_of_its_own_in_the_module_of_a_chain_whatev
   assert [[n for n in births if n in engine.module(on)] for on in ("chain1", "chain3", kid)] == [[], [], []]
   assert (engine.module("chain1")["k"], engine.module(kid)["k"]) == (1, 1)
   assert debugs(said(log, "tell"), operated(log, "chain1")) == ["KeyError('k')"]
-
-
-HELD = [["held", "/w/held.py", "held()", False]]
-"""The extensions of a standing whose one life word makes an act that lives until a control ends it."""
-
-
-HELD_FILES = {
-  "/w/a.txt": "one\ntwo\n",
-  "/w/DOCTRINE.md": "Read first.\nThen act.\n",
-  "/w/held.py": "def held(on=''):\n  def ear(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  return act('held', on, controlled(ear))\n",
-}
-"""The files of a World that gives HELD: the doctrine and the file that defines held."""
 
 
 def defined(word: str) -> str:

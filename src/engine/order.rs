@@ -21,7 +21,7 @@
 use sha2::{Digest, Sha256};
 
 use super::OPENING;
-use crate::{CHECKPOINTER, RECORD, value::Fault};
+use crate::{RECORD, value::Fault};
 
 /// The dispatch of each engine of the major that says a due answer first, and the dispatch that
 /// says it where the ear of the outside said it.
@@ -145,19 +145,24 @@ pub(super) fn ordered(source: String) -> Result<String, Fault> {
 /// which makes that root, drifts at its first entry.
 const CARRIERS: [&str; 1] = ["95b810d66c359256600ed7da2f884d5d19fdeb6905588731a9f419d5130c2677"];
 
+/// The checkpointer that stands in for each of [`CARRIERS`]: the one that each build ran in its
+/// place from the list on, which carries each chain that jumped under its name. It is a text of its
+/// own, and not the checkpointer of this build, since a record holds the entries that its seed
+/// gave, so a later checkpointer would replay that segment to other entries.
+const CARRIER: &str = include_str!("carrier.py");
+
 /// The text of the checkpointer that the sandbox runs for a segment or for the carry of its tip:
-/// the checkpointer of this build in place of one that [`CARRIERS`] lists, which carries each chain
-/// that jumped under its name, and the text that the record holds else.
+/// [`CARRIER`] in place of one that [`CARRIERS`] lists, and the text that the record holds else.
 pub(super) fn carrier(checkpointer: &str) -> &str {
   let digest = format!("{:x}", Sha256::digest(checkpointer.as_bytes()));
-  if CARRIERS.contains(&digest.as_str()) { CHECKPOINTER } else { checkpointer }
+  if CARRIERS.contains(&digest.as_str()) { CARRIER } else { checkpointer }
 }
 
 /// The digest of what a replay of a segment takes from this build beside the texts that the record
 /// names: the opening of the sandbox, the rule of the record, each form of [`FORMS`] with each text
-/// of [`TEXTS`] that takes it, each checkpointer of [`CARRIERS`], and the checkpointer that stands
-/// in for it. Two builds of the same digest replay a segment to the same carry, whatever engine
-/// each runs.
+/// of [`TEXTS`] that takes it, each checkpointer of [`CARRIERS`], and [`CARRIER`], which stands in
+/// for it. Two builds of the same digest replay a segment to the same carry, whatever engine each
+/// runs.
 pub(crate) fn replays() -> String {
   let mut hash = Sha256::new();
   let mut part = |one: &str| {
@@ -170,7 +175,7 @@ pub(crate) fn replays() -> String {
     part(text);
     part(&form.to_string());
   }
-  CARRIERS.into_iter().chain([CHECKPOINTER]).for_each(&mut part);
+  CARRIERS.into_iter().chain([CARRIER]).for_each(&mut part);
   format!("{:x}", hash.finalize())
 }
 

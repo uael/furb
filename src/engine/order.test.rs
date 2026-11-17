@@ -6,7 +6,7 @@ use std::{fs, path::Path};
 
 use sha2::{Digest, Sha256};
 
-use super::{CARRIERS, FORMS, TEXTS, carrier, ordered};
+use super::{CARRIER, CARRIERS, FORMS, TEXTS, carrier, ordered};
 use crate::CHECKPOINTER;
 
 /// The text of the engine that each fact made of each record of the corpus holds.
@@ -81,8 +81,7 @@ fn each_listed_digest_is_listed_once_and_names_a_form() {
 }
 
 #[test]
-fn each_listed_checkpointer_of_the_corpus_runs_as_the_checkpointer_of_this_build_and_each_other_as_it_is()
- {
+fn each_listed_checkpointer_of_the_corpus_runs_as_the_carrier_and_each_other_as_it_is() {
   let texts = held(9);
   assert!(
     texts.iter().any(|one| CARRIERS.contains(&digest(one).as_str())),
@@ -90,6 +89,17 @@ fn each_listed_checkpointer_of_the_corpus_runs_as_the_checkpointer_of_this_build
   );
   for text in texts.iter().map(String::as_str).chain([CHECKPOINTER]) {
     let listed = CARRIERS.contains(&digest(text).as_str());
-    assert_eq!(carrier(text), if listed { CHECKPOINTER } else { text }, "{}", digest(text));
+    assert_eq!(carrier(text), if listed { CARRIER } else { text }, "{}", digest(text));
   }
+}
+
+#[test]
+fn the_carrier_is_the_checkpointer_that_each_build_ran_in_place_of_a_listed_one() {
+  // Each build from the list on held this checkpointer, so each record that a build seeded in
+  // place of a listed one replays on it.
+  assert_eq!(
+    digest(CARRIER),
+    "47d2f5f2357b74941078e28310ef9be4e7aa57a2f024ac526cce2d2411ba5b4c",
+    "the carrier never changes"
+  );
 }

@@ -22,16 +22,23 @@ def seed(names, data):
     numbers[sort] = max(numbers[sort], last - 1) + bool(words)
     words and entries.append(((sort, called, *words),))
 
-  asking = {a["on"] for a in data["acts"] if "value" not in a}
   # The journal makes an act again only on a chain or an act that it knows when the entry comes, and each act with a
   # value comes before each open prompt. home gives each act that it makes again the chain that the act is on, a
-  # chain being on itself, and the facts of each other act, as one with a value on an open prompt, stay in the
-  # prefix.
+  # chain being on itself and a chain that jumped on the chain that it went on as, and the facts of each other act, as
+  # one with a value on an open prompt, stay in the prefix.
+  jumped = data.get("jumped", [])
+  went = {c["id"]: c["to"] for c in jumped}
   home = {c["id"]: c["id"] for c in data["chains"]}
   kinds = {c["id"]: "chain" for c in data["chains"]}
+  for i in went:
+    j = i
+    while j in went:
+      j = went[j]
+    j in kinds and home.update({i: j})
   for x in sorted(data["acts"], key=lambda a: "value" not in a):
     if x["on"] in home:
       home[x["id"]], kinds[x["id"]] = home[x["on"]], x["kind"]
+  asking = {home.get(a["id"]) for a in data["acts"] if "value" not in a}
   # The maker of each chain and each act that the data names stands in the fact carried of the chain that the act is
   # on, or of the first chain, since the seed makes each again as the operator or the journal.
   made = {c["id"]: {} for c in data["chains"]}
@@ -39,7 +46,6 @@ def seed(names, data):
     "by" in x and made[home.get(x["id"], data["chains"][0]["id"])].update({x["id"]: x["by"]})
   # Each chain is made before any chain holds its prefix, so a chain with a source takes no turn of its source again.
   # A chain that jumped is made too, in the order of the numbers, and goes on as the chain that it jumped to.
-  jumped = data.get("jumped", [])
   for c in sorted([*data["chains"], *jumped], key=lambda c: int(c["id"][len("chain") :])):
     put("chain", c["id"], operator, c["on"], c["label"], c["source"])
   entries += [(("jumped", c["id"], "journal", c["to"]),) for c in jumped]
@@ -238,11 +244,15 @@ def gathered(names, define, floor):
         "cut": [x for x in cut if scope(x) == c],
         "lives": [
           *dict.fromkeys(
-            get(r)[4]
+            w
             for x in listening()
             if scope(x) == c
             for r in lineage(x)
-            if question(("rung", r)) and get(r)[4] in words
+            if question(("rung", r))
+            for w in words
+            # The ear of the extensions runs the word of an extension and its life word in one rung on a chain that
+            # lacks the extension.
+            if w and (get(r)[4] == w or get(r)[4].endswith("\n\n" + w))
           )
         ],
       }

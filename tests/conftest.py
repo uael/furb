@@ -568,6 +568,18 @@ async def chained(label: str, source: str = "", n: int = 80) -> str:
   return made
 
 
+HELD = [["held", "/w/held.py", "held()", False]]
+"""The extensions of a standing whose one life word makes an act that lives until a control ends it."""
+
+
+HELD_FILES = {
+  "/w/a.txt": "one\ntwo\n",
+  "/w/DOCTRINE.md": "Read first.\nThen act.\n",
+  "/w/held.py": "def held(on=''):\n  def ear(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  return act('held', on, controlled(ear))\n",
+}
+"""The files of a World that gives HELD: the doctrine and the file that defines held."""
+
+
 def sown(**world: object) -> Sand:
   """The World of the suite: one file and the roster of the suite, with what else a test gives it by keyword."""
   return replace(Sand(files={"/w/a.txt": "one\ntwo\n"}), **world)

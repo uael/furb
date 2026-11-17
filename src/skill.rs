@@ -44,7 +44,7 @@ use crate::{
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   fact::{Fact, named},
-  value::{Fault, Object, Text, entry},
+  value::{Fault, Object, ObjectRef, Text, entry},
   world::{config, files, skills},
 };
 
@@ -88,6 +88,10 @@ const TREE: usize = PROGRAM + 1;
 /// The journal, which says the record again in a later life, so a done it says answers no stand of
 /// this life.
 const JOURNAL: &str = "journal";
+
+/// The kind of the fact by which the seed of a checkpoint makes a chain that jumped go on as the
+/// chain that it went on as.
+const JUMPED: &str = "jumped";
 
 /// The kind of the fact by which the ear teaches the doctrine to a chain that lives when a stand of
 /// this life lands,
@@ -916,7 +920,7 @@ struct Told {
 /// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
 /// why each extension of `refused` does not play.
 pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
-  let heard = ["chain", "stand", "rung", "write", ENABLE, TEACH, config::CONFIGURED];
+  let heard = ["chain", "stand", "rung", "write", JUMPED, ENABLE, TEACH, config::CONFIGURED];
   let offered = Offered { given, places };
   hearing(&heard, move |mut co| async move {
     co.keeps(Told { refused, ..Told::default() })?;
@@ -946,6 +950,10 @@ impl Offered {
     let Self { given, places } = self;
     let new = match a.kind() {
       "chain" if a.question() => return held.born(co, a).await,
+      JUMPED => {
+        held.went(a);
+        return Ok(());
+      }
       "done" if named(a.about(), "stand") => held.stood(co, a, given).await?,
       TEACH => held.taught_by(a),
       ENABLE if held.teach.is_some() => held.enabled_by(a),
@@ -994,6 +1002,15 @@ impl Told {
       }
     }
     Ok(())
+  }
+
+  /// A chain that the seed of a checkpoint makes go on as another, which the seed made too: the
+  /// entry of the chain that jumped stands for the other, as the entry of a source stands for the
+  /// chain that its jump makes.
+  fn went(&mut self, a: &Fact) {
+    let to = a.word(0);
+    let to = to.as_ref().and_then(ObjectRef::as_str);
+    self.chains.retain(|one| Some(one.0.as_str()) != to);
   }
 
   /// The first stand that this life answers, which sets up the root of a new record when the
@@ -1213,9 +1230,12 @@ fn reborn(
   Some(all)
 }
 
-/// The facts of a kind that the transcript of the root holds.
+/// The facts of a kind that the transcript of the root holds, as the root goes on: a root that
+/// jumped keeps its own transcript, and the chain that it went on as holds what the root says
+/// after, and what a checkpoint carried of it.
 pub(crate) async fn rooted(co: &mut Co, kind: &str) -> Result<Vec<Fact>, Fault> {
-  let of = [ROOT, kind].map(Object::string).to_vec();
+  let root = co.call("scope", vec![Object::string(ROOT)], vec![]).await?;
+  let of = [root.as_ref().as_str().unwrap_or(ROOT), kind].map(Object::string).to_vec();
   let got = co.call("transcript", of, vec![]).await?;
   Ok((0..).map_while(|at| entry(&got.as_ref(), at)).filter_map(Fact::of).collect())
 }

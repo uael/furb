@@ -1167,6 +1167,25 @@ fn a_crossing_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_root
 }
 
 #[test]
+fn a_crossing_after_a_jump_of_the_root_leaves_it_one_ear_of_each_life_word() {
+  let at = yard("crossing-jump");
+  let open = || Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let ears = "close(sorted([a[0], scope(x)] for x in listening() if (a := get(x)) and a[0] in ('compacted', 'fitted')))";
+  let mut first = open();
+  closed(&mut first, "jump()\nclose(1)");
+  let before = closed(&mut first, ears).as_ref().py_repr();
+  drop(first);
+  crossing(&at);
+  let mut later = open();
+  assert_eq!(
+    closed(&mut later, ears).as_ref().py_repr(),
+    before,
+    "the root that jumped keeps one ear of each life word across the crossing"
+  );
+  assert_eq!(before, "[['compacted', 'chain2'], ['fitted', 'chain2']]");
+}
+
+#[test]
 fn a_large_value_and_an_exit_come_back_from_the_carry_at_each_later_open_and_no_rung_of_the_seed_raises()
  {
   let at = yard("carry-large");
