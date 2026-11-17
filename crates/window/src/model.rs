@@ -47,8 +47,8 @@ const PINNED: usize = 2;
 /// that they show.
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
 
-/// What the rows of the list show: the count of changes, the moment or the second, the scroll, the
-/// size of the window and the row under the pointer.
+/// What the rows of the list show: the count of changes that it can show, the moment or the second,
+/// the scroll, the size of the window and the row under the pointer.
 pub(crate) type Listed = (u64, Duration, usize, (u16, u16), Option<Row>);
 
 /// The layout of a left side and what the pointer touches of it, as `thread::touched` says.
@@ -125,11 +125,12 @@ pub(crate) struct Model {
   pub(crate) kept_left: Option<(Touched, thread::Left)>,
   /// The rows of the list as they stood, by what they show, as [`Model::list`] says.
   pub(crate) kept_list: Option<(Listed, Rc<[Line]>)>,
-  /// How many changes of what the parts of the feed show the model heard: each change of the left
-  /// side but one that only scrolls the feed, which moves it and changes no part of it.
+  /// How many changes of what the parts of the feed and the list show the model heard: each change
+  /// of the left side but one that leaves each of them as it was.
   pub(crate) shows: u64,
-  /// Whether the change that the model hears only scrolled the feed.
-  pub(crate) scrolled: bool,
+  /// Whether the change that the model hears leaves each part of the feed and the list as they
+  /// were: it scrolls the feed, or it edits the input or moves its caret, which neither shows.
+  pub(crate) same_parts: bool,
   /// The count of changes for which the window last told the images and the whole outputs of the
   /// open thread.
   pub(crate) pictured: u64,
@@ -194,7 +195,7 @@ impl Model {
       kept_left: None,
       kept_list: None,
       shows: 0,
-      scrolled: false,
+      same_parts: false,
       pictured: 0,
       #[cfg(test)]
       layouts: 0,

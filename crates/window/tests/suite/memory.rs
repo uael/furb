@@ -125,3 +125,40 @@ fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing
   println!("a move of the pointer that changes nothing makes {moves} allocations");
   assert!(moves <= PER_MOVE, "a move of the pointer made {moves} allocations, past {PER_MOVE}");
 }
+
+/// The most allocations that a key typed in the input makes, with its frame, on a thread at rest:
+/// 784 to 790 on macOS on 11-17, where each key laid out each part of the feed and the list again,
+/// with 1,587, before.
+const PER_KEY: usize = 870;
+
+#[test]
+fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("typed.jsonl"), false);
+  peer.said(&life, &format!("how long does an open take {ANSWERS}"));
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "Two stages hold most");
+  app.advance(AWAY);
+  shows(&app, "Resolved 1");
+  app.type_text("a");
+  app.advance(AWAY);
+  settled(&app);
+  // A machine tells the window what it changed in its own time, so the least of the keys is the
+  // cost of a key alone.
+  let keys = "bcdefghijk";
+  let typed = keys.chars().map(|key| {
+    let calls = Counted::calls();
+    app.type_text(key.encode_utf8(&mut [0; 4]));
+    app.present().expect("a frame");
+    Counted::calls() - calls
+  });
+  let typed = typed.min().unwrap_or_default();
+  println!("a key typed in the input makes {typed} allocations");
+  assert!(app.text().contains("abcdefghijk"), "{}", app.text());
+  assert!(typed <= PER_KEY, "a key typed in the input made {typed} allocations, past {PER_KEY}");
+}

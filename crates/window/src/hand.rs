@@ -868,7 +868,10 @@ impl Window {
       Input::Moved => {
         let caret = self.caret();
         if self.edited_at != Some(caret) {
-          self.tell(app, |model| model.client.complete_at(caret));
+          self.tell(app, |model| {
+            model.same_parts = true;
+            model.client.complete_at(caret);
+          });
         }
       }
       Input::Pasted(text) => {
@@ -931,6 +934,7 @@ impl Window {
       if !text.is_empty() {
         model.armed = None;
       }
+      model.same_parts = true;
       model.client.edited(text, caret);
     });
     self.colored();
@@ -1114,12 +1118,13 @@ impl Window {
       (model.client.now, model.client.moved, model.speaks) = (now, moved, speaks);
       let given = change(model);
       model.client.played();
-      model.questioned();
+      // A form that comes or goes takes its question out of the feed or gives it back.
+      let formed = model.questioned();
       // What the operator saw marks the card of his thread read at once, in the same layout: a
       // card of a login that only reads, which records no Seen, would else show the unread mark
       // that the last cards of its machine gave it.
-      let scrolled = mem::take(&mut model.scrolled);
-      model.shows += u64::from(!steady && !scrolled);
+      let same = mem::take(&mut model.same_parts) && !formed;
+      model.shows += u64::from(!steady && !same);
       let saw = pump(askers, model);
       model.shows += u64::from(saw);
       model.changes += u64::from(!steady || saw);

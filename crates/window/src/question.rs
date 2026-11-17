@@ -89,8 +89,14 @@ pub(crate) enum Keyed {
 impl Model {
   /// Each question of the open thread that waits for the operator, in the order of the thread.
   pub(crate) fn questions(&self) -> Vec<Question<'_>> {
-    let Some(opened) = &self.client.thread else { return Vec::new() };
-    let open = opened.thread.exchanges.values().flat_map(|exchange| {
+    self.waiting_questions().collect()
+  }
+
+  /// Each question of the open thread that waits for the operator, as [`Model::questions`] says,
+  /// read as they come.
+  fn waiting_questions(&self) -> impl Iterator<Item = Question<'_>> {
+    let exchanges = self.client.thread.iter().flat_map(|opened| opened.thread.exchanges.values());
+    exchanges.flat_map(|exchange| {
       let by = exchange.block.as_ref().map(|block| &block.maker);
       exchange.said.iter().filter_map(move |said| match &said.kind {
         Saying::Question { shape, answered: None } => {
@@ -98,33 +104,35 @@ impl Model {
         }
         _ => None,
       })
-    });
-    open.collect()
+    })
   }
 
   /// The form of the open thread made, kept or let go after a change: it keeps its question while
   /// that question waits, and a new form shows the first question that waits once the input of
-  /// the thread is empty. The text of a form that goes leaves the input.
-  pub(crate) fn questioned(&mut self) {
-    let questions: Vec<String> = self.questions().iter().map(|one| one.act.to_owned()).collect();
-    let free =
-      self.client.aim.is_none() && self.picker.is_none() && self.client.draft.text.is_empty();
+  /// the thread is empty. The text of a form that goes leaves the input. Whether a form came or
+  /// went.
+  pub(crate) fn questioned(&mut self) -> bool {
+    let Some(opened) = &self.client.thread else { return false };
+    let form = opened.form.as_ref();
+    let gone = form.is_some_and(|form| !self.waiting_questions().any(|one| *one.act == form.act));
+    let free = (gone || form.is_none())
+      && self.client.aim.is_none()
+      && self.picker.is_none()
+      && self.client.draft.text.is_empty();
+    let first = self.waiting_questions().next().filter(|_| free).map(|one| one.act.to_owned());
     let moved = self.client.moved;
-    let Some(opened) = self.client.thread.as_mut() else { return };
-    let waits = |form: &Form| questions.contains(&form.act);
-    if opened.form.as_ref().is_some_and(|form| !waits(form)) {
+    let Some(opened) = self.client.thread.as_mut() else { return false };
+    if gone {
       opened.form = None;
       if !self.client.draft.text.is_empty() {
         self.client.restore = Some(String::new());
       }
     }
-    if opened.form.is_none()
-      && free
-      && let Some(act) = questions.first()
-    {
-      let form = Form { act: act.clone(), at: 0, ticked: BTreeSet::new(), since: moved, why: None };
-      opened.form = Some(form);
+    let made = first.is_some();
+    if let Some(act) = first {
+      opened.form = Some(Form { act, at: 0, ticked: BTreeSet::new(), since: moved, why: None });
     }
+    gone || made
   }
 
   /// The form that shows, with its question.

@@ -582,7 +582,7 @@ impl Model {
   /// The feed moved by a count of rows, up for a negative count: at its end it follows its end,
   /// and when less than a screen of it stands above, it asks the page before.
   pub(crate) fn scroll_feed(&mut self, by: isize) -> Option<Verb> {
-    self.scrolled = true;
+    self.same_parts = true;
     let (then, near) = self.laying(|model, kept| {
       let mut feed = model.feed(kept)?;
       let room = model.feed_room(feed.dock().len());

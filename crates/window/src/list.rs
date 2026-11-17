@@ -83,15 +83,15 @@ impl Model {
   }
 
   /// The runs of each row of the list that shows, which the parts that show them share. The list
-  /// is laid out again only when a change, the moment while a mark of it moves or else the second,
-  /// its scroll, the size of the window or the row under the pointer changed, so a move of the
-  /// pointer that stays on one row lays out nothing.
+  /// is laid out again only when a change that it can show, the moment while a mark of it moves or
+  /// else the second, its scroll, the size of the window or the row under the pointer changed, so a
+  /// move of the pointer that stays on one row, or a key typed in the input, lays out nothing.
   pub(crate) fn list(&mut self) -> Rc<[Line]> {
     let on = self.pointer.filter(|(x, _)| self.on_list(*x));
     let pointed = on.and_then(|(_, y)| self.row(usize::from(y)));
     // A loader, an open or a pulse of a card moves with each moment, and an age with each second.
     let clock = if self.moves() { self.client.moved } else { Duration::from_secs(self.second()) };
-    let key = (self.changes, clock, self.scroll, self.size, pointed);
+    let key = (self.shows, clock, self.scroll, self.size, pointed);
     if let Some((was, lines)) = &self.kept_list
       && *was == key
     {
