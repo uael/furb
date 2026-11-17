@@ -16,7 +16,7 @@ caches of the chain stays valid.
 ## The official extensions
 
 Ten extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
-by default, as their manifests say, and `furb-kit`, `web`, `mcp`, `grant` and `todo` play on need, as the rule below
+by default, as their manifests say, and `furb-kit`, `web`, `mcp` and `grant` play on need, as the rule below
 says.
 
 ### Which skill plays on which chain
@@ -128,12 +128,6 @@ reads it.
   it tells the dollars since the grant, and it pauses the chain when they reach `usd`, or when the answer read more than
   `share` of the window. A later grant on the chain closes the one before it, and a wake lets the chain go on. A word
   loads it with `await skill("grant")`, and the `grant` of each door, and the `Grant` door of the host, run that word on the chain.
-- **`todo`** keeps a list of tasks that the operator and each model share, in a view in the footer of each window. Its
-  life word, `todo_list()`, plays on the root and draws one list for the life, a prompt to the operator on a chain of
-  its own labelled `todo`, whose message is the view and whose answer is what the operator did to it. A click on a task
-  checks it, and a task written in the input of the view adds it. A model on the root adds a task with `todo_add(text)`
-  and checks one with `todo_check(text)`. The record keeps each view and each answer, so a later life shows the same
-  list. A config turns it on, as `{"skills": {"todo": true}}`. It shows how the word of an extension draws a view.
 
 `compaction`, `naming`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which
 the model reads on each chain where the extension plays.

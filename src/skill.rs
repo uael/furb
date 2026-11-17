@@ -154,7 +154,7 @@ const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word, the file of its interface
 /// and the file of its keys when its manifest names one, in the order a life runs them.
-const OFFICIAL: [(&str, &str, &str, Option<&str>); 10] = [
+const OFFICIAL: [(&str, &str, &str, Option<&str>); 9] = [
   (
     include_str!("../.agents/skills/catchup/SKILL.md"),
     include_str!("../.agents/skills/catchup/catchup.py"),
@@ -207,12 +207,6 @@ const OFFICIAL: [(&str, &str, &str, Option<&str>); 10] = [
     include_str!("../.agents/skills/grant/SKILL.md"),
     include_str!("../.agents/skills/grant/grant.py"),
     include_str!("../.agents/skills/grant/grant.pyi"),
-    None,
-  ),
-  (
-    include_str!("../.agents/skills/todo/SKILL.md"),
-    include_str!("../.agents/skills/todo/todo.py"),
-    include_str!("../.agents/skills/todo/todo.pyi"),
     None,
   ),
 ];
