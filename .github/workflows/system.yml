@@ -281,14 +281,16 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-nextest@0.9.152
-      # The tests of the archive, in this checkout, with no cargo and no rust. On macOS the tests of the crate and of
+      # The tests of the archive, in this checkout, with no cargo and no rust. The archive goes into the target of the
+      # checkout, which stands at the path of the build on each runner of a system: a test runs a program by the path
+      # that the build compiled into it, as env!("CARGO_BIN_EXE_furb") says. On macOS the tests of the crate and of
       # the window run, and the kills of the command line alone. A package that the filter names and the workspace
       # lacks, or a filter that selects no test, fails the job, so a move or a rename hides no suite.
       - env:
           ONLY: ${{ runner.os == 'macOS' && 'package(furb) | package(furb-window) | (package(furb-cli) & test(/^kills::/))' || 'all()' }}
         run: >-
-          cargo-nextest nextest run --archive-file tests.tar.zst --workspace-remap "$GITHUB_WORKSPACE" --profile ci --no-tests fail
-          -E "$ONLY"
+          cargo-nextest nextest run --archive-file tests.tar.zst --workspace-remap "$GITHUB_WORKSPACE"
+          --extract-to "$GITHUB_WORKSPACE" --extract-overwrite --profile ci --no-tests fail -E "$ONLY"
 
   typescript:
     name: the bindings on ${{ inputs.os }}
