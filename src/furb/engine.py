@@ -858,7 +858,7 @@ def boot(record=(), **outside):
     {},
     {},
   )
-  due, again, owned, lasts, pending, broke, n, tip = [], {}, set(), set(), {}, [], 0, -1
+  due, again, owned, lasts, pending, broke, n, tip, queued = [], {}, set(), set(), {}, [], 0, -1, 0
 
   def lives(g, a):
     if a and a[2] and again.get(id(a)) is a and site.get() in outside:
@@ -901,8 +901,10 @@ def boot(record=(), **outside):
           a = say(kind, name, *words)
           again[id(a)] = a
           held.setdefault((scope(name), "journal"), []).append(a)
-          for b, heard, k, _ in log:
-            b is a and by in outside and waits(by, k) and not heard.add(by) and hear(by, alive.get(by), a)
+          for b, heard, k, _ in reversed(log):
+            if b is a:
+              by in outside and waits(by, k) and not heard.add(by) and hear(by, alive.get(by), a)
+              break
         elif name in known or get(by) or by == "journal" or (words[0] and not get(words[0])):
           due.pop(0)
           counted(e)
@@ -935,8 +937,9 @@ def boot(record=(), **outside):
     return [*pending]
 
   def placed(a):
-    nonlocal n
+    nonlocal n, queued
     n += 1
+    queued += 1
     question(a) and counted(a)
     if due and (at := (*due[0], n)[1]) is not None and at < n:
       drift(a)
@@ -948,7 +951,7 @@ def boot(record=(), **outside):
         or (a[2] not in known and a[2] not in owned and get(a[1]) and (not a[2] or hearer.get() in ("", a[2])))
       )
     ):
-      return a, n - 1, not busy, sum(x[3] is not False for x in log)
+      return a, n - 1, not busy, queued - 1
     return None
 
   def keep(entry):
@@ -1055,6 +1058,7 @@ def boot(record=(), **outside):
         held.setdefault((on, k), []).append(x)
 
   def dispatch():
+    nonlocal queued
     while not busy:
       if broke and broke[-1]:
         broke.append(None)
@@ -1067,6 +1071,7 @@ def boot(record=(), **outside):
           m in heard or heard.add(m) or hear(m, g, a)
         else:
           log.pop(0)
+          queued -= entry is not False
           keep(entry)
           continue
       if not play(not log):

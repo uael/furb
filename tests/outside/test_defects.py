@@ -2,9 +2,11 @@
 as an expected failure that names the row of the register of defects and its carrier, so the fix turns it green and
 xfail_strict turns the suite red until the mark goes."""
 
+import time
+
 import pytest
 
-from conftest import born, said, settle
+from conftest import born, life, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -21,6 +23,28 @@ async def test_a_message_of_a_model_on_its_own_thread_asks_that_model_no_step_ag
   await settle()
   assert [a[5] for a in said(log, "prompt") if a[3] == task] == ["progress"]
   assert len([a for a in said(log, "rung") if a[2] == task]) == 1
+
+
+async def test_a_word_and_its_replay_take_a_time_that_grows_with_their_length_alone() -> None:
+  """A long word and the replay of its record take a time that grows with their length alone: a fact costs the same
+  whatever count of facts waits in the log, as the facts that a run says while it runs do."""
+
+  async def spent(asks: int) -> tuple[float, float]:
+    sand, _, root = born()
+    start = time.process_time()
+    await engine.rung(f"for i in range({asks}):\n  chance()", on=root)
+    ran = time.process_time() - start
+    record = list(sand.record)
+    start = time.process_time()
+    life(sown(), record)
+    return ran, time.process_time() - start
+
+  small = [await spent(2000) for _ in range(3)]
+  large = [await spent(8000) for _ in range(3)]
+  # The large word is 4 times longer: linear gives a ratio near 4 and quadratic near 16, as the walks of the log gave.
+  # The bound lies between them with room for a loaded machine.
+  for part in (0, 1):
+    assert min(one[part] for one in large) < 8 * min(one[part] for one in small)
 
 
 @pytest.mark.xfail(
