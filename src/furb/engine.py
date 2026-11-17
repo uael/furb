@@ -129,7 +129,7 @@ def cd(path: str, on=""):
 
 
 def cwd(on="") -> str:
-  return answer("cd", on, "")
+  return answer("cd", scope(on), "")
 
 
 def pause(id: str, why=None):

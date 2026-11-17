@@ -285,6 +285,7 @@ def cwd(on: str = "") -> str:
   The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a cd, a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory.
   The World writes each path under the home of the user with ~ in place of the home, as ~/a.txt, in each text, each cd and each standing that it gives, and every other path as it stands, so a path that a model reads names no home.
   cwd gives the working directory that the paths of the chain resolve against.
+  The working directory of a chain that jumped is the one of the chain that it went on as, so a cd after the jump, on either name, moves the paths and the commands of both.
   cwd reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   """
 

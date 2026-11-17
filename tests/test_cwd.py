@@ -57,6 +57,19 @@ async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_again
   assert moved == Text("scratch://b.txt", "kept")
 
 
+async def test_the_working_directory_of_a_chain_that_jumped_is_the_one_of_the_chain_that_it_went_on_as() -> None:
+  """The working directory of a chain that jumped is the one of the chain that it went on as, so a cd after the jump, on either name, moves the paths and the commands of both."""
+  sand = Where(files={"/x/a.txt": "two\n"})
+  _, root = life(sand)
+  engine.cd("/w", on=root)
+  new = await engine.jump(on=root)
+  engine.cd("/x", on=root)
+  assert (engine.cwd(on=root), engine.cwd(on=new)) == ("/x", "/x")
+  engine.cd("/y", on=new)
+  await engine.bash("echo hi", on=root)
+  assert (engine.cwd(on=root), sand.where) == ("/y", ["/y"])
+
+
 async def test_the_world_writes_each_path_under_the_home_of_the_user_with_a_tilde_in_place_of_the_home() -> None:
   """The World writes each path under the home of the user with ~ in place of the home, as ~/a.txt, in each text, each cd and each standing that it gives, and every other path as it stands, so a path that a model reads names no home."""
   sand, _, root = born(files={"/h/a.txt": "home\n", "/w/a.txt": "here\n"}, stands=[STANDS[0], "/h/w", STANDS[2]])
