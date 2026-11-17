@@ -124,7 +124,7 @@ impl Yard {
 
   /// The program furb with the env of the yard.
   pub(crate) fn furb(&self, words: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
+    let mut command = Command::new(crate::program(&self.root));
     command.args(words).current_dir(self.root.join("work")).kill_on_drop(true);
     command.env("FURB_CLAUDE_BIN", self.fake("claude")).env_remove("FURB_WINDOW");
     for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "MAX_THINKING_TOKENS"] {

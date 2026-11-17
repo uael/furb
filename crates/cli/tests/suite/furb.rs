@@ -102,7 +102,7 @@ impl Yard {
   /// cache of the yard, and with no window, no local server and no most of thought that the machine
   /// names.
   fn furb(&self, words: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
+    let mut command = Command::new(crate::program(&self.at));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_WINDOW");
     let names = ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"];

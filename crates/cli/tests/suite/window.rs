@@ -30,7 +30,7 @@ async fn a_window_starts_the_daemon_of_its_machine_when_none_listens_and_no_daem
   let yard = Yard::new(format!("fcw{}", process::id()));
   let folder = yard.join("furb").join("host");
   // The daemon reads no file of this machine, and ends with its last window.
-  let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
+  let mut served = Command::new(crate::program(&yard));
   served.args(["host", "--grace", "0"]).env_remove("FURB_WINDOW");
   served.env("XDG_CACHE_HOME", &*yard).env("FURB_CONFIG_DIR", yard.join("config"));
   let reach = Reach::Here { folder: folder.clone(), served: Box::new(served) };
@@ -60,7 +60,7 @@ async fn a_daemon_that_ends_before_it_listens_tells_the_window_the_last_line_tha
   let yard = Yard::new(format!("fce{}", process::id()));
   let folder = yard.join("furb").join("host");
   // The command line refuses a grace that is no number, says why, and ends.
-  let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
+  let mut served = Command::new(crate::program(&yard));
   served.args(["host", "--grace", "never"]).env_remove("FURB_WINDOW");
   let reach = Reach::Here { folder, served: Box::new(served) };
   let mut machine = Machine { name: "test-machine".to_owned(), reach, reads: false };

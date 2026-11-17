@@ -78,7 +78,7 @@ async fn the_daemon_takes_each_change_of_host_json_and_keeps_its_list_when_the_f
   fs::create_dir_all(yard.join("config")).unwrap_or_else(|no| panic!("config: {no}"));
   let tcp = free().await;
   listed(&path, tcp, &["ann"]);
-  let mut daemon = Command::new(env!("CARGO_BIN_EXE_furb"));
+  let mut daemon = Command::new(crate::program(&yard));
   daemon.arg("host").env("FURB_TAILSCALE_API", format!("{port}:{token}"));
   daemon.env("XDG_CACHE_HOME", &*yard).env("FURB_CONFIG_DIR", yard.join("config"));
   daemon.stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
