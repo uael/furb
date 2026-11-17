@@ -109,7 +109,7 @@ impl Client {
       present.is_none_or(|all| all.iter().map(|one| one.windows).sum::<usize>() <= 1)
     };
     let held = |one: &Running| {
-      let controls = self.only_reads(one.at).is_none();
+      let controls = !self.only_reads(one.at);
       one.here && !one.live.is_empty() && !one.background && controls && last(one.at, &one.life)
     };
     let mut all: Vec<Running> = self.running().into_iter().filter(held).collect();

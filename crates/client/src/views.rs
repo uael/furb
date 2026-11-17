@@ -13,7 +13,7 @@ use furb_wire::{
 };
 use serde_json::json;
 
-use crate::{Asked, Client, Key, Target};
+use crate::{Aim, Asked, Client, Key};
 
 /// A view that the client mounted: its machine, its life, the skill that serves it, the viewer
 /// that names it in the daemon, and the tree that the skill gave last with its version, none
@@ -131,9 +131,9 @@ impl Client {
   /// The life of the target of the input, on its machine: none for a new session.
   fn target_life(&self) -> Option<(usize, String)> {
     match self.target() {
-      Target::Thread(key) => Some((key.0, key.1)),
-      Target::Session(at, life) => Some((at, life)),
-      Target::New(..) => None,
+      Aim::Thread(key) => Some((key.0, key.1.clone())),
+      Aim::Session(at, life) => Some((at, life.to_owned())),
+      Aim::New(..) => None,
     }
   }
 

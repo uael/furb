@@ -6,7 +6,7 @@
 
 use furb_wire::protocol::{Answer, Changed, Changes, Frame, Verb};
 
-use crate::{Asked, Client, Key, Target};
+use crate::{Aim, Asked, Client, Key};
 
 /// The changes of a folder as its machine last gave them, and whether a life of its project told a
 /// change since, so the client asks them again.
@@ -45,11 +45,11 @@ impl Client {
     let at = self.target().machine();
     let opened = |key: &Key| self.thread.as_ref().filter(|one| one.thread.key == *key);
     let folder = match self.target() {
-      Target::Thread(key) => {
-        opened(&key).and_then(|one| one.thread.folder.clone()).or_else(|| self.cwd(at, &key.1))
+      Aim::Thread(key) => {
+        opened(key).and_then(|one| one.thread.folder.clone()).or_else(|| self.cwd(at, &key.1))
       }
-      Target::Session(_, life) => self.cwd(at, &life),
-      Target::New(_, folder) => Some(folder),
+      Aim::Session(_, life) => self.cwd(at, life),
+      Aim::New(_, folder) => Some(folder.to_owned()),
     };
     folder.map(|folder| (at, folder))
   }

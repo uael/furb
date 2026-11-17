@@ -5,7 +5,7 @@ use std::{iter, path::Path};
 
 use crate::cells::Cells;
 use furb::view::Standing;
-use furb_client::Target;
+use furb_client::Aim;
 use opentui::style::Style;
 
 use crate::{
@@ -88,8 +88,8 @@ impl Model {
         rows.extend(alone.iter().map(|(left, right)| self.said(left, muted, right)));
         rows.push(Vec::new());
       }
-    } else if let Some(reads) = self.client.only_reads(0) {
-      rows.extend(wrapped(&format!("{reads}."), prose));
+    } else if let Some(place) = self.client.reads_on(0) {
+      rows.extend(wrapped(&format!("This window only reads on {place}."), prose));
       rows.pop();
       rows.extend(wrapped("It shows each session live once another window starts one.", muted));
     } else if self.known() {
@@ -155,7 +155,7 @@ impl Model {
       None => format!("with {model}"),
     });
     let (project, at) = match self.client.target() {
-      Target::New(at, folder) => (self.folder_named(at, &folder), at),
+      Aim::New(at, folder) => (self.folder_named(at, folder), at),
       _ => (self.project(), 0),
     };
     let name = self.client.machines.get(at).map_or("", |one| one.name.as_str());

@@ -40,7 +40,7 @@ impl Client {
       (Some(walk), _) => walk,
       (None, false) => return false,
       (None, true) => {
-        self.history = Some(History { target: self.target(), asked: false, sent: None });
+        self.history = Some(History { target: self.target().owned(), asked: false, sent: None });
         Walk { from: self.draft.clone(), place: None }
       }
     };
@@ -62,16 +62,17 @@ impl Client {
   /// The ask of the history of the target of the input, when the client did not ask it yet, with
   /// its machine and that target.
   pub fn history_due(&mut self) -> Option<(usize, Verb, Target)> {
-    let target = self.target();
-    if self.history.as_ref().is_none_or(|heard| heard.target != target) {
-      self.history = Some(History { target: target.clone(), asked: false, sent: None });
+    let aim = self.target();
+    if self.history.as_ref().is_none_or(|heard| heard.target.aim() != aim) {
+      self.history = Some(History { target: aim.owned(), asked: false, sent: None });
     }
     let heard = self.history.as_mut().filter(|heard| !heard.asked)?;
     heard.asked = true;
-    let (at, life) = match target.clone() {
-      Target::Thread(key) => (key.0, key.1),
-      Target::Session(at, life) => (at, life),
-      Target::New(at, folder) => (at, self.record(&folder)),
+    let target = heard.target.clone();
+    let (at, life) = match &target {
+      Target::Thread(key) => (key.0, key.1.clone()),
+      Target::Session(at, life) => (*at, life.clone()),
+      Target::New(at, folder) => (*at, self.record(folder)),
     };
     Some((at, Verb::History { life }, target))
   }

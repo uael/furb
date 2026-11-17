@@ -12,7 +12,7 @@ use furb_host::protocol::{Answer, Card, Frame, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
 
-use furb_client::{Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Target, Where};
+use furb_client::{Aim, Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME, Where};
 
 use crate::{
   keys::Does,
@@ -536,7 +536,7 @@ impl Model {
   /// the left side, with no row of them made.
   pub(crate) fn input_rows(&self) -> usize {
     // The count of each case of [`Model::input_box`].
-    let boxed = if self.client.only_reads(self.client.target().machine()).is_some() {
+    let boxed = if self.client.only_reads(self.client.target().machine()) {
       1
     } else if self.form().is_some() {
       self.form_rows(self.grown()).0.len() + 3
@@ -577,10 +577,10 @@ impl Model {
         let says = match self.client.target() {
           _ if anchored.is_some() => anchored.as_deref().unwrap_or_default(),
           _ if self.client.draft.python => "A word of Python to run",
-          Target::Thread(_) if reads => "The window sends nothing to this session",
-          Target::Thread(_) if opens => "Your message goes once the session is open",
-          Target::Thread(_) if ended => "A reply opens this thread again",
-          Target::Thread(_)
+          Aim::Thread(_) if reads => "The window sends nothing to this session",
+          Aim::Thread(_) if opens => "Your message goes once the session is open",
+          Aim::Thread(_) if ended => "A reply opens this thread again",
+          Aim::Thread(_)
             if self
               .client
               .thread
@@ -589,9 +589,9 @@ impl Model {
           {
             "Write to this agent"
           }
-          Target::Thread(_) => "Reply to this thread",
-          Target::Session(..) => "Ask in a new thread",
-          Target::New(..) => "Ask for a change, a review or an answer",
+          Aim::Thread(_) => "Reply to this thread",
+          Aim::Session(..) => "Ask in a new thread",
+          Aim::New(..) => "Ask for a change, a review or an answer",
         };
         // The text stands under the blank row that opens the box, as in the box of a message, and
         // after the prompt of the interpreter while it is a word of Python.
@@ -602,7 +602,7 @@ impl Model {
     };
     // A window that only reads has no field to write in.
     let shown = (self.form().is_none() || self.form_rows(self.grown()).1.is_some())
-      && self.client.only_reads(self.client.target().machine()).is_none();
+      && !self.client.only_reads(self.client.target().machine());
     let number = |one: usize| u16::try_from(one).unwrap_or_default();
     Area {
       x: number(x),
@@ -629,7 +629,7 @@ impl Model {
 
   /// The rows of the input above its row of hints: the form of a question, or its box.
   fn input_box(&self) -> Vec<Row> {
-    if self.client.only_reads(self.client.target().machine()).is_some() {
+    if self.client.only_reads(self.client.target().machine()) {
       vec![self.reader()]
     } else if self.form().is_some() {
       let mut rows = self.form_rows(self.grown()).0;
@@ -696,8 +696,8 @@ impl Model {
   pub(crate) fn bar(&self) -> Color {
     match self.client.target() {
       _ if self.form().is_some() => self.tokens.attention,
-      Target::Thread(key) => self.hue(&key),
-      Target::Session(..) | Target::New(..) => self.tokens.accent,
+      Aim::Thread(key) => self.hue(key),
+      Aim::Session(..) | Aim::New(..) => self.tokens.accent,
     }
   }
 
@@ -726,9 +726,9 @@ impl Model {
     let switch = [run(" Message ", message), run(" Python ", python)];
     let gap = || run(" ".repeat(APART), raised);
     let (mark, target, color) = match self.client.target() {
-      Target::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(&key)),
-      Target::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
-      Target::New(at, folder) => return self.launch(at, &folder, switch),
+      Aim::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(key)),
+      Aim::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
+      Aim::New(at, folder) => return self.launch(at, folder, switch),
     };
     let mut left: Line = switch.into();
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
@@ -748,7 +748,7 @@ impl Model {
     // The mark and the accent of a new thread say what the words say, so a target too long for
     // its room drops its words before the name of its session.
     let short = |text: &str| match self.client.target() {
-      Target::Session(..) if text.width() > fits => self.session(),
+      Aim::Session(..) if text.width() > fits => self.session(),
       _ => text.to_owned(),
     };
     let target = left.pop().map(|one| run(cut(&short(&one.content), fits), one.style));
@@ -875,10 +875,10 @@ impl Model {
   /// The project and the session that the input sends to.
   fn session(&self) -> String {
     let (at, life, open) = match self.client.target() {
-      Target::Thread(key) => (key.0, key.1, true),
-      Target::Session(at, life) => (at, life, false),
-      Target::New(at, folder) => {
-        return format!("{} · new session", self.folder_named(at, &folder));
+      Aim::Thread(key) => (key.0, key.1.as_str(), true),
+      Aim::Session(at, life) => (at, life, false),
+      Aim::New(at, folder) => {
+        return format!("{} · new session", self.folder_named(at, folder));
       }
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
@@ -921,15 +921,15 @@ impl Model {
   /// the default actor of the catalog of its machine.
   pub(crate) fn actor(&self) -> Option<(String, Option<String>)> {
     let target = self.client.target();
-    if let Some(chosen) = self.client.chosen.as_ref().filter(|one| one.aims(&target)) {
+    if let Some(chosen) = self.client.chosen.as_ref().filter(|one| one.aims(target)) {
       return Some(leveled(&chosen.actor));
     }
     let (at, life) = match target {
-      Target::Thread(key) => {
+      Aim::Thread(key) => {
         // A word of Python that the operator ran on the thread asked no model, so the model of the
         // thread is the one of the last block that a model wrote. A thread whose page has not come
         // yet stands on the model of its session.
-        let opened = self.client.thread.iter().filter(|one| one.thread.key == key);
+        let opened = self.client.thread.iter().filter(|one| one.thread.key == *key);
         let exchanges = opened.flat_map(|one| one.thread.exchanges.values().rev());
         let blocks = exchanges.filter_map(|one| one.block.as_ref());
         let model = blocks.map(|one| &one.maker).find_map(|maker| match maker {
@@ -939,17 +939,17 @@ impl Model {
         if model.is_some() {
           return model;
         }
-        (key.0, key.1)
+        (key.0, key.1.as_str())
       }
-      Target::Session(at, life) => (at, life),
-      Target::New(at, folder) => return self.opens_on(at, &folder),
+      Aim::Session(at, life) => (at, life),
+      Aim::New(at, folder) => return self.opens_on(at, folder),
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let mut ours = cards.iter().rev().filter(|card| card.life == life);
     let named = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
     // A life that the window opens names no model before its first answer: it stands on the actor
     // that he chose for it, else on the one that a new session of its folder takes.
-    let hold = self.client.holds.get(&(at, life));
+    let hold = self.client.holds.get(&(at, life.to_owned()));
     let opened_on = || {
       let hold = hold?;
       hold.actor.as_deref().map(leveled).or_else(|| self.opens_on(at, hold.cwd.as_deref()?))
@@ -1003,7 +1003,7 @@ impl Model {
   /// An actor that the operator chose for the target of the input: a new session opens on it, and
   /// a life that stands takes it on its root, as a word of the operator.
   pub(crate) fn took_actor(&mut self, actor: String) {
-    self.client.chosen = Some(Chosen::of(&self.client.target(), actor));
+    self.client.chosen = Some(Chosen::of(self.client.target(), actor));
   }
 
   /// The place that the next message is about, while the operator writes it, with the key that
@@ -1143,7 +1143,7 @@ impl Model {
   /// Whether the open thread stands on a machine where the window only reads.
   fn only_reads(&self) -> bool {
     let at = self.client.thread.as_ref().map(|one| one.thread.key.0);
-    at.is_some_and(|at| self.client.only_reads(at).is_some())
+    at.is_some_and(|at| self.client.only_reads(at))
   }
 
   /// The hint of the work of the open thread: its time, which counts each second as the time of a
@@ -1179,8 +1179,8 @@ impl Model {
       return vec![run(format!("  The input fills {} of the view {skill}", filled.node), muted)];
     }
     let at = match self.client.target() {
-      Target::Thread(key) => key.0,
-      Target::Session(at, _) | Target::New(at, _) => at,
+      Aim::Thread(key) => key.0,
+      Aim::Session(at, _) | Aim::New(at, _) => at,
     };
     let named = self.client.machines.get(at).map_or("", |one| one.name.as_str());
     let name = if at == 0 { "This computer" } else { named };
@@ -1193,7 +1193,7 @@ impl Model {
     let folder = elsewhere.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
     // On a thread, the next word runs in the folder of its chain, which a cd moves.
     let opened =
-      self.client.thread.as_ref().filter(|_| matches!(self.client.target(), Target::Thread(_)));
+      self.client.thread.as_ref().filter(|_| matches!(self.client.target(), Aim::Thread(_)));
     let folder = opened.and_then(|one| one.thread.folder.clone()).unwrap_or(folder);
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;
@@ -1202,7 +1202,7 @@ impl Model {
     });
     let folder = self.folder_shown(at, &folder);
     let room = room.saturating_sub(2 + branch.as_deref().map_or(0, Cells::width));
-    let new = matches!(self.client.target(), Target::New(..));
+    let new = matches!(self.client.target(), Aim::New(..));
     let machine = !new && name.width() + 3 + folder.width() <= room;
     let folder = tail(&folder, room);
     let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };

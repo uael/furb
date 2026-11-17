@@ -52,7 +52,7 @@ pub use inspect::Inspection;
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
-pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
+pub use outbox::{Aim, Asked, Chosen, Outgoing, Target, greeting};
 pub use picture::{Held, Picture, Shown};
 pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};

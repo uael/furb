@@ -7,7 +7,7 @@
 use crate::cells::Cells;
 use opentui::style::Style;
 
-use furb_client::{Asked, Completes, Kind, Offer, Target};
+use furb_client::{Aim, Asked, Completes, Kind, Offer};
 
 use crate::{
   input::named,
@@ -209,9 +209,9 @@ impl Model {
     let target = self.client.target();
     let at = target.machine();
     let folder = match target {
-      Target::Thread(key) => self.client.cwd(at, &key.1),
-      Target::Session(_, life) => self.client.cwd(at, &life),
-      Target::New(_, folder) => Some(folder),
+      Aim::Thread(key) => self.client.cwd(at, &key.1),
+      Aim::Session(_, life) => self.client.cwd(at, life),
+      Aim::New(_, folder) => Some(folder.to_owned()),
     };
     let word = self.client.completion.as_ref().map_or("", |one| one.word.as_str());
     let query = word.trim_start_matches(['@', '"']);

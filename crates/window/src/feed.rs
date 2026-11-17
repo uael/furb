@@ -13,7 +13,7 @@ use furb::view::{
 };
 use furb::world::images;
 use furb_client::{
-  Anchor, Command as Ran, Fold, Opened, PICTURE, Picture, Shown, Target, checkout, rests,
+  Aim, Anchor, Command as Ran, Fold, Opened, PICTURE, Picture, Shown, checkout, rests,
 };
 use furb_host::{
   FollowUp,
@@ -338,7 +338,7 @@ impl<'a> Feed<'a> {
         };
         // The button turns the input to the thread, so it stands only while the input sends
         // elsewhere or runs a word: a button that would change nothing does not show.
-        let replies = matches!(self.model.client.target(), Target::Thread(key) if key == self.opened.thread.key)
+        let replies = matches!(self.model.client.target(), Aim::Thread(key) if *key == self.opened.thread.key)
           && !self.model.client.draft.python;
         (Some(mark), (!replies).then(|| (run(" Reopen ", button), Does::Resolve)))
       }
@@ -351,7 +351,7 @@ impl<'a> Feed<'a> {
       _ => (None, Some((run(" Resolve ", button), Does::Resolve))),
     };
     // A window that only reads shows no button that writes: a resolve, a reopen or a stop.
-    let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
+    let reads = self.model.client.only_reads(self.opened.thread.key.0);
     let button = button.filter(|(_, does)| !reads || *does != Does::Resolve);
     (mark, button)
   }
@@ -422,7 +422,7 @@ impl<'a> Feed<'a> {
     // The last answer that wrote a file that furb knew before offers to revert it, a blank row
     // under its block or the band of his word, before the blank row that ends the block, to a
     // window that may write.
-    let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
+    let reads = self.model.client.only_reads(self.opened.thread.key.0);
     if self.reverting == Some(exchange.message.as_str()) && !reads {
       let mut files: Vec<&str> =
         writes(exchange).filter(|one| one.known).map(|one| &*one.path).collect();

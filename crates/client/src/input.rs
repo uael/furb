@@ -15,7 +15,7 @@ use furb_wire::{PICTURE, anchor::Anchor, protocol::BOUND};
 use jiff::Timestamp;
 use serde_json::Value;
 
-use crate::{Client, Opened, Outgoing, Pending, Target, Thread};
+use crate::{Aim, Client, Opened, Outgoing, Pending, Target, Thread};
 
 /// How many emptied drafts the stash keeps, the oldest going first.
 const STASH: usize = 50;
@@ -102,11 +102,11 @@ const SLUG: usize = 32;
 impl Client {
   /// Where the input sends now: where the operator turned it, else the open thread, else a new
   /// session on the first machine, in the folder of the client.
-  pub fn target(&self) -> Target {
+  pub fn target(&self) -> Aim<'_> {
     match (&self.aim, &self.thread) {
-      (Some(target), _) => target.clone(),
-      (None, Some(opened)) => Target::Thread(opened.thread.key.clone()),
-      (None, None) => Target::New(0, self.folder.clone()),
+      (Some(target), _) => target.aim(),
+      (None, Some(opened)) => Aim::Thread(&opened.thread.key),
+      (None, None) => Aim::New(0, &self.folder),
     }
   }
 
@@ -133,7 +133,7 @@ impl Client {
     if self.submit_fill(&text) {
       return Ok(());
     }
-    let (at, life, thread, cwd) = match self.target() {
+    let (at, life, thread, cwd) = match self.target().owned() {
       Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
       Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
       Target::New(at, folder) => {
@@ -144,7 +144,7 @@ impl Client {
     if let Some(away) = self.away(at) {
       return Err(away);
     }
-    if self.only_reads(at).is_some() {
+    if self.only_reads(at) {
       return Err("Nothing went: this window only reads.".to_owned());
     }
     if let Some(why) = self.fault_of(at, &life) {
@@ -229,7 +229,7 @@ impl Client {
   fn renamed(&self, text: &str) -> Option<Result<String, String>> {
     let rest = text.strip_prefix(RENAME).filter(|rest| rest.is_empty() || rest.starts_with(' '));
     let name = rest.filter(|_| !self.draft.python)?.trim();
-    Some(if matches!(self.target(), Target::New(..)) {
+    Some(if matches!(self.target(), Aim::New(..)) {
       Err("A new session takes its name from its first message: send one first.".to_owned())
     } else {
       Ok(renaming(name))
@@ -251,7 +251,7 @@ impl Client {
     let path = text.strip_prefix(CD).filter(|rest| rest.is_empty() || rest.starts_with(' '))?;
     Some(match path.trim() {
       "" => Err(format!("Name the folder: {CD} <path>.")),
-      _ if matches!(self.target(), Target::New(..)) => {
+      _ if matches!(self.target(), Aim::New(..)) => {
         Err("A new session runs in the folder of the launcher: choose it there.".to_owned())
       }
       path => Ok(format!("cd({})", Value::String(path.to_owned()))),

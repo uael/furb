@@ -12,7 +12,7 @@ use std::mem;
 
 use serde_json::Value;
 
-use crate::{Asked, Client, Target};
+use crate::{Aim, Asked, Client};
 
 /// The settings of a session while the operator reads them: its machine and its record, whether
 /// he reads its skills in place of its keys, whether they changed since its machine gave them, the
@@ -32,9 +32,9 @@ impl Client {
   /// shows: a new session has no life to read them from yet.
   pub fn read_settings(&mut self, skills: bool) -> Result<(), String> {
     let life = match self.target() {
-      Target::Thread(key) => (key.0, key.1),
-      Target::Session(at, life) => (at, life),
-      Target::New(..) => {
+      Aim::Thread(key) => (key.0, key.1.clone()),
+      Aim::Session(at, life) => (at, life.to_owned()),
+      Aim::New(..) => {
         return Err("Send a first message: the settings are those of a session.".to_owned());
       }
     };

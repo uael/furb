@@ -16,7 +16,7 @@ use furb_wire::{
   protocol::{Answer, Files, Verb},
 };
 
-use crate::{Asked, Client, Matched, Target, pathed, ranked};
+use crate::{Aim, Asked, Client, Matched, pathed, ranked};
 
 /// What a word of the input completes: a slash that starts a message, or a mention of a file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,7 +187,7 @@ impl Client {
     }
     let (key, life) = self.lived();
     let skills = Asked::Skills(key.clone());
-    let lives = !matches!(self.target(), Target::New(..));
+    let lives = !matches!(self.target(), Aim::New(..));
     if lives && !told.skills.contains_key(&key) && !asking(&skills) {
       due.push((at, Verb::Skills { life }, skills));
     }
@@ -349,9 +349,9 @@ impl Client {
   /// gives the skills of the last session of its project.
   fn lived(&self) -> (String, String) {
     match self.target() {
-      Target::Thread(key) => (key.1.clone(), key.1),
-      Target::Session(_, life) => (life.clone(), life),
-      Target::New(_, folder) => (folder.clone(), self.record(&folder)),
+      Aim::Thread(key) => (key.1.clone(), key.1.clone()),
+      Aim::Session(_, life) => (life.to_owned(), life.to_owned()),
+      Aim::New(_, folder) => (folder.to_owned(), self.record(folder)),
     }
   }
 
@@ -366,9 +366,9 @@ impl Client {
     let query = word.trim_start_matches('@').trim_start_matches('"');
     let at = self.target().machine();
     let here = match self.target() {
-      Target::Thread(key) => self.cwd(at, &key.1),
-      Target::Session(_, life) => self.cwd(at, &life),
-      Target::New(_, folder) => Some(folder),
+      Aim::Thread(key) => self.cwd(at, &key.1),
+      Aim::Session(_, life) => self.cwd(at, life),
+      Aim::New(_, folder) => Some(folder.to_owned()),
     };
     let here = here.unwrap_or_else(|| self.folder.clone());
     let named = query.rfind('/').and_then(|end| query.get(..=end)).unwrap_or_default();

@@ -105,12 +105,16 @@ impl Client {
       .then(|| format!("{} is away, so nothing went. furb dials it until it answers.", told.name))
   }
 
-  /// What the window may do on a machine where it only reads, as a person reads it: the first
-  /// machine is this computer.
-  pub fn only_reads(&self, at: usize) -> Option<String> {
+  /// Whether the window only reads on a machine.
+  pub fn only_reads(&self, at: usize) -> bool {
+    self.reads_on(at).is_some()
+  }
+
+  /// The place where the window only reads, as a person reads it, when it only reads on a machine:
+  /// the first machine is this computer.
+  pub fn reads_on(&self, at: usize) -> Option<&str> {
     let told = self.machines.get(at).filter(|told| told.role == Some(Role::Read))?;
-    let place = if at == 0 { "this computer" } else { told.name.as_str() };
-    Some(format!("This window only reads on {place}"))
+    Some(if at == 0 { "this computer" } else { told.name.as_str() })
   }
 
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,

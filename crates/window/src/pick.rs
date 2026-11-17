@@ -14,7 +14,7 @@ use opentui::{
   style::{Color, Style},
 };
 
-use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
+use furb_client::{Aim, Client, Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
 
 use crate::{
@@ -279,9 +279,10 @@ impl Model {
     self.chose(0);
     // The sessions open on the one that the input sends to, and the models on the one in use.
     let now = match self.client.target() {
-      Target::Thread(key) => Target::Session(key.0, key.1),
+      Aim::Thread(key) => Aim::Session(key.0, &key.1),
       other => other,
-    };
+    }
+    .owned();
     let entries = self.entries();
     let at = entries.iter().position(|one| match of {
       Pick::Sessions => one.choice == Choice::Session(now.clone()),
@@ -1121,7 +1122,7 @@ impl Model {
     let link = chosen.is_some_and(|one| matches!(one.choice, Choice::Link(_)));
     let scope = match self.client.target() {
       _ if !model => "",
-      Target::New(..) => " for the new session",
+      Aim::New(..) => " for the new session",
       _ => " for this session",
     };
     let moves = format!("{} move", [Does::Up, Does::Down].map(|one| self.key(one)).join(""));

@@ -13,7 +13,7 @@ impl Client {
   /// The text of the input queued on the open thread, which its life sends once the chain of the
   /// thread rests, or why it does not go: a follow-up is a message of a thread, with no image.
   pub fn queue(&mut self, text: &str) -> Result<(), String> {
-    let Target::Thread(key) = self.target() else {
+    let Target::Thread(key) = self.target().owned() else {
       return Err("A follow-up waits on a thread: open one first.".to_owned());
     };
     if self.draft.python {

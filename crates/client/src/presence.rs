@@ -4,7 +4,7 @@
 
 use furb_wire::protocol::{Draft, Present, Verb};
 
-use crate::{Asked, Client, Target};
+use crate::{Aim, Asked, Client};
 
 impl Client {
   /// Each other operator whose window holds a life of a machine, by his login.
@@ -22,9 +22,9 @@ impl Client {
       return None;
     }
     match self.target() {
-      Target::Thread(key) => Some((key.0, key.1, Some(key.2))),
-      Target::Session(at, life) => Some((at, life, None)),
-      Target::New(..) => None,
+      Aim::Thread(key) => Some((key.0, key.1.clone(), Some(key.2.clone()))),
+      Aim::Session(at, life) => Some((at, life.to_owned(), None)),
+      Aim::New(..) => None,
     }
   }
 
