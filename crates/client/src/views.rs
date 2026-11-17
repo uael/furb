@@ -129,10 +129,10 @@ impl Client {
   }
 
   /// The life of the target of the input, on its machine: none for a new session.
-  fn target_life(&self) -> Option<(usize, String)> {
+  fn target_life(&self) -> Option<(usize, &str)> {
     match self.target() {
-      Aim::Thread(key) => Some((key.0, key.1.clone())),
-      Aim::Session(at, life) => Some((at, life.to_owned())),
+      Aim::Thread(key) => Some((key.0, &key.1)),
+      Aim::Session(at, life) => Some((at, life)),
       Aim::New(..) => None,
     }
   }
@@ -141,10 +141,17 @@ impl Client {
   /// each skill of the life of the target that has no view, the end of each view of another life
   /// or of a skill that left, and what the operator did to a node.
   pub(crate) fn views_due(&mut self) -> Vec<(usize, Verb, Asked)> {
-    let target = self.target_life();
+    // Most changes leave each view as it was and mount none, which costs no copy.
+    if self.views.iter().all(|one| self.served_now(one, self.target_life()))
+      && self.unmounted().is_none()
+    {
+      return mem::take(&mut self.gestures);
+    }
+    let target = self.target_life().map(|(at, life)| (at, life.to_owned()));
     let views = mem::take(&mut self.views);
-    let (kept, gone): (Vec<View>, Vec<View>) =
-      views.into_iter().partition(|one| self.served_now(one, target.as_ref()));
+    let (kept, gone): (Vec<View>, Vec<View>) = views.into_iter().partition(|one| {
+      self.served_now(one, target.as_ref().map(|(at, life)| (*at, life.as_str())))
+    });
     self.views = kept;
     let ended = |one: View| {
       let verb = Verb::ViewDispose(Dispose { viewer: one.viewer });
@@ -177,10 +184,20 @@ impl Client {
     due
   }
 
+  /// A skill that the life of the target serves and that no view of the client mounts.
+  fn unmounted(&self) -> Option<&str> {
+    let (at, life) = self.target_life()?;
+    let served = self.machines.get(at)?.served.get(life)?;
+    let mounted = |skill: &str| {
+      self.views.iter().any(|one| one.at == at && one.life == life && one.skill == skill)
+    };
+    served.iter().map(String::as_str).find(|skill| !mounted(skill))
+  }
+
   /// Whether a view stays: its life is the one of the target and its skill is still attached.
-  fn served_now(&self, view: &View, target: Option<&(usize, String)>) -> bool {
+  fn served_now(&self, view: &View, target: Option<(usize, &str)>) -> bool {
     let attached = self.machines.get(view.at).and_then(|told| told.served.get(&view.life));
-    target.is_some_and(|(at, life)| view.at == *at && view.life == *life)
+    target.is_some_and(|(at, life)| view.at == at && view.life == life)
       && attached.is_some_and(|skills| skills.contains(&view.skill))
   }
 

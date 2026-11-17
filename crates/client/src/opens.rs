@@ -115,19 +115,25 @@ impl Client {
 
   /// Whether the daemon answered the open of a life, so each verb of the life may go.
   pub fn stands(&self, at: usize, life: &str) -> bool {
-    self.holds.get(&(at, life.to_owned())).is_some_and(|hold| hold.ask == Ask::Answered)
+    self.held(at, life).is_some_and(|hold| hold.ask == Ask::Answered)
+  }
+
+  /// The hold of a life, found by its machine and its record with no copy of either: a client
+  /// holds a few lives.
+  pub(crate) fn held(&self, at: usize, life: &str) -> Option<&Hold> {
+    self.holds.iter().find_map(|(key, hold)| (key.0 == at && key.1 == life).then_some(hold))
   }
 
   /// Whether the views of a life answer: it stands, or a fault ended it and it still shows.
   pub fn reads(&self, at: usize, life: &str) -> bool {
-    let hold = self.holds.get(&(at, life.to_owned()));
+    let hold = self.held(at, life);
     hold.is_some_and(|hold| hold.ask == Ask::Answered || hold.failed().is_some())
   }
 
   /// Why a life only reads: a fault ended it, or its card says why no life opens its record,
   /// which the client knows before any open.
   pub fn fault_of(&self, at: usize, life: &str) -> Option<&str> {
-    let held = self.holds.get(&(at, life.to_owned())).and_then(Hold::failed);
+    let held = self.held(at, life).and_then(Hold::failed);
     let card = || self.machines.get(at)?.cards.iter().find(|card| card.life == life);
     held.or_else(|| card()?.refused.as_deref())
   }

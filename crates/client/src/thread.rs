@@ -268,17 +268,18 @@ impl Client {
     if thread.above.is_none() || thread.exchanges.is_empty() {
       return None;
     }
-    let key = &thread.key.clone();
+    let key = &thread.key;
     if self.fault_of(key.0, &key.1).is_some() {
       return None;
     }
-    let login = self.machines.get(key.0)?.login.clone();
+    let login = &self.machines.get(key.0)?.login;
     // A card that the daemon told before it read the last Seen says unread once more.
     let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
-    if saying || !self.card(key)?.thread.unread(&login) {
+    if saying || !self.card(key)?.thread.unread(login) {
       return None;
     }
     let reader = format!("{OPERATOR}/{login}");
+    let key = &key.clone();
     let told = |card: &Card| card.life == key.1 && *card.thread.prompt == *key.2;
     let settled = self.settled.iter_mut().map(|one| &mut one.2);
     let cards = self.machines.get_mut(key.0).into_iter().flat_map(|one| one.cards.iter_mut());

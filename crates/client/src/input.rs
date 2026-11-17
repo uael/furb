@@ -7,7 +7,7 @@
 //! message shows in the thread at once, and a message that the daemon refuses comes back to the
 //! input with the message after it.
 
-use std::{mem, path::Path};
+use std::{borrow::Cow, mem, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb_wire::renaming;
@@ -134,8 +134,8 @@ impl Client {
       return Ok(());
     }
     let (at, life, thread, cwd) = match self.target().owned() {
-      Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
-      Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
+      Target::Thread((at, life, thread)) => (at, life, Some(thread), None),
+      Target::Session(at, life) => (at, life, None, None),
       Target::New(at, folder) => {
         let folder = self.slugged(at, folder, &text);
         (at, self.record(&folder), None, Some(folder))
@@ -155,7 +155,7 @@ impl Client {
       self.outgoing.push_back(Outgoing { at, life, thread, text, python: true, images: vec![] });
       return Ok(());
     }
-    self.hold((at, life.clone()), cwd, self.moved);
+    self.hold((at, life.clone()), cwd.or_else(|| self.cwd(at, &life).map(Into::into)), self.moved);
     let chosen = self.chosen.take_if(|one| one.life.is_none() && one.at == at);
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
       hold.actor = Some(chosen.actor);
@@ -336,14 +336,14 @@ impl Client {
   /// the client opened it in, else the folder of the client for a new record, else the project of
   /// its cards, else the folder whose sessions
   /// hold it, as for a session with no project.
-  pub fn cwd(&self, at: usize, life: &str) -> Option<String> {
+  pub fn cwd(&self, at: usize, life: &str) -> Option<Cow<'_, str>> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
-    let held = || checkout(life).map(|one| one.display().to_string());
+    let held = || checkout(life).map(|one| Cow::Owned(one.display().to_string()));
     // A life that the client opened before its machine told its card runs where it was opened.
-    let opened = || self.holds.get(&(at, life.to_owned())).and_then(|hold| hold.cwd.clone());
+    let opened = || self.held(at, life).and_then(|hold| hold.cwd.as_deref());
     match cards.iter().find(|card| card.life == life) {
-      None => opened().or_else(|| Some(self.folder.clone())),
-      Some(card) => card.project.clone().or_else(held),
+      None => Some(Cow::Borrowed(opened().unwrap_or(&self.folder))),
+      Some(card) => card.project.as_deref().map(Cow::Borrowed).or_else(held),
     }
   }
 
@@ -376,7 +376,7 @@ impl Client {
   /// The project of a record: the folder that its life opens in, or none for a session with no
   /// project, as a card of its machine says it once the machine told one.
   pub fn project(&self, at: usize, life: &str) -> Option<String> {
-    self.cwd(at, life).filter(|folder| !self.alone(at, folder))
+    self.cwd(at, life).filter(|folder| !self.alone(at, folder)).map(Cow::into_owned)
   }
 
   /// The folder of a new session with no project on a machine, in the folder of those sessions

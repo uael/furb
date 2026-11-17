@@ -4,6 +4,8 @@
 //! of the client took the focus again, since the operator may have changed files with no life; and
 //! the review of the changes of one project, file by file, with the diff of the file that he reads.
 
+use std::borrow::Cow;
+
 use furb_wire::protocol::{Answer, Changed, Changes, Frame, Verb};
 
 use crate::{Aim, Asked, Client, Key};
@@ -41,15 +43,16 @@ impl Client {
   /// The folder of the target of the input, whose branch the launcher names: the folder of the
   /// chain of the open thread, where its next word runs, else the project of the session of a
   /// thread, or the folder of a new session.
-  pub fn target_folder(&self) -> Option<(usize, String)> {
+  pub fn target_folder(&self) -> Option<(usize, Cow<'_, str>)> {
     let at = self.target().machine();
     let opened = |key: &Key| self.thread.as_ref().filter(|one| one.thread.key == *key);
     let folder = match self.target() {
-      Aim::Thread(key) => {
-        opened(key).and_then(|one| one.thread.folder.clone()).or_else(|| self.cwd(at, &key.1))
-      }
+      Aim::Thread(key) => opened(key)
+        .and_then(|one| one.thread.folder.as_deref())
+        .map(Cow::Borrowed)
+        .or_else(|| self.cwd(at, &key.1)),
       Aim::Session(_, life) => self.cwd(at, life),
-      Aim::New(_, folder) => Some(folder.to_owned()),
+      Aim::New(_, folder) => Some(Cow::Borrowed(folder)),
     };
     folder.map(|folder| (at, folder))
   }
@@ -64,20 +67,20 @@ impl Client {
         .iter()
         .any(|(key, one)| key.0 == at && matches!(one, Asked::Changes(asked, _) if asked == folder))
     };
-    let mut folders: Vec<(usize, String)> = self.target_folder().into_iter().collect();
+    let mut folders: Vec<(usize, Cow<'_, str>)> = self.target_folder().into_iter().collect();
     for (at, told) in self.machines.iter().enumerate() {
-      let projects = told.cards.iter().filter_map(|card| card.project.clone());
-      folders.extend(projects.map(|folder| (at, folder)));
+      let projects = told.cards.iter().filter_map(|card| card.project.as_deref());
+      folders.extend(projects.map(|folder| (at, Cow::Borrowed(folder))));
     }
     folders.sort();
     folders.dedup();
-    let stale = |(at, folder): &(usize, String)| {
-      let seen = self.machines.get(*at).and_then(|told| told.changes.get(folder));
+    let stale = |(at, folder): &(usize, Cow<'_, str>)| {
+      let seen = self.machines.get(*at).and_then(|told| told.changes.get(&**folder));
       seen.is_none_or(|one| !one.fresh) && !asking(*at, folder)
     };
-    let ask = |(at, folder): (usize, String)| {
-      let verb = Verb::Changes { cwd: folder.clone(), path: None };
-      (at, verb, Asked::Changes(folder, None))
+    let ask = |(at, folder): (usize, Cow<'_, str>)| {
+      let verb = Verb::Changes { cwd: folder.to_string(), path: None };
+      (at, verb, Asked::Changes(folder.into_owned(), None))
     };
     let mut due: Vec<_> = folders.into_iter().filter(stale).map(ask).collect();
     due.extend(self.review_due());
@@ -87,15 +90,14 @@ impl Client {
   /// The ask of the diff of the file that the review reads, while the client holds none of it.
   fn review_due(&self) -> Option<(usize, Verb, Asked)> {
     let review = self.review.as_ref()?;
-    let path = self.reviewed()?.path.clone();
-    let shown = review.diff.as_ref().is_some_and(|one| one.0 == path);
-    let asked = self
-      .asked
-      .values()
-      .any(|one| *one == Asked::Changes(review.folder.clone(), Some(path.clone())));
+    let path = &self.reviewed()?.path;
+    let shown = review.diff.as_ref().is_some_and(|one| one.0 == *path);
+    let asked = self.asked.values().any(|one| {
+      matches!(one, Asked::Changes(folder, Some(asked)) if *folder == review.folder && asked == path)
+    });
     (!shown && !asked).then(|| {
       let verb = Verb::Changes { cwd: review.folder.clone(), path: Some(path.clone()) };
-      (review.at, verb, Asked::Changes(review.folder.clone(), Some(path)))
+      (review.at, verb, Asked::Changes(review.folder.clone(), Some(path.clone())))
     })
   }
 
@@ -153,7 +155,9 @@ impl Client {
     if self.review.take().is_some() {
       return;
     }
-    let Some((at, folder)) = self.target_folder() else { return };
+    let Some((at, folder)) = self.target_folder().map(|(at, one)| (at, one.into_owned())) else {
+      return;
+    };
     self.stale(|one| one == folder);
     self.review = Some(Review { at, folder, ..Review::default() });
   }

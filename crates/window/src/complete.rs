@@ -4,6 +4,8 @@
 //! stands among the rows that match, the chosen one on the lifted ground. The completion itself
 //! stands in the client.
 
+use std::borrow::Cow;
+
 use crate::cells::Cells;
 use opentui::style::Style;
 
@@ -211,7 +213,7 @@ impl Model {
     let folder = match target {
       Aim::Thread(key) => self.client.cwd(at, &key.1),
       Aim::Session(_, life) => self.client.cwd(at, life),
-      Aim::New(_, folder) => Some(folder.to_owned()),
+      Aim::New(_, folder) => Some(Cow::Borrowed(folder)),
     };
     let word = self.client.completion.as_ref().map_or("", |one| one.word.as_str());
     let query = word.trim_start_matches(['@', '"']);

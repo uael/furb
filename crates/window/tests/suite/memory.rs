@@ -93,9 +93,10 @@ fn a_window_holds_no_more_on_a_life_four_times_as_large() {
 }
 
 /// The most allocations that a move of the pointer makes, from one place of a thread at rest to
-/// another that lights nothing: 41 on macOS on 11-17, where each such move laid out the list and
-/// the left side again, with 900, before.
-const PER_MOVE: usize = 48;
+/// another that lights nothing: 26 on macOS on 11-17, where each such move laid out the list and
+/// the left side again, with 900, and copied the folder and the life of the target of the input,
+/// with 41, before.
+const PER_MOVE: usize = 30;
 
 #[test]
 fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing() {
@@ -127,9 +128,10 @@ fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing
 }
 
 /// The most allocations that a key typed in the input makes, with its frame, on a thread at rest:
-/// 413 on macOS on 11-17, where each key laid out each part of the feed and the list again and
-/// copied each row, with 1,587, before.
-const PER_KEY: usize = 460;
+/// 296 on macOS on 11-17, where each key laid out each part of the feed and the list again and
+/// copied each row, with 1,587, and asked the renderer to measure each character and copied the
+/// folder and the life of the target of the input, with 413, before.
+const PER_KEY: usize = 330;
 
 #[test]
 fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {

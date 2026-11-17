@@ -405,7 +405,7 @@ impl Model {
       return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
     }
     let projects = &self.tokens.projects;
-    let Some(one) = turn(projects, hash(project)) else {
+    let Some(one) = turn(projects, hash(&[project])) else {
       return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
     };
     run(badge(project), Style::new().fg(one.letters).bg(one.ground).bold())
@@ -459,11 +459,11 @@ fn badge(project: &str) -> String {
   format!("{:<2}", letters.to_uppercase())
 }
 
-/// A number from a text, the same in each build, which picks a hue.
-pub(crate) fn hash(text: &str) -> usize {
-  text
-    .bytes()
-    .fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
+/// A number from a text, given in parts that it reads one after the other, the same in each build,
+/// which picks a hue.
+pub(crate) fn hash(parts: &[&str]) -> usize {
+  let bytes = parts.iter().flat_map(|one| one.bytes());
+  bytes.fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
     as usize
 }
 

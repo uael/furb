@@ -4,7 +4,10 @@
 //! many cells as they add up to. The window lays out each row with this measure alone, so a row
 //! never ends in another column than the cells that the renderer draws for it.
 
-use std::cell::{Cell, OnceCell};
+use std::{
+  cell::{Cell, OnceCell},
+  collections::HashMap,
+};
 
 use opentui::{
   App,
@@ -20,7 +23,22 @@ thread_local! {
   /// character that no context measures, which no renderer then draws either, takes one cell, as
   /// the cell that the renderer leaves for what it cannot draw.
   static CONTEXT: OnceCell<Option<Context>> = const { OnceCell::new() };
+  /// The cells of each character that the renderer measured, so a layout asks the renderer once for
+  /// each character: a measure makes and drops a text in the renderer. A measure that runs inside
+  /// another finds the memo taken and asks the renderer.
+  static MEASURED: Cell<Measured> = Cell::default();
 }
+
+/// The cells of each character by one method of measure.
+#[derive(Default)]
+struct Measured {
+  method: WidthMethod,
+  cells: HashMap<Box<str>, usize>,
+}
+
+/// The most characters that the memo of the measures holds before it starts again: a text of many
+/// scripts and emoji asks the renderer again rather than grow the memo with no bound.
+const MEASURES: usize = 4096;
 
 /// The cells of a text.
 pub(crate) trait Cells {
@@ -59,12 +77,28 @@ fn of(character: &str) -> usize {
   if printable(character) {
     return character.len();
   }
-  let method = METHOD.with(Cell::get);
-  let measured = CONTEXT.with(|context| {
-    let context = context.get_or_init(|| Context::new(ContextOptions::default()).ok());
-    context.as_ref().and_then(|one| one.text_width(character, method).ok())
-  });
-  measured.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX))
+  let method = METHOD.get();
+  let mut measured = MEASURED.take();
+  // A measure by another method holds no more.
+  if measured.method != method {
+    measured = Measured { method, cells: HashMap::new() };
+  }
+  let cells = if let Some(&cells) = measured.cells.get(character) {
+    cells
+  } else {
+    let cells = CONTEXT.with(|context| {
+      let context = context.get_or_init(|| Context::new(ContextOptions::default()).ok());
+      context.as_ref().and_then(|one| one.text_width(character, method).ok())
+    });
+    let cells = cells.map_or(1, |cells| usize::try_from(cells).unwrap_or(usize::MAX));
+    if measured.cells.len() >= MEASURES {
+      measured.cells.clear();
+    }
+    measured.cells.insert(character.into(), cells);
+    cells
+  };
+  MEASURED.set(measured);
+  cells
 }
 
 #[cfg(test)]

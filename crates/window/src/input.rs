@@ -2,7 +2,7 @@
 //! key of the operator does to it. Where it sends and what it sends stand in the input of
 //! `furb-client`.
 
-use std::{mem, ops::Range, path::Path};
+use std::{borrow::Cow, mem, ops::Range, path::Path};
 
 use crate::cells::Cells;
 use furb::view::{
@@ -1190,11 +1190,11 @@ impl Model {
       .client
       .target_folder()
       .filter(|(at, one)| *at != 0 || self.folder_named(*at, one) == NO_PROJECT);
-    let folder = elsewhere.map_or_else(|| self.client.folder.clone(), |(_, one)| one);
+    let folder = elsewhere.map_or(Cow::Borrowed(self.client.folder.as_str()), |(_, one)| one);
     // On a thread, the next word runs in the folder of its chain, which a cd moves.
     let opened =
       self.client.thread.as_ref().filter(|_| matches!(self.client.target(), Aim::Thread(_)));
-    let folder = opened.and_then(|one| one.thread.folder.clone()).unwrap_or(folder);
+    let folder = opened.and_then(|one| one.thread.folder.as_deref()).map_or(folder, Cow::Borrowed);
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;
       let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));

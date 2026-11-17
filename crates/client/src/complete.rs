@@ -368,9 +368,9 @@ impl Client {
     let here = match self.target() {
       Aim::Thread(key) => self.cwd(at, &key.1),
       Aim::Session(_, life) => self.cwd(at, life),
-      Aim::New(_, folder) => Some(folder.to_owned()),
+      Aim::New(_, folder) => Some(folder.into()),
     };
-    let here = here.unwrap_or_else(|| self.folder.clone());
+    let here: String = here.map_or_else(|| self.folder.clone(), Into::into);
     let named = query.rfind('/').and_then(|end| query.get(..=end)).unwrap_or_default();
     let away = named.starts_with('/') || named.starts_with('~') || named.starts_with("..");
     if !away {

@@ -357,7 +357,8 @@ impl Model {
     {
       return;
     }
-    self.client.hold((key.0, key.1.clone()), self.client.cwd(key.0, &key.1), self.client.moved);
+    let cwd = self.client.cwd(key.0, &key.1).map(Into::into);
+    self.client.hold((key.0, key.1.clone()), cwd, self.client.moved);
     self.client.leave();
     let thread = Thread { key, since: self.client.moved, ..Thread::default() };
     self.client.thread = Some(Opened { thread, ..Opened::default() });
@@ -927,14 +928,18 @@ impl Model {
     let open = || {
       self.client.thread.as_ref().filter(|one| one.thread.key == *key).and_then(|_| self.title())
     };
-    let title = self.client.card(key).map(|card| card.thread.title.clone()).or_else(open);
-    turn(&self.tokens.hues, hued(&key.1, &title.unwrap_or_default())).unwrap_or(self.tokens.accent)
+    let hue =
+      |title: &str| turn(&self.tokens.hues, hued(&key.1, title)).unwrap_or(self.tokens.accent);
+    match self.client.card(key) {
+      Some(card) => hue(&card.thread.title),
+      None => hue(&open().unwrap_or_default()),
+    }
   }
 }
 
 /// The number of a thread that picks its hue, from its record and its title.
 pub(crate) fn hued(life: &str, title: &str) -> usize {
-  hash(&format!("{life}{title}"))
+  hash(&[life, title])
 }
 
 /// The look of the run of a line that stands at a column.

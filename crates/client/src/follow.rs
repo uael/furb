@@ -26,7 +26,7 @@ impl Client {
     let text = self.unfolded(text.to_owned());
     self.draft.folds.clear();
     // The client holds the life, so its machine pushes each change of the queue.
-    self.hold((at, life.clone()), self.cwd(at, &life), self.moved);
+    self.hold((at, life.clone()), self.cwd(at, &life).map(Into::into), self.moved);
     let Some(told) = self.machines.get(at) else {
       return Err("The machine of this thread is not in the list.".to_owned());
     };
