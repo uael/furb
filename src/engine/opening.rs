@@ -30,8 +30,7 @@ use crate::value::Object;
 /// A Kernel that raises loses the frame of each word that it stepped, so before a fresh Kernel
 /// takes the next act, each run that is not over ends with a refusal that says its word was
 /// lost, each open wants of it first, so the chain holds no rung as running and takes its next
-/// step. A rung that awaited an act through a wants hears only that act, so it is closed with
-/// that refusal, and a rung of any other run hears the done of its run.
+/// step. The rung of each run hears the done of its run, so it ends with that refusal.
 ///
 /// It holds the entries that `seed` of the checkpointer makes from the data of a checkpoint, and
 /// gives the host the kind and the name of the fact of each alone: the data of a checkpoint can

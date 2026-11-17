@@ -39,6 +39,29 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
   engine.cancel(root)
   await settle()
   assert isinstance(engine.peek(waiting), CancelledError) and isinstance(engine.peek(run), CancelledError)
+  _, log, root = born(auto=False)
+  word = "import asyncio\nasync def watch():\n  await bash('slow')\nt = asyncio.create_task(watch())"
+  left = engine.rung(word, on=root)
+  await settle()
+  (run,) = [a[1] for a in said(log, "run") if a[4] == left]
+  engine.cancel(run)
+  await settle()
+  ended = [engine.peek(x, ...) for x in (run, left, said(log, "wants")[0][1])]
+  assert [type(x) for x in ended] == [CancelledError] * 3
+  word = (
+    "import asyncio\n"
+    "seen, later = [], asyncio.get_running_loop().create_future()\n"
+    "async def hold():\n"
+    "  seen.append(await later)\n"
+    "t = asyncio.create_task(hold())\n"
+    "await bash('slow')"
+  )
+  held = engine.rung(word, on=root)
+  await settle()
+  engine.cancel(held)
+  await engine.rung("later.set_result(1)", on=root)
+  await settle()
+  assert (type(engine.peek(held, ...)), await engine.rung("close(seen)", on=root)) == (CancelledError, [])
 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:

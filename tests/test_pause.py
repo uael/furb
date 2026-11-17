@@ -98,7 +98,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
 
 
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
-  """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run."""
+  """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a wants of the run of a paused rung is taken as it is made."""
   sand, log, root, act = slow()
   await verbs(root, "merged")
   await settle()
@@ -111,7 +111,7 @@ async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   engine.pause(step)
   sand.exits(said(log, "bash")[-1][1], 0)
   await settle()
-  assert [a[2] for a in said(log, "started") if a[1] in [w[1] for w in said(log, "wants")]] == [step]
+  assert [a[2] for a in said(log, "started") if a[1] in (wants := [w[1] for w in said(log, "wants")])] == wants
   engine.wake(step)
   assert await step == 0
 

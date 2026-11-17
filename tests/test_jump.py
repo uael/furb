@@ -18,7 +18,7 @@ async def test_a_jump_keeps_each_fact_that_the_chain_held_so_its_turns_never_cha
 
 
 async def test_jump_makes_at_rest_a_chain_with_the_chain_as_its_source() -> None:
-  """jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain."""
+  """jump makes, once no step of a word of the chain runs and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain, while a word or a task that awaits an act goes on."""
   _, _, root = born()
   assert await engine.rung("k = 7", on=root) is None
   engine.read("a.txt", on=root)
@@ -32,10 +32,15 @@ async def test_jump_makes_at_rest_a_chain_with_the_chain_as_its_source() -> None
   held = {x[1] for x in engine.transcript(new)}
   assert (kept in held, read in held) == (True, False)
   assert [x[2] for x in engine.transcript(new) if x[0] == "rung" and x[4] == "w = k + 1"] == [went]
+  _, log, root = born(auto=False)
+  waits = engine.rung("x = await bash('slow')", on=root)
+  await settle()
+  new = await engine.jump(on=root)
+  assert (engine.scope(root), engine.over(waits), engine.over(said(log, "bash")[0][1])) == (new, False, False)
 
 
 async def test_each_jump_before_the_chain_rests_makes_that_one_chain() -> None:
-  """Each jump of a chain that comes before the chain rests makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps."""
+  """Each jump of a chain that comes before the chain jumps makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps."""
   _, _, root = born()
   one, two = engine.bash("echo 1", on=root), engine.bash("echo 2", on=root)
   await settle()
@@ -109,12 +114,19 @@ async def test_the_reading_and_the_transcript_of_a_chain_that_jumped_stay_their_
 
 
 async def test_a_word_that_jumps_its_own_chain_ends_first() -> None:
-  """A word that jumps its own chain ends first, so no word runs across a jump."""
+  """The step of a word that jumps its own chain ends first, and a word that awaits across a jump binds each later name in the module of the chain that it ran on: the chain that the jump made holds its later facts and the names that its told runs bind, so a model that names another of its names there meets a NameError."""
   _, _, root = born()
   assert await engine.rung("went = jump()\nz = 3", on=root) is None
   await settle()
   new = engine.scope(root)
   assert new != root and engine.module(new)["z"] == 3
+  sand, log, root = born(auto=False)
+  waits = engine.rung("x = await bash('slow')\ny = x.code", on=root)
+  await settle()
+  new = await engine.jump(on=root)
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await waits is None
+  assert (engine.module(root)["y"], "y" in engine.module(new), engine.scope(waits)) == (0, False, new)
 
 
 async def test_a_jump_whose_word_is_no_str_is_refused() -> None:

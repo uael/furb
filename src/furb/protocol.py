@@ -1420,7 +1420,7 @@ Who made the prompt of a thread: the operator, a rung of a word, or an ear.
 class Aside1(TypedDict):
   """
   A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as
-  the acknowledgment of an act that stands in no thread of the chain, a stall that the watch of
+  the end notice of an act that stands in no thread of the chain, a stall that the watch of
   the daemon tells, or the question of the act that names the session.
   """
 
@@ -1430,7 +1430,7 @@ class Aside1(TypedDict):
 class Aside2(TypedDict):
   """
   What a word of the operator told the chain: a prompt of None that a rung of his made, or the
-  acknowledgment of a rung that stands in no thread.
+  end notice of a rung that stands in no thread.
   """
 
   aside: Literal["rung"]

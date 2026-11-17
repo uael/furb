@@ -347,9 +347,9 @@ async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -
   assert [(a[0], a[1], a[2]) for a in moves] == [
     ("started", run[1], run[1]),
     ("started", "bash1", WORLD),
-    ("started", wants[1], step),
+    ("started", wants[1], wants[1]),
     ("done", "bash1", WORLD),
-    ("done", wants[1], step),
+    ("done", wants[1], wants[1]),
     ("done", run[1], run[1]),
   ]
   assert moves[3][3] == moves[4][3] and isinstance(moves[5][3], CancelledError)

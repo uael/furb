@@ -229,11 +229,6 @@ def rung(word="", retells="", to="", on="") -> Act:
       match (yield mine):
         case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id and not word:
           yield ("done", id, value) if isinstance(value, BaseException) else ("ready", id, value[1])
-        case ("wants", about, by, _, call) if get(by)[4] == id:
-          yield "started", about
-          while not over(call):
-            yield {call}
-          yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
           if isinstance(value, CancelledError):
             if retells:
@@ -346,8 +341,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     def bind(whose):
       nonlocal bound
       since = transcript(id, "", bound)
-      bound += (k := since.index(a) + 1)
-      w = "\n\n".join("\n".join(x[3]) for x in since[:k] if heard(x))
+      bound += len(since)
+      w = "\n\n".join("\n".join(x[3]) for x in since if heard(x))
       return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
     def replay(of="", words=""):
@@ -396,6 +391,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     yield from replay()
     while (a := (yield {id, "stand", "reply"})) and id not in jumped:
       r = get(a[1]) or a
+      if transcript(id)[-1] is a and not question(a) and r[0] != "run":
+        running.clear()
       try:
         match a:
           case ("done", *_) if r[0] == "stand" and (now := standing()) != last:
@@ -428,7 +425,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             about in held
             and scope(maker := r[2]) == id
             and not prompted(maker)
-            and not any(about in (c, *get(c)[5:]) for c in awaited.values())
+            and not any(about in (c, *get(c)[5:]) for c in awaited)
           ):
             if maker in running or (maker in waiting and not isinstance(value, Exception)):
               value is None or did[maker].add("tell")
@@ -449,8 +446,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         if a[0] == "rung":
           did[a[1]] = set()
         if a[0] == "done" and r[0] == "rung" and (p := r[2]) in barren and not isinstance(a[3], CancelledError):
-          broke, waited, word = isinstance(a[3], Exception), a[1] in awaited, ladder.get(a[1])
-          busy, written = p in held.values(), wrote.setdefault(p, [])
+          broke, waited, word = isinstance(a[3], Exception), "wants" in did[a[1]], ladder.get(a[1])
+          written = wrote.setdefault(p, [])
           barren[p] = (barren[p] + 1) * bool(
             broke
             or (
@@ -462,9 +459,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             )
           )
           written.append(word)
-          if barren[p] // 3:
-            busy or pause(p, a[3] if broke else "made nothing")
-          elif broke or waited or "tell" in did[a[1]] or not busy:
+          if not barren[p] // 3 and (broke or waited or "tell" in did[a[1]] or p not in held.values()):
             due.add(p)
         match a:
           case ("jump", leap, _, _, list(out), str()):
@@ -522,14 +517,15 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           rid = get(r[2])[4]
           running.discard(rid) if a[0] == "started" else running.add(rid)
           if a[0] == "wants" and not over(r[4]):
-            awaited[rid] = r[4]
+            awaited[r[4]] = rid
+            did[rid].add("wants")
         elif a[0] == "done":
           running.discard(a[1])
           for fold in (awaited, did):
             fold.pop(a[1], None)
         if running:
           continue
-        if leaps and not (awaited or any(waiting.values())):
+        if leaps and not any(waiting.values()):
           jumped[id] = j = chain(
             get(id)[4],
             id,
@@ -553,12 +549,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           if offered(last[0], to) is None:
             close(Refused(to + " no actor"), maker * prompted(maker) or step)
           else:
-            note = yield told(
-              step,
-              "advance on " + maker,
-              share=filled(reply) or None,
-              waits=[c for c in awaited.values() if not over(c)] or None,
-            )
+            note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=[*awaited] or None)
         for lone in [x for x in due if not (over(x) or paused(x) or x in {get(y)[2] for y in waiting})]:
           with site.set(lone):
             waiting[rung(to=get(lone)[6])] = ""

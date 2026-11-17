@@ -20,9 +20,6 @@ from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
 
-# The seconds that a word that is over waits at the most for the commands that it started and did not await.
-LINGER = 30.0
-
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word runs in the module of its chain."""
 type Ear = Generator[tuple | set[str] | None, tuple | None]
@@ -298,9 +295,8 @@ class Running:
   writings of its rung left, and what a part raised, which is the raise of the word: the run of the rung is done
   with it. When the part of a writing is over, the Kernel says that it ran, as its rung, with what it raised. A part
   that waits for an act while its model writes makes no wants, since its rung waits for the turn of its model, and
-  goes on at the done of that act. Once the run of its rung stands in the line, the part waits as that run, with a
-  wants, as the run itself does: the turn of the model is over, and the chain counts a run that makes no wants as a
-  word that runs, so it would ask no other prompt while the part waits.
+  goes on at the done of that act. Once a run of its rung stands, the part waits as that run, with a wants, as each
+  job of the run does, so the chain knows each act that a word of it awaits.
   """
 
   def __init__(self, names: Names) -> None:
@@ -322,7 +318,6 @@ class Running:
     self.awaits: dict[str, list[str]] = {}
     self.parts: dict[str, tuple[str, str, int]] = {}
     self.heard = 0
-    self.lingers: dict[str, str] = {}
     # The Kernel speaks as its ear when it runs what its loop holds, and a word speaks as its rung.
     self.me = self.site.get()
     self.loop = Loop(self)
@@ -364,7 +359,7 @@ class Running:
     the word, which the run of its rung is done with, and the job after it in the line of its rung runs."""
     kind, _, rung, _, before = self.of(run)
     self.frames.pop(run, None)
-    self.waits = {wants: one for wants, one in self.waits.items() if one != run}
+    self.let_go(lambda one: one == run)
     self.awaits = {made: kept for made, ones in self.awaits.items() if (kept := [x for x in ones if x != run])}
     if isinstance(got, BaseException):
       self.broke[rung] = got
@@ -380,43 +375,44 @@ class Running:
     self.drives(rung)
 
   def close(self, run: str, rung: str, got: BaseException | None) -> None:
-    """The word of a run is over: the run is done once each task that the word made is over too, and then once each
-    command that it did not await ends, as linger says."""
-    if any(x.rung == rung and not x.done() for x in self.tasks):
+    """The word of a run is over: the run is done once each task that the word made is over too, and it stands until
+    then, so each task waits through a wants of it. The run of a crafted rung is done with its word, since every
+    other word and prompt of its chain waits for that rung: its tasks go on and wait with no wants."""
+    crafted = verb(self.names, "crafted")(rung)
+    assert isinstance(crafted, list)
+    if rung not in crafted and any(x.rung == rung and not x.done() for x in self.tasks):
       self.holding[rung] = (run, got)
-      return
-    if got is None and self.linger(run, rung):
-      return
-    self.finish(run, rung, got)
+    else:
+      for made, job in self.let_go(lambda one: isinstance(one, Task) and one.rung == rung):
+        self.awaits.setdefault(made, []).append(job)  # ty: ignore[invalid-argument-type]
+      self.finish(run, rung, got)
 
-  def linger(self, run: str, rung: str) -> bool:
-    """The word of a turn of a model that is over with each command that it started and did not await still open
-    waits for them, for
-    LINGER seconds at the most, by a wait for them that its run makes with no wants: the chain counts the run as a
-    word that runs, so it acknowledges none of them and asks no reply, and it tells what each command gave before it
-    asks the next one, so the model reads it in the turn after the word that started it."""
-    made = verb(self.names, "get")(rung)
-    if not isinstance(made, tuple) or made[4] or not (left := self.left(rung)):
-      return False
-    with self.site.set(run):
-      waited = verb(self.names, "wait")(LINGER, *left)
-    self.lingers[str(waited)] = run
-    return True
+  def let_go(self, picks: Callable[[str | Task], bool]) -> list[tuple[str, str | Task]]:
+    """Each wants through which a job that picks names waits, said done with CancelledError, as that wants, since that
+    job waits through it no more; gives the act that each awaited, with its job."""
+    gone = [(wants, job) for wants, job in self.waits.items() if picks(job)]
+    for wants, _ in gone:
+      del self.waits[wants]
+      with self.site.set(wants):
+        verb(self.names, "over")(wants) or verb(self.names, "say")("done", wants, self.cancelled())
+    return [(self.made(wants), job) for wants, job in gone]
 
-  def left(self, rung: str) -> list[str]:
-    """Each command under a rung that is not over."""
-    over, under = verb(self.names, "over"), verb(self.names, "under")
-    made = verb(self.names, "transcript")(rung, "bash")
-    assert isinstance(made, list)
-    return [x[1] for x in made if under(x[1], rung) and not over(x[1])]
+  def made(self, wants: str) -> str:
+    """The act that a wants waits for."""
+    asked = verb(self.names, "get")(wants)
+    assert isinstance(asked, tuple)
+    return str(asked[4])
 
-  def lingered(self, waited: str, value: object) -> None:
-    """The wait of a word that lingers is over: the word waits again for the commands that are still open when the
-    wait ended at the end of one, and its run is done with nothing once none is open or the seconds passed."""
-    run = self.lingers.pop(waited)
-    rung = self.of(run)[2]
-    if value is None or not self.linger(run, rung):
-      self.finish(run, rung, None)
+  def answer(self) -> None:
+    """Each wants whose act is done and whose rung no pause covers, said done with what that act came to, as that
+    wants, so a pause over the rung holds the word and a wake lets it go on. The job that waits through it goes on
+    when the Kernel hears that done, at a later turn of the bus."""
+    over, paused, peek = (verb(self.names, x) for x in ("over", "paused", "peek"))
+    for wants, job in list(self.waits.items()):
+      made = self.made(wants)
+      if not over(wants) and over(made) and not paused(self.rung_of(job)):
+        with self.site.set(wants):
+          verb(self.names, "say")("done", wants, peek(made))
 
   def finish(self, run: str, rung: str, got: BaseException | None) -> None:
     """The run of a word, said done with what the word gave, as that run, unless the record ended it already. A
@@ -546,31 +542,30 @@ class Running:
     return False
 
   def through(self, job: str | Task, made: str) -> bool:
-    """A wants for the act that a job waits for, made as the run of its rung once that run stands in the line of the
-    rung, or nothing. The chain counts a run as a word that waits from the start of a wants to its done, so while a task
-    of the run waits through a wants, no other job of the run makes one, and a task makes one only while no job does."""
+    """A wants for the act that a job waits for, made as the run of its rung once that run stands, or nothing, so the
+    chain knows each act that each job of the run awaits. The wants takes itself as it is made, as the Kernel takes a
+    run, so no other ear answers it."""
     run = self.standing(job)
-    if not run or any(
-      self.standing(x) == run and (isinstance(x, Task) or isinstance(job, Task)) for x in self.waits.values()
-    ):
+    if not run:
       return False
     with self.site.set(run):
-      wants = verb(self.names, "act")("wants", "", None, made)
+      wants = verb(self.names, "act")("wants", "", taken, made)
     assert isinstance(wants, str)
     self.waits[wants] = job  # ty: ignore[invalid-assignment]
     return True
 
   def standing(self, job: str | Task) -> str:
-    """The run that stands in the line of the rung of a job, or nothing while the model of the rung writes."""
+    """The run that stands for the rung of a job, or nothing while the model of the rung writes."""
     return self.stands(self.rung_of(job))
 
   def stands(self, rung: str) -> str:
-    """The run that stands in the line of a rung, or nothing while the model of the rung writes."""
-    return next((x for x in self.line.get(rung, []) if x not in self.parts), "")
+    """The run that stands for a rung: the run in its line, or the run whose word is over and whose tasks live, or
+    nothing while the model of the rung writes."""
+    return next((x for x in self.line.get(rung, []) if x not in self.parts), "") or self.holding.get(rung, ("",))[0]
 
   def settle(self, rung: str) -> None:
     """Each job of a rung that waits for an act with no wants, in the order that it came, waits through a wants once
-    through lets it, as when a run of the rung stands, or the wants of a task of that run is done."""
+    a run of the rung stands."""
     for made, ones in list(self.awaits.items()):
       for one in [x for x in ones if self.rung_of(x) == rung and self.through(x, made)]:
         ones.remove(one)
@@ -684,19 +679,21 @@ class Running:
     return got
 
   def dropped(self, control: tuple) -> None:
-    """Every run whose rung a control is over, dropped, with each task of its word: the frame of a word that is mid step
-    is never closed."""
+    """Every run that a control is over, or whose rung it is over, dropped, with each task of its word: the frame of a
+    word that is mid step is never closed."""
     covers = verb(self.names, "covers")
-    for waited, one in list(self.lingers.items()):
-      if covers(control, self.of(one)[2]) and self.lingers.pop(waited, None):
-        self.finish(one, self.of(one)[2], None)
-    for task in [x for x in self.tasks if covers(control, x.rung) and not getattr(x.coro, "cr_running", False)]:
+
+    def hit(rung: str) -> bool:
+      return bool(covers(control, rung) or covers(control, self.stands(rung)))
+
+    for task in [x for x in self.tasks if hit(x.rung) and not getattr(x.coro, "cr_running", False)]:
+      self.let_go(lambda one, task=task: one is task)
       self.tasks.remove(task)
       task.coro.close()
       Future.cancel(task)
-    for rung in [x for x in self.holding if covers(control, x)]:
+    for rung in [x for x in self.holding if hit(x)]:
       self.finish(self.holding.pop(rung)[0], rung, self.cancelled())
-    for one in [x for x in self.frames if covers(control, self.of(x)[2])]:
+    for one in [x for x in self.frames if hit(self.of(x)[2])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
         self.ended(one, self.cancelled())
@@ -704,14 +701,9 @@ class Running:
 
 def lost(names: Names) -> Generator[tuple, object]:
   """What a Kernel says at its birth of each run that an earlier Kernel took and that is not over, whose frame it holds
-  not: the end of each wants of that run that is not over and of the run, and the close of the rung of a run that
-  awaited, each with a refusal that says the word was lost."""
-  get, over, transcript, close = (
-    verb(names, "get"),
-    verb(names, "over"),
-    verb(names, "transcript"),
-    verb(names, "close"),
-  )
+  not: the end of each wants of that run that is not over and of the run, each with a refusal that says the word was
+  lost, which the rung of the run hears as the done of its run."""
+  get, over, transcript = verb(names, "get"), verb(names, "over"), verb(names, "transcript")
   refused = names["Refused"]
   assert isinstance(refused, type)
   why = refused("the Kernel that ran the word of the rung of this run raised, so the word was lost and runs no more")
@@ -725,10 +717,11 @@ def lost(names: Names) -> Generator[tuple, object]:
       for one in wants:
         yield "done", one, why
       yield "done", run, why
-      asked = get(run)
-      assert isinstance(asked, tuple)
-      if wants and not over(asked[4]):
-        close(why, asked[4])
+
+
+def taken(wants: str) -> Generator[tuple, object]:
+  """The ear of a wants, which takes it at once: the Kernel says it done, as that wants."""
+  yield "started", wants
 
 
 def kernel(names: Names) -> Ear:
@@ -742,7 +735,9 @@ def kernel(names: Names) -> Ear:
   held, heard = Running(names), {"run", "writing", "wants", "cancel", "close"}
   yield from lost(names)
   while True:
-    match (yield heard | set(held.awaits) | set(held.lingers)):
+    # The done of each act that a wants waits for, heard by its kind: the act itself may be a rung, whose name each
+    # act that it makes carries, and a busy ear of the outside that listens to an act defers the refusal of that act.
+    match (yield heard | set(held.awaits) | ({"done"} if held.waits else set())):
       case ("run", run, *_):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.took(run)
@@ -750,18 +745,14 @@ def kernel(names: Names) -> Ear:
         held.begin(held.wrote(rung, part, before))
       case ("started", run, *_) if run in held.taken:
         held.begin(run)
+      case ("done", wants, _, value) if wants in held.waits:
+        one = held.waits.pop(wants)
+        made = held.made(wants)
+        held.resume(one, made, held.given(made, value))
       case ("done", made, _, value) if made in held.awaits:
         for one in held.awaits.pop(made):
           held.resume(one, made, held.given(made, value))
-      case ("done", waited, _, value) if waited in held.lingers:
-        held.lingered(waited, value)
-      case ("done", wants, _, value) if wants in held.waits:
-        asked = verb(names, "get")(wants)
-        assert isinstance(asked, tuple)
-        one = held.waits.pop(wants)
-        rung = held.rung_of(one)
-        held.resume(one, asked[4], held.given(str(asked[4]), value))
-        held.settle(rung)
       case ("cancel" | "close", *_) as control:
         held.dropped(control)
+    held.answer()
     held.loop.rest()

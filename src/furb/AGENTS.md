@@ -45,7 +45,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave. It is the loop of asyncio of each word
   while it steps it, so the tasks that asyncio.gather and asyncio.create_task make are its own: it steps them in the
-  order that the facts come, a task waits through a wants only while no other job of its run does, and the run is
+  order that the facts come, each job of the run that waits for an act waits through a wants of the run, and the run is
   done once the word and each of its tasks are over. It refuses, where the word waited, an await that cannot settle:
   of what is neither an act nor a future of that loop, of a chain, of a name of no act, and of the rung or the run of
   the word itself.
@@ -122,14 +122,14 @@ meanings. The entry of such a name here gives only its form in the engine.
 - message: the text a prompt carries.
 - shape: the python type of a response, which a prompt carries by its name.
 - response: what a prompt completes with.
-- acknowledgment: the prompt of nothing that a chain of an earlier build made on a thread that was over when an act
+- end notice: the prompt of nothing that a chain of an earlier build made on a thread that was over when an act
   that a rung of that thread made failed. A chain makes none now, since a thread closes only once no command, wait or
   prompt under it runs, and the view of the crate still reads those prompts in an older record.
 - due: the state of an open thread that a model answers once a new fact for it came that no reply read, as a notice
   on it, the end of an act of it that no word awaits, or the answer of a question on it; the chain makes one rung of
   a due thread, and asks it one reply.
 - barren: a step that raises, that makes nothing and changes no name of its module, or that repeats a word of its
-  thread; the third in a row pauses its thread, or lets it rest on its open acts.
+  thread; the third in a row rests its thread until a fact makes it due.
 - thread: a prompt and the prompts on it, in order, each of which names the one before it as its on; a prompt of
   None on a thread that is open is a notice of it, and any other prompt on it is a question, as a message of a
   person that waits for its answer: its own rung answers it in steps, the thread goes on after the answer, and no
@@ -145,8 +145,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   stand in its own call while the part prompts a chain that asks the World for a reply.
 - ran: the fact the Kernel says, as a rung, once the part of a writing of that rung is over, with what the part
   raised, which the World hears to end a reply at a part that raised.
-- wants: the act a run makes when its word waits for an act that is not done, which the rung takes and answers
-  with what that act came to.
+- wants: the act a run makes when its word or a task of it waits for an act that is not done, which takes itself as
+  it is made, and which the Kernel says done, as that wants, with what that act came to once no pause covers the rung.
 - step: one turn of a model and the run of its word, which is one rung.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of

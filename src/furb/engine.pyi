@@ -64,7 +64,6 @@ An ear speaks by yielding a saying, and the work it began speaks later by say, u
 The chain has the Kernel begin every rung, by the act run.
 The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
-The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
 type Show = tuple[int, int] | str | list[str] | Callable[[list[str]], list[int]]
 """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
@@ -304,7 +303,7 @@ def pause(id: str, why: object = None) -> None:
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
   A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears the wake and then everything that was said meanwhile, in order.
-  An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run.
+  An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a wants of the run of a paused rung is taken as it is made.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
   A pause of a name of no act of the life raises Refused, which names it, and says nothing.
@@ -339,13 +338,13 @@ def cancel(id: str, why: object = None) -> None:
 
 def jump(drop: list[str] = [], word: str = "", on: str = "") -> Act[str]:
   """A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change.
-  jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain.
-  Each jump of a chain that comes before the chain rests makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps.
+  jump makes, once no step of a word of the chain runs and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain, while a word or a task that awaits an act goes on.
+  Each jump of a chain that comes before the chain jumps makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps.
   The chain that a jump makes keeps each stand and each cd of the chain whatever drop names, so it stands where the chain stood and works in its directory.
   After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says, so its threads, its messages and the next ask of its model are there.
   Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled.
   The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it.
-  A word that jumps its own chain ends first, so no word runs across a jump.
+  The step of a word that jumps its own chain ends first, and a word that awaits across a jump binds each later name in the module of the chain that it ran on: the chain that the jump made holds its later facts and the names that its told runs bind, so a model that names another of its names there meets a NameError.
   A jump whose word is no str is refused, since no chain takes it, so the chain does not jump.
   """
 
@@ -364,7 +363,7 @@ def close(value: object, id: str = "") -> None:
   close is given the value first, since a word that answers its own prompt names no act at all.
   A value closes an act with that value, and a prompt with a value that has its shape.
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
-  A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row pauses the thread when no act of it is open, and else the thread rests until an act of it ends.
+  A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row rests the thread until a fact makes it due.
   A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word answers, awaits or cancels each.
   A wait under the prompt neither refuses its close nor is cancelled by it, since a wait does no work: each act that it waits for counts by itself, and the close ends the word that awaits it.
   A close of a prompt that another says, the operator, an ear or a word that is not under the prompt, first cancels each command and each prompt under the prompt that is not over, so the transcript shows the cancel of each, and then ends the prompt.
@@ -611,7 +610,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A thread is asked again exactly when a new fact for it came since its last ask, so it rests only when it is over, when it is paused, or when nothing new came for it; this rule is of a thread that is open and that a model answers.
   A step is barren when it raises, when it made no act, closed no prompt, changed no name of the module of its chain and no act that it awaited ended, as a step that only passes or debugs, and when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended.
   An act of a step is each question that the step made but its reply and each control that it said, on its chain or on another, as a message to a worker on another chain, whether its model still wrote the word or the word ran, and an act that was over before the await is no end.
-  The third barren step in a row pauses the thread when no act of it is open, with what that step raised as the why, or made nothing when it raised nothing, and in each other case the thread rests with no pause until a fact makes it due; so a loop of one word, two words in turn that each only debug and a loop of passes while a grant tells its ledger end at the third step, and two words in turn that each read a file end at the fifth, while a loop whose each step awaits an act that ends has no bound here: the time of each act bounds it, and a grant bounds its spend.
+  The third barren step in a row rests the thread with no pause until a fact makes it due, as a message of a person does; so a loop of one word, two words in turn that each only debug and a loop of passes while a grant tells its ledger end at the third step, and two words in turn that each read a file end at the fifth, while a loop whose each step awaits an act that ends has no bound here: the time of each act bounds it, and a grant bounds its spend.
   The chain asks a thread again only for a fact for that thread, and a fact of another thread asks it never.
   A thread is due, one time for one fact, and its count of barren steps starts again, when it is made, at a wake that covers it, and at a message on it of a person or of a model whose word is no word of the thread, as a word of another thread of its chain, of a thread that a word of it made, or of another chain, and at the end of a question on it that no word of the thread asked, as a message of a person that waits for its answer, so the thread goes on after that answer.
   An open act of a thread is an act that a word of the thread made and that the outside started, or a prompt or a rung that such a word made, from its start to its done, so an act with an ear of its own that never ends, as a chain or a grant, is no open act.
@@ -903,7 +902,7 @@ A paused chain makes no new reply after a held response.
 No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once.
 It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake.
 A pause over the rung that the chain asked for gives the turn of the chain to the next rung that waits, so a paused prompt holds no other prompt of the chain, and the paused rung takes the turn again after its wake.
-The chain asks no model while a word of the chain runs, so every word that is ready runs before a model is asked.
+Nothing that a word of the chain runs or awaits holds a reply: a command, a wait, a prompt, a gather, a task that the word left running, or a future of its loop, so a thread that a fact makes due is asked as soon as no reply of the chain is in flight.
 The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once.
 """
 type Ready = tuple[Literal["ready"], str, str, str]
@@ -945,7 +944,7 @@ The ran of a writing whose part follows another word than the word that ran hold
 The ran of a writing of a rung that is done holds CancelledError, since its part never begins.
 """
 type Wants = tuple[Literal["wants"], str, str, str, str]
-"""A wants is the act that a run makes when its word waits for an act: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word.
+"""A wants is the act that a run makes when its word, or a task of its word, waits for an act: it takes itself as it is made, a run holds many at once, and the Kernel says each done, as that wants, with what its act came to once that act is done and no pause covers the rung, so a pause over the rung holds the word.
 A word that awaits an act that is over goes on at a later turn of the bus, through a wants, as when it awaits one that is not over, so it never holds the bus and the journal keeps each fact in its order.
 """
 type Out = tuple[Literal["out"], str, str, str, str]
@@ -1042,7 +1041,9 @@ def tells(id: str) -> bool:
   """
 
 def crafted(id: str) -> list[str]:
-  """The rungs with a word and an actor that are open on the chain of an act, by their names, in the order that they were made, which a rung with a word, a prompt to a model and the open of the root wait for."""
+  """The rungs with a word and an actor that are open on the chain of an act, by their names, in the order that they were made, which a rung with a word, a prompt to a model and the open of the root wait for.
+  The run of a crafted rung is done once its word is over, so a task that its word left running goes on and holds no other word and no prompt of its chain.
+  """
 
 def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.

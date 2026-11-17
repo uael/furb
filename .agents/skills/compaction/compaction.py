@@ -31,7 +31,8 @@ this chain then names the new one, so the work goes on there, and the turns of t
 - supersede(keep) jumps this chain to a chain that keeps what the filter keep kept, the setup, and each stand and
   cd. compact() supersedes this chain with a filter that applies FILTERS in order, and its first word there
   binds the summary that it is given and reads again each file whose read or write it kept, showing what changed. Its
-  prompts, its threads and its module go on there. A jump waits until no word of the chain runs.
+  prompts, its threads and its module go on there. A jump waits until no step of a word of the chain runs; a word
+  that still awaits goes on, and binds its later names on this chain, not on the new one.
 - A filter drops acts. latest() keeps the last read or write of each path, quiet() drops the commands, recent(n)
   keeps the acts of the last n replies, and await chosen() asks the model of this chain which acts to keep.
   together(*filters) applies filters in order.

@@ -136,7 +136,7 @@ pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Works<'a>) -> Option<&'a 
   }
 }
 
-/// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
+/// What a prompt to a model is: a message of a thread when it stands on one, the end notice of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
 /// that the operator made himself. A note that a word puts on another chain where no agent works
@@ -154,7 +154,7 @@ fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
   });
   let none = !starts && act.words.first().is_some_and(|shape| shape == "None");
   match maker {
-    Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
+    Some(maker) if none && maker.kind == Kind::Chain => end_notice(act, rows),
     _ if *act.by == *WATCH => Verdict::Aside(Aside::Notice),
     Some(maker) if maker.kind.as_str() == NAME => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
@@ -177,9 +177,9 @@ fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
   }
 }
 
-/// What the acknowledgment of an act that a chain made is: a message of the thread of that act, or
+/// What the end notice of an act that a chain made is: a message of the thread of that act, or
 /// an aside when the act stands in no thread.
-fn acknowledged<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Verdict<'a> {
+fn end_notice<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Verdict<'a> {
   let message = act.words.get(1).and_then(|one| one.as_str()).unwrap_or_default();
   let about = message.split_once(' ').map(|(about, _)| about).filter(|about| {
     about.len() > 1

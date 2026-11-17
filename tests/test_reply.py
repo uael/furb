@@ -316,22 +316,30 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   assert said(log, "reply")[0][2] == held and engine.peek(held) == 2
 
 
-async def test_the_chain_asks_no_model_while_a_word_of_the_chain_runs() -> None:
-  """The chain asks no model while a word of the chain runs, so every word that is ready runs before a model is asked."""
-  _, log, root = born("close(1)", "close(2)")
-  laid = engine.rung("k = 1", on=root)
-  act = engine.prompt(int, "count", on=root)
-  assert await act == 1
-  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == laid]
-  ended = log.index(next(a for a in log if a[:2] == ("done", run)))
-  assert ended < log.index(said(log, "reply")[0])
-  outer = engine.rung("rung('j = 2')\nprompt(int, 'again')", on=root)
-  await settle()
-  (inner,) = [a[1] for a in engine.transcript(root) if a[0] == "rung" and a[2] == outer]
-  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == inner]
-  facts = engine.transcript(root)
-  replies = [i for i, a in enumerate(facts) if a[0] == "reply"]
-  assert facts.index(next(a for a in facts if a[:2] == ("done", run))) < replies[1]
+async def test_nothing_that_a_word_of_the_chain_runs_or_awaits_holds_a_reply() -> None:
+  """Nothing that a word of the chain runs or awaits holds a reply: a command, a wait, a prompt, a gather, a task that the word left running, or a future of its loop, so a thread that a fact makes due is asked as soon as no reply of the chain is in flight."""
+  task = "import asyncio\nasync def watch():\n  await {}\nt = asyncio.create_task(watch())"
+  future = "asyncio.get_running_loop().create_future()"
+  for word in (
+    "await bash('slow')",
+    "bash('slow')",
+    "await wait(600, bash('slow'))",
+    "await prompt(int, 'sub', on=chain('w'))",
+    "import asyncio\nawait asyncio.gather(bash('slow'), bash('slow'))",
+    task.format("bash('slow')"),
+    task.format(future),
+    f"import asyncio\nawait {future}",
+  ):
+    _, log, root = born(word, auto=False)
+    one = engine.prompt(int, "count", on=root)
+    for _ in range(4):
+      await settle()
+    engine.prompt(None, "look", on=one)
+    for _ in range(4):
+      await settle()
+    steps = [a[1] for a in said(log, "rung") if a[2] == one]
+    ended = [engine.over(a[1]) for a in said(log, "bash")]
+    assert ([a[2] for a in said(log, "reply") if a[3] == root], len(steps), any(ended)) == (steps, 2, False), word
 
 
 async def test_the_chain_asks_one_model_at_a_time() -> None:

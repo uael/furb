@@ -410,7 +410,7 @@ impl<'a> Reader<'a> {
       act.kind == Kind::Prompt && *act.id != *thread && message_of(act, &self.held) == Some(thread)
     };
     // Each prompt of the thread, whose rungs answer the thread, and the messages that the operator
-    // said among them: a wake or an acknowledgment that the engine says is no message.
+    // said among them: a wake or an end notice that the engine says is no message.
     let prompts: Vec<&Act> =
       [prompt].into_iter().chain(self.held.on_chain(&prompt.chain).filter(on)).collect();
     // Each word that an operator ran on a prompt of the thread is a message of his, as code.

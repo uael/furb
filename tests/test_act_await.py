@@ -61,8 +61,8 @@ async def test_a_word_runs_coroutines_at_once_as_tasks_in_an_order_that_the_reco
   commands = {a[4]: a[1] for a in said(log, "bash")}
   # An argument of gather is made at the call, and each task runs from the next turn of the loop, in its order.
   assert list(commands) == ["four", "three", "one", "two"]
-  # Each task waits through one wants of the run at a time, so the chain counts the run as a word that waits.
-  assert [a[4] for a in said(log, "wants")] == [commands["three"]]
+  # Each task waits through a wants of the run of its own, so the chain knows each act that the word awaits.
+  assert [a[4] for a in said(log, "wants")] == [commands[x] for x in ("three", "one", "two", "four")]
   for command in ["two", "four", "one"]:
     sand.exits(commands[command], 0)
     await settle()
@@ -75,6 +75,14 @@ async def test_a_word_runs_coroutines_at_once_as_tasks_in_an_order_that_the_reco
   again, _ = await relived(replace(sand, record=[], calls=[]), plain(sand.record))
   assert engine.turns(on=root) == before and engine.peek(run, ...) is None
   assert [a[1:] for a in again if a[0] == "wants"] == [a[1:] for a in log if a[0] == "wants"]
+  watch = "import asyncio\nasync def watch():\n  await bash('slow')\nt = asyncio.create_task(watch())"
+  sand, log, root = born(watch, "close(1)", auto=False)
+  one = engine.prompt(int, "watch", on=root)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), [a[1] for a in said(log, "wants")]) == (1, [said(log, "wants")[0][1]])
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await one == 1
 
 
 async def test_a_task_that_raises_or_that_is_cancelled_raises_that_exception_or_cancellederror_where_it_is_awaited() -> (

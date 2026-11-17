@@ -4252,7 +4252,7 @@
           "required": [
             "aside"
           ],
-          "description": "A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as\nthe acknowledgment of an act that stands in no thread of the chain, a stall that the watch of\nthe daemon tells, or the question of the act that names the session."
+          "description": "A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as\nthe end notice of an act that stands in no thread of the chain, a stall that the watch of\nthe daemon tells, or the question of the act that names the session."
         },
         {
           "type": "object",
@@ -4265,7 +4265,7 @@
           "required": [
             "aside"
           ],
-          "description": "What a word of the operator told the chain: a prompt of None that a rung of his made, or the\nacknowledgment of a rung that stands in no thread."
+          "description": "What a word of the operator told the chain: a prompt of None that a rung of his made, or the\nend notice of a rung that stands in no thread."
         },
         {
           "type": "object",

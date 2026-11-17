@@ -74,7 +74,7 @@ async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> Non
   assert dones(log, "wants") == []
   engine.wake(root)
   await settle()
-  assert [one[2] for one in dones(log, "wants")] == [command[2]] and (await act) == 0
+  assert [one[2] for one in dones(log, "wants")] == [said(log, "wants")[0][1]] and (await act) == 0
 
 
 async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:

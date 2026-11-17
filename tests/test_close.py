@@ -178,12 +178,14 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
 
 
 async def test_a_close_in_the_wrong_shape_is_a_raise_of_its_step_which_is_barren() -> None:
-  """A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row pauses the thread when no act of it is open, and else the thread rests until an act of it ends."""
-  _, log, root = born(*["close('bad')"] * 8, auto=False)
+  """A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row rests the thread until a fact makes it due."""
+  _, log, root = born(*["close('bad')"] * 3, "close(5)", auto=False)
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert len([a for a in said(log, "rung") if a[2] == act]) == 3 and engine.paused(act)
-  assert [repr(a[3]) for a in said(log, "pause") if a[1] == act] == [repr(Refused("'bad' not int"))]
+  assert len([a for a in said(log, "rung") if a[2] == act]) == 3 and not engine.paused(act)
+  assert said(log, "pause") == []
+  engine.prompt(None, "an int", on=act)
+  assert await act == 5
   sand, log, root = born("x = bash('slow')\nclose('bad')", "close('bad')", "close('bad')", "close(4)", auto=False)
   act = engine.prompt(int, "count", on=root)
   await settle()
