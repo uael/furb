@@ -1276,7 +1276,7 @@ async fn a_fault_of_one_life_leaves_the_daemon_and_the_other_lives() {
   let bad = opened(&mut window, &at, "bad.jsonl").await;
   match window.ask(Verb::Attach { life: bad.clone(), from: 0 }).await {
     Ok(Answer::Done) => {
-      let ended = |frame: &Frame| matches!(frame, Frame::Event { life, event, .. } if *life == bad && matches!(**event, Event::Ended(Some(_))));
+      let ended = |frame: &Frame| matches!(frame, Frame::Event { life, event, .. } if **life == *bad && matches!(**event, Event::Ended(Some(_))));
       window.until(ended).await;
     }
     refused => assert_eq!(refused, Err(ProtocolError::Closed { life: bad.clone() })),
@@ -1336,7 +1336,7 @@ async fn a_window_that_attaches_a_life_that_a_fault_ended_hears_why() {
   window.ended(&life).await;
   assert_eq!(window.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Ok(Answer::Done));
   let why = SchemaError::BeforeCut { of: "record" }.to_string();
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if **one == *life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
   window.until(ended).await;
 }
 
@@ -1352,7 +1352,7 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_its_window_unt
   fs::copy(before, at.join("before.jsonl")).unwrap();
   let life = open(&mut window, &at, "before.jsonl", Some(0)).await;
   let why = SchemaError::BeforeCut { of: "record" }.to_string();
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if **one == *life && matches!(&**event, Event::Ended(Some(no)) if *no == why));
   window.until(ended).await;
   let page = || Verb::Thread {
     life: life.clone(),
@@ -1420,7 +1420,7 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
     attach: Some(0),
   };
   assert_eq!(later.ask(verb).await, Ok(Answer::Done));
-  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if *one == life && matches!(&**event, Event::Ended(Some(why)) if drift(why)));
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event, .. } if **one == *life && matches!(&**event, Event::Ended(Some(why)) if drift(why)));
   later.until(ended).await;
   let said = format!("furb host: the life of {life} ended: ");
   let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);

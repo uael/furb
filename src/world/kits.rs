@@ -33,6 +33,7 @@ use std::{
 mod uv;
 
 use furb_wire::{
+  Name,
   error::ProtocolError,
   event::Event as Told,
   protocol::{Answer, Config, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
@@ -145,8 +146,15 @@ pub(crate) fn kits(
   places: Places,
 ) -> Box<dyn Ear> {
   ear(move |mut co: Co<Worked>| async move {
-    let mut kits =
-      Kits { life, here, images, places, played: Vec::new(), held: HashMap::new(), seq: 0 };
+    let mut kits = Kits {
+      life: Name::from(life),
+      here,
+      images,
+      places,
+      played: Vec::new(),
+      held: HashMap::new(),
+      seq: 0,
+    };
     co.keeps(Programs::new())?;
     for (name, program) in co.kept::<Programs>()?.iter() {
       kits.learn(name, program.as_deref());
@@ -178,7 +186,7 @@ type Programs = Vec<(String, Option<String>)>;
 /// plays in the order of its enables, the kit of each act that a process holds, and how many facts
 /// the ear told.
 struct Kits {
-  life: String,
+  life: Name,
   here: PathBuf,
   images: Option<PathBuf>,
   places: Places,
@@ -229,7 +237,7 @@ impl Kits {
       return;
     }
     let frame = Frame::Event {
-      life: self.life.clone(),
+      life: Arc::clone(&self.life),
       seq: self.seq,
       event: Arc::new(Told::Fact(outward(a.object().as_ref()))),
     };

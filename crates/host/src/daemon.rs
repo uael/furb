@@ -2047,6 +2047,8 @@ impl Teller {
     asks: mpsc::WeakUnboundedSender<Asked>,
   ) {
     let Self { life, mut opens, outbox } = self;
+    // Each frame of an event names the life by this one text, which it shares.
+    let named = Name::from(life.as_str());
     let mut events = pin!(events);
     loop {
       let event = tokio::select! {
@@ -2064,7 +2066,7 @@ impl Teller {
       let paced = event.is_none();
       let due = |opens: &&mut Heard| paced || opens.ended();
       let opening = opens.iter_mut().filter(due).flat_map(|opens| opens.frames(&life));
-      let event = event.map(|(seq, event)| Frame::Event { life: life.clone(), seq, event });
+      let event = event.map(|(seq, event)| Frame::Event { life: Arc::clone(&named), seq, event });
       if opening.chain(event).any(|frame| outbox.send(frame).is_err()) {
         break;
       }

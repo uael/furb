@@ -98,7 +98,7 @@ impl Client {
     let Frame::Event { life, event, .. } = frame else { return false };
     let Event::Queued { chain, waiting } = &**event else { return false };
     if let Some(told) = self.machines.get_mut(at) {
-      told.queued.entry(life.clone()).or_default().insert(chain.clone(), waiting.clone());
+      told.queued.entry(life.to_string()).or_default().insert(chain.clone(), waiting.clone());
     }
     true
   }

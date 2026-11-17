@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::{
   Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads,
-  act::{Name, read_names},
+  act::{Name, read_name, read_names},
   card,
   error::ProtocolError,
   event::{Event, Seq},
@@ -712,7 +712,12 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   // The frame shares the event that the log holds, so the frame of each window copies none of it.
-  Event { life: String, seq: Seq, event: Arc<Event> },
+  Event {
+    #[serde(deserialize_with = "read_name")]
+    life: Name,
+    seq: Seq,
+    event: Arc<Event>,
+  },
   /// Each operator that a window of a life holds now, pushed to each of its windows after each
   /// attach, detach and draft.
   Presence { life: String, operators: Vec<Present> },

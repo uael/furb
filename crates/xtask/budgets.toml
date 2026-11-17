@@ -44,7 +44,7 @@ memory_heap_mib = 512
 # its image each 10 000 facts. memory_allocs_per_frame: the daemon and the window, for each frame that a window reads
 # when it attaches at the start of the log of a life, in the test of the slow window.
 [bench.macos]
-# Measured on 11-17, macOS 26, dev profile: 1322; 1377, 1339 and 1346; 19.
+# Measured on 11-17, macOS 26, dev profile: 1322; 1364, 1326 and 1333; 18.
 memory_allocs_per_fact = 1322
-memory_allocs_per_fact_large = 1346
-memory_allocs_per_frame = 19
+memory_allocs_per_fact_large = 1333
+memory_allocs_per_frame = 18
