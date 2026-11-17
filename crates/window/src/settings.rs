@@ -166,7 +166,7 @@ impl Model {
   /// it comes from, how it plays now and the change that waits for the next session, then what he
   /// does to it in place: turn it on or off, reload the extensions of the session, or mention it in
   /// the message.
-  pub(crate) fn extension(&self, place: usize) -> Vec<Entry> {
+  pub(crate) fn skill(&self, place: usize) -> Vec<Entry> {
     let Some(one) = self.client.skill_at(place) else { return Vec::new() };
     let about =
       |left: String| Entry { part: Cow::Owned(one.name.clone()), left, ..Entry::default() };

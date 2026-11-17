@@ -58,9 +58,8 @@ pub(crate) enum Pick {
   Value(usize),
   /// The skills of the session that the input sends to, with how each plays.
   Skills,
-  /// One extension, by its place among the skills: what it is, how it plays, and what he does to
-  /// it.
-  Extension(usize),
+  /// One skill, by its place among the skills: what it is, how it plays, and what he does to it.
+  Skill(usize),
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, the place of the
@@ -213,7 +212,7 @@ impl Pick {
       Self::Leave => "Leave the window",
       Self::Settings | Self::Value(_) => "Settings",
       Self::Skills => "Extensions",
-      Self::Extension(_) => "Extension",
+      Self::Skill(_) => "Extension",
     }
   }
 
@@ -231,7 +230,7 @@ impl Pick {
       Self::Settings => "Search a setting",
       Self::Value(_) => "Write the value",
       Self::Skills => "Search a skill or an extension",
-      Self::Extension(_) => "Search what to do",
+      Self::Skill(_) => "Search what to do",
     }
   }
 
@@ -243,7 +242,7 @@ impl Pick {
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models | Self::Efforts => "take it",
       Self::History => "write it",
-      Self::Session | Self::Leave | Self::Extension(_) => "do it",
+      Self::Session | Self::Leave | Self::Skill(_) => "do it",
       Self::Settings => "change it",
       Self::Value(_) => "set it",
       Self::Skills => "open it",
@@ -347,7 +346,7 @@ impl Model {
       Pick::Leave => self.leave_choices(),
       Pick::Settings => self.settings(),
       Pick::Skills => self.played(),
-      Pick::Extension(place) => self.extension(place),
+      Pick::Skill(place) => self.skill(place),
       // The part that writes a value stands in the columns of the settings that it came from.
       Pick::Value(place) => self.settings().into_iter().chain(self.value(place)).collect(),
     }
@@ -861,7 +860,7 @@ impl Model {
       Choice::Skill(place) => self.took_skill(place),
       Choice::Turn(place) => {
         self.client.turn_skill(place);
-        self.opened_extension(place);
+        self.opened_skill(place);
       }
       Choice::SignIn(device) => {
         self.client.sign_in(device);
@@ -892,14 +891,14 @@ impl Model {
         let mention = format!("/{}", one.name);
         self.client.added(&mention);
       }
-      Some(_) => self.opened_extension(place),
+      Some(_) => self.opened_skill(place),
       None => {}
     }
   }
 
   /// The view of an extension open, on its first action.
-  fn opened_extension(&mut self, place: usize) {
-    let of = Pick::Extension(place);
+  fn opened_skill(&mut self, place: usize) {
+    let of = Pick::Skill(place);
     self.picker =
       Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
     self.chose(0);
@@ -907,7 +906,7 @@ impl Model {
 
   /// The list part closed, or, from the view of an extension, back to the extensions on its row.
   pub(crate) fn closed_part(&mut self) {
-    let Some(Pick::Extension(place)) = self.picker.as_ref().map(|one| one.of) else {
+    let Some(Pick::Skill(place)) = self.picker.as_ref().map(|one| one.of) else {
       self.picker = None;
       return;
     };
