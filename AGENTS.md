@@ -467,8 +467,8 @@ fix what your change broke, and report what was broken before.
   that command.
 - `sh script/hooks/pre-commit run --all-files`: every check that needs no build, in one command, which takes seconds to
   a minute. It runs each hook of the stage `pre-commit` on every file, as the job of the hooks in the gates does: the
-  hooks of a commit, and the type check, the lock of uv, the format of Rust, the links, the paths, the unused names and
-  the workflows. It exits with 1 when a hook fails, and prints `Failed` beside the name of that hook, with its output.
+  hooks of a commit, and the type check, the lock of uv, the format of Rust, the links, the paths, the unused names, the
+  features of furb in the programs and the workflows. It exits with 1 when a hook fails, and prints `Failed` beside the name of that hook, with its output.
   It takes the same pre-commit as the commit hook: the `.venv` of the checkout, else the `.venv` of the main checkout,
   else the `pre-commit` of PATH. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs the
   old `pre-commit` of the system, which cannot read the config, so do not use it there. The type check runs through
