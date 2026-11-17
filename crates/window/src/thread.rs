@@ -850,13 +850,13 @@ impl Model {
     let mut rows: Vec<Rc<Row>> = match self.feed(kept) {
       None => self.home().into_iter().map(Rc::new).collect(),
       Some(mut feed) => {
-        let dock = feed.dock();
-        let room = self.feed_room(dock.len());
+        let (dock, opens, kits) = (feed.dock(), self.open_rows(), self.kit_rows());
+        let room = self.room_beside(opens.len() + dock.len() + kits.len());
         let items = feed.items();
         let shown = items.shown(feed.opened.top, room, |item| feed.part_rows(item));
         let mut rows = Vec::with_capacity(usize::from(self.size.1));
         rows.push(Rc::new(feed.head()));
-        rows.extend(self.open_rows().into_iter().map(Rc::new));
+        rows.extend(opens.into_iter().map(Rc::new));
         let above = rows.len();
         rows.extend(shown.rows);
         rows.resize(above + room, Rc::clone(&blank));
@@ -873,7 +873,7 @@ impl Model {
           }
         }
         rows.extend(dock.into_iter().map(Rc::new));
-        rows.extend(self.kit_rows().into_iter().map(Rc::new));
+        rows.extend(kits.into_iter().map(Rc::new));
         rows
       }
     };
@@ -885,8 +885,12 @@ impl Model {
   /// How many rows the feed takes beside a dock of a count of rows: the window less the head, the
   /// rows of an open, the dock, the rows of the kits and the input.
   pub(crate) fn feed_room(&self, dock: usize) -> usize {
-    let taken = 1 + self.open_rows().len() + dock + self.kit_rows().len() + self.input_rows();
-    usize::from(self.size.1).saturating_sub(taken)
+    self.room_beside(self.open_rows().len() + dock + self.kit_rows().len())
+  }
+
+  /// How many rows the feed takes beside a count of rows of an open, a dock and the kits.
+  fn room_beside(&self, beside: usize) -> usize {
+    usize::from(self.size.1).saturating_sub(1 + beside + self.input_rows())
   }
 
   /// The card of the thread that the window started, while its machine told none: the daemon
