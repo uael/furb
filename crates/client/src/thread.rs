@@ -192,6 +192,19 @@ impl Thread {
     self.agents.iter().filter(|one| one.at.is_some_and(rewound)).collect()
   }
 
+  /// The places of the exchanges that a change of the thread changes, when it changes nothing else
+  /// that an exchange shows: none when it changes the agents, the thread itself as a sub thread,
+  /// the exchanges above or its fault, or when the thread moved in time.
+  pub fn changes(&self, page: &Page) -> Option<Vec<usize>> {
+    let alone = !self.replaces
+      && self.fault.is_none()
+      && self.agents == page.agents
+      && self.sub == page.sub
+      && self.above.is_some_and(|above| above <= page.above);
+    let changed = |one: &&Exchange| self.exchanges.get(&one.at) != Some(*one);
+    alone.then(|| page.exchanges.iter().filter(changed).map(|one| one.at).collect())
+  }
+
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
   /// place of the one before it, and the agents and the context are those of the thread now.
   pub fn took(&mut self, page: Page, now: Duration) {

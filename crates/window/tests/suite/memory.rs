@@ -17,7 +17,7 @@ use opentui::testing::TestApp;
 use crate::{
   cards::{app, options, row, shows},
   counted::Counted,
-  daemon::{ANSWERS, Daemon, MARKDOWN, PATIENCE, STREAMED, STREAMS},
+  daemon::{ANSWERS, Daemon, MARKDOWN, PATIENCE, Peer, STREAMED, STREAMS},
   here::Here,
 };
 
@@ -196,24 +196,44 @@ fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {
 /// the part.
 const QUIET: Duration = Duration::from_millis(100);
 
-/// The most allocations that the window makes for a part of a reply that streams into a thread
-/// under a long answer, with each frame that the part takes: 4,692 on macOS on 11-17, of which
-/// about 3,300 lay out the long answer again, which the part does not change.
-const PER_PART: Bound = on_macos(5200);
+/// The answers above a reply that streams, as the words that make the model answer them and how
+/// many: a short answer, a long answer that fills the feed above the reply, and fifty of them.
+const ABOVE: [(&str, usize); 3] = [(ANSWERS, 1), (MARKDOWN, 1), (MARKDOWN, 50)];
+
+/// How many allocations more than under the short answer a part of a reply may make under the
+/// others: a part lays out the part that it changes, which is the same under each, and no other.
+const GROWTH: usize = 64;
 
 #[test]
-fn a_part_of_a_reply_that_streams_into_a_long_thread_stays_in_its_bound() {
+fn a_part_of_a_reply_lays_out_only_the_part_that_it_changes() {
+  let parts = ABOVE.map(|(answer, count)| streamed_part(answer, count));
+  println!("a part of a reply under {ABOVE:?} makes {parts:?} allocations");
+  let least = parts.iter().copied().min().unwrap_or_default();
+  assert!(
+    parts.iter().all(|one| *one <= least + GROWTH),
+    "a part makes {parts:?} allocations under {ABOVE:?}: it lays out the parts above it again"
+  );
+}
+
+/// The allocations that the window makes for a part of a reply that streams into a thread under a
+/// count of answers, with each frame that the part takes: the middle of its parts after the first,
+/// which opens the block of its word. Each part makes a few more than the one before, as the block
+/// of the reply grows.
+fn streamed_part(answer: &str, count: usize) -> usize {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");
   daemon.served();
   let mut peer = daemon.peer();
   let life = peer.opened(&sessions.join("streams.jsonl"), false);
-  let first = peer.said(&life, &format!("show each part of markdown {MARKDOWN}"));
-  let message = format!("where does the time go {STREAMS}");
-  peer.ask(Verb::Prompt { life, shape: "None".to_owned(), message, to: None, on: Some(first) });
+  let first = peer.said(&life, &format!("show the answer {answer}"));
+  for more in 1..count {
+    asked(&mut peer, &life, &first, format!("show it again {answer}"));
+    answered(&mut peer, (&life, &first), more + 1);
+  }
+  asked(&mut peer, &life, &first, format!("where does the time go {STREAMS}"));
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
-  app.click(80, row(&app, "show each part"));
+  app.click(80, row(&app, "show the answer"));
   shows(&app, "said = '''");
   settled(&app);
   let (process, parts): (Vec<usize>, Vec<usize>) = (0..STREAMED)
@@ -229,12 +249,33 @@ fn a_part_of_a_reply_that_streams_into_a_long_thread_stays_in_its_bound() {
       (Counted::calls() - calls.0, Here::calls() - calls.1)
     })
     .unzip();
-  println!("the parts of a reply make {parts:?} allocations in the window, {process:?} in all");
+  println!("under {count} of {answer}, the parts make {parts:?} in the window, {process:?} in all");
   shows(&app, &format!("part {} of", STREAMED - 1));
-  // The first part opens the block of the word.
-  let part = parts.iter().skip(1).copied().min().unwrap_or_default();
-  println!("a part of a reply makes {part} allocations");
-  bounded(part, PER_PART, "a part of a reply");
+  let mut after: Vec<usize> = parts.iter().skip(1).copied().collect();
+  after.sort_unstable();
+  after.get(after.len() / 2).copied().unwrap_or_default()
+}
+
+/// A message said on a thread.
+fn asked(peer: &mut Peer, life: &str, thread: &str, message: String) {
+  let (life, on) = (life.to_owned(), Some(thread.to_owned()));
+  peer.ask(Verb::Prompt { life, shape: "None".to_owned(), message, to: None, on });
+}
+
+/// The thread once it holds a count of exchanges, the last of which said its answer, as the page of
+/// its end says it: each ask waits for the answer of the daemon.
+fn answered(peer: &mut Peer, (life, thread): (&str, &str), exchanges: usize) {
+  let start = Instant::now();
+  loop {
+    let (life, thread) = (life.to_owned(), thread.to_owned());
+    let verb = Verb::Thread { life, thread, before: None, limit: 1, at: None };
+    let Answer::Page(page) = peer.ask(verb) else { panic!("no page") };
+    let said = page.exchanges.last().is_some_and(|one| !one.said.is_empty());
+    if page.above + page.exchanges.len() == exchanges && said {
+      return;
+    }
+    assert!(start.elapsed() < PATIENCE, "the thread holds {} exchanges", page.above + 1);
+  }
 }
 
 /// The most allocations that a step of the wheel makes on a long thread, with its frame: 414 on

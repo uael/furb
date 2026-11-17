@@ -4,7 +4,7 @@
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
 
-use std::{collections::HashMap, mem, path::Path, rc::Rc};
+use std::{cell::Cell, collections::HashMap, mem, path::Path, rc::Rc, time::Duration};
 
 use crate::cells::Cells;
 use furb::view::{
@@ -29,7 +29,7 @@ use crate::{
     self, BARRED, Line, barred, capital, clipped, marked, run, sliced, spread, styled, wrapped,
   },
   list::project,
-  model::{Kept, Model},
+  model::{Kept, Model, Parts},
   names::{self, Named},
   picture, prose,
   question::{closed, person},
@@ -58,6 +58,8 @@ pub(crate) struct Feed<'a> {
   blocks: Option<Vec<Rc<Read>>>,
   /// The last answer that wrote a file that furb knew before, once a row asks for it.
   reverting: Option<&'a str>,
+  /// Whether the part that the feed lays out read the clock, so it shows a time that moves.
+  timed: Cell<bool>,
 }
 
 impl Model {
@@ -65,12 +67,16 @@ impl Model {
   pub(crate) fn feed<'a>(&'a self, kept: &'a mut Kept) -> Option<Feed<'a>> {
     let opened = self.client.thread.as_ref()?;
     let reverting = self.reverting().map(|one| one.message.as_ref());
-    Some(Feed { model: self, opened, wide: self.wide(), kept, blocks: None, reverting })
+    let timed = Cell::new(false);
+    Some(Feed { model: self, opened, wide: self.wide(), kept, blocks: None, reverting, timed })
   }
 }
 
 /// How many blocks the window keeps the code of before it forgets them all.
 const READ: usize = 256;
+
+/// How many texts that answers said the window keeps the lines of before it forgets them all.
+const SAID: usize = 256;
 
 /// The code of a block as the window read it: the text of each line, the look of its code, its
 /// colors and its names, and the numbers of its lines that bind each name, in their order.
@@ -86,17 +92,19 @@ impl<'a> Feed<'a> {
   /// The rows of a part of the feed, laid out once for what it shows, so a scroll lays out only the
   /// parts that come into sight.
   pub(crate) fn part_rows(&mut self, item: Item) -> Rows {
-    let stamp = Some((self.model.shows, self.model.clock()));
-    if self.kept.parts.0 == stamp
-      && let Some(rows) = self.kept.parts.1.get(&item)
+    let (lays, clock) = (self.model.lays, self.model.clock());
+    if self.kept.parts.lays != Some(lays) {
+      self.kept.parts = Parts { lays: Some(lays), rows: HashMap::new() };
+    }
+    if let Some((rows, read)) = self.kept.parts.rows.get(&item)
+      && read.is_none_or(|read| read == clock)
     {
       return Rc::clone(rows);
     }
+    self.timed.set(false);
     let rows: Rows = self.rows(item).into_iter().map(Rc::new).collect();
-    if self.kept.parts.0 != stamp {
-      self.kept.parts = (stamp, HashMap::new());
-    }
-    self.kept.parts.1.insert(item, Rc::clone(&rows));
+    let read = self.timed.get().then_some(clock);
+    self.kept.parts.rows.insert(item, (Rc::clone(&rows), read));
     rows
   }
 
@@ -587,12 +595,14 @@ impl<'a> Feed<'a> {
     let (at, life, _) = &self.opened.thread.key;
     let thread = &self.opened.thread;
     let pending = thread.pending.iter().map(|one| one.text.as_str());
-    let open =
-      |one: &Exchange| self.opened.unfolded.contains(&Fold::Block(one.message.to_string()));
+    let open = |one: &Exchange| {
+      let folds = self.opened.unfolded.iter();
+      folds.into_iter().any(|fold| matches!(fold, Fold::Block(message) if *message == *one.message))
+    };
     let lines = thread
       .exchanges
       .values()
-      .filter_map(|one| one.block.as_ref().filter(|block| open(one) || !block.rolls()));
+      .filter_map(|one| one.block.as_ref().filter(|block| !block.rolls() || open(one)));
     let gave = lines.flat_map(|block| block.lines.iter().flat_map(|line| &line.pictures));
     let texts = thread.exchanges.values().map(|one| one.text.as_str()).chain(pending);
     let texts = texts.chain(gave.map(String::as_str));
@@ -946,7 +956,7 @@ impl<'a> Feed<'a> {
       // which settles into the grey of a line that ran, so the eye sees where the work moved on.
       Mark::Ran => {
         let (ended, settles) = (self.opened.thread.ended.get(&line.number), self.model.settles);
-        let age = ended.map(|at| self.model.client.moved.saturating_sub(*at));
+        let age = ended.map(|at| self.moved().saturating_sub(*at));
         let share =
           age.filter(|age| *age < settles).map(|age| age.as_millis() * 100 / settles.as_millis());
         let color = share
@@ -964,11 +974,11 @@ impl<'a> Feed<'a> {
       Mark::Runs { began, .. } => {
         let ended = line.made.iter().filter(|one| !matches!(one, Made::Works)).count();
         let count = (line.made.len() > 1).then(|| format!("{ended} of {} ended", line.made.len()));
-        let time = began.and_then(|began| self.model.since(began)).map(timer);
+        let time = began.and_then(|began| self.since(began)).map(timer);
         count.into_iter().chain(time).reduce(|count, time| format!("{count} · {time}"))
       }
       Mark::Stopped { at } => {
-        let age = at.and_then(|at| self.model.age(at / 1000));
+        let age = at.and_then(|at| self.age(at / 1000));
         Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))
       }
       _ => line.output.as_ref().and_then(|one| one.took).filter(|took| *took > 0).map(timer),
@@ -1111,9 +1121,34 @@ impl<'a> Feed<'a> {
     rows
   }
 
+  /// The time from a moment of the clock of the machines to now, in milliseconds, which the part
+  /// that reads it shows as it moves.
+  fn since(&self, began: u64) -> Option<u64> {
+    self.timed.set(true);
+    self.model.since(began)
+  }
+
+  /// How long ago a second was, from one minute on, which the part that reads it shows as it moves.
+  fn age(&self, since: u64) -> Option<String> {
+    self.timed.set(true);
+    self.model.age(since)
+  }
+
+  /// The second now, which the part that reads it shows as it moves.
+  fn second(&self) -> u64 {
+    self.timed.set(true);
+    self.model.second()
+  }
+
+  /// The clock of the loaders now, which the part that reads it shows as it moves.
+  fn moved(&self) -> Duration {
+    self.timed.set(true);
+    self.model.client.moved
+  }
+
   /// What a line whose model is asked again says, in the accent: furb works.
   fn retry(&self, retry: &Retrying) -> Line {
-    vec![run(retry.said(self.model.second()), Style::new().fg(self.model.tokens.accent))]
+    vec![run(retry.said(self.second()), Style::new().fg(self.model.tokens.accent))]
   }
 
   /// The thought of a model as one muted row through its whole life: its last words while it
@@ -1125,7 +1160,7 @@ impl<'a> Feed<'a> {
     // The word says what the row is, and the time stands at the right, in the column of the time of
     // a line that runs: it counts while the model thinks, and stays as the time that it took.
     let (word, seconds) = match thought.took {
-      None => (THINKS, self.model.since(thought.began)),
+      None => (THINKS, self.since(thought.began)),
       Some(took) => ("thought", Some(took).filter(|one| *one > 0)),
     };
     let head = format!("  {word} · ");
@@ -1211,21 +1246,38 @@ impl<'a> Feed<'a> {
         Row::default(),
       ];
     }
-    let lines = prose::lines(
-      &self.model.homed(&said.text),
-      self.wide.saturating_sub(4),
-      t,
-      &mut self.kept.colors,
-    );
+    let lines = self.prose(&said.text);
     let mut rows: Vec<Row> = lines
-      .into_iter()
-      .map(|mut line| {
-        line.insert(0, run("  ", Style::new()));
-        Row::of(line)
+      .iter()
+      .map(|line| {
+        let mut row = Vec::with_capacity(line.len() + 1);
+        row.push(run("  ", Style::new()));
+        row.extend(line.iter().cloned());
+        Row::of(row)
       })
       .collect();
     rows.push(Row::default());
     rows
+  }
+
+  /// The lines of a text of markdown that an answer said, in the columns of the prose: laid out
+  /// once for each text and each count of columns, which the window keeps for the [`SAID`] texts
+  /// that it read last.
+  fn prose(&mut self, text: &str) -> Rc<[Line]> {
+    let room = self.wide.saturating_sub(4);
+    if let Some((laid, lines)) = self.kept.prose.get(text)
+      && *laid == room
+    {
+      return Rc::clone(lines);
+    }
+    let homed = self.model.homed(text);
+    let lines: Rc<[Line]> =
+      prose::lines(&homed, room, &self.model.tokens, &mut self.kept.colors).into();
+    if self.kept.prose.len() >= SAID {
+      self.kept.prose.clear();
+    }
+    self.kept.prose.insert(text.to_owned(), (room, Rc::clone(&lines)));
+    lines
   }
 
   /// The dock of the agents of the thread that no line of a block made, with a blank row above
@@ -1343,7 +1395,7 @@ impl<'a> Feed<'a> {
     let t = &self.model.tokens;
     let (card, muted) = (&agent.card, self.style(Role::Muted));
     // An agent that ended says how long it took, from one second on, as one that works does.
-    let since = agent.began.and_then(|began| self.model.since(began));
+    let since = agent.began.and_then(|began| self.since(began));
     let time = agent.took.map_or(since, |took| Some(took).filter(|one| *one > 0)).map(timer);
     let working = |loader| (Some(loader), WORKS, t.accent);
     let (mark, word, color) = match &card.standing {

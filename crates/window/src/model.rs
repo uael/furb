@@ -71,18 +71,44 @@ pub(crate) type Touched = ((u64, Duration, Option<(u16, u16)>), Option<thread::T
 
 /// What the window keeps of each layout, so the next layout reads again only what changed: the
 /// colors and the names of each text of python, the code of each block by the message of its
-/// answer, and the rows of each part of the feed that it laid out, so a scroll lays out only the
-/// parts that come into sight.
+/// answer, the lines of each text of markdown that an answer said, and the rows of each part of the
+/// feed that it laid out, so a scroll lays out only the parts that come into sight.
 #[derive(Default)]
 pub(crate) struct Kept {
   pub(crate) colors: Colors,
   pub(crate) names: Names,
   pub(crate) read: HashMap<String, Rc<Read>>,
+  /// The lines of each text of markdown that an answer said, by the text, with the columns that
+  /// they fill.
+  pub(crate) prose: HashMap<String, (usize, Rc<[Line]>)>,
   pub(crate) parts: Parts,
 }
 
-/// The rows of each part of the feed, with the count of changes and the clock that they show.
-pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, thread::Rows>);
+/// The rows of each part of the feed as a layout made them, under the count of the changes that
+/// reach each part when it made them, each with the clock that its rows read, if they read one.
+#[derive(Default)]
+pub(crate) struct Parts {
+  pub(crate) lays: Option<u64>,
+  pub(crate) rows: HashMap<thread::Item, (thread::Rows, Option<Duration>)>,
+}
+
+impl Parts {
+  /// The rows of some parts let go, so the next layout lays them out again.
+  pub(crate) fn forget(&mut self, parts: &[thread::Item]) {
+    for part in parts {
+      self.rows.remove(part);
+    }
+  }
+}
+
+/// The parts of the feed that a change of the model reaches: each part, or only some, as a change
+/// of the exchanges of the open thread reaches the parts that read them.
+#[derive(Debug, Default)]
+pub(crate) enum Reach {
+  #[default]
+  Each,
+  Parts(Vec<thread::Item>),
+}
 
 #[expect(
   clippy::struct_excessive_bools,
@@ -143,6 +169,11 @@ pub(crate) struct Model {
   /// How many changes of what the parts of the feed and the list show the model heard: each change
   /// of the left side but one that leaves each of them as it was.
   pub(crate) shows: u64,
+  /// How many changes the model heard that reach each part of the feed: a change of what shows
+  /// that reaches only some parts, as [`Reach`] says, lays out those parts again alone.
+  pub(crate) lays: u64,
+  /// The parts of the feed that the change that the model hears reaches.
+  pub(crate) reach: Reach,
   /// Whether the change that the model hears leaves each part of the feed and the list as they
   /// were: it scrolls the feed, or it edits the input or moves its caret, which neither shows.
   pub(crate) same_parts: bool,
@@ -210,6 +241,8 @@ impl Model {
       kept_left: None,
       kept_list: None,
       shows: 0,
+      lays: 0,
+      reach: Reach::Each,
       same_parts: false,
       pictured: 0,
       #[cfg(test)]
@@ -338,10 +371,21 @@ impl Model {
     true
   }
 
+  /// The answer to an ask that the client reads alone. The moments of the bar of the time at now
+  /// reach no part of the feed, which follows now.
+  fn answered_here(&mut self, at: usize, asked: Asked, heard: Heard) {
+    let time = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
+    let now = matches!(asked, Asked::Moments(_)) && time.is_some_and(|one| one.at.is_none());
+    self.client.answered(at, asked, heard.ok());
+    if now {
+      self.reach = Reach::Parts(Vec::new());
+    }
+  }
+
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     if asked.read_here() {
-      return self.client.answered(at, asked, heard.ok());
+      return self.answered_here(at, asked, heard);
     }
     match (asked, heard) {
       (Asked::Open, Ok(Frame::Reply { .. })) => self.client.answered_open(at, id),

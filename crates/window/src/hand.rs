@@ -47,7 +47,7 @@ use crate::{
   line::Line,
   link::{self, Asker, Heard},
   machine::Looking,
-  model::{Acts, Model, Told},
+  model::{Acts, Model, Reach, Told},
   pick::Pick,
   picture,
   question::Keyed,
@@ -1123,7 +1123,14 @@ impl Window {
       // card of a login that only reads, which records no Seen, would else show the unread mark
       // that the last cards of its machine gave it.
       let same = mem::take(&mut model.same_parts) && !formed;
-      model.shows += u64::from(!steady && !same);
+      let reach = mem::take(&mut model.reach);
+      if !steady && !same {
+        model.shows += 1;
+        match reach {
+          Reach::Parts(parts) if !formed => model.kept.parts.forget(&parts),
+          _ => model.lays += 1,
+        }
+      }
       let saw = pump(askers, model);
       model.shows += u64::from(saw);
       model.changes += u64::from(!steady || saw);

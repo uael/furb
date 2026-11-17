@@ -29,7 +29,7 @@ use crate::{
   keys::Does,
   line::{Line, styled},
   list::hash,
-  model::{Kept, Key, Model},
+  model::{Kept, Key, Model, Reach},
   opens::QUIET,
   tokens::{Loader, turn},
 };
@@ -568,6 +568,7 @@ impl Model {
     let open = |one: &&mut Opened| {
       one.thread.key.0 == at && one.thread.key.1 == life && one.thread.key.2 == thread
     };
+    let reverted = self.reverting().map(|one| Item::At(one.at));
     let Some(opened) = self.client.thread.as_mut().filter(open) else { return false };
     // A change of now gives the bar of the time new moments, and reaches no moment of the past.
     if let Some(time) = opened.thread.time.as_mut() {
@@ -579,9 +580,27 @@ impl Model {
     if opened.thread.past() {
       return false;
     }
+    let (changes, last) = (opened.thread.changes(&page), opened.thread.exchanges.keys().last());
+    let before = [reverted, Some(last.map_or(Item::Head, |at| Item::At(*at)))];
     opened.thread.took(page, self.client.moved);
     self.client.refollow();
+    self.reach = changes.map_or(Reach::Each, |places| self.exchanges_reach(&places, before));
     true
+  }
+
+  /// The parts of the feed that a change of the exchanges at some places reaches, as
+  /// [`Feed::exchange`] reads them: each exchange from the first that changed on, since
+  /// an exchange heads its block by the model of the block before it and links each name to the
+  /// line before it that binds the name, and the parts that the change can move a row from: the
+  /// last part before the change, the head of an empty thread among them, which held what waits on
+  /// the thread, and the answer that offered to revert its files before the change, and the one
+  /// that offers it after.
+  fn exchanges_reach(&self, places: &[usize], before: [Option<Item>; 2]) -> Reach {
+    let Some(opened) = self.client.thread.as_ref() else { return Reach::Each };
+    let first = places.iter().min().copied().unwrap_or(usize::MAX);
+    let after = opened.thread.exchanges.range(first..).map(|(at, _)| Item::At(*at));
+    let reverts = self.reverting().map(|one| Item::At(one.at));
+    Reach::Parts(after.chain(before.into_iter().chain([reverts]).flatten()).collect())
   }
 
   /// The feed moved by a count of rows, up for a negative count: at its end it follows its end,
