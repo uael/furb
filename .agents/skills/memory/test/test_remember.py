@@ -3,8 +3,8 @@
 from asyncio import CancelledError
 from pathlib import Path
 
-from conftest import paragraphs, plain, settle
-from furb import engine
+from conftest import definitions, paragraphs, plain, settle
+from furb import checkpoint, engine
 from skills.conftest import extended, memorized, noted, recalled, tilded
 
 
@@ -187,3 +187,25 @@ async def test_between_two_stands_remember_asks_once_for_each_memory_file_and_ea
   assert recalled(root, tmp_path) == [memorized(top, "one\n")]
   engine.stand(engine.ROOT)
   assert recalled(root, tmp_path)[1:] == [memorized(up, "up\n"), memorized(top, "two\n")]
+
+
+async def test_a_life_born_on_a_checkpoint_tells_no_memory_file_again_that_a_carried_turn_gave_whole(
+  tmp_path: Path,
+) -> None:
+  """A life born on a checkpoint tells no memory file again that a carried turn gave whole, nor after a jump that drops the reads of memory of the life: memory takes what a tell of a read gave whole as the text that the chain holds at its path, when the chain holds no done of that read."""
+  noted(tmp_path / "work", "one\ntwo\n")
+  _, root = extended("memory", tmp_path, lives=True)
+  await settle()
+  first = recalled(root, tmp_path)
+  assert first
+  data = checkpoint.gathered(vars(engine), definitions, {})
+  _, again = extended("memory", tmp_path, lives=True, record=checkpoint.seed(vars(engine), data))
+  await settle()
+  engine.stand(engine.ROOT)
+  await settle()
+  assert recalled(again, tmp_path) == first
+  reads = [x[1] for x in engine.transcript(again) if x[0] == "read"]
+  await engine.jump(reads, on=again)
+  await engine.rung("cd('.')", on=again)
+  await settle()
+  assert recalled(again, tmp_path) == first
