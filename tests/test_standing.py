@@ -7,7 +7,7 @@ from furb import engine
 
 
 async def test_standing_gives_what_the_chains_stand_on() -> None:
-  """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first."""
+  """standing gives what the chains stand on: the answer of the last stand that the transcript of the chain that the root goes on as holds, and an empty standing before the first."""
   seen: list[object] = []
 
   def world() -> Generator[tuple | None, tuple]:
@@ -26,10 +26,14 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
   sand.stands = STANDS
   assert await engine.stand(engine.ROOT) == STANDS and engine.standing() == STANDS
   assert [a[1] for a in engine.transcript(root) if a[0] == "stand"] == ["stand1", "stand2"]
+  went = await engine.jump(on=root)
+  sand.stands = later
+  assert await engine.stand(engine.ROOT) == later and engine.standing() == later
+  assert [a[1] for a in engine.transcript(went) if a[0] == "stand"][-1] == "stand3"
 
 
-async def test_it_reads_the_transcript_of_the_root_as_it_stands_where_the_call_is_made() -> None:
-  """It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there."""
+async def test_it_reads_that_transcript_as_it_stands_where_the_call_is_made() -> None:
+  """It reads that transcript as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there."""
   sand, _, root = granting("close(1)", cost=(200000, 0, 0, 0, 0.0))
   grant(share=0.9, on=root)
   one = engine.prompt(int, "count", on=root)

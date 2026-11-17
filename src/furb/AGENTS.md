@@ -20,9 +20,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - share: the part of a window that one model response used.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default actor
   and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World writes
-  for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain tells no
-  standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory; the root
-  plays both on itself in its setup, and a chain whose standing names a doctrine plays both again when a later stand
+  for a model; its one home is the transcript of the chain that the root goes on as, where the done of the last stand
+  holds it. A chain tells no standing of its own: a stand that a word makes tells the roster and the actor, and a cd
+  tells the directory; the root plays both on itself in its setup, and a chain whose standing names a doctrine plays both again when a later stand
   gives another standing, and at its birth when the stand of the setup that it holds gave another one. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
   of a chain that ran no cd.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at

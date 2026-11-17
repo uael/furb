@@ -61,7 +61,7 @@ async def test_transcript_gives_a_new_list_at_each_call() -> None:
 
 
 async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
-  """The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root."""
+  """The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the chain that the root goes on as."""
   _, _, root = born()
   word = "k = 1\ncd('/x')"
   laid = engine.rung(word, on=root)

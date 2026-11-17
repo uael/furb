@@ -101,7 +101,7 @@ def program(on="") -> dict[str, str]:
 
 
 def standing():
-  return answer("stand", ROOT, [])
+  return answer("stand", scope(ROOT), [])
 
 
 def operated(where):
@@ -398,8 +398,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       )
     yield from staged()
     yield from replay()
-    while True:
-      r = get((a := (yield {id, "stand", "reply"}))[1]) or a
+    while (a := (yield {id, "stand", "reply"})) and id not in jumped:
+      r = get(a[1]) or a
       try:
         match a:
           case ("done", *_) if r[0] == "stand" and (now := standing()) != last:

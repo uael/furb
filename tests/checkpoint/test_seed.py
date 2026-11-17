@@ -2,7 +2,7 @@
 
 import ast
 
-from conftest import STANDS, Sand, born, life, said, settle, sown, world_says
+from conftest import STANDS, Sand, born, life, said, settle, sown, until, world_says
 from furb import checkpoint, engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
@@ -93,9 +93,10 @@ async def test_each_chain_of_the_data_that_jumped_is_made_again_under_its_name_i
   assert await engine.rung("k = 7", on=root) is None
   went = str(await engine.jump(on=root))
   data = checkpoint.gathered(vars(engine), lambda word: word, {})
-  life(sown(), checkpoint.seed(vars(engine), data))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   assert (engine.scope(root), engine.module(went)["k"]) == (went, 7)
+  assert [x[:3] for x in log if x[2] == root] == [("started", root, root), ("module", root, root)]
   assert await engine.rung("k += 1", on=root) is None and engine.module(went)["k"] == 8
 
 
@@ -171,6 +172,16 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_journal_bin
   assert not engine.paused("chain3")
   assert not engine.paused("chain1")
   assert [x[2] for x in log if x[0] == "rung"] == ["prompt1"]
+  _, _, root = born()
+  went = str(await engine.jump(on=root))
+  thread = engine.prompt(str, "work", on=root)
+  await settle()
+  entries = checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), lambda word: word, {}))
+  life(sown(script={went: ["close('on')", "close('more')"]}), entries)
+  await until(lambda: engine.over(thread))
+  more = engine.prompt(str, "more", on=thread)
+  await until(lambda: engine.over(more))
+  assert (engine.peek(thread), engine.peek(more)) == ("on", "more")
 
 
 async def test_the_journal_binds_the_definitions_and_the_values_of_each_chain_before_seed_says_the_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (

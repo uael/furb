@@ -122,7 +122,7 @@ export declare class Engine {
   module(options?: { on?: string } | null): unknown
   /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say. */
   program(options?: { on?: string } | null): unknown
-  /** standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first. */
+  /** standing gives what the chains stand on: the answer of the last stand that the transcript of the chain that the root goes on as holds, and an empty standing before the first. */
   standing(): unknown
   /** stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life. */
   stand(options?: { on?: string } | null): Act & PromiseLike<unknown>

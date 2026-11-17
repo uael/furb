@@ -127,7 +127,7 @@ def transcript(on: str = "", of: str = "", at: int = 0) -> list[Fact]:
   transcript(on, "journal") gives each fact on a chain that the journal said again from the record, with the speaker that the record holds, so a host tells the facts of an earlier life from those of this one.
   transcript(on, of, at) gives what transcript(on, of) gives from the place at, and copies no fact before that place.
   transcript gives a new list at each call, so a word that changes the list it was given changes no transcript.
-  The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root.
+  The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the chain that the root goes on as.
   The name of an act gives the facts on its scope, and a name of no act gives no fact.
   """
 
@@ -245,8 +245,8 @@ def program(on: str = "") -> dict[str, str]:
   """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
 
 def standing() -> Standing:
-  """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first.
-  It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there.
+  """standing gives what the chains stand on: the answer of the last stand that the transcript of the chain that the root goes on as holds, and an empty standing before the first.
+  It reads that transcript as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there.
   """
 
 def stand(on: str = "") -> Act[Standing]:
