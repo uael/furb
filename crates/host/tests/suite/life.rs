@@ -232,6 +232,35 @@ async fn a_fact_said_while_a_reply_at_the_tip_waits_is_in_its_events_and_not_in_
   until(&mut events, rung).await;
 }
 
+/// The commands that one rung starts at once, which the life tells as one batch of events.
+const STARTED: usize = 40;
+
+/// A reader that hears a command start finds it among the commands of the life at once, so a
+/// handover that the reader asks then waits for it, also while the life still tells the rest of
+/// the batch in which it heard it.
+#[tokio::test]
+async fn each_command_that_a_reader_hears_start_stands_among_the_commands_of_the_life() {
+  let at = place("commands");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let word = format!("started = [bash('sleep 60') for _ in range({STARTED})]");
+  made(&life, rung(&word)).await;
+  let starts = |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Bash && !matches!(act.phase, Phase::Done(_)));
+  let mut heard = Vec::new();
+  while heard.len() < STARTED {
+    let logged = until(&mut events, starts).await.pop().expect("the start of a command");
+    let Event::Act(act) = &*logged.1 else { unreachable!() };
+    if !heard.contains(&act.id) {
+      assert!(
+        life.commands().contains(&act.id),
+        "{} started and is no command of the life",
+        act.id
+      );
+      heard.push(Arc::clone(&act.id));
+    }
+  }
+}
+
 #[tokio::test]
 async fn a_query_is_a_command_that_the_life_answers() {
   let at = place("queries");

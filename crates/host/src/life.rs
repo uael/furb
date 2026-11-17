@@ -571,6 +571,12 @@ impl Life {
           *slot = Some(Slot::Told(before));
         }
         self.stale = true;
+        // The commands that run change before any reader hears the act, so a reader that hears a
+        // command start, as a handover asked then, finds it among them and waits for its end.
+        if act.kind == Kind::Bash {
+          let commands = &self.kept.held;
+          self.commands.send_if_modified(|was| mem::replace(was, commands.commands()) != *was);
+        }
         if let Some(held) = held {
           event = Event::Act(held);
         }
@@ -1414,7 +1420,6 @@ async fn driven(
       }
     }
     drained(&mut engine, life);
-    life.commands.send_if_modified(|was| mem::replace(was, life.kept.held.commands()) != *was);
     life.kept.streams.lined(engine.lines());
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
