@@ -76,6 +76,18 @@ pub(crate) fn record(daemon: &Daemon, at: usize) -> PathBuf {
   daemon.file("furb").join(".furb").join("sessions").join(format!("rest{at}.jsonl"))
 }
 
+/// The open of the thread that shows read its record whole, which it does once the catalog holds
+/// it, so neither its row nor its card shows a share. The stage of the read and its end come as two
+/// frames, which a loaded machine tells after a frame with neither.
+#[cfg(unix)]
+fn read_whole(app: &TestApp) {
+  let whole = || {
+    let text = app.text();
+    text.contains("Opening · reads the record") && !text.contains('%')
+  };
+  assert!(app.wait_until(PATIENCE, whole), "{}", app.text());
+}
+
 /// The card of a thread clicked.
 pub(crate) fn card(app: &TestApp, title: &str) {
   app.click(80, row(app, &title[..15]));
@@ -290,6 +302,7 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   card(&app, gate);
   app.advance(Duration::from_secs(1));
   shows(&app, "1.0 s");
+  read_whole(&app);
   app.press("escape");
   let frame = shows(&app, "go to anything");
   assert!(frame.contains("Opening"), "the open goes on:\n{frame}");
@@ -299,10 +312,8 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   let frame = shows(&app, &format!("furb · {}", &time[..20]));
   // The head of the thread, and the card of each open.
   assert_eq!(frame.matches(" Opening").count(), 3, "{frame}");
+  read_whole(&app);
   app.press("escape");
-  // Each record is read whole once the catalog holds its open, so no card shows a share.
-  let read = app.wait_until(PATIENCE, || !app.text().contains('%'));
-  assert!(read, "{}", app.text());
   screen("open-home", &app);
   // The first card again: its open counts from its first ask.
   card(&app, gate);
