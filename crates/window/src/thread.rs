@@ -952,8 +952,8 @@ pub(crate) struct Touch {
   name: Option<usize>,
 }
 
-/// What the pointer at a place of the left side touches, when a thing there takes the pointer or
-/// the row shows more under it.
+/// What the pointer at a place of the left side touches, when a thing there takes the pointer, the
+/// row shows more under it, or its line awaits agents, whose rows light.
 fn touched(rows: &[Row], (x, y): (u16, u16)) -> Option<Touch> {
   let (row, x) = (rows.get(usize::from(y))?, usize::from(x));
   let hot = row.hot.iter().position(|hot| hot.0.contains(&x));
@@ -964,6 +964,10 @@ fn touched(rows: &[Row], (x, y): (u16, u16)) -> Option<Touch> {
   });
   let link = run.filter(|&at| row.line.get(at).is_some_and(|one| one.link.is_some()));
   let name = row.names.iter().position(|one| one.0.contains(&x));
-  let touches = hot.is_some() || link.is_some() || name.is_some() || row.pointed.is_some();
+  let touches = hot.is_some()
+    || link.is_some()
+    || name.is_some()
+    || row.pointed.is_some()
+    || !row.awaits.is_empty();
   touches.then_some(Touch { row: y, hot, link, name })
 }
