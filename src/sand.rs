@@ -14,7 +14,7 @@ use std::{mem, time::Duration};
 use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
-  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
+  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker, unstable,
 };
 
 use crate::value::{Fault, Object};
@@ -345,8 +345,12 @@ impl Sand {
           self.made(&call);
           self.limited(call).resume(Object::none(), PrintWriter::Disabled)
         }
-        ReplProgress::FunctionCall(call) => {
-          let args: Vec<Object> = call.args.args().map(|one| one.to_owned()).collect();
+        ReplProgress::FunctionCall(mut call) => {
+          let Some(args) = owned(mem::take(&mut call.args)) else {
+            let fault = Fault::refused("a call of the sandbox names a value that its arena lacks");
+            step = self.limited(call).abort(raised(&fault), PrintWriter::Disabled);
+            continue;
+          };
           let (on, name) = (call.object_id, call.function_name.clone());
           self.state = State::Answering(Box::new(call));
           let answer = host.answer(self, on, &name, args);
@@ -468,6 +472,19 @@ fn fault(error: &MontyException) -> Fault {
 /// What a life is refused for asking something no life asks.
 fn refusal(why: &str) -> MontyException {
   MontyException::new(ExcType::RuntimeError, Some(why.to_owned()))
+}
+
+/// The values of a call of the sandbox, each one its own. A call of one value with no keyword
+/// takes the arena of the call as it stands, as most calls do, and a call of more copies each value
+/// out of it. None when the arena lacks a value that the call names.
+fn owned(args: CallArgs) -> Option<Vec<Object>> {
+  let (graph, ids, kwargs) = unstable::into_call_args_parts(args);
+  match ids[..] {
+    [one] if kwargs.is_empty() => unstable::object_from_graph(graph, one).ok().map(|one| vec![one]),
+    _ => unstable::call_args_from_parts(graph, ids, kwargs)
+      .ok()
+      .map(|args| args.args().map(|one| one.to_owned()).collect()),
+  }
 }
 
 /// A fault of the host, raised where the sandbox called: the builtin exception it names, with its message, or a
