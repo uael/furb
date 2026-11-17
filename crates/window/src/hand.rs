@@ -1654,7 +1654,7 @@ impl Window {
       } else if down && let Some(folder) = model.folder_at(event.x, event.y) {
         // A folder opens the sub thread about it, or turns the input to a message about it.
         model.client.review = None;
-        match model.sub_of(&folder).map(|one| one.card.prompt.clone()) {
+        match model.sub_of(&folder).map(|one| one.card.prompt.to_string()) {
           Some(sub) => model.open_agent(sub),
           None => model.client.draft.anchor = Some(Anchor { path: folder, at: Where::Folder }),
         }

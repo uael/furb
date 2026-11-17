@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, Maker, Phase, operator},
+  act::{Act, Kind, Maker, Name, Phase, operator},
   card::{Card, Sent, Skill, Standing},
   state::State,
   threads::ThreadNode,
@@ -37,10 +37,10 @@ impl Held {
         self.sites().map(|site| (site, self.seen_by(site))).collect();
       let mut nodes: Vec<ThreadNode> =
         self.rail(&[], None).into_iter().filter(|node| node.thread.yours).collect();
-      nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_str()).map_or(0, |act| act.began));
+      nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_ref()).map_or(0, |act| act.began));
       let card = |node: ThreadNode| {
         let readers = sites.iter().filter(|(_, seen)| !unseen(&node.thread, &rows, seen));
-        let said = |id: &String| models.get(id.as_str()).map(|one| (*one).to_owned());
+        let said = |id: &Name| models.get(id.as_ref()).map(|one| (*one).to_owned());
         let model =
           node.thread.messages.iter().rev().find_map(said).or_else(|| said(&node.thread.prompt));
         Card {
@@ -107,7 +107,7 @@ impl Held {
     let mut nodes = self.rail(&[], None);
     let node = loop {
       let Some(node) = nodes.pop() else { return Vec::new() };
-      if node.thread.prompt == thread {
+      if *node.thread.prompt == *thread {
         break node;
       }
       nodes.extend(node.agents);
@@ -128,7 +128,7 @@ fn working(agents: &[ThreadNode]) -> usize {
 fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
   let thread = &node.thread;
   let acts =
-    || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_str()));
+    || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_ref()));
   match node.state {
     State::Asks => Standing::Asks { of: asked(node, rows) },
     state => Standing::of(state, thread.over, acts().find_map(|act| act.pause.as_ref())),
@@ -138,7 +138,7 @@ fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
 /// The member that the first question of a thread, or of an agent under it, waits for, and none
 /// when it waits for each operator.
 fn asked(node: &ThreadNode, rows: &Rows<'_>) -> Option<String> {
-  let own = node.thread.asks.first().and_then(|ask| rows.get(ask.as_str()));
+  let own = node.thread.asks.first().and_then(|ask| rows.get(ask.as_ref()));
   let to = |act: &&Act| act.words.get(2).and_then(Value::as_str).map(str::to_owned);
   match own {
     Some(ask) => to(ask)?.strip_prefix(OPERATOR)?.strip_prefix('/').map(str::to_owned),

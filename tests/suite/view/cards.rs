@@ -4,7 +4,7 @@ use furb::view::{Card, Fold, Held, Part, Skill, Standing};
 
 fn card(standing: Standing, readers: &[&str]) -> Card {
   Card {
-    prompt: "prompt1".to_owned(),
+    prompt: "prompt1".into(),
     title: "a thread".to_owned(),
     standing,
     model: None,

@@ -385,12 +385,12 @@ impl Model {
     let (from, at) =
       opened.from.as_deref().map_or((opened, None), |from| (from, Some(&opened.thread.key.2)));
     let shown = from.docked().1;
-    let after = at.and_then(|at| shown.iter().position(|one| one.card.prompt == *at));
+    let after = at.and_then(|at| shown.iter().position(|one| *one.card.prompt == **at));
     let Some(next) = shown.get(after.map_or(0, |at| at + 1)).or(shown.first()) else {
       self.client.notice = Some("No agent of this thread works now.".to_owned());
       return;
     };
-    let prompt = next.card.prompt.clone();
+    let prompt = next.card.prompt.to_string();
     if at.is_some() {
       self.back();
     }
@@ -479,7 +479,7 @@ impl Model {
       return;
     };
     let place = block.lines.iter().position(|one| one.number == number).unwrap_or_default();
-    let fold = Fold::Block(exchange.message.clone());
+    let fold = Fold::Block(exchange.message.to_string());
     if !block.shown(opened.unfolded.contains(&fold)).contains(&place) {
       opened.unfolded.insert(fold);
     }
@@ -899,7 +899,7 @@ impl Model {
     let session =
       told.cards.iter().find(|card| card.life == key.1).and_then(|card| card.session.clone());
     let thread = view::Card {
-      prompt: key.2.clone(),
+      prompt: key.2.as_str().into(),
       title: self.title()?,
       standing: Standing::Thinks,
       model: None,

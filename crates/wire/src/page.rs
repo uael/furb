@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-  act::{Act, Maker, Read, fault},
+  act::{Act, Maker, Name, Read, fault, read_name},
   anchor::Anchor,
   card::Card,
   protocol::{Node, Slot},
@@ -150,7 +150,8 @@ pub struct Agent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Exchange {
   pub at: usize,
-  pub message: String,
+  #[serde(deserialize_with = "read_name")]
+  pub message: Name,
   #[serde(default)]
   pub said_at: u64,
   pub by: Maker,
@@ -401,7 +402,8 @@ impl Thought {
 /// question, or the resolve of its message by a person, with its act and its text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Said {
-  pub act: String,
+  #[serde(deserialize_with = "read_name")]
+  pub act: Name,
   pub kind: Saying,
   pub text: String,
 }

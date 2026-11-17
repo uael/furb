@@ -71,7 +71,7 @@ impl Opened {
   pub fn agent(&self) -> Option<&card::Card> {
     let from = self.from.as_deref()?;
     let agents = from.thread.agents.iter();
-    agents.map(|one| &one.card).find(|one| one.prompt == self.thread.key.2)
+    agents.map(|one| &one.card).find(|one| *one.prompt == *self.thread.key.2)
   }
 
   /// The sub thread that this thread is, as the thread that it is on holds it: a thread about a
@@ -223,7 +223,7 @@ impl Thread {
 
   /// The messages of the operator that the thread shows now let go.
   pub fn shown(&mut self) {
-    let told = |act: &String| self.exchanges.values().any(|one| one.message == *act);
+    let told = |act: &String| self.exchanges.values().any(|one| *one.message == **act);
     self.pending.retain(|one| !one.act.as_ref().is_some_and(told));
   }
 
@@ -279,7 +279,7 @@ impl Client {
       return None;
     }
     let reader = format!("{OPERATOR}/{login}");
-    let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
+    let told = |card: &Card| card.life == key.1 && *card.thread.prompt == *key.2;
     let settled = self.settled.iter_mut().map(|one| &mut one.2);
     let cards = self.machines.get_mut(key.0).into_iter().flat_map(|one| one.cards.iter_mut());
     for card in cards.chain(settled).filter(|card| told(card)) {

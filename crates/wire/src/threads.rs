@@ -4,7 +4,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::State;
+use crate::{
+  act::{Name, read_name, read_names, read_some_name},
+  state::State,
+};
 
 /// The sign of an image in a text that names it by its name, before its name, as the title of a
 /// thread and the input of a client show it.
@@ -16,15 +19,19 @@ pub const PICTURE: &str = "▣ ";
 /// its model closes the message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainThread {
-  pub prompt: String,
+  #[serde(deserialize_with = "read_name")]
+  pub prompt: Name,
   /// The name of the thread: the label of its chain for the first thread that no operator made on
   /// a chain under the root, the name of the session for the first thread of the operator on the
   /// root, and else the first line of its message that is not empty, with each image that it names
   /// as its name after [`PICTURE`].
   pub title: String,
-  pub messages: Vec<String>,
-  pub asked: Vec<String>,
-  pub asks: Vec<String>,
+  #[serde(deserialize_with = "read_names")]
+  pub messages: Vec<Name>,
+  #[serde(deserialize_with = "read_names")]
+  pub asked: Vec<Name>,
+  #[serde(deserialize_with = "read_names")]
+  pub asks: Vec<Name>,
   pub state: State,
   pub over: bool,
   pub origin: Origin,
@@ -55,10 +62,11 @@ pub struct ThreadNode {
 /// thread that it holds with the moment that thread began, in order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainTrack {
-  pub chain: String,
+  #[serde(deserialize_with = "read_name")]
+  pub chain: Name,
   pub label: String,
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub parent: Option<String>,
+  #[serde(default, deserialize_with = "read_some_name", skip_serializing_if = "Option::is_none")]
+  pub parent: Option<Name>,
   pub state: State,
   pub moments: Vec<u64>,
   pub threads: Vec<Began>,
@@ -69,10 +77,11 @@ pub struct ChainTrack {
 /// and the first line of its message, so a window draws a prompt between two chains as a link.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Began {
-  pub prompt: String,
+  #[serde(deserialize_with = "read_name")]
+  pub prompt: Name,
   pub at: u64,
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub by: Option<String>,
+  #[serde(default, deserialize_with = "read_some_name", skip_serializing_if = "Option::is_none")]
+  pub by: Option<Name>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ended: Option<u64>,
   #[serde(default)]
@@ -116,7 +125,7 @@ pub enum Aside {
   Wake,
   /// A question of another chain to this one, a worker that asks its coordinator, with the chain
   /// that asks.
-  Question(String),
+  Question(#[serde(deserialize_with = "read_name")] Name),
   /// The work of an agent: a prompt that a rung made on a chain under its own, when that rung
   /// stands in no thread, as a command of the operator runs its word. It is no thread of the
   /// operator and never takes an unread mark of his.
@@ -126,9 +135,11 @@ pub enum Aside {
 /// A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainAside {
-  pub prompt: String,
+  #[serde(deserialize_with = "read_name")]
+  pub prompt: Name,
   pub aside: Aside,
-  pub messages: Vec<String>,
+  #[serde(deserialize_with = "read_names")]
+  pub messages: Vec<Name>,
 }
 
 /// A run of notes: the asides of a chain that are no question and follow one another in its feed
@@ -136,7 +147,8 @@ pub struct ChainAside {
 /// the notes that began or ended after the place up to which the operator read the chain.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct NoteRun {
-  pub prompts: Vec<String>,
+  #[serde(deserialize_with = "read_names")]
+  pub prompts: Vec<Name>,
   pub count: usize,
   pub unread: usize,
 }

@@ -186,7 +186,7 @@ fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
     let Some(card) = cards.into_iter().find(|card| card.life == life) else { return false };
     let page = Verb::Thread {
       life: life.clone(),
-      thread: card.thread.prompt,
+      thread: card.thread.prompt.to_string(),
       before: None,
       limit: 5,
       at: None,

@@ -17,7 +17,7 @@ pub type Name = Arc<str>;
 
 /// A name read from the text that a frame holds, made in one allocation: serde reads an `Arc<str>`
 /// through a `String` that it then copies.
-fn read_name<'de, D: Deserializer<'de>>(from: D) -> Result<Name, D::Error> {
+pub(crate) fn read_name<'de, D: Deserializer<'de>>(from: D) -> Result<Name, D::Error> {
   struct Text;
   impl Visitor<'_> for Text {
     type Value = Name;
@@ -29,6 +29,26 @@ fn read_name<'de, D: Deserializer<'de>>(from: D) -> Result<Name, D::Error> {
     }
   }
   from.deserialize_str(Text)
+}
+
+/// A name in a list or an option, read as [`read_name`] reads it.
+#[repr(transparent)]
+struct Named(Name);
+
+impl<'de> Deserialize<'de> for Named {
+  fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
+    read_name(from).map(Self)
+  }
+}
+
+/// A list of names, each read in one allocation; the list keeps the place that it was read into.
+pub(crate) fn read_names<'de, D: Deserializer<'de>>(from: D) -> Result<Vec<Name>, D::Error> {
+  Vec::<Named>::deserialize(from).map(|names| names.into_iter().map(|one| one.0).collect())
+}
+
+/// A name that may be absent, read in one allocation.
+pub(crate) fn read_some_name<'de, D: Deserializer<'de>>(from: D) -> Result<Option<Name>, D::Error> {
+  Option::<Named>::deserialize(from).map(|name| name.map(|one| one.0))
 }
 
 /// The kind of an act, read once from its fact: each kind that the view reads by name, and any

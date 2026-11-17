@@ -2,7 +2,7 @@
 //! order of the cards of every machine in one list.
 
 use furb_wire::{
-  FollowUp, Part, Standing,
+  FollowUp, Name, Part, Standing,
   card::Skill,
   protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Role, Verb},
 };
@@ -152,11 +152,11 @@ impl Client {
             .iter()
             .find(|one| one.life == life && one.thread.prompt == new.thread.prompt);
           if !was.is_some_and(calls) {
-            self.called.insert((at, life.clone(), new.thread.prompt.clone()), self.moved);
+            self.called.insert((at, life.clone(), new.thread.prompt.to_string()), self.moved);
           }
         }
         let stays = |one: &Card| {
-          let told = |prompt: &String| *prompt == one.thread.prompt;
+          let told = |prompt: &Name| *prompt == one.thread.prompt;
           one.life != life
             || !(gone.iter().any(told) || changed.iter().any(|new| told(&new.thread.prompt)))
         };
@@ -174,7 +174,7 @@ impl Client {
       Ok(_) => return Listing::Same,
     }
     for (_, key, card) in self.settled.iter_mut().filter(|one| one.1.0 == at) {
-      let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
+      let told = |one: &&Card| one.life == key.1 && *one.thread.prompt == *key.2;
       if let Some(now) = self.machines.get(at).and_then(|one| one.cards.iter().rfind(told)) {
         card.clone_from(now);
       }
@@ -184,7 +184,7 @@ impl Client {
 
   /// The card of a thread, as its machine last told it.
   pub fn card(&self, key: &Key) -> Option<&Card> {
-    let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
+    let told = |one: &&Card| one.life == key.1 && *one.thread.prompt == *key.2;
     self.machines.get(key.0)?.cards.iter().find(told)
   }
 
@@ -208,7 +208,7 @@ impl Client {
     let mut cards: Vec<_> = cards.collect();
     cards.sort_by(|one, other| (&one.0, one.1, one.2).cmp(&(&other.0, other.1, other.2)));
     let keyed = |((part, ..), _, at, card): ((Part, u8, i64), _, usize, &Card)| {
-      (part, (at, card.life.clone(), card.thread.prompt.clone()), card.clone())
+      (part, (at, card.life.clone(), card.thread.prompt.to_string()), card.clone())
     };
     self.settled = cards.into_iter().map(keyed).collect();
   }

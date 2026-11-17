@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  act::{OPERATOR, Pause, operator},
+  act::{Name, OPERATOR, Pause, operator, read_name},
   state::State,
 };
 
@@ -15,7 +15,8 @@ use crate::{
 /// one member. A question of an agent under it is a question of the card.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Card {
-  pub prompt: String,
+  #[serde(deserialize_with = "read_name")]
+  pub prompt: Name,
   pub title: String,
   pub standing: Standing,
   #[serde(default, skip_serializing_if = "Option::is_none")]

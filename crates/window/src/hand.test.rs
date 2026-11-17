@@ -62,7 +62,7 @@ fn window(app: &TestApp, lines: usize) -> Window {
   };
   let exchange = Exchange {
     at: 0,
-    message: "rung3".to_owned(),
+    message: "rung3".into(),
     said_at: 0,
     by: Maker::default(),
     text: String::new(),
@@ -98,7 +98,7 @@ fn card() -> Card {
     pins: Vec::new(),
     since: 0,
     thread: view::Card {
-      prompt: "prompt1".to_owned(),
+      prompt: "prompt1".into(),
       title: "the speed".to_owned(),
       standing: Standing::Resolved,
       model: None,
@@ -165,7 +165,7 @@ fn long(app: &TestApp, answers: usize) -> Window {
   };
   let exchange = |at: usize| Exchange {
     at,
-    message: format!("rung{at}"),
+    message: format!("rung{at}").into(),
     said_at: 0,
     by: Maker::default(),
     text: format!(

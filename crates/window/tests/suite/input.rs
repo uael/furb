@@ -79,7 +79,13 @@ pub(crate) fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
   let mut peer = daemon.peer();
   let Answer::Cards(cards) = peer.ask(Verb::Cards) else { panic!("the daemon gives the cards") };
   let Some(card) = cards.into_iter().find(|card| card.life == life) else { return Vec::new() };
-  let page = Verb::Thread { life, thread: card.thread.prompt, before: None, limit: 20, at: None };
+  let page = Verb::Thread {
+    life,
+    thread: card.thread.prompt.to_string(),
+    before: None,
+    limit: 20,
+    at: None,
+  };
   let Answer::Page(page) = peer.ask(page) else { panic!("the daemon gives a page") };
   page.exchanges.into_iter().map(|one| one.text).collect()
 }

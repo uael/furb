@@ -3127,7 +3127,7 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   let told = card(&mut window, resolved).await;
   let operator = told.viewers.first().cloned().expect("the window holds the life");
   let thread = view::Card {
-    prompt: prompt.clone(),
+    prompt: prompt.as_str().into(),
     title: "ground the branch".to_owned(),
     standing: Standing::Resolved,
     model: Some("claude-cli:opus".to_owned()),
@@ -3336,7 +3336,7 @@ async fn a_resolve_closes_each_act_that_keeps_a_thread_open_and_a_message_opens_
   let prompt = messaged(&mut window, &life, "ground the branch").await;
   let stands = |prompt: &str, standing: Standing| {
     let prompt = prompt.to_owned();
-    move |card: &Card| card.thread.prompt == prompt && card.thread.standing == standing
+    move |card: &Card| *card.thread.prompt == *prompt && card.thread.standing == standing
   };
   let asks = Standing::Asks { of: None };
   card(&mut window, stands(&prompt, asks.clone())).await;
@@ -3439,7 +3439,7 @@ async fn the_cards_of_a_record_stay_the_same_through_each_birth_across_a_crossin
   // The cards that the life holds once it is born, which the index that its end writes keeps, and
   // a fold of the record with no index.
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  let ended = card(&mut window, |card| !card.held && card.thread.prompt == prompt).await;
+  let ended = card(&mut window, |card| !card.held && *card.thread.prompt == *prompt).await;
   assert_eq!(same(&ended), same(&rests));
   let index = format!("{life}.threads.json");
   let kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
@@ -3449,7 +3449,7 @@ async fn the_cards_of_a_record_stay_the_same_through_each_birth_across_a_crossin
   fs::remove_file(&index).unwrap();
   let mut later = Window::dialed(&local).await;
   cards(&mut later).await;
-  let folded = card(&mut later, |card| card.thread.prompt == prompt).await;
+  let folded = card(&mut later, |card| *card.thread.prompt == *prompt).await;
   assert_eq!(same(&folded), same(&rests));
 }
 

@@ -5,12 +5,13 @@
 use std::{
   collections::{HashMap, HashSet},
   hash::BuildHasher,
+  sync::Arc,
 };
 
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, WATCH, operator},
+  act::{Act, Kind, Name, WATCH, operator},
   anchor::Anchor,
   state::{State, working},
   threads::{
@@ -165,7 +166,7 @@ fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
     }
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
-      Verdict::Aside(Aside::Question(maker.chain.to_string()))
+      Verdict::Aside(Aside::Question(Arc::clone(&maker.chain)))
     }
     Some(maker)
       if maker.kind == Kind::Rung && maker.chain != act.chain && thread_of(act, rows).is_none() =>
@@ -237,13 +238,13 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
   let notes: HashSet<&str> = asides
     .iter()
     .filter(|one| !matches!(one.aside, Aside::Question(_) | Aside::Agent))
-    .map(|one| one.prompt.as_str())
+    .map(|one| one.prompt.as_ref())
     .collect();
   let inside: HashSet<&str> = threads
     .iter()
     .flat_map(|one| one.messages.iter().chain(&one.asked))
     .chain(asides.iter().flat_map(|one| &one.messages))
-    .map(String::as_str)
+    .map(AsRef::as_ref)
     .collect();
   let mut runs: Vec<NoteRun> = Vec::new();
   let mut open = false;
@@ -266,7 +267,7 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
       open = true;
     }
     let Some(run) = runs.last_mut() else { continue };
-    run.prompts.push(act.id.to_string());
+    run.prompts.push(Arc::clone(&act.id));
     run.count += 1;
     run.unread += usize::from(act.ended.unwrap_or(act.began) > read);
   }
@@ -294,19 +295,19 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
     }
   }
   for (thread, act) in later {
-    let Some(at) = out.iter_mut().find(|one| one.prompt == thread) else {
-      match asides.iter_mut().find(|one| one.1.prompt == thread) {
-        Some(aside) if !act.asks_operator() => aside.1.messages.push(act.id.to_string()),
+    let Some(at) = out.iter_mut().find(|one| *one.prompt == *thread) else {
+      match asides.iter_mut().find(|one| *one.1.prompt == *thread) {
+        Some(aside) if !act.asks_operator() => aside.1.messages.push(Arc::clone(&act.id)),
         None if !act.asks_operator() => asides.push((act.began, aside_of(act, Aside::Notice))),
         _ => {}
       }
       continue;
     };
     if act.asks_operator() {
-      at.asked.push(act.id.to_string());
-      at.asks.extend(act.owed().then(|| act.id.to_string()));
+      at.asked.push(Arc::clone(&act.id));
+      at.asks.extend(act.owed().then(|| Arc::clone(&act.id)));
     } else {
-      at.messages.push(act.id.to_string());
+      at.messages.push(Arc::clone(&act.id));
     }
   }
   asides.sort_by_key(|one| one.0);
@@ -314,7 +315,7 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
   named(&mut out, rows);
   for thread in &mut out {
     let acts = iter::once(&thread.prompt).chain(&thread.messages);
-    let acts: Vec<&Act> = acts.filter_map(|id| rows.get(id.as_str())).copied().collect();
+    let acts: Vec<&Act> = acts.filter_map(|id| rows.get(id.as_ref())).copied().collect();
     let open = acts.iter().rfind(|act| !act.done());
     thread.over = open.is_none();
     // With none open, the last message that he did not take back says how the thread ended: one
@@ -355,7 +356,7 @@ fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
 /// Any other thread keeps the first line of its own message, also each thread of the root: the
 /// name of the session stands on the row of the session alone, and a thread never takes it.
 fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
-  let Some(chain) = out.first().and_then(|one| rows.get(one.prompt.as_str())).map(|act| &act.chain)
+  let Some(chain) = out.first().and_then(|one| rows.get(one.prompt.as_ref())).map(|act| &act.chain)
   else {
     return;
   };
@@ -392,8 +393,8 @@ pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<Thr
   for inner in under {
     let Some(on) = by_chain.get(inner.id.as_ref()) else { continue };
     for thread in chain_threads(on, rows) {
-      let parent = rows.get(thread.prompt.as_str()).and_then(|act| parent_of(act, rows));
-      if parent.is_some_and(|parent| list.iter().any(|one| one.prompt == parent)) {
+      let parent = rows.get(thread.prompt.as_ref()).and_then(|act| parent_of(act, rows));
+      if parent.is_some_and(|parent| list.iter().any(|one| *one.prompt == *parent)) {
         list.push(thread);
       }
     }
@@ -403,7 +404,7 @@ pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<Thr
 
 /// An aside of its own, from its prompt, before the prompts on it join it.
 fn aside_of(act: &Act, aside: Aside) -> ChainAside {
-  ChainAside { prompt: act.id.to_string(), aside, messages: Vec::new() }
+  ChainAside { prompt: Arc::clone(&act.id), aside, messages: Vec::new() }
 }
 
 /// A thread of its own, from its prompt, before its messages and its questions join it. A sub
@@ -421,9 +422,9 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let title = images::references(title).into_iter().fold(title.to_owned(), |title, one| {
     title.replacen(&one.text, &format!("{PICTURE}{}", one.name), 1)
   });
-  let asked: Vec<String> = act.asks_operator().then(|| act.id.to_string()).into_iter().collect();
+  let asked: Vec<Name> = act.asks_operator().then(|| Arc::clone(&act.id)).into_iter().collect();
   ChainThread {
-    prompt: act.id.to_string(),
+    prompt: Arc::clone(&act.id),
     title,
     messages: Vec::new(),
     asks: asked.iter().filter(|_| act.owed()).cloned().collect(),
@@ -440,12 +441,12 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
 /// the order that it was given.
 pub fn nest_threads(list: Vec<ChainThread>, rows: &Rows<'_>) -> Vec<ThreadNode> {
   let at: HashMap<&str, usize> =
-    list.iter().enumerate().map(|(n, one)| (one.prompt.as_str(), n)).collect();
+    list.iter().enumerate().map(|(n, one)| (one.prompt.as_ref(), n)).collect();
   let parents: Vec<Option<usize>> = list
     .iter()
     .enumerate()
     .map(|(n, one)| {
-      let act = rows.get(one.prompt.as_str())?;
+      let act = rows.get(one.prompt.as_ref())?;
       at.get(parent_of(act, rows)?).copied().filter(|parent| *parent != n)
     })
     .collect();
@@ -491,7 +492,7 @@ pub fn open(node: &ThreadNode) -> bool {
 /// When the last message of a thread began: its prompt, or the last prompt on it.
 fn last_message(thread: &ChainThread, rows: &Rows<'_>) -> u64 {
   let acts = iter::once(&thread.prompt).chain(&thread.messages);
-  acts.filter_map(|id| rows.get(id.as_str())).map(|act| act.began).max().unwrap_or_default()
+  acts.filter_map(|id| rows.get(id.as_ref())).map(|act| act.began).max().unwrap_or_default()
 }
 
 /// How a thread concerns the operator, or none, from the state of its node. The failure of an agent
@@ -523,11 +524,11 @@ pub(super) fn unseen<S: BuildHasher>(
   }
   let ids = iter::once(&thread.prompt).chain(&thread.messages).chain(&thread.asked);
   let work = ids
-    .filter_map(|id| rows.get(id.as_str()))
+    .filter_map(|id| rows.get(id.as_ref()))
     .map(|act| act.ended.unwrap_or(act.began).max(act.began))
     .max()
     .unwrap_or_default();
-  let chain = rows.get(thread.prompt.as_str()).map(|act| act.chain.as_ref()).unwrap_or_default();
+  let chain = rows.get(thread.prompt.as_ref()).map(|act| act.chain.as_ref()).unwrap_or_default();
   let read = |id: &str| seen.get(id).copied().unwrap_or_default();
   work > read(&thread.prompt).max(read(chain))
 }

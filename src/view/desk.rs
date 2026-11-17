@@ -1,6 +1,8 @@
 //! The desk of the operator: each question that waits for him and each notice that he did not
 //! dismiss, with what the line of his answer is for the shape that each one asks.
 
+use std::sync::Arc;
+
 use crate::{
   value::{Fault, Object},
   wire::outward,
@@ -19,9 +21,9 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
     let word = |at: usize| act.words.get(at).and_then(|one| one.as_str()).unwrap_or_default();
     let shape = if notice { "None" } else { word(0) };
     Ask {
-      id: act.id.to_string(),
-      chain: act.chain.to_string(),
-      by: act.by.to_string(),
+      id: Arc::clone(&act.id),
+      chain: Arc::clone(&act.chain),
+      by: Arc::clone(&act.by),
       shape: shape.to_owned(),
       message: word(1).to_owned(),
       notice,

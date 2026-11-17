@@ -20,7 +20,7 @@ use crate::{
 /// clock of the window.
 pub(crate) fn card(title: &str, standing: Standing, before: u64) -> Card {
   let thread = view::Card {
-    prompt: "prompt1".to_owned(),
+    prompt: "prompt1".into(),
     title: title.to_owned(),
     standing,
     model: Some("claude-cli:opus".to_owned()),

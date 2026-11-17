@@ -724,7 +724,7 @@ impl Host for Paged {
     let block = Block { maker: Maker::Operator, lines: vec![line], more: true, thought: None };
     let exchange = Exchange {
       at: 0,
-      message: "prompt1".to_owned(),
+      message: "prompt1".into(),
       said_at: 0,
       by: Maker::Operator,
       text: "hi".to_owned(),

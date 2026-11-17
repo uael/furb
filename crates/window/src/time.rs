@@ -269,7 +269,7 @@ impl Model {
   /// The place among the chains of the one that holds the open thread.
   fn holder(&self, chains: &Chains) -> Option<usize> {
     let key = &self.client.thread.as_ref()?.thread.key;
-    chains.tracks.iter().position(|one| one.threads.iter().any(|began| began.prompt == key.2))
+    chains.tracks.iter().position(|one| one.threads.iter().any(|began| *began.prompt == *key.2))
   }
 
   /// The ink of a chain under the bar, grey while it rests, with the place of the chain that holds
@@ -350,7 +350,7 @@ impl Model {
           };
           hot.push((BEFORE + one..BEFORE + one + 1, Some(click)));
         }
-        let label = if track.label.is_empty() { &track.chain } else { &track.label };
+        let label = if track.label.is_empty() { &*track.chain } else { track.label.as_str() };
         let room = self.wide().saturating_sub(BEFORE + axis.room + 1);
         // A chain stands under the chain whose word made it.
         let label =
@@ -469,7 +469,7 @@ fn flow_says(time: &Time, flow: &Flow) -> String {
   let Some(chains) = time.chains.as_ref() else { return String::new() };
   let label = |at: usize| {
     let Some(track) = chains.tracks.get(at) else { return String::new() };
-    if track.label.is_empty() { track.chain.clone() } else { track.label.clone() }
+    if track.label.is_empty() { track.chain.to_string() } else { track.label.clone() }
   };
   let (sender, receiver, says) = (label(flow.sender), label(flow.receiver), &flow.says);
   if flow.answer {

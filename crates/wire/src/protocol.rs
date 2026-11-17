@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-  Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads, card,
+  Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads,
+  act::{Name, read_names},
+  card,
   error::ProtocolError,
   event::{Event, Seq},
 };
@@ -719,7 +721,12 @@ pub enum Frame {
   Granted { role: Role },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
-  Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
+  Cards {
+    life: String,
+    changed: Vec<Card>,
+    #[serde(deserialize_with = "read_names")]
+    gone: Vec<Name>,
+  },
   /// How far the daemon stands in the index of the cards of a record that no life holds, pushed to
   /// each peer that asked the cards while the daemon reads the record: the thousandths of the read
   /// done, of 1000, which never go back. The frame with `done` equal to `of` comes before the frame

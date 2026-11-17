@@ -503,7 +503,7 @@ impl<'a> Reader<'a> {
       } else {
         Saying::Question { shape, answered: Answered::of(asked) }
       };
-      let one = Said { act: asked.id.to_string(), kind, text: said_of(asked).to_owned() };
+      let one = Said { act: Arc::clone(&asked.id), kind, text: said_of(asked).to_owned() };
       said.push((asked.began, one));
     }
     for closed in &answers.closes {
@@ -512,7 +512,7 @@ impl<'a> Reader<'a> {
         Some(by @ (Maker::Operator | Maker::Member { .. })) => Saying::Resolved { by: by.clone() },
         _ => Saying::Answer,
       };
-      let one = Said { act: closed.id.to_string(), kind, text: text(closed.value()) };
+      let one = Said { act: Arc::clone(&closed.id), kind, text: text(closed.value()) };
       said.push((closed.ended.unwrap_or(closed.began), one));
     }
     said.sort_by_key(|(place, _)| *place);
@@ -535,7 +535,7 @@ impl<'a> Reader<'a> {
     let python = message.kind == Kind::Rung;
     Exchange {
       at,
-      message: message.id.to_string(),
+      message: Arc::clone(&message.id),
       said_at: message.began,
       by: message.maker.clone(),
       text: if python { String::new() } else { text(message.words.get(1)) },
@@ -748,7 +748,7 @@ impl<'a> Reader<'a> {
     });
     let title = said_of(prompt).lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
     let card = Card {
-      prompt: prompt.id.to_string(),
+      prompt: Arc::clone(&prompt.id),
       title: title.to_owned(),
       standing: Standing::of(state, now.done(), now.pause.as_ref()),
       model,

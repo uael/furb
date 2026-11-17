@@ -325,7 +325,7 @@ impl Held {
         .filter_map(|chain| on.get(chain))
         .flat_map(|acts| chain_threads(acts, &rows))
         .collect();
-      list.sort_by_key(|one| rows.get(one.prompt.as_str()).map_or(0, |act| act.began));
+      list.sort_by_key(|one| rows.get(one.prompt.as_ref()).map_or(0, |act| act.began));
       order_threads(nest_threads(list, &rows), &rows)
     })
   }
@@ -384,7 +384,7 @@ impl Held {
           // that the operator said has no act as its maker.
           let asker = |act: &Act| {
             let maker = (&self).act(&act.by).map(|maker| &maker.chain);
-            maker.filter(|one| **one != chain.id).map(ToString::to_string)
+            maker.filter(|one| **one != chain.id).map(Arc::clone)
           };
           let says = |act: &Act| {
             let text = act.words.get(1).and_then(Value::as_str).unwrap_or_default();
@@ -392,7 +392,7 @@ impl Held {
           };
           let mut threads: Vec<Began> = starts
             .map(|act| Began {
-              prompt: act.id.to_string(),
+              prompt: Arc::clone(&act.id),
               at: act.began,
               by: asker(act),
               ended: act.ended,
@@ -401,7 +401,7 @@ impl Held {
             .collect();
           threads.sort_by_key(|one| one.at);
           ChainTrack {
-            chain: chain.id.to_string(),
+            chain: Arc::clone(&chain.id),
             label: chain
               .words
               .first()
@@ -409,7 +409,7 @@ impl Held {
               .unwrap_or_default()
               .trim()
               .to_owned(),
-            parent: (&self).act(&chain.by).map(|maker| maker.chain.to_string()),
+            parent: (&self).act(&chain.by).map(|maker| Arc::clone(&maker.chain)),
             state: chain.state,
             moments: moments_of(on.iter().copied()),
             threads,

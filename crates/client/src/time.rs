@@ -68,7 +68,7 @@ impl Chains {
     }
     let count = self.tracks.len();
     let places: HashMap<&str, usize> =
-      self.tracks.iter().enumerate().map(|(at, one)| (one.chain.as_str(), at)).collect();
+      self.tracks.iter().enumerate().map(|(at, one)| (one.chain.as_ref(), at)).collect();
     let parent = |at: usize| {
       let made = self.tracks.get(at)?.parent.as_deref().and_then(|one| places.get(one).copied());
       made.filter(|one| *one != at)
@@ -132,8 +132,8 @@ impl Chains {
   /// with at least one of the two chains among the ones that show.
   pub fn flows(&self) -> Vec<Flow> {
     let shown = self.shown();
-    let row = |chain: &str| shown.iter().position(|(one, _)| one.chain == chain);
-    let place = |chain: &str| self.tracks.iter().position(|one| one.chain == chain);
+    let row = |chain: &str| shown.iter().position(|(one, _)| *one.chain == *chain);
+    let place = |chain: &str| self.tracks.iter().position(|one| *one.chain == *chain);
     let mut flows = Vec::new();
     for (asked, track) in self.tracks.iter().enumerate() {
       for thread in &track.threads {
@@ -149,7 +149,7 @@ impl Chains {
           to,
           at,
           answer,
-          prompt: thread.prompt.clone(),
+          prompt: thread.prompt.to_string(),
           says: thread.says.clone(),
         };
         flows.push(flow(asker, asked, from, to, thread.at, false));
@@ -395,8 +395,11 @@ impl Client {
       let why = "Scroll up to the first message of the thread, then send from this moment again.";
       return Some(Err(why.to_owned()));
     }
-    let kept: Vec<String> =
-      thread.exchanges.values().map(|one| Value::String(one.message.clone()).to_string()).collect();
+    let kept: Vec<String> = thread
+      .exchanges
+      .values()
+      .map(|one| Value::String(one.message.to_string()).to_string())
+      .collect();
     let (text, kept) = (Value::String(text.to_owned()), kept.join(", "));
     thread.time = None;
     thread.moved();
@@ -468,7 +471,7 @@ impl Client {
     let moment = time.placed(at);
     let began = |one: &&Began| moment.is_none_or(|moment| one.at <= moment);
     let thread = track.threads.iter().rev().find(began).or(track.threads.first())?;
-    Some((thread.prompt.clone(), moment))
+    Some((thread.prompt.to_string(), moment))
   }
 
   /// The ask of the chains of the life of the open thread, while they show under its bar and the

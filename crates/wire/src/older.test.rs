@@ -11,10 +11,10 @@ fn page() -> Page {
   let block = Block { maker: Maker::Operator, lines: vec![line], more: false, thought: None };
   let answered = Answered { by: Maker::Operator, reply: Reply::Withdrawn(None) };
   let question = Saying::Question { shape: "str".to_owned(), answered: Some(answered) };
-  let said = |kind| Said { act: "prompt2".to_owned(), kind, text: "resolved".to_owned() };
+  let said = |kind| Said { act: "prompt2".into(), kind, text: "resolved".to_owned() };
   let exchange = Exchange {
     at: 0,
-    message: "prompt1".to_owned(),
+    message: "prompt1".into(),
     said_at: 0,
     by: Maker::Operator,
     text: "hi".to_owned(),

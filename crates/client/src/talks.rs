@@ -27,7 +27,7 @@ pub struct Talk {
 impl Client {
   /// The exchanges of the conversation of a thread about lines, once its machine gave them.
   pub fn talk(&self, prompt: &str) -> Option<&[Exchange]> {
-    self.talks.iter().find(|one| one.now.card.prompt == prompt)?.exchanges.as_deref()
+    self.talks.iter().find(|one| *one.now.card.prompt == *prompt)?.exchanges.as_deref()
   }
 
   /// The threads about lines whose conversations the review shows, as agents of a thread of a life
@@ -60,7 +60,7 @@ impl Client {
       self.talks.iter_mut().filter(|one| !one.asked && one.read.as_ref() != Some(&one.now))
     {
       (talk.asked, talk.read) = (true, Some(talk.now.clone()));
-      let thread = talk.now.card.prompt.clone();
+      let thread = talk.now.card.prompt.to_string();
       let (life, at) = (talk.life.clone(), talk.at);
       let verb = Verb::Thread {
         life,
@@ -76,7 +76,7 @@ impl Client {
 
   /// What a machine told of the page of a conversation. A refusal keeps the exchanges before it.
   pub(crate) fn told_talk(&mut self, prompt: &str, heard: Option<Frame>) {
-    let Some(talk) = self.talks.iter_mut().find(|one| one.now.card.prompt == prompt) else {
+    let Some(talk) = self.talks.iter_mut().find(|one| *one.now.card.prompt == *prompt) else {
       return;
     };
     talk.asked = false;

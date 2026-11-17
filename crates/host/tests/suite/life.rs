@@ -398,7 +398,7 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_s
   assert_eq!(told, facts, "the life tells each fact of the record");
   let threads = life.send(Command::Threads { on: None, at: None, read: None, site: None }).await;
   let Ok(Reply::Threads(threads)) = threads else { panic!("the threads: {threads:?}") };
-  let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_str()).collect();
+  let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_ref()).collect();
   assert_eq!(prompts, ["prompt1", "prompt3"], "a window reads the threads of the record");
   let reach = Reach { before: None, limit: 10 };
   let page = life.send(Command::Thread { thread: "prompt1".to_owned(), reach, at: None }).await;

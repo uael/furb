@@ -64,7 +64,7 @@ impl Model {
   /// The rows of the open thread.
   pub(crate) fn feed<'a>(&'a self, kept: &'a mut Kept) -> Option<Feed<'a>> {
     let opened = self.client.thread.as_ref()?;
-    let reverting = self.reverting().map(|one| one.message.as_str());
+    let reverting = self.reverting().map(|one| one.message.as_ref());
     Some(Feed { model: self, opened, wide: self.wide(), kept, blocks: None, reverting })
   }
 }
@@ -303,7 +303,7 @@ impl<'a> Feed<'a> {
     let forward =
       ahead.map(|one| (before - one.content.width()..before, Some(Click::Key(Does::Forward))));
     // The mark of the branches of a thread opens its last branch.
-    let last = self.opened.thread.branches().last().map(|one| one.card.prompt.clone());
+    let last = self.opened.thread.branches().last().map(|one| one.card.prompt.to_string());
     let fork = last.filter(|_| forks.1).map(|prompt| (forks.0, Some(Click::Agent(prompt))));
     Row { hot: hot.into_iter().chain(forward).chain(fork).collect(), ..Row::of(line) }
   }
@@ -370,7 +370,7 @@ impl<'a> Feed<'a> {
   /// first branch being the thread itself, whose head names how many branches it has.
   fn branch(&self) -> (Option<usize>, usize) {
     let branch = self.opened.from.as_deref().and_then(|from| {
-      let mine = |one: &&Agent| one.card.prompt == self.opened.thread.key.2;
+      let mine = |one: &&Agent| *one.card.prompt == *self.opened.thread.key.2;
       from.thread.branches().iter().position(mine)
     });
     (branch, self.opened.thread.branches().len())
@@ -423,7 +423,7 @@ impl<'a> Feed<'a> {
     // under its block or the band of his word, before the blank row that ends the block, to a
     // window that may write.
     let reads = self.model.client.only_reads(self.opened.thread.key.0);
-    if self.reverting == Some(exchange.message.as_str()) && !reads {
+    if self.reverting == Some(exchange.message.as_ref()) && !reads {
       let mut files: Vec<&str> =
         writes(exchange).filter(|one| one.known).map(|one| &*one.path).collect();
       files.sort_unstable();
@@ -587,7 +587,8 @@ impl<'a> Feed<'a> {
     let (at, life, _) = &self.opened.thread.key;
     let thread = &self.opened.thread;
     let pending = thread.pending.iter().map(|one| one.text.as_str());
-    let open = |one: &Exchange| self.opened.unfolded.contains(&Fold::Block(one.message.clone()));
+    let open =
+      |one: &Exchange| self.opened.unfolded.contains(&Fold::Block(one.message.to_string()));
     let lines = thread
       .exchanges
       .values()
@@ -822,7 +823,7 @@ impl<'a> Feed<'a> {
       let click = if named.name == PROMPT {
         prompts += 1;
         let agent = agents.get(prompts - 1).or(agents.last());
-        agent.map(|one| Click::Agent(one.card.prompt.clone()))
+        agent.map(|one| Click::Agent(one.card.prompt.to_string()))
       } else if named.binds {
         None
       } else {
@@ -1193,7 +1194,7 @@ impl<'a> Feed<'a> {
       ];
     }
     if let Saying::Question { answered, .. } = &said.kind {
-      let formed = self.opened.form.as_ref().is_some_and(|form| form.act == said.act);
+      let formed = self.opened.form.as_ref().is_some_and(|form| *form.act == *said.act);
       if answered.is_none() && formed {
         return Vec::new();
       }
@@ -1312,7 +1313,7 @@ impl<'a> Feed<'a> {
       let line = format!("{}  ", shown_at(one));
       title.splice(0..0, [run("◆ ", Style::new().fg(self.model.tokens.accent)), run(line, muted)]);
     }
-    let open = Click::Agent(agent.card.prompt.clone());
+    let open = Click::Agent(agent.card.prompt.to_string());
     let Some((numbers, value)) = under else {
       let room = self.wide.saturating_sub(2);
       let said = title

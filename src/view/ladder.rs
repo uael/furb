@@ -200,7 +200,7 @@ impl<'a> Walk<'a, '_> {
       self.out.push(Rung::Ear { rungs, depth });
       return;
     }
-    self.out.push(Rung::Step { id: act.id.to_string(), depth });
+    self.out.push(Rung::Step { id: Arc::clone(&act.id), depth });
     let under = self.under(act);
     let of = if act.kind == Kind::Prompt { "rungs" } else { "prompts" };
     let key = format!("{of}:{}", act.id);

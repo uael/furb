@@ -345,7 +345,7 @@ impl Model {
     };
     let said =
       opened.thread.exchanges.values().rev().find(|one| his(&one.by)).filter(|one| one.runs)?;
-    Some(Back::Said(said.message.clone(), said.text.clone()))
+    Some(Back::Said(said.message.to_string(), said.text.clone()))
   }
 
   /// A message out of the queue, by its place and its text, and out of the thread that shows it. A
@@ -1229,7 +1229,7 @@ impl Model {
       self.client.thread.as_ref().is_some_and(|one| {
         let key = &one.thread.key;
         let mut exchanges = one.thread.exchanges.values();
-        (key.0, &key.1) == (word.at, &word.life) && exchanges.any(|one| one.message == word.rung)
+        (key.0, &key.1) == (word.at, &word.life) && exchanges.any(|one| *one.message == *word.rung)
       })
     };
     let Some(word) = self.word.as_ref().filter(|word| !shows(word)) else {

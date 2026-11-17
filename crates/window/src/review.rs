@@ -113,7 +113,7 @@ impl Model {
     let shown = self.reviewing()?;
     let path = &self.client.reviewed()?.path;
     let subs = self.subs(path, &shown.diff, shown.split);
-    Some(subs.get(row).copied().flatten()?.card.prompt.clone())
+    Some(subs.get(row).copied().flatten()?.card.prompt.to_string())
   }
 
   /// The head of the diff, as the head of a thread: the project and its branch muted, the file
