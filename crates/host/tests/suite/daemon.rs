@@ -3660,6 +3660,34 @@ async fn the_changes_of_a_checkout_give_its_branch_its_files_with_their_counts_a
 }
 
 #[tokio::test]
+async fn a_read_of_the_changes_writes_nothing_in_the_checkout_so_a_git_command_of_his_meets_no_lock()
+ {
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let folder = at.join("project");
+  fs::create_dir_all(&folder).unwrap();
+  let git = |args: &[&str]| {
+    let done = process::Command::new("git").arg("-C").arg(&folder).args(args).output();
+    assert!(done.unwrap().status.success(), "git {args:?}");
+  };
+  git(&["init", "-q", "-b", "trunk"]);
+  fs::write(folder.join("a.txt"), "one\n").unwrap();
+  git(&["add", "a.txt"]);
+  // A commit starts the maintenance of git in the background, which may write the index later.
+  let quiet = ["-c", "maintenance.auto=false", "-c", "user.name=t", "-c", "user.email=t@t"];
+  git(&[&quiet[..], &["commit", "-q", "-m", "a"]].concat());
+  // A file whose time moved and whose text did not: a status that may lock the index writes it.
+  let later = File::options().write(true).open(folder.join("a.txt")).unwrap();
+  later.set_modified(UNIX_EPOCH + Duration::from_secs(4_000_000_000)).unwrap();
+  let index = || fs::read(folder.join(".git/index")).unwrap();
+  let before = index();
+  let asked = window.ask(Verb::Changes { cwd: folder.display().to_string(), path: None }).await;
+  assert!(matches!(asked, Ok(Answer::Changes(_))), "{asked:?}");
+  assert!(index() == before, "the read of the changes wrote the index of the checkout");
+}
+
+#[tokio::test]
 async fn the_changes_of_a_folder_deep_in_a_checkout_name_the_files_of_that_folder_alone() {
   use furb_host::protocol::{Change, Changed, Changes};
   let at = place();

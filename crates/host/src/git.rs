@@ -2,6 +2,9 @@
 //! the last commit with the lines that each adds and removes, and the diff of one of them. Each
 //! asks the program git of the machine, which knows each form of a checkout, a worktree among them,
 //! and runs off the loop of the daemon under a bound of time, so a slow disk holds back no verb.
+//! Each read writes nothing in the checkout: a status takes no optional lock, and each diff is the
+//! plumbing `diff-index`, which never refreshes the index, so a git command that the operator runs
+//! there at the same moment never meets the lock of the index.
 
 use std::{
   fs,
@@ -29,8 +32,9 @@ pub(crate) async fn changes(folder: &Path, path: Option<&str>) -> Result<Changes
   };
   let (branch, mut files) = statused(&status);
   // A checkout with no commit has no head to count against: each file is new there.
-  let counts =
-    git(folder, &["diff", "HEAD", "--numstat", "-z", "--", "."]).await?.unwrap_or_default();
+  let counts = git(folder, &["diff-index", "-M", "--numstat", "-z", "HEAD", "--", "."])
+    .await?
+    .unwrap_or_default();
   let top = git(folder, &["rev-parse", "--show-toplevel"]).await?.unwrap_or_default();
   let top = PathBuf::from(top.trim());
   for (path, added, removed) in counted(&counts) {
@@ -56,7 +60,8 @@ pub(crate) async fn changes(folder: &Path, path: Option<&str>) -> Result<Changes
 async fn based(folder: &Path) -> Option<Lines> {
   let remote = git(folder, &["rev-parse", "--abbrev-ref", "origin/HEAD"]).await.ok()??;
   let base = git(folder, &["merge-base", "HEAD", remote.trim()]).await.ok()??;
-  let counts = git(folder, &["diff", base.trim(), "--numstat", "-z", "--", "."]).await.ok()??;
+  let counts =
+    git(folder, &["diff-index", "-M", "--numstat", "-z", base.trim(), "--", "."]).await.ok()??;
   let sums = counted(&counts).into_iter().fold((0, 0), |sum, one| (sum.0 + one.1, sum.1 + one.2));
   Some(Lines { added: sums.0, removed: sums.1 })
 }
@@ -121,7 +126,7 @@ async fn diff(folder: &Path, path: &str) -> Result<String, String> {
   let top = format!(":(top){path}");
   let tracked = git(folder, &["ls-files", "--error-unmatch", "--", &top]).await?.is_some();
   let diff = if tracked {
-    git(folder, &["diff", "HEAD", "--", &top]).await?
+    git(folder, &["diff-index", "-p", "HEAD", "--", &top]).await?
   } else {
     let root = git(folder, &["rev-parse", "--show-toplevel"]).await?.unwrap_or_default();
     let file = Path::new(root.trim()).join(path).display().to_string();
@@ -148,7 +153,8 @@ async fn ran(
   fine: fn(i32) -> bool,
 ) -> Result<Option<String>, String> {
   let mut command = Command::new("git");
-  command.arg("-C").arg(folder).args(args).stdin(Stdio::null()).kill_on_drop(true);
+  command.arg("--no-optional-locks").arg("-C").arg(folder).args(args);
+  command.stdin(Stdio::null()).kill_on_drop(true);
   let run = command.output();
   let out = match timeout(BOUND, run).await {
     Ok(Ok(out)) => out,
