@@ -18,4 +18,5 @@ def catchup(on: str = "") -> Act:
   It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself, so a new chain makes no read on the chains that live.
   The journal keeps each read and each clock of a catch-up, so a later life on the same record tells the same catch-up at the same place.
   It hears no control, as the chain that it serves hears none, so a pause of the chain holds no catch-up.
+  A word of the chain that binds a name of the engine that the catch-up reads, as picked or peek, changes no catch-up, since the word of the extension runs in the module of the extensions of the chain.
   """

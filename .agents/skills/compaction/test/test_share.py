@@ -12,7 +12,7 @@ def choices(root: str) -> list[tuple]:
 
 
 async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tmp_path: Path) -> None:
-  """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
+  """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless the word of an extension rebinds it, since a word of the chain never reaches the module of the extensions."""
   sand, root, _ = compacting(tmp_path)
   await engine.rung("compacted()", on=root)
   sand.cost = (240000, 0, 0, 0, 0.0)
@@ -20,6 +20,6 @@ async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tm
   assert await engine.prompt(float, "share", on=root) == 0.6
   assert choices(root) == []
   sand.cost = (244000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 2\ndebug(t'{x}')", "SHARE = 2\nclose(([], ''))", "close(x)"]
+  sand.script[root] = ["x = 2\ndebug(t'{x}')", "await rung(Text('mine.py', 'SHARE = 2'))\nclose(([], ''))", "close(x)"]
   assert await engine.prompt(int, "past", on=root) == 2
   assert len(choices(root)) == 1 and engine.scope(root) != root

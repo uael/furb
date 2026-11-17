@@ -177,3 +177,16 @@ async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> No
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(two, "/w/a.txt")]
   assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
   assert [a[3] for a in said(log, "catchup")] == [root, two, three]
+
+
+async def test_a_word_of_the_chain_that_binds_a_name_of_the_engine_that_the_catch_up_reads_changes_no_catch_up() -> (
+  None
+):
+  """A word of the chain that binds a name of the engine that the catch-up reads, as picked or peek, changes no catch-up, since the word of the extension runs in the module of the extensions of the chain."""
+  sand, _, root = await caught_up()
+  engine.read("a.txt", on=root)
+  await engine.rung('picked = "x"\npeek = "y"', on=root)
+  sand.files["/w/a.txt"] = "one\nthree\n"
+  engine.stand(engine.ROOT)
+  assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'three'}}"]
+  assert (engine.module(root)["picked"], engine.module(root)["peek"]) == ("x", "y")

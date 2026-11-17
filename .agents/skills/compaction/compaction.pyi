@@ -3,9 +3,9 @@ from furb.engine import Act, Filter
 compaction: str
 """compaction is the doctrine of the extension, a quote that says what each part does and how a project changes the defaults."""
 SHARE: float
-"""SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
+"""SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless the word of an extension rebinds it, since a word of the chain never reaches the module of the extensions."""
 AGAIN: float
-"""AGAIN is the share of the window that an answer reads past the first answer after a compaction of compacted before compacted asks choice again, and it is 0.15 unless a word rebinds it."""
+"""AGAIN is the share of the window that an answer reads past the first answer after a compaction of compacted before compacted asks choice again, and it is 0.15 unless the word of an extension rebinds it, since a word of the chain never reaches the module of the extensions."""
 OVERFLOWED: str
 """OVERFLOWED is the summary that fitted gives compact, which says why the chain lost its acts."""
 BRIEF: str

@@ -12,7 +12,7 @@ async def test_compact_supersedes_the_chain_of_the_caller(tmp_path: Path) -> Non
   sand, root, _ = compacting(tmp_path)
   sand.script[root] = [
     "read('a.txt')\nbash('echo hi')",
-    "FILTERS = [lambda acts: []]\nclose([compact(), compact([quiet()])])",
+    "await rung(Text('mine.py', 'FILTERS = [lambda acts: []]'))\nclose([compact(), compact([quiet()])])",
   ]
   went = await engine.prompt(list, "compact", on=root)
   await settle()

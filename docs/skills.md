@@ -3,12 +3,16 @@
 An extension adds to what a model can do in furb. It is Python, as a word of a model is: a life runs the word of each
 extension on each chain where it plays, before any other word, so the functions that it defines are there for the model,
 and the model reads the extension in its turns as it reads its own work. In the setup of the root, which every new chain
-holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN).content)`, and the
-turn of the rung that this word made, which holds the code of the file alone, since that rung runs it. The engine
-crafts these turns itself from the extensions that the World gives in the standing. The file is a copy of the
-word of the extension in `words/<name>/<digest>/` of the config directory of the user, which holds no import of furb.
-The digest is the start of the sha256 of the word, so a life of another build in the same config directory writes its
-own word beside this one, and never over the file that this life reads.
+holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN))`, and the turn of
+the rung that this word made, which holds the code of the file alone, since that rung runs it. A rung of a text runs the
+code in the module of the extensions of its chain, which holds the names of the engine, and binds each name that the
+code defines in the module of the chain too, so the model calls each function of the extension, and a name that the
+model binds, as `picked`, never reaches the code of an extension. A project changes a default of an extension with a
+skill of its own, whose word runs in the same module. The engine crafts these turns itself from the extensions that the
+World gives in the standing. The file is a copy of the word of the extension in `words/<name>/<digest>/` of the config
+directory of the user, which holds no import of furb. The digest is the start of the sha256 of the word, so a life of
+another build in the same config directory writes its own word beside this one, and never over the file that this life
+reads.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
 caches of the chain stays valid.

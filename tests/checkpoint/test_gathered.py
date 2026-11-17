@@ -2,7 +2,7 @@
 
 from conftest import HELD, HELD_FILES, STANDS, born, definitions, life, paragraphs, settle, sown, world_says
 from furb import checkpoint, engine
-from furb.engine import LARGEST, OPERATOR, Refused
+from furb.engine import LARGEST, OPERATOR, Refused, Text
 
 WORD = """def f():
   return 1
@@ -248,9 +248,9 @@ async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() ->
   assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)
 
 
-async def test_the_definitions_of_a_chain_take_the_word_of_each_extension_that_its_ear_played_on_it() -> None:
+async def test_the_definitions_of_a_chain_take_the_word_of_each_skill_that_its_ear_played_on_it() -> None:
   """The definitions of a chain take the word of each extension that the ear of the extensions played on it, so a life word that a later life plays on that chain finds its names bound, since that life plays no extension again on a chain that had it."""
-  _, root = life(sown(), extensions=engine.idle("extensions"))
+  _, root = life(sown(), (), **{"extensions": engine.idle("extensions")})
   token = engine.site.set("extensions")
   try:
     engine.rung("import json\n\n\ndef kit():\n  return json.dumps(3)\n\nkit()", on=root)
@@ -329,3 +329,42 @@ async def test_jumped_holds_each_chain_that_jumped_with_its_maker_its_parent_its
   by, on, label, source = engine.get(root)[2:6]
   assert data["jumped"] == [{"id": root, "by": by, "on": on, "label": label, "source": source, "to": went}]
   assert root not in [c["id"] for c in data["chains"]]
+
+
+async def test_chains_holds_the_definitions_and_the_values_of_the_module_of_the_skills_of_each_chain() -> None:
+  """chains holds, as extensions, for each chain whose module holds the module of its extensions or that ran the word of an extension that the life enabled, the definitions of each word of a rung of a text and of each such word, the text that binds each plain value of that module again, and shared, the names that the module of the chain binds to the same object, while the definitions of the chain still hold each such word, so a build of an earlier minor reads the data as it did."""
+  _, _, root = born()
+  word = "def first(lines):\n  return picked(span(1, 1), lines)\nheld = []\nmine = 2"
+  await engine.rung(Text("kit.py", word), on=root)
+  await engine.rung('picked = "x"\nmine = 3', on=root)
+  data = checkpoint.gathered(vars(engine), definitions, {})
+  [one] = [x for x in data["chains"] if x["id"] == root]
+  defined = definitions(word)
+  assert one["extensions"] == {"definitions": [defined], "values": {"held": "[]", "mine": "2"}, "shared": ["held"]}
+  assert defined in one["definitions"] and one["values"]["mine"] == "3"
+  _, again = life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  await engine.rung("got = first(['a'])", on=again)
+  assert (engine.module(again)["got"], engine.module(again)["mine"]) == ([1], 3)
+
+
+async def test_an_engine_before_the_module_of_the_skills_held_in_the_module_of_the_chain_what_the_word_of_a_skill_assigns() -> (
+  None
+):
+  """An engine before the module of the extensions held in the module of the chain what the word of an extension assigns, so the extensions of a chain of such an engine take those values from the module of the chain, as names that it shares."""
+  word = "def first(lines):\n  return picked(span(1, 1), lines)\nheld = []"
+  _, root = life(sown(), (), **{"extensions": engine.idle("extensions")})
+  token = engine.site.set("extensions")
+  try:
+    engine.say("enable", root, "kit", word, "")
+    engine.rung(word, on=root)
+  finally:
+    engine.site.reset(token)
+  await settle()
+  data = checkpoint.gathered(vars(engine), definitions, {})
+  [one] = [x for x in data["chains"] if x["id"] == root]
+  assert one["extensions"] == {"definitions": [definitions(word)], "values": {"held": "[]"}, "shared": ["held"]}
+  _, again = life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  await engine.rung('picked = "x"\ngot = first(["a"])\nsame = held is __extensions__["held"]', on=again)
+  assert (engine.module(again)["got"], engine.module(again)["same"]) == ([1], True)

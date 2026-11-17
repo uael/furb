@@ -86,7 +86,8 @@ def turns(on="") -> list[tuple]:
 
 
 def module(on="") -> dict:
-  return (transcript(on, "module") or [[{}] * 4])[-1][3]
+  m, a = (transcript(on, "module") or [[{}] * 4])[-1][3], get(on) or [""] * 6
+  return m.setdefault("__extensions__", {**globals()}) if isinstance((get(a[5]) or a)[4], Text) else m
 
 
 def program(on="") -> dict[str, str]:
@@ -209,6 +210,7 @@ def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
 
 
 def rung(word="", retells="", to="", on="") -> Act:
+  text, word = word, getattr(word, "content", word)
   if not isinstance(word, str):
     raise Refused(f"no word: {word!r:.80}")
 
@@ -241,7 +243,7 @@ def rung(word="", retells="", to="", on="") -> Act:
               yield told(id, "raised", raised=value)
           yield "done", id, value
 
-  return act("rung", on, controlled(ear), word, retells, to if word or to else module(on).get("actor", ""))
+  return act("rung", on, controlled(ear), text, retells, to if word or to else module(on).get("actor", ""))
 
 
 def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
@@ -302,7 +304,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
 
     def setup(given):
       e = given[4:] and given[4]
-      files = [[f"rung(read({x[1]!r}, HIDDEN).content)" for x in e if x[1] and x[3] == k] for k in (0, 1)]
+      files = [[f"rung(read({x[1]!r}, HIDDEN))" for x in e if x[1] and x[3] == k] for k in (0, 1)]
       lives = [[x[2] for x in e if x[2] and x[3] == k] for k in (0, 1)]
       return [
         ['debug(t"{standing()[4]=}")'] * bool(given[4:])

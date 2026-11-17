@@ -56,7 +56,8 @@ def seed(names, data):
       t for t in c["turns"] if t[1] not in kinds or home[t[1]] != i or t[0] not in ("started", "done", kinds[t[1]])
     ]
     lost = [*c["lost"], *c["values"]]
-    carried = ("carried", i, "journal", c["turns"], c["values"], definitions, made[i], lost, c["cut"])
+    extended = [c["extensions"]] if "extensions" in c else []
+    carried = ("carried", i, "journal", c["turns"], c["values"], definitions, made[i], lost, c["cut"], *extended)
     entries += [(carried,), (("prefix", i, "journal", kept),)]
     (c["paused"] or i in asking) and entries.append((("pause", i, operator),))
   for x in data["acts"]:
@@ -90,8 +91,8 @@ def birth(names):
     match (yield {"carried", "module", "prefix", "jumped"}):
       case ("jumped", about, _, to):
         names["jumped"][about] = to
-      case ("carried", about, _, _, values, definitions, _, lost, cut):
-        bind(module(about), about, values, definitions)
+      case ("carried", about, _, _, values, definitions, _, lost, cut, *extended):
+        bind(module(about), about, values, definitions, names, *extended)
         lost = [n for n in lost if n not in module(about)]
         note = f"The life goes on from a checkpoint. It lost {lost or 'no name'}, and it cut {cut or 'no act'}."
         notes[about] = (lost or cut) and note
@@ -104,13 +105,21 @@ def birth(names):
         while not transcript(born, "carried") and get(born)[5]:
           born = get(born)[5]
         for x in transcript(born, "carried")[-1:]:
-          x[5:] and bind(held, about, x[4], x[5])
+          x[5:] and bind(held, about, x[4], x[5], names, *x[9:10])
 
 
-def bind(module, about, values, definitions):
+def bind(module, about, values, definitions, names, extended=None):
   # The module of a chain at the tip, made again as data: each value from its text, each definition, then each value
   # that a definition bound again, while a value whose object the module still holds stays that object, which a
-  # definition took. A value or a definition that raises loses only itself.
+  # definition took. A value or a definition that raises loses only itself. The module of the extensions of the chain
+  # is made first, as the engine makes it, and each name of it but a name of the engine is bound in the module of the
+  # chain, as a rung of a text binds it, so a value or a definition of the chain itself wins over it.
+  held = {}
+  if extended:
+    held = module.setdefault("__extensions__", {**names})
+    bind(held, about, extended["values"], extended["definitions"], names)
+    module.update({k: v for k, v in held.items() if k not in names})
+    definitions = [d for d in definitions if d not in extended["definitions"]]
   bound = {}
   for word in [None, *definitions, None]:
     for k, text in values.items() if word is None else ():
@@ -123,6 +132,8 @@ def bind(module, about, values, definitions):
       word and eval(compile(word, about, "exec"), module)  # noqa: S307
     except Exception:  # noqa: S110
       pass
+  for k in (extended or {}).get("shared", ()):
+    k in held and module.update({k: held[k]})
 
 
 def gathered(names, define, floor):
@@ -166,20 +177,52 @@ def gathered(names, define, floor):
   asked = [*map(get, chains)] + [x for h in chains for x in transcript(h) if x is get(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
-  values, lost, named = {}, {}, {x[1] for x in asked if x[0] in ("prompt", "bash")}
-  for c in chains:
-    values[c], lost[c] = {}, []
-    for key, value in module(c).items():
-      if not (key.startswith("__") or callable(value) or names.get(key, values) is value):
+  named = {x[1] for x in asked if x[0] in ("prompt", "bash")}
+
+  def kept(held):
+    got, gone = {}, []
+    for key, value in held.items():
+      if not (key.startswith("__") or callable(value) or names.get(key, got) is value):
         try:
           text = literal(value, found := set())
         except RecursionError:
           text = ""
         if text:
-          values[c][key] = text
-          named |= found
+          got[key] = text
+          named.update(found)
         else:
-          lost[c].append(key)
+          gone.append(key)
+    return got, gone
+
+  # The word of each extension that the life enabled, as its definitions: an engine before the module of the
+  # extensions ran it in the module of the chain, and a later life moves it to the module of the extensions.
+  enabled = [x[4] for c in {root, scope(root)} for x in transcript(c, "enable") if isinstance(x[4:5] and x[4], str)]
+  kits = {d for d in map(define, enabled) if d}
+
+  values, lost, extended = {}, {}, {}
+  for c in chains:
+    values[c], lost[c] = kept(module(c))
+    last = transcript(c, "carried")[-1:]
+    played = [
+      w for r, w in program(c).items() if get(r) and (isinstance(get(r)[4], names["Text"]) or define(w) in kits)
+    ]
+    definitions = [
+      *[d for x in last for d in (x[9]["definitions"] if x[9:] else [d for d in x[5] if d in kits])],
+      *filter(None, map(define, played)),
+    ]
+    held = module(c).get("__extensions__")
+    if isinstance(held, dict):
+      mine, missing = kept(held)
+      shared = [k for k, v in module(c).items() if k in values[c] and held.get(k, held) is v]
+    else:
+      # An engine before the module of the extensions held what the word of an extension assigns in the module of
+      # the chain.
+      assigned = {k for w in [*played, *enabled] for k in re.findall(r"(?m)^([A-Za-z_]\w*)\s*(?::[^=\n]+)?=(?!=)", w)}
+      mine = {k: v for k, v in values[c].items() if k in assigned}
+      missing, shared = [k for k in lost[c] if k in assigned], [*mine]
+    lost[c] += [k for k in missing if k not in lost[c]]
+    if definitions or mine:
+      extended[c] = {"definitions": definitions, "values": mine, "shared": shared}
   # The last read or write of each path on a chain holds the text that the chain holds there, which catchup and memory
   # compare with the file, so it stays known after a crossing. A read of the setup stays a carried turn, which a chain
   # with a source holds whole whatever its filter.
@@ -253,6 +296,7 @@ def gathered(names, define, floor):
           *filter(None, [define(w) for r, w in program(c).items() if get(r)]),
         ],
         "values": values[c],
+        **({"extensions": extended[c]} if c in extended else {}),
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],
         "lives": [
@@ -265,7 +309,7 @@ def gathered(names, define, floor):
             for w in words
             # The ear of the extensions runs the word of an extension and its life word in one rung on a chain that
             # lacks the extension.
-            if w and (get(r)[4] == w or get(r)[4].endswith("\n\n" + w))
+            if w and ((ran := str(getattr(get(r)[4], "content", get(r)[4]))) == w or ran.endswith("\n\n" + w))
           )
         ],
       }

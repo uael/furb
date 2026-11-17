@@ -234,7 +234,7 @@ test("what a model writes streams into the session under its rung until its repl
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
         // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each
-        // official extension the word rung(read('<file>', HIDDEN).content) and the turn of the rung that it made, which
+        // official extension the word rung(read('<file>', HIDDEN)) and the turn of the rung that it made, which
         // holds the code alone, then the stand and the cd, whose user turn holds what they tell, then each life word in
         // a turn of its own, the user turn after the word that reads holding what it read, then the open of the root
         // and the prompt.

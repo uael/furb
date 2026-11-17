@@ -23,7 +23,8 @@
 //! extension by a fact that the record keeps, and plays the word and the life word as a rung on
 //! each chain where the
 //! extension plays, and the definitions alone of a new word of an extension that the life runs,
-//! which reloads it.
+//! which reloads it. Each such rung is given the word as a text, so it runs in the module of the
+//! extensions of its chain, which no word of a model writes.
 
 use std::{
   env, fs,
@@ -320,6 +321,17 @@ impl Skill {
     let root = text(3).as_deref() == Some(ROOTED);
     let file = text(4).unwrap_or_default();
     Some(Self { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
+  }
+
+  /// A word of the extension as a rung takes it, and none for a blank word, since a rung with no
+  /// word asks a model: the text of its file, the file of its word or its name when no file stands
+  /// for it, which the rung runs in the module of the extensions of its chain, or the word alone
+  /// for an engine that runs it in the module of the chain.
+  fn word(&self, word: &str, apart: bool) -> Option<Object> {
+    let path = if self.file.is_empty() { &self.name } else { &self.file };
+    let word = word.trim_matches('\n');
+    (!word.trim().is_empty())
+      .then(|| if apart { Text::new(path.as_str(), word).object() } else { Object::string(word) })
   }
 
   /// The saying that enables the extension, about the root: its name, its word, its life word,
@@ -894,7 +906,7 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
 /// rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
-  telling(given, Vec::new(), places)
+  telling(given, Vec::new(), places, true)
 }
 
 /// What the ear of the extensions keeps of the facts that it heard, which the image of a life
@@ -905,6 +917,10 @@ pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
 #[derive(Default, Serialize, Deserialize)]
 struct Told {
   refused: Vec<String>,
+  /// Whether the engine runs the word of an extension in the module of the extensions of its
+  /// chain, as [`world::apart`] says, so a rung takes the word as a text.
+  #[serde(default)]
+  apart: bool,
   enabled: Vec<Skill>,
   chains: Vec<(String, Vec<String>)>,
   teach: Option<(String, String, i64)>,
@@ -913,11 +929,16 @@ struct Told {
 
 /// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
 /// why each extension of `refused` does not play.
-pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
+pub(crate) fn telling(
+  given: Vec<Skill>,
+  refused: Vec<String>,
+  places: Places,
+  apart: bool,
+) -> Box<dyn Ear> {
   let heard = ["chain", "stand", "rung", "write", JUMPED, ENABLE, TEACH, config::CONFIGURED];
   let offered = Offered { given, places };
   hearing(&heard, move |mut co| async move {
-    co.keeps(Told { refused, ..Told::default() })?;
+    co.keeps(Told { refused, apart, ..Told::default() })?;
     loop {
       let a = hear(&mut co).await;
       // The ear holds what it keeps while it steps, and gives it back before it waits again,
@@ -978,7 +999,7 @@ impl Told {
   /// ear of the source, and the engine puts each act on the name of the source on it, so the entry
   /// of the source stands for it and the ear plays nothing on it.
   async fn born(&mut self, co: &mut Co, a: &Fact) -> Result<(), Fault> {
-    let Self { enabled, chains, taught, .. } = self;
+    let Self { enabled, chains, taught, apart, .. } = self;
     let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
     if source.as_deref() == Some(a.by()) {
       return Ok(());
@@ -992,7 +1013,7 @@ impl Told {
     chains.push((a.about().to_owned(), had.unwrap_or_default()));
     if let Some(born) = chains.last_mut() {
       for one in enabled.iter() {
-        play(co, one, born).await?;
+        play(co, one, born, *apart).await?;
       }
     }
     Ok(())
@@ -1018,7 +1039,7 @@ impl Told {
     a: &Fact,
     given: &[Skill],
   ) -> Result<Option<Vec<Skill>>, Fault> {
-    let Self { refused, enabled, chains, teach, taught } = self;
+    let Self { refused, enabled, chains, teach, taught, .. } = self;
     // A life born on a checkpoint holds the teach and the enables of its root in the turns that
     // the checkpoint carries, which no journal says again: the ear reads them there, as a whole
     // replay of the record hears them, and teaches nothing again. It reads them at a stand that the
@@ -1149,7 +1170,7 @@ impl Told {
   /// nothing: the record holds each rung that it played, which the life plays again in its place,
   /// so the ear only takes again what each chain has.
   async fn played(&mut self, co: &mut Co, a: &Fact, new: Vec<Skill>) -> Result<(), Fault> {
-    let Self { enabled, chains, teach, taught, .. } = self;
+    let Self { enabled, chains, teach, taught, apart, .. } = self;
     if let Some((_, _, 0)) = teach.take() {
       *taught = true;
       let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
@@ -1167,19 +1188,19 @@ impl Told {
     for one in new {
       let Some(two) = enabled.iter_mut().find(|two| two.name == one.name) else {
         for chain in chains.iter_mut() {
-          let word = worded(&one, chain);
+          let word = worded(&one, chain, *apart);
           if !again {
-            ring(co, &chain.0, &word).await?;
+            ring(co, &chain.0, word).await?;
           }
         }
         enabled.push(one);
         continue;
       };
       if two.word != one.word && !again {
-        let word = reloads(&one.word);
+        let word = one.word(&reloads(&one.word), *apart);
         for (chain, had) in chains.iter() {
           if had.contains(&one.name) {
-            ring(co, chain, &word).await?;
+            ring(co, chain, word.clone()).await?;
           }
         }
       }
@@ -1255,20 +1276,27 @@ fn range(part: impl Ranged) -> Range<usize> {
   usize::from(part.start())..usize::from(part.end())
 }
 
-async fn play(co: &mut Co, one: &Skill, chain: &mut (String, Vec<String>)) -> Result<(), Fault> {
-  let word = worded(one, chain);
-  ring(co, &chain.0, &word).await
+async fn play(
+  co: &mut Co,
+  one: &Skill,
+  chain: &mut (String, Vec<String>),
+  apart: bool,
+) -> Result<(), Fault> {
+  let word = worded(one, chain, apart);
+  ring(co, &chain.0, word).await
 }
 
-/// The word that plays one extension on a chain, which then has it.
-fn worded(one: &Skill, (chain, had): &mut (String, Vec<String>)) -> String {
+/// The word that plays one extension on a chain, which then has it: the text of its file with its
+/// life word, which runs in the module of the extensions of the chain, or its life word alone on a
+/// chain that has it, or none.
+fn worded(one: &Skill, (chain, had): &mut (String, Vec<String>), apart: bool) -> Option<Object> {
   if had.contains(&one.name) {
-    one.life.clone()
+    (!one.life.is_empty()).then(|| Object::string(one.life.clone()))
   } else if one.root && chain != ROOT {
-    String::new()
+    None
   } else {
     had.push(one.name.clone());
-    format!("{}\n\n{}", one.word, one.life).trim_matches('\n').to_owned()
+    one.word(&format!("{}\n\n{}", one.word, one.life), apart)
   }
 }
 
@@ -1288,11 +1316,11 @@ async fn bare(co: &mut Co) -> Result<bool, Fault> {
   told(co, "chain()").await
 }
 
-/// A word played on a chain as a rung, unless it is empty.
-async fn ring(co: &mut Co, chain: &str, word: &str) -> Result<(), Fault> {
-  if !word.is_empty() {
+/// A word played on a chain as a rung, when there is one.
+async fn ring(co: &mut Co, chain: &str, word: Option<Object>) -> Result<(), Fault> {
+  if let Some(word) = word {
     let on = vec![("on", Object::string(chain))];
-    co.call("rung", vec![Object::string(word)], on).await?;
+    co.call("rung", vec![word], on).await?;
   }
   Ok(())
 }

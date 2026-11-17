@@ -10,7 +10,8 @@ async def test_brief_is_the_message_of_the_prompt_of_choice(tmp_path: Path) -> N
   """BRIEF is the message of the prompt of choice: which acts to keep, and how to close."""
   sand, root, _ = compacting(tmp_path)
   word = (
-    "kept = 'keep' in BRIEF and 'close((ids, summary))' in BRIEF\nBRIEF = 'pick'\nc = choice()\nawait c\nclose(kept)"
+    "kept = 'keep' in BRIEF and 'close((ids, summary))' in BRIEF\nawait rung(Text('mine.py', \"BRIEF = 'pick'\"))\n"
+    "c = choice()\nawait c\nclose(kept)"
   )
   sand.script[root] = [word, "close(([], ''))"]
   assert await engine.prompt(bool, "brief", on=root) is True

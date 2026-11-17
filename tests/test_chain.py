@@ -526,7 +526,7 @@ async def taught(*skills: list) -> tuple[Sand, list[tuple], str]:
 
 
 async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_paragraph_chain() -> None:
-  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, then crafts its setup on itself, each turn a rung with a word and its default actor, and tells its open once no rung with a word and an actor is open on it: the turn debug(t"{standing()[4]=}") when the standing gives the extensions, which shows the extensions that the words after it load, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the turn of its stand, stand() with a cd to the directory of the standing, each life word of those extensions, then the fact setup, then the turns of the files and of the life words of the extensions of the root alone, then the open; so the turns before the stand are the same text in each directory and for each roster and actor, and the turns up to the fact setup are the same text in each chain of the record."""
+  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, then crafts its setup on itself, each turn a rung with a word and its default actor, and tells its open once no rung with a word and an actor is open on it: the turn debug(t"{standing()[4]=}") when the standing gives the extensions, which shows the extensions that the words after it load, the read of the doctrine, the word rung(read('<file>', HIDDEN)) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the turn of its stand, stand() with a cd to the directory of the standing, each life word of those extensions, then the fact setup, then the turns of the files and of the life words of the extensions of the root alone, then the open; so the turns before the stand are the same text in each directory and for each roster and actor, and the turns up to the fact setup are the same text in each chain of the record."""
   _, _, root = born(stands=TAUGHT, files=TAUGHT_FILES)
   held = engine.transcript(root)
   first = next(n for n, a in enumerate(held) if a[0] == "rung")
@@ -543,13 +543,13 @@ async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_
     ("user", f"#rung1 debugged\nrung1_debug = {'standing()[4]=' + repr([*TAUGHT[4], LATE])!r}"),
     ("assistant", "read('/w/DOCTRINE.md')"),
     ("user", "#read1\nread1_path = '/w/DOCTRINE.md'\n<s:read1_text>\nRead first.\nThen act.</s:read1_text>"),
-    ("assistant", "rung(read('/w/one.py', HIDDEN).content)"),
+    ("assistant", "rung(read('/w/one.py', HIDDEN))"),
     ("user", "x = 41\n"),
     ("assistant", STOOD),
     ("user", stood("stand2") + "\n\n#cd1\ncd1_path = '/w'"),
     ("assistant", "z = x + 1"),
     ("user", ""),
-    ("assistant", "rung(read('/w/late.py', HIDDEN).content)"),
+    ("assistant", "rung(read('/w/late.py', HIDDEN))"),
     ("user", "y = 1\n"),
     ("assistant", "w = y + 1"),
   ]
@@ -559,7 +559,7 @@ async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_
   (setup,) = [n for n, a in enumerate(engine.transcript(root)) if a[0] == "setup"]
   assert engine.transcript(root)[setup] == ("setup", root, root)
   later = {a[1] for a in engine.transcript(root)[setup:] if a[0] == "rung"}
-  assert [a[4] for a in crafted if a[1] in later] == ["rung(read('/w/late.py', HIDDEN).content)", "w = y + 1"]
+  assert [a[4] for a in crafted if a[1] in later] == ["rung(read('/w/late.py', HIDDEN))", "w = y + 1"]
 
 
 async def test_a_life_word_of_a_skill_reads_the_directory_of_the_standing() -> None:
@@ -587,7 +587,7 @@ async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> Non
   assert setup[7][:2] == ("assistant", STOOD)
   assert [one[:2] for one in engine.turns(on=root)[10:14]] == [
     ("user", ""),
-    ("assistant", "rung(read('/w/late.py', HIDDEN).content)"),
+    ("assistant", "rung(read('/w/late.py', HIDDEN))"),
     ("user", "y = 1\n"),
     ("assistant", "w = y + 1"),
   ]

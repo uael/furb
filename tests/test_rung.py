@@ -678,10 +678,42 @@ async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_to
   assert all(engine.over(rung) for rung in rungs)
 
 
-async def test_a_word_that_is_no_str_is_refused_where_the_rung_is_made() -> None:
-  """A word that is no str is refused where the rung is made, so its chain makes no act of it and goes on."""
+async def test_a_word_that_is_neither_a_str_nor_a_text_is_refused_where_the_rung_is_made() -> None:
+  """A word that is neither a str nor a text is refused where the rung is made, so its chain makes no act of it and goes on."""
   _, log, root = born()
-  await engine.rung("try:\n  rung(read('a.txt'))\nexcept Refused as no:\n  why = str(no)", on=root)
-  assert engine.module(root)["why"] == "no word: Text(path='/w/a.txt', content='one\\ntwo\\n')"
+  await engine.rung("try:\n  rung(read('a.txt').lines)\nexcept Refused as no:\n  why = str(no)", on=root)
+  assert engine.module(root)["why"] == "no word: ['one', 'two']"
   assert len(said(log, "rung")) == 1
   assert await engine.rung("close(2)", on=root) == 2
+
+
+async def test_a_rung_of_a_text_holds_the_text_as_its_word_and_runs_its_content_in_the_module_of_the_skills() -> None:
+  """A rung of a text holds the text as its word and runs its content in the module of the extensions of its chain, so the functions that an extension defines read the names of the engine there, whatever a word of the chain binds, and a rung that retells it runs there too."""
+  _, log, root = born()
+  kit = await engine.rung(Text("kit.py", "def first(lines):\n  return picked(span(1, 1), lines)"), on=root)
+  (made,) = [a for a in said(log, "rung") if a[1] == "rung1"]
+  assert made[4:] == (Text("kit.py", "def first(lines):\n  return picked(span(1, 1), lines)"), "", "") and kit is None
+  await engine.rung('picked = "x"\ngot = first(["a", "b"])', on=root)
+  assert (engine.module(root)["picked"], engine.module(root)["got"]) == ("x", [1])
+  two = await chained("two", root)
+  (copy,) = [a for a in said(log, "rung") if a[5] == "rung1"]
+  await engine.rung('picked = "y"\ngot = first(["c"])', on=two)
+  assert copy[3] == two and engine.module(two)["got"] == [1] and engine.module(root)["got"] == [1]
+
+
+async def test_the_kernel_binds_in_the_module_of_the_chain_each_name_that_a_word_of_a_text_binds() -> None:
+  """The Kernel binds in the module of the chain each name but a name of the engine that a step of a word of a text binds in the module of the extensions, so the chain calls what an extension defines, and a name that the step leaves as it was stays as the chain binds it."""
+  _, _, root = born()
+  await engine.rung('picked = "x"', on=root)
+  kit = engine.rung(Text("kit.py", "def k():\n  return 1\nspan = 2\nraise ValueError('no')\nj = 3"), on=root)
+  await settle()
+  assert isinstance(engine.peek(kit), ValueError)
+  await engine.rung("got = k()", on=root)
+  held = engine.module(root)
+  assert (held["got"], held["picked"], callable(held["span"]), "j" in held) == (1, "x", True, False)
+  assert engine.module(kit)["span"] == 2
+  state = Text("state.py", "state = globals().setdefault('state', [])")
+  await engine.rung(state, on=root)
+  await engine.rung("state = 'mine'", on=root)
+  await engine.rung(state, on=root)
+  assert engine.module(root)["state"] == "mine"

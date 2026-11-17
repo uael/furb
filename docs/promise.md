@@ -34,8 +34,8 @@ only grows.
 | Part | Where | Version now |
 | --- | --- | --- |
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
-| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 3.1 |
-| The schema of the carry of a crossing, which an open makes in memory: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
+| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 3.2 |
+| The schema of the carry of a crossing, which an open makes in memory: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.2 |
 | The protocol of the daemon | `PROTOCOL` in `crates/wire/src/protocol.rs`, `crates/host/protocol.schema.json` | 49 |
 | The nodes of a view, a closed set that only grows (P5) | `crates/host/protocol.schema.json` | with the protocol |
 

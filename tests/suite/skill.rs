@@ -283,6 +283,14 @@ fn lived(at: &Path, given: Vec<Skill>) -> Engine {
   engine
 }
 
+/// The word of a rung: the content of the text that the ear of the extensions gives it, or the
+/// word that a rung of another maker holds.
+fn worded(one: &Fact) -> String {
+  let word = one.word(1);
+  let text = word.and_then(Text::of).map(|one| one.content);
+  text.or_else(|| word.and_then(|one| one.as_str().map(str::to_owned))).unwrap_or_default()
+}
+
 /// Each rung that the ear of the extensions made on these chains, and not on an origin of one: its
 /// name, its chain
 /// and its word.
@@ -292,8 +300,7 @@ fn rungs(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String, String)> 
     let on = verbs::Transcript { on: Some((*chain).to_owned()), of: None, at: None };
     for one in engine.transcript(on).unwrap() {
       if one.kind() == "rung" && one.by() == "extensions" && one.on() == *chain {
-        let word = one.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-        out.push((one.about().to_owned(), (*chain).to_owned(), word));
+        out.push((one.about().to_owned(), (*chain).to_owned(), worded(&one)));
       }
     }
   }
@@ -429,8 +436,7 @@ fn a_chain_that_a_jump_makes_takes_no_skill_again_and_a_new_skill_plays_on_it_on
     let on = verbs::Transcript { on: Some("chain2".to_owned()), of: None, at: None };
     let facts = engine.transcript(on).unwrap();
     let ours = facts.into_iter().filter(|one| one.kind() == "rung" && one.by() == "extensions");
-    let word = |one: &Fact| one.word(1).and_then(|one| one.as_str().map(str::to_owned));
-    ours.map(|one| (one.about().to_owned(), word(&one).unwrap_or_default())).collect::<Vec<_>>()
+    ours.map(|one| (one.about().to_owned(), worded(&one))).collect::<Vec<_>>()
   };
   {
     let mut engine = lived(&at, vec![note(NOTE)]);
@@ -737,8 +743,7 @@ fn the_setup_of_the_root_ends_with_the_skills_of_the_root_alone_and_a_chain_with
   };
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
-  let hidden =
-    |path: &str| format!("rung(read({}, HIDDEN).content)", Object::string(path).py_repr());
+  let hidden = |path: &str| format!("rung(read({}, HIDDEN))", Object::string(path).py_repr());
   let shared = at.join("shared.py").display().to_string();
   let (shared, rooted) = (hidden(&shared), hidden(&rooted));
   assert_eq!(

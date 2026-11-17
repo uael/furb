@@ -443,7 +443,11 @@ class Running:
             frame.close()
             return self.ended(job, self.cancelled())  # ty: ignore[invalid-argument-type]
           try:
-            got = self.stepped(self.stepping, frame, rung, given)
+            before = self.before(rung)
+            try:
+              got = self.stepped(self.stepping, frame, rung, given)
+            finally:
+              self.bound(rung, before)
           except StopIteration:
             return self.over(job, None)
           except BaseException as raised:
@@ -636,15 +640,18 @@ class Running:
     self.ran[rung] = held + part
     if not part.strip():
       return self.ended(run, None)
-    module = verb(self.names, "module")(chain)
-    assert isinstance(module, dict)
+    module = self.module(rung, chain)
     # A word that awaits nothing runs whole here, so the loop of the words is its running loop here too, and a task
     # that it makes is a job of its rung.
     outer = self.loop.enter()
     try:
       with self.site.set(rung), self.hearer.set(rung):
         # The part keeps the line it stands on in the word, so a traceback of it names the line its model wrote.
-        ran = self.stepped(ran_in, "\n" * held.count("\n") + part, rung, module)
+        before = self.before(rung)
+        try:
+          ran = self.stepped(ran_in, "\n" * held.count("\n") + part, rung, module)
+        finally:
+          self.bound(rung, before)
     except BaseException as raised:
       return self.ended(run, raised)
     finally:
@@ -653,6 +660,38 @@ class Running:
       return self.ended(run, None)
     self.frames[run] = ran
     return self.carry(run, None)
+
+  def module(self, rung: str, chain: str) -> dict[str, object]:
+    """The globals that the word of a rung runs in, which module of the engine gives for that rung: the module of the
+    extensions of its chain for a rung of a text and for a rung that retells one, and the module of its chain for any
+    other, as for a told rung, which is no act."""
+    module = verb(self.names, "module")(rung if verb(self.names, "get")(rung) else chain)
+    assert isinstance(module, dict)
+    return module
+
+  def before(self, rung: str) -> dict[str, object] | None:
+    """What the module of the extensions held before a step of the word of a rung of a text, which bound reads, and
+    nothing for any other rung, whose word binds in the module of its chain itself."""
+    made = verb(self.names, "get")(rung)
+    if not isinstance(made, tuple):
+      return None
+    module = self.module(rung, str(made[3]))
+    return None if module is verb(self.names, "module")(str(made[3])) else dict(module)
+
+  def bound(self, rung: str, before: dict[str, object] | None) -> None:
+    """Each name but a name of the engine that a step of the word of a rung of a text bound in the module of the
+    extensions of its chain, bound in the module of its chain too, as an import of each name of a module binds them.
+    So the chain calls what an extension defines, a name of the engine stays as a word of the chain binds it, which
+    never reaches the module of the extensions, and a name that the step left as it was, as a name of state that a
+    reload keeps through globals().setdefault, stays as the chain binds it."""
+    if before is None:
+      return
+    made = verb(self.names, "get")(rung)
+    assert isinstance(made, tuple)
+    chain = verb(self.names, "module")(str(made[3]))
+    assert isinstance(chain, dict)
+    module = self.module(rung, str(made[3]))
+    chain.update({k: v for k, v in module.items() if k not in self.names and before.get(k, before) is not v})
 
   def part(self, run: str, held: str) -> str | BaseException:
     """What a job runs of the word of its rung, given what ran of it: what a run holds past what ran, and the part of

@@ -214,10 +214,13 @@ async def test_the_journal_binds_the_definitions_and_the_values_of_each_chain_be
 async def test_the_fact_carried_of_a_chain_holds_its_turns_the_text_of_each_value_and_each_word_of_its_definitions_which_the_journal_binds_in_that_order() -> (
   None
 ):
-  """The fact carried of a chain holds its turns, the text of each value of the chain, each word of its definitions, and after its makers each name that it may lose and each act that it cut, and birth binds each value from its text, then each word of the definitions, then each value again."""
+  """The fact carried of a chain holds its turns, the text of each value of the chain, each word of its definitions, and after its makers each name that it may lose and each act that it cut, then the extensions of the chain when the data holds them, and birth binds each value from its text, then each word of the definitions, then each value again."""
   life(sown())
   root = chain("chain1", "", "root", definitions=["def f():\n  return SIZE", "SIZE = SIZE + 1"], values={"SIZE": "6"})
-  entries = checkpoint.seed(vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work")]})
+  kits = {"definitions": ["K = 1"], "values": {}, "shared": []}
+  entries = checkpoint.seed(
+    vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work", **{"extensions": kits})]}
+  )
   assert [x[0] for x in entries if x[0][0] == "carried"] == [
     (
       "carried",
@@ -230,7 +233,7 @@ async def test_the_fact_carried_of_a_chain_holds_its_turns_the_text_of_each_valu
       ["SIZE"],
       [],
     ),
-    ("carried", "chain3", "journal", [], {}, [], {}, [], []),
+    ("carried", "chain3", "journal", [], {}, [], {}, [], [], kits),
   ]
   life(sown(), entries)
   await settle()
@@ -600,3 +603,20 @@ async def test_a_born_chain_with_a_source_keeps_in_its_prefix_each_fact_of_an_ac
   again = engine.chain("again", fork)
   await settle()
   assert [t[1] for t in engine.turns(on=again) if f"#{shell} exited 0" in str(t[1])] != []
+
+
+async def test_birth_makes_the_module_of_the_skills_of_a_chain_from_its_fact_carried_before_it_binds_the_chain() -> (
+  None
+):
+  """birth makes the module of the extensions of a chain from the extensions of its fact carried before it binds the chain: each value and each word of its definitions there, then each name of it but a name of the engine in the module of the chain, then the chain less the definitions that the extensions hold, then each name of shared to the object of the module of the extensions again, so a function of an extension reads the names of the engine there after a crossing, whatever a word of the chain binds."""
+  word = "def first(lines):\n  return picked(span(1, 1), lines)"
+  kits = {"definitions": [word], "values": {"held": "[]"}, "shared": ["held"]}
+  root = chain("chain1", "", "root", definitions=[word], values={"held": "[]", "picked": "'x'"}, **{"extensions": kits})
+  life(sown())
+  life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": [root]}))
+  await settle()
+  await engine.rung(
+    "got = first(['a'])\nsame = held is __extensions__['held']\nbound = 'first' in __extensions__", on="chain1"
+  )
+  held = engine.module("chain1")
+  assert (held["picked"], held["got"], held["same"], held["bound"]) == ("x", [1], True, True)

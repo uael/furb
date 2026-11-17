@@ -417,6 +417,17 @@ fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
   })
 }
 
+/// Whether the engine of a segment of a record runs the word of an extension in the module of the
+/// extensions of its chain: one whose last fact made names the minor 2 of the schema or a later
+/// one, or this build's own on a record that names no engine.
+pub fn apart(record: &[Object]) -> bool {
+  let made =
+    record.iter().rev().find_map(|entry| Fact::of_entry(entry).filter(|one| one.kind() == MADE));
+  made.is_none_or(|fact| {
+    fact.word(2).and_then(Schema::read).is_some_and(|one| one.major == 3 && one.minor >= 2)
+  })
+}
+
 /// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
 /// of a build before the release was in the fact made.
 pub fn release(record: &[Object]) -> Option<String> {

@@ -36,13 +36,19 @@ pub struct Schema {
 /// before the schemas, comes from a build before the cut, which the promise does not hold: no life
 /// opens it, as [`Schema::opens`] says, and a reader of a record reads it. The minor 1 holds, in
 /// the entry of each fact, the count of the facts that waited for their ears as the life said it,
-/// by which the replay says each answer of an ear of the outside where the life said it.
-pub const RECORD_SCHEMA: Schema = Schema { major: 3, minor: 1 };
+/// by which the replay says each answer of an ear of the outside where the life said it. The minor
+/// 2 holds the word of each rung that plays an extension as a text, which the engine runs in the
+/// module of the extensions of its chain; the ear of the extensions gives a segment of an earlier
+/// minor, whose engine takes no text, the word as a str, as it did.
+pub const RECORD_SCHEMA: Schema = Schema { major: 3, minor: 2 };
 
 /// The schema of the data of the checkpoint that this build writes and reads. The minor 1 holds
 /// `systems`, the system prompt of each chain that reads an engine that the next life does not run;
-/// a reader of the minor 0 skips it, and gives each chain the engine that the life runs.
-pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 1 };
+/// a reader of the minor 0 skips it, and gives each chain the engine that the life runs. The minor
+/// 2 holds `extensions` in a chain, the module of the extensions of that chain; a reader of the
+/// minor 1 skips it, and binds the words of the extensions in the module of the chain, which its
+/// definitions still hold.
+pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 2 };
 
 /// Why a build does not read what a schema names.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]

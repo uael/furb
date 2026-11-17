@@ -10,8 +10,8 @@ from skills.conftest import FULL, compacting
 
 GIST = "close(([], 'gist'))"
 """GIST is the word of a model that chooses no act and sums the rest up as gist."""
-ONCE = "SHARE = 2\ny = 2\ndebug(t'{y}')"
-"""ONCE is a word that binds y and rebinds SHARE past any share, so the chain compacts once."""
+ONCE = "y = 2\ndebug(t'{y}')"
+"""ONCE is a word that binds y, after which AGAIN keeps the chain from compacting again."""
 
 
 async def wrapped(
@@ -24,7 +24,7 @@ async def wrapped(
   for word in words:
     await engine.rung(word, on=root)
   sand.cost = FULL
-  sand.script[root] = ["x = 1\ndebug(t'{x}')", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
+  sand.script[root] = ["x = 1\ndebug(t'{x}')", chooser, ONCE, "close(x + y)"]
   act = engine.prompt(int, "go", on=root)
   await act
   await until(lambda: (ends or compacted_on)(root))
@@ -87,7 +87,7 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   }
   sand.cost = FULL
   chooser = f"close(([{held['c.txt']!r}, {held['a.txt']!r}], 'gist'))"
-  sand.script[root] = ["read('a.txt')\nx = 1", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
+  sand.script[root] = ["read('a.txt')\nx = 1", chooser, ONCE, "close(x + y)"]
   assert await engine.prompt(int, "go", on=root) == 3
   await until(lambda: compacted_on(root))
   new = engine.scope(root)
@@ -147,7 +147,7 @@ async def test_it_never_completes(tmp_path: Path) -> None:
   """It never completes."""
   sand, root, _ = compacting(tmp_path)
   sand.cost = FULL
-  sand.script[root] = ["w = compacted()\ndebug(t'{w}')", "x = 1\ndebug(t'{x}')", "SHARE = 2\n" + GIST, "close(1)"]
+  sand.script[root] = ["w = compacted()\ndebug(t'{w}')", "x = 1\ndebug(t'{x}')", GIST, "close(1)"]
   assert await engine.prompt(int, "go", on=root) == 1
   watcher = engine.module(root)["w"]
   await until(lambda: compacted_on(root, watcher))

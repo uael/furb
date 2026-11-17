@@ -52,8 +52,11 @@ words of its rungs to the word of the kit, and each chain plays the new definiti
 
 ## A def in a word
 
-A name that a word binds stays bound in the module of its chain. A word can also rebind a verb of the engine, and it can
-make an act whose ear answers the reads of a scheme of its own, which is a door:
+A name that a word binds stays bound in the module of its chain. The word of a kit runs in the module of the extensions
+of the chain, which holds the names of the engine, and each name that it defines is bound in the module of the chain
+too: a name that a word of the chain binds never reaches a function of a kit, so a kit holds each name that it uses. A
+word can also rebind a verb of the engine, and it can make an act whose ear answers the reads of a scheme of its own,
+which is a door:
 
 ```python
 def notes(id: str):

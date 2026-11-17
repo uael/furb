@@ -62,7 +62,7 @@ A later life on a record finds its scratch directory again, and when the directo
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
 The chain has the Kernel begin every rung, by the act run.
-The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave.
+The Kernel takes a run as that run, begins its word in the module that module gives for the rung that the word first ran in when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 """
 type Show = tuple[int, int] | str | list[str] | Callable[[list[str]], list[int]]
@@ -238,6 +238,7 @@ def turns(on: str = "") -> list[Turn]:
 def module(on: str = "") -> dict:
   """module gives the globals of a chain: the dict that the last module of its transcript carries, in which every rung of the chain runs.
   A chain that holds no module gives an empty dict.
+  The module of a rung of a text, and of a rung that retells one, is the module of the extensions of its chain, a dict that the module of the chain holds under __extensions__ and makes at its first use as a copy of the names of the engine, so what a word of the chain binds never reaches it.
   """
 
 def program(on: str = "") -> dict[str, str]:
@@ -401,7 +402,7 @@ def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   A wait with no act after its seconds is refused, with a refusal that says to await the act itself or to give the act as its second argument, since a wait on no act holds a word for no fact.
   """
 
-def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
+def rung(word: str | Text = "", retells: str = "", to: str = "", on: str = "") -> Act:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is.
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
@@ -430,7 +431,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The turns of the chain of another prompt tell the rung of a word its caller wrote.
   rung is given a word and runs it on a chain in the globals of that chain.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
-  A word that is no str is refused where the rung is made, so its chain makes no act of it and goes on.
+  A word that is neither a str nor a text is refused where the rung is made, so its chain makes no act of it and goes on.
   A close ends the rung that runs in a prompt at its next await.
   A chain with a source and its origin share the one act, the record's.
   A chain with a source awaits what its origin started, through the name of the act.
@@ -450,6 +451,8 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   A rung with no word holds the word of its model when the reply for it is done, and it is done with the refusal a reply came to.
   A rung with a word that it does not retell says its word ready only while the one that made it is not paused, so a paused prompt runs no word that a write of its door gives until the wake.
   A rung that retells says its word ready only once the rung that it retells is over, so no word runs twice at once, and the copy of a word that ran on through a replay finds each act of that word done and binds what it bound in the new module.
+  A rung of a text holds the text as its word and runs its content in the module of the extensions of its chain, so the functions that an extension defines read the names of the engine there, whatever a word of the chain binds, and a rung that retells it runs there too.
+  The Kernel binds in the module of the chain each name but a name of the engine that a step of a word of a text binds in the module of the extensions, so the chain calls what an extension defines, and a name that the step leaves as it was stays as the chain binds it.
   """
 
 @overload
@@ -548,7 +551,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A prompt that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins.
   The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then.
-  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, then crafts its setup on itself, each turn a rung with a word and its default actor, and tells its open once no rung with a word and an actor is open on it: the turn debug(t"{standing()[4]=}") when the standing gives the extensions, which shows the extensions that the words after it load, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the turn of its stand, stand() with a cd to the directory of the standing, each life word of those extensions, then the fact setup, then the turns of the files and of the life words of the extensions of the root alone, then the open; so the turns before the stand are the same text in each directory and for each roster and actor, and the turns up to the fact setup are the same text in each chain of the record.
+  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, then crafts its setup on itself, each turn a rung with a word and its default actor, and tells its open once no rung with a word and an actor is open on it: the turn debug(t"{standing()[4]=}") when the standing gives the extensions, which shows the extensions that the words after it load, the read of the doctrine, the word rung(read('<file>', HIDDEN)) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the turn of its stand, stand() with a cd to the directory of the standing, each life word of those extensions, then the fact setup, then the turns of the files and of the life words of the extensions of the root alone, then the open; so the turns before the stand are the same text in each directory and for each roster and actor, and the turns up to the fact setup are the same text in each chain of the record.
   A life word of an extension reads the directory of the standing as the directory of the chain, since the stand and the cd of the root come before the life word of each extension, so the memory of a folder loads in the folder where the chain works.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
   A chain with no source holds first the setup of the root, each fact from the paragraph chain() of the root to its fact setup that is about the root or an act under it, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open comes after them.

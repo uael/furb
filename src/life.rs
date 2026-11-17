@@ -347,7 +347,10 @@ impl Opening {
     let life = self.record.clone().unwrap_or_default();
     let ears = vec![
       ("provider", provider),
-      (skill::EAR, skill::telling(played, refused, places.clone())),
+      (
+        skill::EAR,
+        skill::telling(played, refused, places.clone(), record.is_none_or(world::apart)),
+      ),
       ("skills", lasting(skills(user.clone()), move || skills(user.clone()))),
       ("kits", working(works.then(|| world::kits::kits(life, project, gallery.clone(), places)))),
       (

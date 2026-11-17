@@ -1,7 +1,7 @@
 from furb.engine import HEAD, Act, Show
 
 BIND: int
-"""BIND is the most characters that the binding of a server may hold for mcp_index to bind its class at once, and it is 3000 unless a word rebinds it."""
+"""BIND is the most characters that the binding of a server may hold for mcp_index to bind its class at once, and it is 3000 unless the word of an extension rebinds it, since a word of the chain never reaches the module of the extensions."""
 mcp: str
 """mcp is the doctrine of the extension, a quote that says what the index tells and what each of mcp_tools, mcp_tool, mcp_use, mcp_call, mcp_read, mcp_prompt, mcp_servers and mcp_control does."""
 

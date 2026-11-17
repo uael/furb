@@ -181,7 +181,7 @@ async def test_the_chain_has_the_kernel_begin_every_rung() -> None:
 
 
 async def test_the_kernel_takes_a_run_as_that_run() -> None:
-  """The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave."""
+  """The Kernel takes a run as that run, begins its word in the module that module gives for the rung that the word first ran in when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave."""
   _, log, root = born("x = bash('echo hi')\nout = await x\nclose(out.code)")
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()

@@ -148,8 +148,10 @@ pub(crate) fn pieces(turns: &[Value]) -> Vec<(usize, bool, Content, &str)> {
   for (at, turn) in turns.iter().enumerate() {
     let python = turn[1].as_str().unwrap_or_default();
     if turn[0] == "assistant" {
-      // The setup reads the code of each kit in a rung of its own, and tells it whole.
-      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
+      // The setup reads the code of each kit in a rung of its own, and tells it whole. A setup of a
+      // build before the module of the kits gives the rung the content of the text.
+      kit = python.starts_with("rung(read(")
+        && (python.ends_with(", HIDDEN))") || python.ends_with(", HIDDEN).content)"));
       pieces.push((at, true, Content::Turns, python));
     } else if mem::take(&mut kit) {
       pieces.push((at, false, Content::Kits, python));
