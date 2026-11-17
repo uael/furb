@@ -10,15 +10,22 @@ from skills.conftest import compacting, extended
 async def test_supersede_jumps_the_chain_to_a_chain_that_keeps_what_the_filter_kept(tmp_path: Path) -> None:
   """supersede(keep) jumps the chain of the caller to a chain that keeps what the filter keep kept of its acts, and runs word there first, and gives the jump."""
   sand, root, _ = compacting(tmp_path)
+  # Two turns that the chain carried from another record, each an act that a filter keeps or drops by its name.
+  turn = ("assistant", "x = 1", (1, 2, 3, 4, 0.5), None)
+  carried = [
+    (kind, f"reply{n}", f"carry{n}", *words) for n in (0, 7) for kind, *words in [("reply", root, "m"), ("done", turn)]
+  ]
+  engine.say("prefix", root, carried)
   kept, dropped = engine.bash("echo kept", on=root), engine.bash("echo hi", on=root)
   await settle()
-  sand.script[root] = [f"close(supersede(take({dropped!r}, inside=False), word='w = 1'))"]
+  sand.script[root] = [f"close(supersede(take({dropped!r}, 'reply0', inside=False), word='w = 1'))"]
   went = await engine.prompt(str, "cut", on=root)
   await settle()
   new = str(engine.peek(went))
   assert (engine.get(went)[0], engine.get(new)[5], engine.scope(root)) == ("jump", root, new)
   held = {a[1] for a in engine.transcript(new)}
   assert (kept in held, dropped in held, engine.module(new)["w"]) == (True, False, 1)
+  assert [a for a in engine.transcript(new) if a in carried] == carried[2:]
 
 
 async def test_so_each_name_of_the_chain_names_a_chain_with_fewer_turns(tmp_path: Path) -> None:

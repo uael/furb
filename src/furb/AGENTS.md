@@ -105,7 +105,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   that cut, or the whole transcript of a chain that holds no cut; the turns, a fork and each scan at a fact read it.
   The reading of a chain that jumped is its own, as its model read it.
 - carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
-  another record or from a carry; a chain with a source holds it whole.
+  another record or from a carry; a chain with a source holds it whole in its setup, and after it as its filter keeps
+  its name, so a compaction drops it as any other turn.
 - note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to

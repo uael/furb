@@ -12,6 +12,8 @@ import pytest
 import furb
 from conftest import (
   DOOR,
+  HELD,
+  HELD_FILES,
   STANDS,
   Py,
   Sand,
@@ -761,8 +763,10 @@ async def test_a_chain_with_a_source_holds_the_acts_it_inherited_as_the_filter_k
   assert one in held and two not in held
 
 
-async def test_a_chain_with_a_source_holds_whole_each_fact_of_its_origin_about_a_name_that_no_act_holds() -> None:
-  """A chain with a source holds whole each fact of its origin about a name that no act of the life holds, as a turn that its origin carried from another record."""
+async def test_a_chain_with_a_source_holds_each_turn_that_its_origin_carried_whole_in_its_setup_and_after_it_as_its_filter_keeps_it() -> (
+  None
+):
+  """A chain with a source holds each fact of its origin about a name that no act of the life holds, as a turn that its origin carried from another record, whole in its setup, and after it when its filter keeps that name."""
   _, _, root = born()
   await settle()
   turn = ("assistant", "x = 1", (1, 2, 3, 4, 0.5), None)
@@ -770,14 +774,29 @@ async def test_a_chain_with_a_source_holds_whole_each_fact_of_its_origin_about_a
     ("tell", "reply0", "carry9", ["#bash40 exited 0"]),
     ("reply", "reply0", "carry9", root, "m"),
     ("done", "reply0", "carry9", turn),
+    ("tell", "rung70", "rung70", ["#rung70"]),
     ("reply", "reply77", "rung70", root, "m"),
     ("done", "reply77", "provider", turn),
     ("tell", "bash40", "bash40", ["#bash40"]),
   ]
   engine.say("prefix", root, carried)
-  twin = engine.chain("twin", source=root, filter=take("chain0"))
+  twin = engine.chain("twin", source=root)
+  kept = engine.chain("kept", source=root, filter=take("reply77"))
+  none = engine.chain("none", source=root, filter=take("chain0"))
   await settle()
-  assert [a for a in engine.transcript(twin) if a in carried] == carried
+  held = [[a for a in engine.transcript(c) if a in carried] for c in (twin, kept, none)]
+  assert held == [carried, carried[4:6], []]
+  # A root born on a checkpoint carries its setup, which a chain from it holds whole whatever its filter.
+  born(stands=[*STANDS, "/w/DOCTRINE.md", HELD], files=HELD_FILES)
+  await settle()
+  life(
+    sown(stands=[*STANDS, "/w/DOCTRINE.md", HELD], files=HELD_FILES),
+    checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), lambda word: word, {})),
+  )
+  await settle()
+  bare = engine.chain("bare", source="chain1", filter=take("chain0"))
+  await settle()
+  assert "Then act." in str(engine.turns(on=bare))
 
 
 async def test_the_steps_that_an_inherited_prompt_takes_after_the_point_enter_its_owner_alone() -> None:

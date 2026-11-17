@@ -369,11 +369,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           rung(words)
 
     if source or copied:
-      kin = {
-        source,
-        id,
-        *[n for one in ([x[1] for x in t if question(x)] if kept is None else kept) for n in lineage(one)],
-      }
+      kin = {source, id, *[n for one in ([x[1] for x in t] if kept is None else kept) for n in lineage(one)]}
       bound = len(
         (
           yield (
@@ -382,8 +378,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             [
               it
               for n, it in enumerate(t)
-              if (lo <= n <= hi and ROOT in lineage(it[1]))
-              or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
+              if (lo <= n <= hi and (ROOT in lineage(it[1]) or not get(it[1])))
+              or (source and (b[2] if (b := get(it[1])) and b[0] == "reply" else it[1]) in kin)
             ],
           )
         )[3]
@@ -804,7 +800,7 @@ def covers(a, id):
     if question(("reply", id)):
       id = get(id)[2]
     return on(id) or (question(("rung", id)) and on(get(id)[2]))
-  return any(map(on, lineage(id))) or question(("chain", of)) and scope(id) == scope(of)
+  return any(map(on, lineage(id))) or (question(("chain", of)) and scope(id) == scope(of))
 
 
 def paused(id):
