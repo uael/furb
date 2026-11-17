@@ -448,6 +448,44 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_s
   assert_eq!(fs::read_to_string(&record).unwrap(), text, "nothing writes on the record");
 }
 
+/// A checkpoint of a record from before the stable cut is told with what a view reads of it: each
+/// chain with no turns and no module, which hold the most of a checkpoint, both while the life
+/// tells it and when a reader reads it again from the record; the fold of it still makes its
+/// threads.
+#[tokio::test]
+async fn a_checkpoint_of_a_record_is_told_with_no_turns_and_no_module_of_its_chains() {
+  let at = place("checkpoint-told");
+  let record = at.join("record.jsonl");
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/corpus/record-2/work.jsonl");
+  fs::copy(before, &record).unwrap();
+  let opening = Opening { record: Some(record.display().to_string()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening).unwrap();
+  let told = |events: &[Logged]| -> Vec<serde_json::Value> {
+    let facts = events.iter().filter_map(|one| match &*one.1 {
+      Event::Fact(fact) if fact[0] == "checkpoint" => Some(fact.clone()),
+      _ => None,
+    });
+    facts.collect()
+  };
+  let first = until(&mut Box::pin(life.events(0)), |event| matches!(event, Event::Ended(_))).await;
+  // A reader that comes once the life let go of its facts reads them again from the record.
+  let again = until(&mut Box::pin(life.events(0)), |event| matches!(event, Event::Ended(_))).await;
+  for checkpoints in [told(&first), told(&again)] {
+    assert_eq!(checkpoints.len(), 1, "the record holds one checkpoint");
+    let chains = checkpoints[0][3]["chains"].as_array().unwrap();
+    assert_ne!(chains.len(), 0, "the checkpoint holds its chains");
+    for chain in chains {
+      assert!(chain["id"].is_string(), "{chain}");
+      for key in ["turns", "definitions", "values"] {
+        assert!(chain.get(key).is_none(), "a view reads no {key} of a chain");
+      }
+    }
+  }
+  let threads = life.send(Command::Threads { on: None, at: None, read: None, site: None }).await;
+  let Ok(Reply::Threads(threads)) = threads else { panic!("the threads: {threads:?}") };
+  assert!(!threads.threads.is_empty(), "the fold of the checkpoint still makes the threads");
+}
+
 #[tokio::test]
 async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
   let at = place("meaning");

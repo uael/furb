@@ -3,20 +3,24 @@
 
 use std::{
   collections::HashSet,
-  env, io,
+  env, fmt, io,
   process::{Command, Stdio},
   sync::{Arc, Mutex, PoisonError},
 };
 
 use furb::{
   Ear, Fact, Fault, Object,
+  checkpoint::CHECKPOINT,
   ear::{Co, ear, hear, hearing, say},
   view::{Fold, Name, Pause, followed},
   wire::outward,
   world::{Asked, CONSOLE},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde::{
+  Deserialize, Deserializer, Serialize,
+  de::{IgnoredAny, MapAccess, SeqAccess, Visitor},
+};
+use serde_json::{Map, Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
@@ -181,19 +185,38 @@ async fn stepped<W: 'static>(
   Ok(true)
 }
 
-/// A fact as JSON reads it. The fact of a module tells no words, since a module is no plain value.
+/// A fact as JSON reads it. The fact of a module tells no words, since a module is no plain value,
+/// and a checkpoint tells what a view reads of it, as [`viewed`] says.
 pub(crate) fn json_of(a: &Fact) -> Value {
   match a.kind() {
     "module" => json!(["module", a.about(), a.by()]),
-    _ => outward(a.object().as_ref()),
+    _ => viewed(outward(a.object().as_ref())),
   }
+}
+
+/// The keys of each chain of a checkpoint that no view reads: its turns and its module, which
+/// hold the most of a checkpoint.
+const UNREAD: [&str; 3] = ["turns", "definitions", "values"];
+
+/// A fact less what no view reads of it: the turns and the module of each chain of a checkpoint.
+fn viewed(mut fact: Value) -> Value {
+  if fact.get(0).and_then(Value::as_str) == Some(CHECKPOINT) {
+    let chains = fact.get_mut(3).and_then(|data| data.get_mut("chains"));
+    for chain in chains.and_then(Value::as_array_mut).into_iter().flatten() {
+      if let Some(chain) = chain.as_object_mut() {
+        chain.retain(|key, _| !UNREAD.contains(&key.as_str()));
+      }
+    }
+  }
+  fact
 }
 
 /// A fact as [`json_of`] gives it, read from a line of JSON of what a record tells, as the log of
 /// a life writes it: one parse, and no value of the sandbox made. Nothing for a line that holds no
-/// fact.
+/// fact. The parse makes no value of what no view reads of a checkpoint, so the line of a large
+/// checkpoint costs no more than what a view keeps of it.
 pub(crate) fn json_of_line(line: &str) -> Option<Value> {
-  let mut fact: Value = serde_json::from_str(line).ok()?;
+  let Lined(mut fact) = serde_json::from_str(line).ok()?;
   let held = fact.as_array_mut()?;
   if held.len() < 2 || !held.iter().take(2).all(Value::is_string) {
     return None;
@@ -202,6 +225,96 @@ pub(crate) fn json_of_line(line: &str) -> Option<Value> {
     held.resize(3, json!(""));
   }
   Some(fact)
+}
+
+/// A fact parsed from its line, as [`json_of_line`] reads it.
+struct Lined(Value);
+
+impl<'de> Deserialize<'de> for Lined {
+  fn deserialize<D: Deserializer<'de>>(read: D) -> Result<Self, D::Error> {
+    read.deserialize_seq(Self(Value::Null))
+  }
+}
+
+impl<'de> Visitor<'de> for Lined {
+  type Value = Self;
+
+  fn expecting(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    out.write_str("a fact")
+  }
+
+  fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self, A::Error> {
+    let mut fact: Vec<Value> = Vec::new();
+    loop {
+      let checkpoint = fact.len() == 3 && fact.first().and_then(Value::as_str) == Some(CHECKPOINT);
+      let next = if checkpoint {
+        seq.next_element::<Data>()?.map(|data| Value::Object(data.0))
+      } else {
+        seq.next_element::<Value>()?
+      };
+      let Some(next) = next else { return Ok(Self(Value::Array(fact))) };
+      fact.push(next);
+    }
+  }
+}
+
+/// The data of a checkpoint, with each chain as a view reads it.
+struct Data(Map<String, Value>);
+
+impl<'de> Deserialize<'de> for Data {
+  fn deserialize<D: Deserializer<'de>>(read: D) -> Result<Self, D::Error> {
+    read.deserialize_map(Self(Map::new()))
+  }
+}
+
+impl<'de> Visitor<'de> for Data {
+  type Value = Self;
+
+  fn expecting(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    out.write_str("the data of a checkpoint")
+  }
+
+  fn visit_map<A: MapAccess<'de>>(mut self, mut map: A) -> Result<Self, A::Error> {
+    while let Some(key) = map.next_key::<String>()? {
+      let value = match key.as_str() {
+        "chains" => Value::Array(
+          map.next_value::<Vec<Chain>>()?.into_iter().map(|one| Value::Object(one.0)).collect(),
+        ),
+        _ => map.next_value::<Value>()?,
+      };
+      self.0.insert(key, value);
+    }
+    Ok(self)
+  }
+}
+
+/// A chain of a checkpoint less its keys that no view reads, which the parse passes over.
+struct Chain(Map<String, Value>);
+
+impl<'de> Deserialize<'de> for Chain {
+  fn deserialize<D: Deserializer<'de>>(read: D) -> Result<Self, D::Error> {
+    read.deserialize_map(Self(Map::new()))
+  }
+}
+
+impl<'de> Visitor<'de> for Chain {
+  type Value = Self;
+
+  fn expecting(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    out.write_str("a chain of a checkpoint")
+  }
+
+  fn visit_map<A: MapAccess<'de>>(mut self, mut map: A) -> Result<Self, A::Error> {
+    while let Some(key) = map.next_key::<String>()? {
+      if UNREAD.contains(&key.as_str()) {
+        map.next_value::<IgnoredAny>()?;
+      } else {
+        let value = map.next_value::<Value>()?;
+        self.0.insert(key, value);
+      }
+    }
+    Ok(self)
+  }
 }
 
 /// What the engine alone says of a fact: each live act that a pause or a wake covers, and the pause

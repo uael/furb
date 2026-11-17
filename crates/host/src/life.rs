@@ -1054,11 +1054,17 @@ fn read_record(record: &str, take: &mut Take<'_>) -> Option<()> {
 }
 
 /// Each line of the file of the log, until each place is filled: a line is a fact as JSON writes
-/// it, so its digest is the digest of its text, and only a line that a place takes is parsed.
+/// it, so its digest is the digest of its text, and only a line that a place takes is parsed. A
+/// checkpoint is told as a view reads it, less what its line holds, so its line is parsed and its
+/// digest is the digest of that fact.
 fn read_log(log: &str, take: &mut Take<'_>) -> Option<()> {
+  let head = format!("[\"{}\"", checkpoint::CHECKPOINT);
   for line in BufReader::new(File::open(log).ok()?).lines() {
     let line = line.ok()?;
-    if !take(digested(&line), &|| serde_json::from_str(&line).unwrap_or_default()) {
+    let viewed = line.starts_with(&head).then(|| json_of_line(&line)).flatten();
+    let one = viewed.as_ref().map_or_else(|| digested(&line), digest);
+    let fact = || viewed.clone().unwrap_or_else(|| serde_json::from_str(&line).unwrap_or_default());
+    if !take(one, &fact) {
       break;
     }
   }
