@@ -481,6 +481,28 @@ impl Fold {
         cut.contains(run.as_str()).then(|| json!({"is": "Refused", "args": [interruption(&run)]}));
       self.done(&run, ended.unwrap_or(Value::Null));
     }
+    // No later life knows an act that the checkpoint does not carry, a chain or an act of its acts,
+    // as a reply on the way, which no list of live acts holds as a step, or a rung whose word the
+    // crossing cut, so no fact ends it: it ends here,
+    // a rung as its run ended or well, as a run that the carry cut did not fail, and each other act
+    // as interrupted. Else it stays open in each view, and the watch of a daemon tells its chain of
+    // it again and again.
+    let carried: HashSet<&str> =
+      list("acts").iter().filter_map(|act| act.get("id")?.as_str()).collect();
+    let left: Vec<Name> = self
+      .live
+      .values()
+      .chain(self.replies.keys())
+      .filter(|id| !carried.contains(id.as_ref()))
+      .filter(|id| self.acts.get(*id).is_some_and(|act| act.kind != Kind::Chain && !act.done()))
+      .cloned()
+      .collect();
+    for id in left {
+      let rung = self.acts.get(&id).is_some_and(|act| act.kind == Kind::Rung);
+      let cut = json!({"is": "Refused", "args": [interruption(&id)]});
+      let value = if rung { self.ran.get(&*id).cloned().unwrap_or(Value::Null) } else { cut };
+      self.done(&id, value);
+    }
   }
 
   /// The end of an act, with what it came to: the answer of a reply costs its chain and its rung,

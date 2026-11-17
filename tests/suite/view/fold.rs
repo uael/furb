@@ -393,6 +393,35 @@ fn a_checkpoint_ends_each_run_of_a_word_and_a_run_that_it_cut_did_not_fail() {
 }
 
 #[test]
+fn a_checkpoint_ends_each_act_that_it_does_not_carry_so_no_view_holds_it_open() {
+  let mut fold = Fold::default();
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "go", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
+    json!(["rung", "rung2", "chain1", "chain1", "visual_sweep()", "", ""]),
+    json!(["wait", "wait1", "rung2", "chain1", 60]),
+  ];
+  for fact in &facts {
+    fold.recorded(fact);
+  }
+  let open = json!({"kind": "prompt", "id": "prompt1", "on": "chain1", "shape": "str", "message": "go", "to": "", "held": ""});
+  let data = json!({"chains": [{"id": "chain1", "on": "", "label": "root", "source": "", "cut": []}], "acts": [open]});
+  let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
+  let of = |id: &str| moved.iter().find(|act| *act.id == *id);
+  let ended = |id: &str| matches!(of(id), Some(act) if act.done());
+  assert!(ended("reply1") && ended("rung1") && ended("rung2") && ended("wait1"), "{moved:?}");
+  assert!(!ended("prompt1") && !ended("chain1"), "it ends no act that it carries");
+  let why = "reply1 was interrupted: the life that ran it ended before it did";
+  assert_eq!(
+    of("reply1").and_then(|act| act.value().cloned()),
+    Some(json!({"is": "Refused", "args": [why]}))
+  );
+  assert_eq!(of("rung2").and_then(|act| act.run.clone()), Some(RunState::Done));
+}
+
+#[test]
 fn the_wire_names_the_operator_as_the_engine_does() {
   assert_eq!(furb_wire::OPERATOR, engine::OPERATOR);
 }
