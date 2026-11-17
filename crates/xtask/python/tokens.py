@@ -55,7 +55,7 @@ def copies() -> list[tuple[str, str]]:
   found: list[tuple[str, str]] = []
   if SYSTEM:
     found.append(("the installed furb_monty", SYSTEM))
-  built = sorted(ROOT.glob("target/*/build/furb-*/out/system.py"), key=lambda one: one.stat().st_mtime, reverse=True)
+  built = sorted(ROOT.glob("target/*/build/furb/*/out/system.py"), key=lambda one: one.stat().st_mtime, reverse=True)
   return found + [(str(one.relative_to(ROOT)), one.read_text(encoding="utf-8")) for one in built]
 
 
