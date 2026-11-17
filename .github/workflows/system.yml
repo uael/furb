@@ -37,8 +37,8 @@ jobs:
   build:
     # The test programs of each crate and the clippy of the workspace. Its cache of rust holds each dependency of the
     # three builds, since the tests select the whole workspace with the feature typescript, and the two other builds
-    # restore it. The copy of the build goes to the job of the crate as an artifact of a day: the programs, never the
-    # target, which is ten times as large. A build that fails ends each job after it on its system, which reports
+    # restore it. The archive of the tests goes to the job of the crate as an artifact of a day, never the target,
+    # which is ten times as large. A build that fails ends each job after it on its system, which reports
     # skipped and gives no test result there, as the last step of this job says, and no job of another system.
     name: the build of the tests on ${{ inputs.os }}
     runs-on: ${{ inputs.os }}
@@ -83,33 +83,20 @@ jobs:
       # builds share every dependency in one cache.
       - run: |
           echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
-      # Each program of the tests of the crate, with the folder of its package, which cargo runs it in. The report of
-      # --timings says how long each crate took to build, which the step after the build keeps as an artifact.
+      # The runner of the tests of the crate, as in each tree: each test runs in a process of its own, under the
+      # bounds of time of .config/nextest.toml. A test that measures its process, as the heap of a window, read the
+      # other tests of its program when they all ran in one process.
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      # The archive of the tests: each test program, each program and example that a test runs, and the libraries
+      # that they link, as the DLL of OpenTUI on Windows, which the crate runs on another runner. The report of
+      # --timings says how long each crate took to build, which the build keeps as an artifact.
       - run: |
-          cargo test --locked --workspace --features furb/typescript --no-run --timings \
-            --message-format json-render-diagnostics \
-            | tr -d '\r' | jq -r --arg root "$GITHUB_WORKSPACE" '
-              def here: gsub("\\\\"; "/") | ltrimstr($root | gsub("\\\\"; "/")) | ltrimstr("/");
-              select(.reason == "compiler-artifact" and .executable != null)
-              | [(.manifest_path | here | sub("/?Cargo.toml$"; "") | if . == "" then "." else . end),
-                 (if .profile.test then "test" else "program" end), .target.name, (.executable | here)]
-              | @tsv' | tr -d '\r' > "$RUNNER_TEMP/programs.tsv"
-          cat "$RUNNER_TEMP/programs.tsv"
+          mkdir -p "$RUNNER_TEMP/copy"
+          cargo nextest archive --locked --workspace --features furb/typescript --timings \
+            --archive-file "$RUNNER_TEMP/copy/tests.tar.zst"
       - run: cargo clippy --locked --workspace --all-targets --features furb/typescript -- -D warnings
-      - run: |
-          copy="$RUNNER_TEMP/copy"
-          mkdir -p "$copy"
-          cp "$RUNNER_TEMP/programs.tsv" "$copy/programs.tsv"
-          cut -f4 "$RUNNER_TEMP/programs.tsv" | while read -r one; do
-            mkdir -p "$copy/$(dirname "$one")" && cp "$one" "$copy/$one"
-          done
-          # On Windows a program of the window loads the DLL of OpenTUI, which it finds beside itself.
-          if [ "$RUNNER_OS" = Windows ]; then
-            grep "^crates/window" "$RUNNER_TEMP/programs.tsv" | cut -f4 | while read -r one; do
-              cp target/opentui/*/opentui.dll "$copy/$(dirname "$one")/"
-            done
-          fi
-          du -sh "$copy"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: build-${{ inputs.os }}
@@ -261,9 +248,9 @@ jobs:
           name: tokens
 
   crate:
-    # The tests of the crate and of the command line, which the build of each system compiled: each program runs in the
-    # folder of its package, as cargo runs it, and a program that fails leaves the others to run, so the log names each
-    # red test. The clippy of the crate ran in the build. On macOS the job runs the tests of the crate, the tests of the
+    # The tests of the workspace, which the build of each system compiled and archived, run by cargo-nextest as in a
+    # tree: a test that fails leaves the others to run, so the log names each red test. The clippy of the crate ran
+    # in the build. On macOS the job runs the tests of the crate, the tests of the
     # window, which draws with a native library of each system, and the kill matrix of the daemon alone, which ends it
     # with the signals of Unix, as it did when it built them there.
     name: the crate on ${{ inputs.os }}
@@ -291,40 +278,17 @@ jobs:
       # The task promise of xtask runs pytest in the environment of the repository, and so does its test: the tools of
       # the group dev, with no package of the workspace, which the job builds none of.
       - run: uv sync --locked --only-group dev
-      - run: |
-          # An artifact keeps no mode, and a test runs the programs and the examples beside it.
-          cut -f4 programs.tsv | while read -r one; do chmod +x "$one"; done
-          # On macOS the tests of the crate and of the window run, and the kills of the command line alone. A folder
-          # that this selection names and no program of the table holds, or a filter that selects no test, fails the
-          # job, so a move or a rename hides no suite.
-          kept=". crates/window crates/cli"
-          failed=0
-          ran=""
-          while IFS="$(printf '\t')" read -r folder kind name program; do
-            [ "$kind" = test ] || continue
-            filter=""
-            if [ "$RUNNER_OS" = macOS ]; then
-              case " $kept " in *" $folder "*) ;; *) continue ;; esac
-              if [ "$folder" = crates/cli ]; then
-                [ "$name" = suite ] || continue
-                filter=kills::
-              fi
-            fi
-            ran="$ran $folder"
-            echo "::group::$folder $name"
-            said=$(cd "$folder" && CARGO_MANIFEST_DIR="$GITHUB_WORKSPACE/$folder" "$GITHUB_WORKSPACE/$program" $filter 2>&1) ||
-              failed=1
-            printf '%s\n' "$said"
-            if [ -n "$filter" ] && printf '%s\n' "$said" | grep -q '^running 0 tests'; then
-              echo "::error::The filter $filter selects no test of $folder $name."
-              failed=1
-            fi
-            echo "::endgroup::"
-          done < programs.tsv
-          for one in $kept; do
-            case " $ran " in *" $one "*) ;; *) echo "::error::No test program of the folder $one ran."; failed=1 ;; esac
-          done
-          exit $failed
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      # The tests of the archive, in this checkout, with no cargo and no rust. On macOS the tests of the crate and of
+      # the window run, and the kills of the command line alone. A package that the filter names and the workspace
+      # lacks, or a filter that selects no test, fails the job, so a move or a rename hides no suite.
+      - env:
+          ONLY: ${{ runner.os == 'macOS' && 'package(furb) | package(furb-window) | (package(furb-cli) & test(/^kills::/))' || 'all()' }}
+        run: >-
+          cargo-nextest nextest run --archive-file tests.tar.zst --workspace-remap "$GITHUB_WORKSPACE" --profile ci --no-tests fail
+          -E "$ONLY"
 
   typescript:
     name: the bindings on ${{ inputs.os }}

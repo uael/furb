@@ -26,6 +26,17 @@ priority = 100
 filter = "package(furb-frames) & test(/^capture::/)"
 slow-timeout = { period = "15s", terminate-after = 12 }
 
+# An archive of the tests, which the gates build once for each system and run on another runner, holds the examples
+# too: a test of the examples runs each one as a user runs it, from the folder of the profile above the test. The gates
+# build for the triple of the machine, in a folder of that name.
+[profile.default.archive]
+include = [
+  { path = "debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "x86_64-unknown-linux-gnu/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "aarch64-apple-darwin/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "x86_64-pc-windows-msvc/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+]
+
 # A life of a test on a fake claude writes the turns that its command line resumes in the config dir of claude, which
 # is the one of the person unless CLAUDE_CONFIG_DIR names another: each test run gives its tests a folder of its own,
 # under the target of the tree, which goes with it.
@@ -61,6 +72,10 @@ command = [
 platform = "cfg(unix)"
 filter = "all()"
 setup = ["claude", "data", "cache"]
+
+# The gates run the tests on a runner of 3 or 4 cores, where a tree has 14: a test past 60 s there is not a hang.
+[profile.ci]
+slow-timeout = { period = "30s", terminate-after = 4 }
 
 # The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
 # so a flake never hides behind a retry. `cargo nextest run --profile census`.
