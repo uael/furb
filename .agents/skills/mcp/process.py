@@ -1431,13 +1431,20 @@ class Hub:
       if isinstance(method, str) and method.endswith("/list_changed"):
         news.put_nowait(method)
 
-    async def subscribed(client: Client) -> None:
+    async def subscribed(client: Client, ready: asyncio.Event) -> None:
       # A server of the protocol of 2026-07-28 sends the change of a list only while a stream of the client listens,
-      # and the change then reaches `heard` too, as the notification of an older server does.
-      with contextlib.suppress(ListenNotSupportedError, SubscriptionLost, MCPError):
-        async with client.listen(tools_list_changed=True, prompts_list_changed=True, resources_list_changed=True) as on:
-          async for _ in on:
-            pass
+      # and the change then reaches `heard` too, as the notification of an older server does. The stream is ready once
+      # it listens, or once the server refused it.
+      try:
+        with contextlib.suppress(ListenNotSupportedError, SubscriptionLost, MCPError):
+          async with client.listen(
+            tools_list_changed=True, prompts_list_changed=True, resources_list_changed=True
+          ) as on:
+            ready.set()
+            async for _ in on:
+              pass
+      finally:
+        ready.set()
 
     async def roots(context: ClientRequestContext) -> types.ListRootsResult:
       del context
@@ -1461,8 +1468,14 @@ class Hub:
           )
           why = f"{run.command} did not start: {unborn}" if unborn else said(no) + stderr(errors)
           raise Refused(why) from no
-        listening = asyncio.ensure_future(subscribed(client))
+        # The server is connected once its stream listens: a call that came before would change a list that no stream
+        # hears, as the first call of a chain that a slow index did not hold.
+        ready = asyncio.Event()
+        listening = asyncio.ensure_future(subscribed(client, ready))
         stack.callback(listening.cancel)
+        with contextlib.suppress(TimeoutError):
+          async with asyncio.timeout(CONNECT):
+            await ready.wait()
         info = client.server_info
         entry.version, entry.instructions = (info.version if info else "") or "", client.instructions or ""
         entry.offered, entry.client = offered, client
