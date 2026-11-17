@@ -688,6 +688,40 @@ async fn a_second_daemon_cannot_listen_where_one_listens() {
   assert!(matches!(local.listen().await, Err(furb_host::TransportError::Taken { .. })));
 }
 
+/// The daemons that start at once on a socket that a killed daemon left: one listens, and each
+/// other is refused, so no daemon serves on a socket that no peer reaches.
+#[cfg(unix)]
+#[test]
+fn of_daemons_that_start_at_once_on_a_stale_socket_one_listens() {
+  use std::{os::unix::net::UnixListener, sync::Barrier, thread};
+
+  use tokio::runtime::{Builder, Runtime};
+  const DAEMONS: usize = 16;
+  let place = folder();
+  let local = Local::new(place.to_path_buf());
+  let runtime = Runtime::new().unwrap();
+  // The listener of a daemon that a kill ended: its file stays, and no one answers it.
+  drop(runtime.block_on(local.listen()).unwrap());
+  drop(UnixListener::bind(place.join("host.sock")).unwrap());
+  let start = Barrier::new(DAEMONS);
+  let listened: Vec<bool> = thread::scope(|scope| {
+    let started: Vec<_> = (0..DAEMONS)
+      .map(|_| {
+        scope.spawn(|| {
+          let runtime = Builder::new_current_thread().enable_all().build();
+          start.wait();
+          let listener = runtime.map(|one| one.block_on(local.listen()));
+          // Each listener stands until each daemon tried, as a daemon that serves does.
+          start.wait();
+          matches!(listener, Ok(Ok(_)))
+        })
+      })
+      .collect();
+    started.into_iter().map(|one| one.join().unwrap()).collect()
+  });
+  assert_eq!(listened.iter().filter(|one| **one).count(), 1, "{listened:?}");
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_folder_open_to_others_holds_no_socket() {

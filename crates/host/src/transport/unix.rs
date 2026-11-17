@@ -31,10 +31,22 @@ impl Drop for Listener {
 
 const SOCKET: &str = "host.sock";
 
+/// The lock of the folder, which a daemon holds from its look at the socket to its listen, and the
+/// kernel ends with its process.
+const LOCK: &str = "host.lock";
+
+/// The socket of a folder listening, or refused when a daemon listens there. The lock of the folder
+/// makes the look at a stale socket, its removal and the listen one step: without it, two daemons
+/// that start at once on the socket of a killed one each remove the socket of the other, and both
+/// listen, one where no peer reaches it. A daemon waits for the lock only while another starts.
 pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
   guarded(folder)?;
   let socket = folder.join(SOCKET);
   bounded(&socket)?;
+  let mut opened = fs::OpenOptions::new();
+  opened.create(true).truncate(false).write(true).mode(0o600);
+  let lock = opened.open(folder.join(LOCK)).map_err(|source| listening(&socket, source))?;
+  lock.lock().map_err(|source| listening(&socket, source))?;
   match UnixListener::bind(&socket) {
     Err(no) if no.kind() == io::ErrorKind::AddrInUse => {
       if UnixStream::connect(&socket).await.is_ok() {
