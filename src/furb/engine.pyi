@@ -637,7 +637,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
   The turns do not show a told rung, since the turn shows its python already.
-  A told rung is no act, and the record keeps neither it nor its run.
+  A told rung is no act, and the record keeps only its run, an act whose rung is the name of the told rung.
   A later life hears the same paragraphs and runs the told rung again.
   A told rung takes the name of the rung whose advance or first ready runs it, with _told after it, as rung5_told.
   A rung makes at most one told rung, at its advance or at its first ready, so no two told rungs share a name.

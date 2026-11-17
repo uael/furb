@@ -1542,10 +1542,13 @@ async def test_the_turns_do_not_show_a_told_rung() -> None:
 
 
 async def test_a_told_rung_is_no_act() -> None:
-  """A told rung is no act, and the record keeps neither it nor its run."""
+  """A told rung is no act, and the record keeps only its run, an act whose rung is the name of the told rung."""
   sand, _, _, first, second = await told_read()
   assert engine.get(f"{first}_told") is None and engine.get(f"{second}_told") is None
   assert [e for e in sand.record if "_told" in str(e[0][:2])] == []
+  runs = [e[0] for e in sand.record if e[0][0] == "run" and str(e[0][4]).endswith("_told")]
+  assert [x[4] for x in runs] == [f"{first}_told", f"{second}_told"]
+  assert [engine.get(x[1])[4:6] for x in runs] == [x[4:6] for x in runs]
 
 
 async def test_a_later_life_hears_the_same_paragraphs_and_runs_the_told_rung_again() -> None:
