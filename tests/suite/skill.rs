@@ -420,6 +420,40 @@ fn a_chain_takes_each_skill_at_its_birth_and_a_later_life_plays_the_same_rungs_a
 }
 
 #[test]
+fn a_chain_that_a_jump_makes_takes_no_skill_again_and_a_new_skill_plays_on_it_once() {
+  let at = place("jump");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let full = format!("{NOTE}\n\nnote()");
+  // Each rung that the ear made on the chain that the root went on as, its prefix among them.
+  let played = |engine: &mut Engine| {
+    let on = verbs::Transcript { on: Some("chain2".to_owned()), of: None, at: None };
+    let facts = engine.transcript(on).unwrap();
+    let ours = facts.into_iter().filter(|one| one.kind() == "rung" && one.by() == "extensions");
+    let word = |one: &Fact| one.word(1).and_then(|one| one.as_str().map(str::to_owned));
+    ours.map(|one| (one.about().to_owned(), word(&one).unwrap_or_default())).collect::<Vec<_>>()
+  };
+  {
+    let mut engine = lived(&at, vec![note(NOTE)]);
+    let jump = verbs::Jump { on: Some("chain1".to_owned()), ..Default::default() };
+    engine.jump(jump).unwrap();
+    assert_eq!(played(&mut engine), [("rung1".to_owned(), full.clone())]);
+  }
+  let other = Skill {
+    name: "other".to_owned(),
+    word: "o = 1".to_owned(),
+    life: String::new(),
+    root: false,
+    file: String::new(),
+  };
+  let mut engine = lived(&at, vec![note(NOTE), other]);
+  assert_eq!(
+    played(&mut engine),
+    [("rung1".to_owned(), full), ("rung4".to_owned(), "o = 1".to_owned())],
+    "a later life plays a new extension once, on the chain that the root went on as"
+  );
+}
+
+#[test]
 fn the_definitions_of_a_word_are_its_imports_its_functions_its_classes_its_types_and_its_names_in_capitals()
  {
   let word = "import json\nfrom re import sub\n\nseen = []\nLIMIT = 2\nA = B = 3\nTOP: int = 4\nLATER: int\nmixed_Case = 5\n\n\

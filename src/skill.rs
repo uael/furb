@@ -972,10 +972,15 @@ impl Told {
   /// A chain at its birth, which the ear hears before the call that made it returns. The chain has
   /// what its origin had, which it made again. A chain with no source in a life whose root took its
   /// setup forks that setup, which holds each extension of every chain, so the ear plays nothing on
-  /// it.
+  /// it. A chain that its source made is the chain that a jump of the source goes on as, with each
+  /// ear of the source, and the engine puts each act on the name of the source on it, so the entry
+  /// of the source stands for it and the ear plays nothing on it.
   async fn born(&mut self, co: &mut Co, a: &Fact) -> Result<(), Fault> {
     let Self { enabled, chains, taught, .. } = self;
     let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
+    if source.as_deref() == Some(a.by()) {
+      return Ok(());
+    }
     let had = chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
     if *taught {
       let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
