@@ -1324,12 +1324,16 @@ export interface Files {
 /**
  * The changes of a checkout of git against its last commit: its branch, none when its head names
  * no branch, each file that differs, and the diff of the file that the peer named, as git writes
- * a unified diff, a file that git does not track yet added whole.
+ * a unified diff, a file that git does not track yet added whole. With no file named, also the
+ * lines that it adds and removes against the base of its branch, and the pull request of its
+ * branch, as gh gives it.
  */
 export interface Changes {
   branch?: string | null;
   files: Changed[];
   diff?: string | null;
+  base?: Lines | null;
+  pull?: Pull | null;
 }
 /**
  * A file of a checkout that differs from the last commit: its path from the top of the checkout,
@@ -1340,6 +1344,28 @@ export interface Changed {
   added: number;
   removed: number;
   state: Change;
+}
+/**
+ * The lines that a checkout adds and removes against the point where its branch leaves the
+ * default branch of its remote, its tree included.
+ */
+export interface Lines {
+  added: number;
+  removed: number;
+}
+/**
+ * The pull request of the branch of a checkout: its number, its title, its address, the lines
+ * that it adds and removes, and how many of its checks fail, wait and pass.
+ */
+export interface Pull {
+  number: number;
+  title: string;
+  url: string;
+  added: number;
+  removed: number;
+  failing: number;
+  pending: number;
+  passing: number;
 }
 /**
  * A card of the machine: one thread that an operator started, in the record of its session. It
@@ -1891,4 +1917,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 76;
+export const PROTOCOL = 77;

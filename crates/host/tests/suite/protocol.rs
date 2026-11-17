@@ -536,6 +536,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "6ca077c5eea911301022f9604b4df3ab91457917332aea215ef51468e6d0e778",
   "bd8bfc97b59275d6b38a8ed022408208f6a6a9c26a37c852c9d56f3ac719ab29",
   "bf8da88a23a0f43494ea24928315317d2846492357662815ebb660f4e8dbd294",
+  "36797221c9fa87972c807a8a082a57626831f387eb1baed26c27b170950e16a1",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

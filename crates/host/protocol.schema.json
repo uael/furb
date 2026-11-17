@@ -3500,12 +3500,34 @@
             "null"
           ],
           "default": null
+        },
+        "base": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Lines"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pull": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pull"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "files"
       ],
-      "description": "The changes of a checkout of git against its last commit: its branch, none when its head names\nno branch, each file that differs, and the diff of the file that the peer named, as git writes\na unified diff, a file that git does not track yet added whole."
+      "description": "The changes of a checkout of git against its last commit: its branch, none when its head names\nno branch, each file that differs, and the diff of the file that the peer named, as git writes\na unified diff, a file that git does not track yet added whole. With no file named, also the\nlines that it adds and removes against the base of its branch, and the pull request of its\nbranch, as gh gives it."
     },
     "Changed": {
       "type": "object",
@@ -3553,6 +3575,78 @@
         }
       ],
       "description": "How a file differs from the last commit."
+    },
+    "Lines": {
+      "type": "object",
+      "properties": {
+        "added": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "added",
+        "removed"
+      ],
+      "description": "The lines that a checkout adds and removes against the point where its branch leaves the\ndefault branch of its remote, its tree included."
+    },
+    "Pull": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "added": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "failing": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "pending": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "passing": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "number",
+        "title",
+        "url",
+        "added",
+        "removed",
+        "failing",
+        "pending",
+        "passing"
+      ],
+      "description": "The pull request of the branch of a checkout: its number, its title, its address, the lines\nthat it adds and removes, and how many of its checks fail, wait and pass."
     },
     "Card": {
       "type": "object",
@@ -5680,7 +5774,7 @@
             "before",
             "quote"
           ],
-          "description": "A line of the file: its number in the file after the change, or before it for a line that the\nchange removed, and its text then."
+          "description": "A line of the file, or the lines from it: its number in the file after the change, or before\nit for a line that the change removed, and its text then, one line of the quote for each line."
         },
         {
           "type": "object",
@@ -6563,5 +6657,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 76
+  "x-protocol": 77
 }
