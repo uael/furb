@@ -429,14 +429,7 @@ async fn spawned(life: &str, name: &str, program: &Path) -> Result<(Child, Group
     Some("py") => Some((python(), &[])),
     _ => None,
   };
-  let mut command = match runner {
-    Some((runner, before)) => {
-      let mut command = Command::new(runner);
-      command.args(before).arg(program);
-      command
-    }
-    None => Command::new(program),
-  };
+  let mut command = commanded(runner, program);
   command
     .current_dir(program.parent().unwrap_or(Path::new(".")))
     .env(LIFE, life)
@@ -455,6 +448,24 @@ enum Unstarted {
   Uv(#[from] uv::Error),
   #[error(transparent)]
   Unborn(#[from] Unborn),
+}
+
+/// The variable of uv that keeps no cache. A project above the folder of a kit can say no-cache in
+/// its config, as the checkout of furb does, and uv then makes the environment of the kit again
+/// from the index at each start, which took 7 to 9 seconds where the cache takes half of one.
+const UNCACHED: &str = "UV_NO_CACHE";
+
+/// The command of the program of a kit on its runner, or as it stands with none. A module that uv
+/// runs takes the cache of uv, whatever the config of a project above its folder says, unless the
+/// environment of the life names [`UNCACHED`].
+fn commanded(runner: Option<(PathBuf, &[&str])>, program: &Path) -> Command {
+  let Some((runner, before)) = runner else { return Command::new(program) };
+  let mut command = Command::new(runner);
+  command.args(before).arg(program);
+  if before.contains(&"--script") && env::var_os(UNCACHED).is_none() {
+    command.env(UNCACHED, "false");
+  }
+  command
 }
 
 /// Whether a module of Python holds a header of PEP 723, which opens on this line.
@@ -567,3 +578,7 @@ fn beside(name: &str) -> Option<PathBuf> {
   let program = env::current_exe().and_then(fs::canonicalize).ok()?;
   Some(program.parent()?.join(name)).filter(|one| one.is_file())
 }
+
+#[cfg(test)]
+#[path = "kits.test.rs"]
+mod test;
