@@ -351,7 +351,7 @@ impl Window {
   /// What an act came to, once it is done.
   async fn done(&mut self, id: &str) -> Value {
     let ended = |event: &Event| match event {
-      Event::Act(act) => act.id == id && matches!(act.phase, Phase::Done(_)),
+      Event::Act(act) => *act.id == *id && matches!(act.phase, Phase::Done(_)),
       _ => false,
     };
     let Event::Act(act) = self.until(ended).await else { unreachable!() };

@@ -11,7 +11,7 @@ use std::{
 use furb::{
   Ear, Fact, Fault, Object,
   ear::{Co, ear, hear, hearing, say},
-  view::{Fold, Pause, followed},
+  view::{Fold, Name, Pause, followed},
   wire::outward,
   world::{Asked, CONSOLE},
 };
@@ -211,7 +211,7 @@ async fn covered<W: 'static>(
   fold: &Fold,
   controls: &mut Vec<Fact>,
   a: &Fact,
-) -> Result<(Vec<String>, Option<Pause>), Fault> {
+) -> Result<(Vec<Name>, Option<Pause>), Fault> {
   let mut found = Vec::new();
   if !a.question() && matches!(a.kind(), "pause" | "wake") {
     controls.retain(|one| one.about() != a.about());

@@ -378,7 +378,7 @@ impl Window {
     // may hold the same name: the done of this one holds this word.
     let this = |frame: &Frame| {
       matches!(event_of(frame), Some(Event::Act(act))
-        if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
+        if *act.id == *rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
     };
     self.until(this).await;
     rung
@@ -456,7 +456,7 @@ impl Window {
 fn done(id: &str) -> impl Fn(&Frame) -> bool + '_ {
   move |frame| {
     matches!(event_of(frame), Some(Event::Act(act))
-      if act.id == id && matches!(act.phase, Phase::Done(_)))
+      if *act.id == *id && matches!(act.phase, Phase::Done(_)))
   }
 }
 
@@ -655,7 +655,7 @@ async fn an_end_is_a_pause_whose_next_life_takes_its_open_work_and_a_kill_cancel
     assert_eq!(window.ask(end).await, Ok(Answer::Done));
     window.until(|frame| matches!(event_of(frame), Some(Event::Ended(None)))).await;
     open(&mut window, &at, "a.jsonl", None).await;
-    let ended = Verb::Ended { life, act: wait.id.clone() };
+    let ended = Verb::Ended { life, act: wait.id.to_string() };
     let Ok(Answer::Acts(acts)) = window.ask(ended).await else { panic!("no end of the wait") };
     let states: Vec<view::State> = acts.iter().map(|act| act.state).collect();
     assert_eq!(states, [after], "an end with cancel {cancel}");

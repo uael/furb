@@ -101,12 +101,12 @@ pub fn root_of<'a>(prompt: &'a Act, rows: &impl Lookup<'a>) -> &'a str {
 /// that a worker that a round made stands in the thread whose word started the round. An act whose
 /// makers end before a prompt, as one that the operator made, stands in none.
 pub fn thread_of<'a>(act: &Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
-  let mut maker = rows.act(act.by.as_str())?;
+  let mut maker = rows.act(act.by.as_ref())?;
   for _ in 0..DEEP {
     if maker.kind == Kind::Prompt {
       return Some(root_of(maker, rows));
     }
-    maker = rows.act(maker.by.as_str())?;
+    maker = rows.act(maker.by.as_ref())?;
   }
   None
 }
@@ -145,16 +145,16 @@ pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Works<'a>) -> Option<&'a 
 fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     let root = root_of(act, rows);
-    return if root == act.id { Verdict::Own } else { Verdict::Message(root) };
+    return if root == &*act.id { Verdict::Own } else { Verdict::Message(root) };
   }
-  let maker = rows.act(act.by.as_str());
+  let maker = rows.act(act.by.as_ref());
   let starts = maker.is_some_and(|one| {
     one.kind == Kind::Rung && one.chain != act.chain && !rows.works(&act.chain, act.began)
   });
   let none = !starts && act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
-    _ if act.by == WATCH => Verdict::Aside(Aside::Notice),
+    _ if *act.by == *WATCH => Verdict::Aside(Aside::Notice),
     Some(maker) if maker.kind.as_str() == NAME => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
     Some(maker) if none && maker.kind == Kind::Rung && operator(&maker.by) => {
@@ -165,7 +165,7 @@ fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
     }
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
-      Verdict::Aside(Aside::Question(maker.chain.clone()))
+      Verdict::Aside(Aside::Question(maker.chain.to_string()))
     }
     Some(maker)
       if maker.kind == Kind::Rung && maker.chain != act.chain && thread_of(act, rows).is_none() =>
@@ -205,8 +205,8 @@ fn within<'a>(chain: &'a str, of: &str, rows: &impl Lookup<'a>) -> bool {
     if at == of {
       return true;
     }
-    match rows.act(at).and_then(|one| rows.act(one.by.as_str())) {
-      Some(maker) if maker.chain != at => at = &maker.chain,
+    match rows.act(at).and_then(|one| rows.act(one.by.as_ref())) {
+      Some(maker) if *maker.chain != *at => at = &maker.chain,
       _ => return false,
     }
   }
@@ -248,16 +248,16 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
   let mut runs: Vec<NoteRun> = Vec::new();
   let mut open = false;
   for act in on {
-    let maker = rows.get(act.by.as_str());
+    let maker = rows.get(act.by.as_ref());
     let below = maker.is_some_and(|one| one.chain == act.chain && one.kind != Kind::Chain);
     let retold = act.kind == Kind::Rung && maker.is_some_and(|one| one.kind == Kind::Chain);
     let silent = act.kind == Kind::Chain
       || !followed(act.kind.as_str())
       || matches!(&act.kind, Kind::Other(kind) if kind == "grant");
-    if below || retold || silent || inside.contains(act.id.as_str()) {
+    if below || retold || silent || inside.contains(act.id.as_ref()) {
       continue;
     }
-    if !notes.contains(act.id.as_str()) {
+    if !notes.contains(act.id.as_ref()) {
       open = false;
       continue;
     }
@@ -266,7 +266,7 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
       open = true;
     }
     let Some(run) = runs.last_mut() else { continue };
-    run.prompts.push(act.id.clone());
+    run.prompts.push(act.id.to_string());
     run.count += 1;
     run.unread += usize::from(act.ended.unwrap_or(act.began) > read);
   }
@@ -296,17 +296,17 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
   for (thread, act) in later {
     let Some(at) = out.iter_mut().find(|one| one.prompt == thread) else {
       match asides.iter_mut().find(|one| one.1.prompt == thread) {
-        Some(aside) if !act.asks_operator() => aside.1.messages.push(act.id.clone()),
+        Some(aside) if !act.asks_operator() => aside.1.messages.push(act.id.to_string()),
         None if !act.asks_operator() => asides.push((act.began, aside_of(act, Aside::Notice))),
         _ => {}
       }
       continue;
     };
     if act.asks_operator() {
-      at.asked.push(act.id.clone());
-      at.asks.extend(act.owed().then(|| act.id.clone()));
+      at.asked.push(act.id.to_string());
+      at.asks.extend(act.owed().then(|| act.id.to_string()));
     } else {
-      at.messages.push(act.id.clone());
+      at.messages.push(act.id.to_string());
     }
   }
   asides.sort_by_key(|one| one.0);
@@ -319,7 +319,7 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
     thread.over = open.is_none();
     // With none open, the last message that he did not take back says how the thread ended: one
     // that the model closed after a stop of the thread resolves it. Else its prompt says it.
-    let last = || acts.iter().rfind(|act| act.id == thread.prompt || !act.taken_back());
+    let last = || acts.iter().rfind(|act| *act.id == *thread.prompt || !act.taken_back());
     thread.state = match open.or_else(last).copied() {
       _ if !thread.asks.is_empty() => State::Asks,
       Some(act) => match State::of(act) {
@@ -342,12 +342,12 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
 fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
   let rungs: HashSet<&str> = on
     .iter()
-    .filter(|act| act.kind == Kind::Rung && act.by == prompt)
-    .map(|act| act.id.as_str())
+    .filter(|act| act.kind == Kind::Rung && *act.by == *prompt)
+    .map(|act| act.id.as_ref())
     .collect();
   on.iter()
     .copied()
-    .filter(|act| rungs.contains(act.id.as_str()) || rungs.contains(act.by.as_str()))
+    .filter(|act| rungs.contains(act.id.as_ref()) || rungs.contains(act.by.as_ref()))
     .collect()
 }
 
@@ -359,7 +359,7 @@ fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
   else {
     return;
   };
-  let Some(chain) = rows.get(chain.as_str()).filter(|act| act.kind == Kind::Chain) else { return };
+  let Some(chain) = rows.get(chain.as_ref()).filter(|act| act.kind == Kind::Chain) else { return };
   if chain.on.is_empty() {
     return;
   }
@@ -380,17 +380,17 @@ fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
 pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<ThreadNode> {
   let mut by_chain: HashMap<&str, Vec<&Act>> = HashMap::new();
   for act in acts.iter().copied().filter(|act| act.id != act.chain) {
-    by_chain.entry(act.chain.as_str()).or_default().push(act);
+    by_chain.entry(act.chain.as_ref()).or_default().push(act);
   }
   let mut list = by_chain.get(chain).map(|on| chain_threads(on, rows)).unwrap_or_default();
   let mut under: Vec<&Act> = acts
     .iter()
     .copied()
-    .filter(|act| act.kind == Kind::Chain && act.id != chain && within(&act.id, chain, rows))
+    .filter(|act| act.kind == Kind::Chain && *act.id != *chain && within(&act.id, chain, rows))
     .collect();
   under.sort_by_key(|act| act.began);
   for inner in under {
-    let Some(on) = by_chain.get(inner.id.as_str()) else { continue };
+    let Some(on) = by_chain.get(inner.id.as_ref()) else { continue };
     for thread in chain_threads(on, rows) {
       let parent = rows.get(thread.prompt.as_str()).and_then(|act| parent_of(act, rows));
       if parent.is_some_and(|parent| list.iter().any(|one| one.prompt == parent)) {
@@ -403,13 +403,13 @@ pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<Thr
 
 /// An aside of its own, from its prompt, before the prompts on it join it.
 fn aside_of(act: &Act, aside: Aside) -> ChainAside {
-  ChainAside { prompt: act.id.clone(), aside, messages: Vec::new() }
+  ChainAside { prompt: act.id.to_string(), aside, messages: Vec::new() }
 }
 
 /// A thread of its own, from its prompt, before its messages and its questions join it. A sub
 /// thread that asks the operator is its own first question.
 fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
-  let maker = rows.get(act.by.as_str());
+  let maker = rows.get(act.by.as_ref());
   let mine = operator(&act.by);
   let origin = match maker {
     _ if mine => Origin::Operator,
@@ -421,9 +421,9 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let title = images::references(title).into_iter().fold(title.to_owned(), |title, one| {
     title.replacen(&one.text, &format!("{PICTURE}{}", one.name), 1)
   });
-  let asked: Vec<String> = act.asks_operator().then(|| act.id.clone()).into_iter().collect();
+  let asked: Vec<String> = act.asks_operator().then(|| act.id.to_string()).into_iter().collect();
   ChainThread {
-    prompt: act.id.clone(),
+    prompt: act.id.to_string(),
     title,
     messages: Vec::new(),
     asks: asked.iter().filter(|_| act.owed()).cloned().collect(),
@@ -527,7 +527,7 @@ pub(super) fn unseen<S: BuildHasher>(
     .map(|act| act.ended.unwrap_or(act.began).max(act.began))
     .max()
     .unwrap_or_default();
-  let chain = rows.get(thread.prompt.as_str()).map(|act| act.chain.as_str()).unwrap_or_default();
+  let chain = rows.get(thread.prompt.as_str()).map(|act| act.chain.as_ref()).unwrap_or_default();
   let read = |id: &str| seen.get(id).copied().unwrap_or_default();
   work > read(&thread.prompt).max(read(chain))
 }
@@ -571,6 +571,6 @@ impl<'a> Lookup<'a> for OnChain<'_, 'a> {
 
 impl<'a> Works<'a> for OnChain<'_, 'a> {
   fn works(&self, chain: &str, at: u64) -> bool {
-    works(self.on.iter().copied().filter(|one| one.chain == chain), at)
+    works(self.on.iter().copied().filter(|one| *one.chain == *chain), at)
   }
 }

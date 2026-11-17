@@ -3,6 +3,7 @@
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
   mem,
+  sync::Arc,
 };
 
 use crate::{fact::named, skill};
@@ -11,7 +12,9 @@ use serde_json::{Value, json};
 
 use furb_wire::{
   OPERATOR,
-  act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, interruption, operator},
+  act::{
+    Act, Answer, Kind, Maker, Name, Pause, Phase, RunState, Spend, fault, interruption, operator,
+  },
   state::{State, chain_state},
 };
 
@@ -67,19 +70,19 @@ pub fn timed(fact: &Value) -> bool {
 /// are all the acts that the state of the chain reads.
 #[derive(Default, Serialize, Deserialize)]
 struct Chain {
-  open: BTreeMap<u64, String>,
-  last: Option<String>,
-  prompt: Option<String>,
-  remote: BTreeMap<u64, String>,
+  open: BTreeMap<u64, Name>,
+  last: Option<Name>,
+  prompt: Option<Name>,
+  remote: BTreeMap<u64, Name>,
 }
 
 /// A reply that is not done: the chain that it stands on, the actor that answers it, and the rung
 /// that waits for the word that it writes.
 #[derive(Serialize, Deserialize)]
 struct Reply {
-  chain: String,
+  chain: Name,
   actor: String,
-  maker: String,
+  maker: Name,
   /// The account that served it, once a fact says so.
   account: Option<String>,
 }
@@ -89,20 +92,20 @@ struct Reply {
 /// or a wake covers.
 #[derive(Default, Serialize, Deserialize)]
 pub struct Fold {
-  acts: HashMap<String, Act>,
+  acts: HashMap<Name, Act>,
   /// How many facts the fold heard that take a place in time, which is the place of the fact that
   /// it hears.
   clock: u64,
-  chains: HashMap<String, Chain>,
-  replies: HashMap<String, Reply>,
+  chains: HashMap<Name, Chain>,
+  replies: HashMap<Name, Reply>,
   /// The rung of each run, and what the run of the word of each rung gave once it is done.
   runs: HashMap<String, String>,
   ran: HashMap<String, Value>,
-  children: HashMap<String, Vec<String>>,
+  children: HashMap<Name, Vec<Name>>,
   /// The acts that a person follows and that are not done, by the place they began.
-  live: BTreeMap<u64, String>,
+  live: BTreeMap<u64, Name>,
   /// The acts that the fact that the fold hears changed, in order.
-  moved: Vec<String>,
+  moved: Vec<Name>,
   /// Each pause and each wake that the fold heard, in order, which [`Fold::recorded`] reads to find
   /// what a pause or a wake covers and the pause that holds a new act.
   pauses: Vec<Value>,
@@ -120,14 +123,14 @@ impl Fold {
 
   /// The chain that an act stands in.
   pub fn chain_of(&self, id: &str) -> Option<&str> {
-    self.acts.get(id).map(|act| act.chain.as_str())
+    self.acts.get(id).map(|act| act.chain.as_ref())
   }
 
   /// The live acts whose pause a pause, or a wake, would change: each that no pause holds, or each
   /// that one holds.
-  pub fn open(&self, pausing: bool) -> Vec<String> {
+  pub fn open(&self, pausing: bool) -> Vec<Name> {
     let acts = self.live.values().filter_map(|id| self.acts.get(id));
-    acts.filter(|act| act.pause.is_some() != pausing).map(|act| act.id.clone()).collect()
+    acts.filter(|act| act.pause.is_some() != pausing).map(|act| Arc::clone(&act.id)).collect()
   }
 
   /// The acts that a fact of a record changes, each as it stands after the fact, for a reader with
@@ -152,7 +155,7 @@ impl Fold {
     }
     if matches!(kind, "pause" | "wake") {
       let open = self.open(kind == "pause");
-      let covered: Vec<String> = open.into_iter().filter(|id| self.covers(about, id)).collect();
+      let covered: Vec<Name> = open.into_iter().filter(|id| self.covers(about, id)).collect();
       return self.hear(fact, &covered, None);
     }
     self.hear(fact, &[], None)
@@ -172,7 +175,7 @@ impl Fold {
       if self.reaches(of, one) {
         return true;
       }
-      name = self.acts.get(one).map(|act| act.by.as_str());
+      name = self.acts.get(one).map(|act| act.by.as_ref());
     }
     false
   }
@@ -194,7 +197,7 @@ impl Fold {
 
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each live act
   /// that a pause or a wake covers, and `born` the pause that holds a new act, as the engine found.
-  pub fn hear(&mut self, fact: &Value, covered: &[String], born: Option<Pause>) -> Vec<Act> {
+  pub fn hear(&mut self, fact: &Value, covered: &[Name], born: Option<Pause>) -> Vec<Act> {
     self.clock += u64::from(timed(fact));
     let text = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
     let (kind, about, by) = (text(0), text(1), text(2));
@@ -209,43 +212,22 @@ impl Fold {
 
   /// A new act: its kind, its name and its maker, then what it is on and its words.
   fn asked(&mut self, [kind, id, by]: [&str; 3], rest: &[Value], born: Option<Pause>) {
-    let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default().to_owned();
-    let on = text(0);
+    let word = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
+    let (id, by, on) = (Name::from(id), self.name(by), self.name(word(0)));
     let followed = followed(kind);
     let kind = Kind::from(kind);
     let chain = if kind == Kind::Chain {
-      id.to_owned()
+      Arc::clone(&id)
     } else {
-      self.chain_of(&on).unwrap_or(&on).to_owned()
+      self.acts.get(&on).map_or_else(|| Arc::clone(&on), |act| Arc::clone(&act.chain))
     };
-    match kind {
-      Kind::Run => {
-        let rung = text(1);
-        if let Some(act) =
-          self.acts.get_mut(&rung).filter(|act| act.kind == Kind::Rung && act.word.is_none())
-        {
-          act.word = Some(text(2));
-          self.moved.push(rung.clone());
-        }
-        self.runs.insert(id.to_owned(), rung);
-      }
-      Kind::Reply => {
-        let reply =
-          Reply { chain: on.clone(), actor: text(1), maker: by.to_owned(), account: None };
-        if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
-          maker.asking = true;
-          self.moved.push(by.to_owned());
-        }
-        self.replies.insert(id.to_owned(), reply);
-      }
-      _ => {}
-    }
-    let maker = self.maker(&kind, by, rest);
+    self.linked(&kind, [&id, &by, &on], rest);
+    let maker = self.maker(&kind, &by, rest);
     let run = (kind == Kind::Rung).then_some(RunState::Running);
     let act = Act {
       kind,
-      id: id.to_owned(),
-      by: by.to_owned(),
+      id,
+      by,
       maker,
       on,
       chain,
@@ -266,8 +248,43 @@ impl Fold {
     let taken = if act.kind == Kind::Chain { self.carried(rest) } else { Vec::new() };
     let act = Act { taken, ..act };
     self.placed(&act);
-    self.moved.push(act.id.clone());
-    self.acts.insert(act.id.clone(), act);
+    self.moved.push(Arc::clone(&act.id));
+    self.acts.insert(Arc::clone(&act.id), act);
+  }
+
+  /// What a new run or reply ties to the acts that it names: a run gives its rung its word and
+  /// names it, and a reply holds its chain, its actor and the rung that asks it.
+  fn linked(&mut self, kind: &Kind, [id, by, on]: [&Name; 3], rest: &[Value]) {
+    let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default().to_owned();
+    match kind {
+      Kind::Run => {
+        let rung = text(1);
+        if let Some(act) = self
+          .acts
+          .get_mut(rung.as_str())
+          .filter(|act| act.kind == Kind::Rung && act.word.is_none())
+        {
+          act.word = Some(text(2));
+          self.moved.push(Arc::clone(&act.id));
+        }
+        self.runs.insert(id.to_string(), rung);
+      }
+      Kind::Reply => {
+        let reply =
+          Reply { chain: Arc::clone(on), actor: text(1), maker: Arc::clone(by), account: None };
+        if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
+          maker.asking = true;
+          self.moved.push(Arc::clone(by));
+        }
+        self.replies.insert(Arc::clone(id), reply);
+      }
+      _ => {}
+    }
+  }
+
+  /// The name of an act that the fold holds, shared, or a new name for a text that names none.
+  fn name(&self, text: &str) -> Name {
+    self.acts.get_key_value(text).map_or_else(|| Name::from(text), |(name, _)| Arc::clone(name))
   }
 
   /// Who made a new act of a kind, by its maker and its words after its kind, its name and its
@@ -319,30 +336,31 @@ impl Fold {
     if !followed(act.kind.as_str()) {
       return;
     }
-    self.live.insert(act.began, act.id.clone());
-    self.children.entry(act.by.clone()).or_default().push(act.id.clone());
+    let id = || Arc::clone(&act.id);
+    self.live.insert(act.began, id());
+    self.children.entry(Arc::clone(&act.by)).or_default().push(id());
     if !act.kind.work() {
       return;
     }
-    let held = self.chains.entry(act.chain.clone()).or_default();
-    held.open.insert(act.began, act.id.clone());
-    held.last = Some(act.id.clone());
+    let held = self.chains.entry(Arc::clone(&act.chain)).or_default();
+    held.open.insert(act.began, id());
+    held.last = Some(id());
     if act.kind == Kind::Prompt {
-      held.prompt = Some(act.id.clone());
+      held.prompt = Some(id());
       if let Some(maker) = self.remote_of(act) {
-        self.chains.entry(maker).or_default().remote.insert(act.began, act.id.clone());
+        self.chains.entry(maker).or_default().remote.insert(act.began, id());
       }
     }
   }
 
   /// The chain of the rung that made a prompt on another chain.
-  fn remote_of(&self, prompt: &Act) -> Option<String> {
+  fn remote_of(&self, prompt: &Act) -> Option<Name> {
     let maker = self.acts.get(&prompt.by).filter(|maker| maker.kind == Kind::Rung)?;
-    (prompt.kind == Kind::Prompt && maker.chain != prompt.chain).then(|| maker.chain.clone())
+    (prompt.kind == Kind::Prompt && maker.chain != prompt.chain).then(|| Arc::clone(&maker.chain))
   }
 
   /// A fact about an act: its kind, what it is about and who said it, then the fact whole.
-  fn said(&mut self, [kind, about, by]: [&str; 3], fact: &Value, covered: &[String]) {
+  fn said(&mut self, [kind, about, by]: [&str; 3], fact: &Value, covered: &[Name]) {
     match kind {
       "pause" | "wake" => {
         self.pauses.push(fact.clone());
@@ -350,7 +368,7 @@ impl Fold {
         for id in covered {
           if let Some(act) = self.acts.get_mut(id) {
             act.pause.clone_from(&pause);
-            self.moved.push(id.clone());
+            self.moved.push(Arc::clone(id));
           }
         }
       }
@@ -360,7 +378,7 @@ impl Fold {
         if let Some(act) = self.acts.get_mut(about).filter(|act| !act.done()) {
           act.phase = Phase::Started;
           act.operator |= by == CONSOLE;
-          self.moved.push(about.to_owned());
+          self.moved.push(Arc::clone(&act.id));
         }
       }
       "account" => {
@@ -385,7 +403,7 @@ impl Fold {
           self.acts.get_mut(about).filter(|act| act.kind == Kind::Rung).zip(word)
         {
           act.word = Some(word.to_owned());
-          self.moved.push(about.to_owned());
+          self.moved.push(Arc::clone(&act.id));
         }
       }
       "prefix" => {
@@ -401,7 +419,7 @@ impl Fold {
         }
         if let Some(chain) = self.acts.get_mut(about).filter(|act| act.kind == Kind::Chain) {
           chain.taken = taken;
-          self.moved.push(about.to_owned());
+          self.moved.push(Arc::clone(&chain.id));
         }
       }
       "checkpoint" => self.checkpointed(fact.get(3).unwrap_or(&Value::Null)),
@@ -474,7 +492,7 @@ impl Fold {
     if let Some(reply) = self.replies.remove(about) {
       if let Some(maker) = self.acts.get_mut(&reply.maker).filter(|act| act.asking) {
         maker.asking = false;
-        self.moved.push(reply.maker.clone());
+        self.moved.push(Arc::clone(&reply.maker));
       }
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
@@ -504,7 +522,7 @@ impl Fold {
       self.update_run(&rung);
     }
     let Some(act) = self.acts.get(about) else { return };
-    let (began, chain, remote) = (act.began, act.chain.clone(), self.remote_of(act));
+    let (began, chain, remote) = (act.began, Arc::clone(&act.chain), self.remote_of(act));
     self.live.remove(&began);
     if let Some(held) = self.chains.get_mut(&chain) {
       held.open.remove(&began);
@@ -515,7 +533,7 @@ impl Fold {
     if let Some(act) = self.acts.get_mut(about) {
       act.phase = Phase::Done(value);
       act.ended.get_or_insert(self.clock);
-      self.moved.push(about.to_owned());
+      self.moved.push(Arc::clone(&act.id));
     }
     self.update_run(about);
     for child in self.children.get(about).cloned().unwrap_or_default() {
@@ -546,7 +564,7 @@ impl Fold {
     };
     if let Some(act) = self.acts.get_mut(id) {
       act.run = Some(run);
-      self.moved.push(id.to_owned());
+      self.moved.push(Arc::clone(&act.id));
     }
   }
 
@@ -554,11 +572,11 @@ impl Fold {
   fn settled(&mut self) -> Vec<Act> {
     let mut moved = mem::take(&mut self.moved);
     let mut seen = HashSet::new();
-    moved.retain(|id| seen.insert(id.clone()));
-    let mut chains: Vec<String> = Vec::new();
+    moved.retain(|id| seen.insert(Arc::clone(id)));
+    let mut chains: Vec<Name> = Vec::new();
     for id in &moved {
       let Some(act) = self.acts.get(id) else { continue };
-      chains.push(act.chain.clone());
+      chains.push(Arc::clone(&act.chain));
       chains.extend(self.remote_of(act));
       if act.kind != Kind::Chain {
         let state = State::of(act);
@@ -569,7 +587,7 @@ impl Fold {
     }
     // A chain is read once, however many of its acts moved.
     let mut read = HashSet::new();
-    chains.retain(|chain| read.insert(chain.clone()));
+    chains.retain(|chain| read.insert(Arc::clone(chain)));
     for chain in chains {
       let state = self.chain_state(&chain);
       let Some(act) = self.acts.get_mut(&chain).filter(|act| act.kind == Kind::Chain) else {

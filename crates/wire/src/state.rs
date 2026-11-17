@@ -108,7 +108,7 @@ pub fn chain_state(on: &[&Act], remote: &[&Act]) -> State {
 
 /// The state of each act, and of each chain from the acts that stand in it.
 pub fn restate(acts: &mut [Act]) {
-  let ids: HashMap<&str, &Act> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+  let ids: HashMap<&str, &Act> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
   let states: Vec<State> = acts
     .iter()
     .map(|act| {
@@ -120,7 +120,7 @@ pub fn restate(acts: &mut [Act]) {
       let remote: Vec<&Act> = acts
         .iter()
         .filter(|one| one.kind == Kind::Prompt && one.chain != act.id)
-        .filter(|one| ids.get(one.by.as_str()).is_some_and(|maker| maker.chain == act.id))
+        .filter(|one| ids.get(one.by.as_ref()).is_some_and(|maker| maker.chain == act.id))
         .collect();
       chain_state(&on, &remote)
     })

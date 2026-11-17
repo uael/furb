@@ -32,7 +32,7 @@ fn conductor() -> Vec<Act> {
   let mut acts: HashMap<String, Act> = HashMap::new();
   for fact in facts.filter(Value::is_array).chain(more) {
     for act in fold.hear(&fact, &[], None) {
-      acts.insert(act.id.clone(), act);
+      acts.insert(act.id.to_string(), act);
     }
   }
   let mut all: Vec<Act> = acts.into_values().collect();
@@ -46,7 +46,7 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut acts: HashMap<String, Act> = HashMap::new();
   for fact in facts {
     for act in fold.hear(&fact, &[], None) {
-      acts.insert(act.id.clone(), act);
+      acts.insert(act.id.to_string(), act);
     }
   }
   let mut all: Vec<Act> = acts.into_values().collect();
@@ -62,7 +62,7 @@ fn tree(acts: &[Act], chain: &str) -> Vec<(usize, String, String)> {
       walk(&node.agents, depth + 1, out);
     }
   }
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
   let all: Vec<&Act> = acts.iter().collect();
   let mut out = Vec::new();
   walk(&chain_tree(chain, &all, &rows), 0, &mut out);
@@ -71,8 +71,8 @@ fn tree(acts: &[Act], chain: &str) -> Vec<(usize, String, String)> {
 
 /// The threads of a chain, and its asides with what each is.
 fn listed(acts: &[Act], chain: &str) -> (Vec<String>, Vec<(String, Aside)>) {
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+  let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *chain).collect();
   let threads = chain_threads(&on, &rows).into_iter().map(|one| one.prompt).collect();
   let asides = chain_asides(&on, &rows).into_iter().map(|one| (one.prompt, one.aside)).collect();
   (threads, asides)
@@ -118,8 +118,8 @@ fn a_notice_a_word_of_the_operator_a_wake_and_a_question_of_another_chain_are_no
 
 /// The runs of notes of a chain, each with its prompts and its unread count.
 fn runs(acts: &[Act], chain: &str, read: u64) -> Vec<(Vec<String>, usize)> {
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+  let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *chain).collect();
   let notes = chain_notes(&on, &rows, read);
   assert!(notes.iter().all(|run| run.count == run.prompts.len()), "{notes:?}");
   notes.into_iter().map(|NoteRun { prompts, unread, .. }| (prompts, unread)).collect()
@@ -134,7 +134,7 @@ fn the_notes_that_follow_one_another_in_a_chain_stand_as_one_run_with_the_ones_n
   assert_eq!(runs(&acts, "chain2", 0), [(two.clone(), 2)]);
   assert_eq!(runs(&acts, "chain7", 0), [(names(&["prompt36"]), 1)]);
   // A note that began after the place that was read counts as unread, and none else does.
-  let began = |id: &str| acts.iter().find(|act| act.id == id).map(|act| act.began).unwrap();
+  let began = |id: &str| acts.iter().find(|act| *act.id == *id).map(|act| act.began).unwrap();
   assert_eq!(runs(&acts, "chain2", began("prompt47")), [(two.clone(), 1)]);
   assert_eq!(runs(&acts, "chain2", u64::MAX), [(two, 0)]);
   // On chain1 the word of the operator that runs between the wake and the acknowledgment of that
@@ -189,7 +189,7 @@ fn each_worker_nests_under_the_thread_that_made_it_and_takes_the_label_of_its_ch
   ];
   assert_eq!(agents, labels);
   // The record names no session, so the first thread of the operator keeps its first line.
-  let message = acts.iter().find(|act| act.id == "prompt1").and_then(|act| act.words[1].as_str());
+  let message = acts.iter().find(|act| *act.id == *"prompt1").and_then(|act| act.words[1].as_str());
   assert_eq!(message.and_then(|one| one.lines().next()), Some(got[0].2.as_str()));
 }
 
@@ -457,8 +457,8 @@ fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
     ];
     facts.extend(more);
     let acts = folded(facts);
-    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+    let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *"chain1").collect();
     chain_threads(&on, &rows).into_iter().map(|one| one.state).collect::<Vec<_>>()
   };
   // A model that writes the word of the rung of the thread thinks, as the session does.

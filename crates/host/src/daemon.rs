@@ -46,7 +46,7 @@ use furb::{
   life::{Answer as Answered, Log, Opening},
   skill::Places,
   value::Fault,
-  view::{self, Reach, Sent, WATCH},
+  view::{self, Name, Reach, Sent, WATCH},
   wire::parsed,
   world::{
     self, Members, Roster, catalog,
@@ -679,7 +679,7 @@ async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answe
     loop {
       match heard.recv().await {
         Ok((_, event)) => match &*event {
-          Event::Act(one) if one.id == act => break,
+          Event::Act(one) if *one.id == *act => break,
           Event::Ended(_) => return Err(ProtocolError::Closed { life }),
           _ => {}
         },
@@ -1826,7 +1826,7 @@ impl Lives {
       .filter(|(life, held)| matches!(held.stage, Stage::Living(_)) && from != Some(life.as_str()));
     let runs =
       living.map(|(life, held)| (life.clone(), held.handle.clone(), held.handle.commands()));
-    let lives: Vec<(String, LifeHandle, BTreeSet<String>)> =
+    let lives: Vec<(String, LifeHandle, BTreeSet<Name>)> =
       runs.filter(|(_, _, commands)| !commands.is_empty()).collect();
     let (log, asks) = (self.settings.opening.log.clone(), self.asks.clone());
     tokio::spawn(async move {

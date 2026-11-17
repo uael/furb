@@ -20,6 +20,7 @@ use std::{
   sync::atomic::{AtomicU32, Ordering},
 };
 
+use furb::view::{Act, Fold};
 use furb_host::{
   Host, Outbox, ProtocolError, fixed,
   protocol::{
@@ -870,4 +871,17 @@ fn a_frame_of_an_event_says_the_same_bytes() {
   // The bytes of the frame when it held a copy of its event.
   let held = r#"{"frame":"event","life":"/l.jsonl","seq":3,"event":{"event":"fact","data":["done","run1","run1",7,{"a":[1.5,null]}]}}"#;
   assert_eq!(serde_json::to_string(&frame).unwrap(), held);
+}
+
+/// An act says the same bytes now that it shares its names, so no window reads another act.
+#[test]
+fn an_act_says_the_same_bytes() {
+  let mut fold = Fold::default();
+  let made =
+    fold.recorded(&serde_json::json!(["prompt", "prompt1", "operator", "chain1", "str", "hi", ""]));
+  // The bytes of the act when it held a copy of each name.
+  let held = r#"[{"kind":"prompt","id":"prompt1","by":"operator","maker":{"role":"operator"},"on":"chain1","chain":"chain1","words":["str","hi",""],"phase":{"phase":"asked"},"operator":false,"pause":null,"run":null,"word":null,"asking":false,"began":1,"ended":null,"spend":null,"state":"runs"}]"#;
+  assert_eq!(serde_json::to_string(&made).unwrap(), held);
+  let read: Vec<Act> = serde_json::from_str(held).unwrap();
+  assert_eq!(read, made, "an act reads back from the same bytes");
 }

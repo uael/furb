@@ -466,7 +466,7 @@ impl Model {
   /// birth of the life may hold its name and another word, so the life holds no end of the word.
   fn ran(&mut self, acts: Vec<Act>) {
     let Some(word) = self.word.as_mut() else { return };
-    let Some(act) = acts.into_iter().find(|one| one.id == word.rung) else { return };
+    let Some(act) = acts.into_iter().find(|one| *one.id == *word.rung) else { return };
     if let Some(run) = act.run.filter(|_| act.word.as_deref() == Some(&word.text)) {
       word.ran = Some(run);
     } else {

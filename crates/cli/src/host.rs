@@ -90,7 +90,7 @@ pub(crate) async fn said(
   else {
     return Err(DaemonError::Unanswered.into());
   };
-  let done = acts.into_iter().find(|one| one.id == id).map(|one| one.phase);
+  let done = acts.into_iter().find(|one| *one.id == *id).map(|one| one.phase);
   let Some(Phase::Done(value)) = done else { return Err(DaemonError::Unanswered.into()) };
   Ok(Some(value))
 }

@@ -32,8 +32,8 @@ use furb::{
   skill::ENABLE,
   verbs,
   view::{
-    self, Act, Asked, Desk, Fold, Held, Kind, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown,
-    Streamed, ThreadNode, Threads,
+    self, Act, Asked, Desk, Fold, Held, Kind, Name, Named, Page, Phase, Reach, Rung, SHOWN, Sent,
+    Shown, Streamed, ThreadNode, Threads,
   },
   wire::{outward, parsed},
   world::{
@@ -354,7 +354,7 @@ pub struct Life {
   /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
   cards: watch::Sender<Option<Arc<Session>>>,
   /// The id of each command of the life that runs, whose end a handover waits for.
-  commands: watch::Sender<BTreeSet<String>>,
+  commands: watch::Sender<BTreeSet<Name>>,
   times: Times,
   /// Whether an event changed what the cards read since the life last told them, and when it may
   /// tell them next.
@@ -400,7 +400,7 @@ struct Kept {
 #[derive(Clone, Serialize, Deserialize)]
 enum Slot {
   Told(Arc<Event>),
-  Held(String),
+  Held(Name),
 }
 
 impl Slot {
@@ -464,7 +464,7 @@ struct Gone {
 #[derive(Clone, Default, Serialize, Deserialize)]
 struct Spent {
   /// The place of the last event of each act.
-  acts: HashMap<String, Seq>,
+  acts: HashMap<Name, Seq>,
   /// The places of the parts that a model wrote for each rung that has no word yet.
   parts: HashMap<String, Vec<Seq>>,
   /// Each place that a later event replaced, under the place of that event, in order.
@@ -477,13 +477,13 @@ impl Spent {
     match event {
       Event::Act(act) => {
         // A later event of an act moves the place of its name, which the map holds once.
-        if let Some(at) = self.acts.get_mut(&act.id) {
+        if let Some(at) = self.acts.get_mut(&*act.id) {
           self.replaced.push_back((seq, mem::replace(at, seq)));
         } else {
-          self.acts.insert(act.id.clone(), seq);
+          self.acts.insert(Arc::clone(&act.id), seq);
         }
         if act.word.is_some() || matches!(act.phase, Phase::Done(_)) {
-          let parts = self.parts.remove(&act.id).unwrap_or_default();
+          let parts = self.parts.remove(&*act.id).unwrap_or_default();
           self.replaced.extend(parts.into_iter().map(|part| (seq, part)));
         }
       }
@@ -513,7 +513,7 @@ pub struct LifeHandle {
   name: Arc<Mutex<Option<String>>>,
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
-  commands: watch::Receiver<BTreeSet<String>>,
+  commands: watch::Receiver<BTreeSet<Name>>,
 }
 
 impl Life {
@@ -565,7 +565,7 @@ impl Life {
         let before = self.kept.held.took(Arc::clone(act)).map(|one| Event::Act(one).into());
         // Each reader hears the act as the life holds it, which keeps who made it through a birth.
         let held = self.kept.held.shared(&act.id).map(Arc::clone);
-        let place = self.kept.spent.acts.get(&act.id).and_then(|at| usize::try_from(*at).ok());
+        let place = self.kept.spent.acts.get(&*act.id).and_then(|at| usize::try_from(*at).ok());
         if let (Some(before), Some(slot)) = (before, place.and_then(|at| self.kept.log.get_mut(at)))
         {
           *slot = Some(Slot::Told(before));
@@ -590,7 +590,7 @@ impl Life {
     }
     let event = Arc::new(event);
     self.kept.log.push(Some(match &*event {
-      Event::Act(act) => Slot::Held(act.id.clone()),
+      Event::Act(act) => Slot::Held(Arc::clone(&act.id)),
       _ => Slot::Told(Arc::clone(&event)),
     }));
     self.readers.send((seq, event)).ok();
@@ -1121,7 +1121,7 @@ struct Tells {
   name: Arc<Mutex<Option<String>>>,
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
-  commands: watch::Sender<BTreeSet<String>>,
+  commands: watch::Sender<BTreeSet<Name>>,
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
@@ -1505,7 +1505,7 @@ async fn pumped(engine: &mut Engine, waits: bool) -> Woke {
 fn queued_on(life: &Life, on: String) -> (String, Option<String>) {
   let thread = life.kept.held.shared(&on).filter(|act| act.kind == Kind::Prompt);
   match thread {
-    Some(act) => (act.chain.clone(), Some(on)),
+    Some(act) => (act.chain.to_string(), Some(on)),
     None => (on, None),
   }
 }
@@ -1838,13 +1838,13 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 impl LifeHandle {
   /// The id of each command of the life that runs now.
   #[must_use]
-  pub fn commands(&self) -> BTreeSet<String> {
+  pub fn commands(&self) -> BTreeSet<Name> {
     self.commands.borrow().clone()
   }
 
   /// Once none of these commands of the life runs, or the life ended: the end of a life cuts each
   /// command that it runs, which no later life takes again.
-  pub async fn settled(&self, of: &BTreeSet<String>) {
+  pub async fn settled(&self, of: &BTreeSet<Name>) {
     let mut commands = self.commands.clone();
     // A life that ended runs no command.
     commands.wait_for(|runs| runs.is_disjoint(of)).await.ok();

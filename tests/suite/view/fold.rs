@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use furb::{
   engine,
-  view::{Fold, Maker, Pause, RunState, State},
+  view::{Fold, Maker, Name, Pause, RunState, State},
 };
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
@@ -29,20 +29,20 @@ fn facts() -> Vec<(Value, Vec<&'static str>, Option<Pause>)> {
 fn a_record_folds_each_pause_and_wake_and_each_act_born_under_a_pause_as_its_live_life_did() {
   let (mut live, mut recorded) = (Fold::default(), Fold::default());
   for (fact, covered, born) in facts() {
-    let covered: Vec<String> = covered.into_iter().map(str::to_owned).collect();
+    let covered: Vec<Name> = covered.into_iter().map(Name::from).collect();
     let lived = live.hear(&fact, &covered, born);
     let read = recorded.recorded(&fact);
     assert_eq!(read, lived, "after {fact}");
   }
   let paused = |fold: &Fold, pausing| fold.open(pausing);
-  assert_eq!(paused(&recorded, false), Vec::<String>::new(), "the wake let each act go");
+  assert_eq!(paused(&recorded, false), Vec::<Name>::new(), "the wake let each act go");
   let mut held = Fold::default();
   for (fact, _, _) in facts().into_iter().take(4) {
     held.recorded(&fact);
   }
   assert_eq!(
     held.open(false),
-    ["prompt1", "rung1"],
+    [Name::from("prompt1"), Name::from("rung1")],
     "the pause holds the prompt and the rung born under it"
   );
 }
@@ -58,7 +58,7 @@ fn a_chain_whose_last_command_the_end_of_its_life_cut_rests_and_one_whose_comman
       json!(["done", "bash1", "bash", {"is": "Refused", "args": [why]}]),
     ];
     let moved = facts.iter().map(|fact| fold.recorded(fact)).last().unwrap_or_default();
-    let of = |id: &str| moved.iter().find(|act| act.id == id).map(|act| act.state);
+    let of = |id: &str| moved.iter().find(|act| *act.id == *id).map(|act| act.state);
     (of("bash1"), of("chain1"))
   };
   let cut = "bash1 was interrupted: the life that ran it ended before it did";
@@ -92,9 +92,9 @@ fn a_chain_with_a_source_takes_each_message_of_the_operator_that_its_prefix_carr
   for fact in &facts {
     last = fold.recorded(fact);
   }
-  let chain = last.iter().find(|act| act.id == "chain2").expect("the prefix moves its chain");
+  let chain = last.iter().find(|act| *act.id == *"chain2").expect("the prefix moves its chain");
   assert_eq!(chain.taken, ["prompt1", "prompt3"], "each message of the operator, once, in order");
-  assert!(last.iter().all(|act| act.id != "chain1"), "the source takes nothing: {last:?}");
+  assert!(last.iter().all(|act| *act.id != *"chain1"), "the source takes nothing: {last:?}");
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn a_chain_with_a_source_takes_the_messages_of_the_operator_that_its_fact_names_
   for fact in &facts {
     last = fold.recorded(fact);
   }
-  let chain = last.iter().find(|act| act.id == "chain2").expect("the chain");
+  let chain = last.iter().find(|act| *act.id == *"chain2").expect("the chain");
   assert_eq!(
     chain.taken,
     ["prompt1"],
@@ -178,8 +178,8 @@ fn each_act_names_the_role_of_its_maker_live_and_from_its_record_alike() {
   let (mut live, mut recorded) = (Fold::default(), Fold::default());
   let (mut lived, mut read) = (HashMap::new(), HashMap::new());
   for fact in &facts {
-    lived.extend(live.hear(fact, &[], None).into_iter().map(|act| (act.id.clone(), act.maker)));
-    read.extend(recorded.recorded(fact).into_iter().map(|act| (act.id.clone(), act.maker)));
+    lived.extend(live.hear(fact, &[], None).into_iter().map(|act| (act.id, act.maker)));
+    read.extend(recorded.recorded(fact).into_iter().map(|act| (act.id, act.maker)));
   }
   let opus = Maker::Model { model: "claude-cli:opus".to_owned(), effort: Some("high".to_owned()) };
   let want = [
@@ -227,7 +227,7 @@ fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_nam
   {
     let rung = format!("rung{at}");
     let made = fold.recorded(&json!(["rung", rung, "chain1", "chain1", "", "", actor]));
-    let made = made.into_iter().find(|act| act.id == rung).map(|act| act.maker);
+    let made = made.into_iter().find(|act| *act.id == *rung).map(|act| act.maker);
     assert_eq!(made, Some(maker), "{actor}");
   }
 }
@@ -307,13 +307,13 @@ fn a_checkpoint_makes_each_act_that_it_carries_and_ends_each_act_that_it_ends() 
   fold.recorded(&json!(["chain", "chain1", "operator", "", "root", ""]));
   fold.recorded(&json!(["prompt", "prompt1", "operator", "chain1", "str", "go", ""]));
   let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
-  let of = |id: &str| moved.iter().find(|act| act.id == id).cloned().unwrap();
+  let of = |id: &str| moved.iter().find(|act| *act.id == *id).cloned().unwrap();
   let (went, more) = (of("prompt1"), of("prompt2"));
-  assert_eq!((went.by.as_str(), went.value()), ("operator", Some(&json!("went"))));
-  assert_eq!((more.by.as_str(), more.chain.as_str(), more.done()), ("journal", "chain1", false));
+  assert_eq!((went.by.as_ref(), went.value()), ("operator", Some(&json!("went"))));
+  assert_eq!((more.by.as_ref(), more.chain.as_ref(), more.done()), ("journal", "chain1", false));
   assert_eq!(more.words, [json!("None"), json!("more"), json!("")]);
   assert!(
-    moved.iter().all(|act| act.id != "chain1" || act.by == "operator"),
+    moved.iter().all(|act| *act.id != *"chain1" || *act.by == *"operator"),
     "it makes no act it holds"
   );
 }
@@ -345,7 +345,7 @@ fn a_checkpoint_makes_each_act_that_it_carries_by_the_maker_that_it_names() {
     ],
   });
   let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
-  let by = |id: &str| moved.iter().find(|act| act.id == id).map(|act| act.by.clone());
+  let by = |id: &str| moved.iter().find(|act| *act.id == *id).map(|act| act.by.to_string());
   assert_eq!(
     (by("chain1"), by("prompt1"), by("prompt2")),
     (Some("operator".to_owned()), Some("operator".to_owned()), Some("rung4".to_owned()))
@@ -365,7 +365,7 @@ fn a_rung_told_done_with_no_run_ran_its_word() {
   }
   // A birth tells the rung again as done, and not the run of its word, which its record holds.
   let moved = fold.recorded(&json!(["done", "rung1", "journal", null]));
-  let rung = moved.iter().find(|act| act.id == "rung1").unwrap();
+  let rung = moved.iter().find(|act| *act.id == *"rung1").unwrap();
   assert_eq!(rung.run, Some(RunState::Done));
 }
 
@@ -385,9 +385,9 @@ fn a_checkpoint_ends_each_run_of_a_word_and_a_run_that_it_cut_did_not_fail() {
   }
   let data = json!({"chains": [{"id": "chain1", "on": "", "label": "root", "source": "", "cut": ["run2"]}], "acts": []});
   let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
-  let run = |id: &str| moved.iter().find(|act| act.id == id).and_then(|act| act.run.clone());
+  let run = |id: &str| moved.iter().find(|act| *act.id == *id).and_then(|act| act.run.clone());
   assert_eq!((run("rung1"), run("rung2")), (Some(RunState::Done), Some(RunState::Done)));
-  let cut = moved.iter().find(|act| act.id == "run2").and_then(|act| act.value().cloned());
+  let cut = moved.iter().find(|act| *act.id == *"run2").and_then(|act| act.value().cloned());
   let why = "run2 was interrupted: the life that ran it ended before it did";
   assert_eq!(cut, Some(json!({"is": "Refused", "args": [why]})));
 }

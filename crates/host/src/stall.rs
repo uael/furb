@@ -15,13 +15,14 @@
 
 use std::{
   collections::{HashMap, HashSet},
+  sync::Arc,
   time::Duration,
 };
 
 use serde_json::Value;
 use tokio::time::Instant;
 
-use furb::view::{Act, Kind, Phase, State, operator};
+use furb::view::{Act, Kind, Name, Phase, State, operator};
 
 use crate::{event::Event, protocol::Open};
 
@@ -47,7 +48,7 @@ pub(crate) struct Quiet {
   acts: Vec<Act>,
   told: Told,
   ours: HashSet<String>,
-  chains: HashMap<String, Chain>,
+  chains: HashMap<Name, Chain>,
 }
 
 /// What the watch holds of one chain: when an act of it changed or a model wrote for it last,
@@ -148,8 +149,12 @@ impl Quiet {
     // answer.
     if done && self.asks(act) {
       let now = Instant::now();
-      let waited: Vec<String> =
-        self.acts.iter().filter(|one| waited_on(one, act)).map(|one| one.chain.clone()).collect();
+      let waited: Vec<Name> = self
+        .acts
+        .iter()
+        .filter(|one| waited_on(one, act))
+        .map(|one| Arc::clone(&one.chain))
+        .collect();
       for name in waited {
         if let Some(chain) = self.chains.get_mut(&name) {
           chain.last = now;
@@ -165,31 +170,31 @@ impl Quiet {
         self.acts.push(act.clone());
       }
     }
-    let ours = self.ours.contains(&act.id);
+    let ours = self.ours.contains(&*act.id);
     match &self.told {
-      Told::Asking { prompt, .. } if *prompt == act.id && done => self.told = Told::Said,
+      Told::Asking { prompt, .. } if *prompt == *act.id && done => self.told = Told::Said,
       _ if ours => {}
-      Told::Asking { chain, .. } if *chain == act.chain => {}
+      Told::Asking { chain, .. } if *chain == *act.chain => {}
       _ => self.told = Told::No,
     }
     let now = Instant::now();
-    let chain = self.chains.entry(act.chain.clone()).or_insert_with(|| Chain::new(now));
+    let chain = self.chains.entry(Arc::clone(&act.chain)).or_insert_with(|| Chain::new(now));
     match &chain.told {
-      Told::Asking { prompt, .. } if *prompt == act.id && done => chain.told = Told::Said,
+      Told::Asking { prompt, .. } if *prompt == *act.id && done => chain.told = Told::Said,
       _ if ours => {}
       _ => (chain.last, chain.told) = (now, Told::No),
     }
     if act.kind == Kind::Chain && done {
-      self.chains.remove(&act.id);
+      self.chains.remove(&*act.id);
     } else if act.kind == Kind::Chain {
-      if let Some(chain) = self.chains.get_mut(&act.id) {
+      if let Some(chain) = self.chains.get_mut(&*act.id) {
         chain.state = act.state;
       } else {
-        self.chains.insert(act.id.clone(), Chain { state: act.state, ..Chain::new(now) });
+        self.chains.insert(Arc::clone(&act.id), Chain { state: act.state, ..Chain::new(now) });
       }
     }
     if done {
-      self.ours.remove(&act.id);
+      self.ours.remove(&*act.id);
     }
   }
 
@@ -215,7 +220,7 @@ impl Quiet {
   /// is a prompt to him, or it stands on a chain that asks him or that a pause holds.
   fn asks(&self, one: &Act) -> bool {
     let to = one.words.get(2).and_then(Value::as_str).unwrap_or_default();
-    let chain = self.chains.get(&one.chain).map(|chain| chain.state);
+    let chain = self.chains.get(&*one.chain).map(|chain| chain.state);
     one.pause.is_some()
       || one.owed()
       || one.kind == Kind::Prompt && operator(to)
@@ -229,7 +234,7 @@ impl Quiet {
   fn hung(&self, one: &Act, look: &Look<'_>) -> Option<Duration> {
     let worded = one.words.first().and_then(Value::as_str).is_some_and(|word| !word.is_empty());
     let bound = match one.kind {
-      Kind::Rung if worded && !look.working.contains(one.chain.as_str()) => HUNG,
+      Kind::Rung if worded && !look.working.contains(one.chain.as_ref()) => HUNG,
       Kind::Reply => THINK,
       _ => return None,
     };
@@ -251,7 +256,7 @@ impl Quiet {
       matches!(self.told, Told::No) && self.acts.iter().any(|one| Self::lasting(one, &look));
     let life = armed.then(|| self.last + self.bound);
     let stalls = |one: &Act| {
-      let chain = self.chains.get(&one.chain).filter(|chain| matches!(chain.told, Told::No))?;
+      let chain = self.chains.get(&*one.chain).filter(|chain| matches!(chain.told, Told::No))?;
       Some(chain.last + self.hung(one, &look)?)
     };
     life.into_iter().chain(self.acts.iter().filter_map(stalls)).min()
@@ -281,7 +286,7 @@ impl Quiet {
       let name = first.chain.clone();
       let mine: Vec<(Open, Duration)>;
       (mine, hung) = hung.into_iter().partition(|(one, _)| one.chain == name);
-      let Some(chain) = self.chains.get_mut(&name) else { continue };
+      let Some(chain) = self.chains.get_mut(name.as_str()) else { continue };
       let due: Vec<(Open, Duration)> =
         mine.into_iter().filter(|(_, bound)| chain.last + *bound <= now).collect();
       let Some(wait) = due.iter().map(|(_, bound)| *bound).min() else { continue };
@@ -319,11 +324,11 @@ impl Look<'_> {
   /// awaits an act that asks him, the act that the rung retells or a prompt that the word made.
   fn waits(&self, one: &Act) -> bool {
     let (rung, retells) = match one.kind {
-      Kind::Rung => (Some(one.id.as_str()), one.words.get(1).and_then(Value::as_str)),
+      Kind::Rung => (Some(one.id.as_ref()), one.words.get(1).and_then(Value::as_str)),
       Kind::Run => (one.words.first().and_then(Value::as_str), None),
       _ => (None, None),
     };
-    self.asking.contains(one.id.as_str())
+    self.asking.contains(one.id.as_ref())
       || retells.is_some_and(|id| self.asking.contains(id))
       || rung.is_some_and(|id| self.asked_by.contains(id))
   }
@@ -335,16 +340,16 @@ fn waited_on(one: &Act, asked: &Act) -> bool {
   let made = asked.kind == Kind::Prompt;
   match one.kind {
     Kind::Rung => {
-      one.words.get(1).and_then(Value::as_str) == Some(asked.id.as_str())
+      one.words.get(1).and_then(Value::as_str) == Some(asked.id.as_ref())
         || made && one.id == asked.by
     }
-    Kind::Run => made && one.words.first().and_then(Value::as_str) == Some(asked.by.as_str()),
+    Kind::Run => made && one.words.first().and_then(Value::as_str) == Some(asked.by.as_ref()),
     _ => false,
   }
 }
 
 fn open(one: &Act) -> Open {
-  Open { act: one.id.clone(), kind: one.kind.to_string(), chain: one.chain.clone() }
+  Open { act: one.id.to_string(), kind: one.kind.to_string(), chain: one.chain.to_string() }
 }
 
 /// Each open act as a notice names it, with its kind and its chain.

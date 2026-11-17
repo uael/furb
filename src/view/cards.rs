@@ -26,11 +26,11 @@ impl Held {
   /// order that they began.
   pub fn cards(&self) -> Vec<Card> {
     self.then(None, |acts| {
-      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
+      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), *act)).collect();
       let mut models: HashMap<&str, &str> = HashMap::new();
       for act in acts.iter().filter(|act| act.kind == Kind::Rung) {
         if let Maker::Model { model, .. } = &act.maker {
-          models.insert(act.by.as_str(), model);
+          models.insert(act.by.as_ref(), model);
         }
       }
       let sites: Vec<(&str, HashMap<String, u64>)> =
@@ -70,7 +70,7 @@ impl Held {
         };
         let text = text.and_then(Value::as_str).filter(|_| operator(&act.by))?;
         let python = act.kind == Kind::Rung;
-        Some(Sent { by: act.by.clone(), text: text.to_owned(), python })
+        Some(Sent { by: act.by.to_string(), text: text.to_owned(), python })
       };
       acts.iter().filter_map(sent).collect()
     })
@@ -82,7 +82,7 @@ impl Held {
     self.then(None, |acts| {
       let read = |act: &&&Act| {
         act.kind.as_str() == "read"
-          && act.chain == ROOT
+          && *act.chain == *ROOT
           && act.words.first().and_then(Value::as_str) == Some("skills://")
       };
       let index = acts.iter().rev().filter(read).find_map(|act| match &act.phase {
@@ -115,7 +115,7 @@ impl Held {
     let ids = [&node.thread.prompt].into_iter().chain(&node.thread.messages);
     let open = ids.filter_map(|id| (&self).act(id)).filter(|act| !act.done());
     let shape = |act: &Act| act.words.first().and_then(Value::as_str).unwrap_or("None").to_owned();
-    open.map(|act| (act.id.clone(), shape(act))).collect()
+    open.map(|act| (act.id.to_string(), shape(act))).collect()
   }
 }
 

@@ -49,7 +49,7 @@ use crate::{
   life::Opening,
   skill::{self, Skill},
   view::{
-    Act as ViewAct, Asked, Fold, Held, Pause, SHOWN, Shown, quotes as quotes_of, restate,
+    Act as ViewAct, Asked, Fold, Held, Name, Pause, SHOWN, Shown, quotes as quotes_of, restate,
     writing as writing_of,
   },
   wire,
@@ -887,7 +887,9 @@ impl Meaning {
       (None, None) => self.fold.recorded(&fact),
       (covered, born) => {
         let born = born.and_then(|one| Pause::of(&wire::outward(one.object().as_ref())));
-        self.fold.hear(&fact, &covered.unwrap_or_default(), born)
+        let covered: Vec<Name> =
+          covered.iter().flatten().map(|one| Name::from(one.as_str())).collect();
+        self.fold.hear(&fact, &covered, born)
       }
     };
     for act in &acts {
@@ -917,7 +919,7 @@ impl Meaning {
   /// that one holds.
   #[cfg_attr(feature = "typescript", napi)]
   pub fn open(&self, pausing: bool) -> Vec<String> {
-    self.fold.open(pausing)
+    self.fold.open(pausing).iter().map(ToString::to_string).collect()
   }
 
   /// What waits for the operator, with each notice that the window still shows.

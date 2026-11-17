@@ -111,12 +111,12 @@ pub(crate) async fn until(
 
 /// Whether an event is the act of a name, done.
 pub(crate) fn done(id: &str) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)))
+  move |event| matches!(event, Event::Act(act) if *act.id == *id && matches!(act.phase, Phase::Done(_)))
 }
 
 /// Whether an event is the act of a name, in a state.
 fn stands(id: String, state: State) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && act.state == state)
+  move |event| matches!(event, Event::Act(act) if *act.id == *id && act.state == state)
 }
 
 /// The act that a command made.
@@ -161,14 +161,14 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_until_the_end() {
   let phases: Vec<&Phase> = got
     .iter()
     .filter_map(|one| match &*one.1 {
-      Event::Act(act) if act.id == id => Some(&act.phase),
+      Event::Act(act) if *act.id == *id => Some(&act.phase),
       _ => None,
     })
     .collect();
   assert_eq!(phases, [&Phase::Asked, &Phase::Started, &Phase::Done(json!("ok"))]);
   let asked =
     got.iter().position(|one| matches!(&*one.1, Event::Fact(fact) if fact[1] == json!(id)));
-  let act = got.iter().position(|one| matches!(&*one.1, Event::Act(act) if act.id == id));
+  let act = got.iter().position(|one| matches!(&*one.1, Event::Act(act) if *act.id == *id));
   assert!(asked.unwrap() < act.unwrap());
   assert!(got.iter().any(|one| *one.1 == Event::Changed("chain1".to_owned())));
   assert_eq!(life.send(Command::End).await.unwrap(), Reply::Done);
@@ -447,7 +447,7 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   .await;
   let Some(Event::Act(wait)) = held.last().map(|one| &*one.1) else { panic!("an act") };
   assert_eq!(wait.pause.as_ref().map(|one| one.by.as_str()), Some("operator"));
-  let chain = |one: &&Logged| matches!(&*one.1, Event::Act(act) if act.id == "chain1");
+  let chain = |one: &&Logged| matches!(&*one.1, Event::Act(act) if *act.id == *"chain1");
   let Some(Event::Act(root)) = held.iter().rfind(chain).map(|one| &*one.1) else {
     panic!("an act")
   };
@@ -618,7 +618,7 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
     panic!("the acts then")
   };
   assert!(then.iter().all(|act| act.began <= first), "{then:?}");
-  assert!(!then.iter().any(|act| act.id == asked), "{then:?}");
+  assert!(!then.iter().any(|act| *act.id == *asked), "{then:?}");
   life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
   let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
@@ -908,7 +908,7 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   let why = Some("for lunch".to_owned());
   life.send(Command::Pause { id: "chain1".to_owned(), why }).await.unwrap();
   let paused = |event: &Event| {
-    matches!(event, Event::Act(act) if act.id == "chain1"
+    matches!(event, Event::Act(act) if *act.id == *"chain1"
       && act.pause.as_ref().is_some_and(|one| one.why == Some(json!("for lunch"))))
   };
   until(&mut events, paused).await;
@@ -1079,7 +1079,7 @@ async fn a_life_across_a_crossing_tells_the_acts_of_its_history_each_at_the_plac
     .iter()
     .filter(|act| {
       let at = usize::try_from(act.began).ok().and_then(|one| one.checked_sub(1));
-      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_str())
+      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_ref())
     })
     .map(|act| format!("{} at {}", act.id, act.began))
     .collect();
@@ -1117,7 +1117,7 @@ async fn a_reader_that_attaches_late_reads_each_line_that_a_running_command_prin
     "a reader at 0 reads the whole output so far, in the facts of the log"
   );
   let running = got.iter().any(
-    |(_, e)| matches!(&**e, Event::Act(a) if a.id == id && !matches!(a.phase, Phase::Done(_))),
+    |(_, e)| matches!(&**e, Event::Act(a) if *a.id == *id && !matches!(a.phase, Phase::Done(_))),
   );
   assert!(running, "the command still runs while the reader reads");
 }

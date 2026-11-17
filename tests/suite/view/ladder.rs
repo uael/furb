@@ -11,7 +11,7 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut acts: HashMap<String, Act> = HashMap::new();
   for fact in facts {
     for act in fold.hear(&fact, &[], None) {
-      acts.insert(act.id.clone(), act);
+      acts.insert(act.id.to_string(), act);
     }
   }
   let mut all: Vec<Act> = acts.into_values().collect();
@@ -130,9 +130,9 @@ fn an_act_told_before_the_act_that_made_it_stands_under_its_maker() {
   // An ear that a rung starts can make an act before the life tells that rung: the ladder holds
   // the acts in the order they were told, and the act stands under its maker all the same.
   let acts = folded(eight());
-  let mut told: Vec<Act> = acts.iter().filter(|act| act.id != "rung8").cloned().collect();
-  let at = told.iter().position(|act| act.id == "prompt8").unwrap_or_default();
-  let rung = acts.iter().find(|act| act.id == "rung8").cloned();
+  let mut told: Vec<Act> = acts.iter().filter(|act| *act.id != *"rung8").cloned().collect();
+  let at = told.iter().position(|act| *act.id == *"prompt8").unwrap_or_default();
+  let rung = acts.iter().find(|act| *act.id == *"rung8").cloned();
   told.extend(rung);
   let last = told.len() - 1;
   told.swap(at + 1, last);

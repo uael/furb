@@ -13,7 +13,7 @@ use std::{
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, RunState, operator},
+  act::{Act, Kind, Name, RunState, operator},
   ladder::{Rung, Shown},
   state::State,
 };
@@ -25,9 +25,9 @@ use super::fold::followed;
 /// the acts that live, an act that is not done or a rung whose word still runs.
 pub(super) struct Index<'a> {
   pub acts: &'a [Arc<Act>],
-  pub at: &'a HashMap<String, usize>,
-  pub made: &'a HashMap<String, Vec<usize>>,
-  pub on: &'a HashMap<String, Vec<usize>>,
+  pub at: &'a HashMap<Name, usize>,
+  pub made: &'a HashMap<Name, Vec<usize>>,
+  pub on: &'a HashMap<Name, Vec<usize>>,
   pub live: &'a BTreeSet<usize>,
 }
 
@@ -97,7 +97,7 @@ fn listed<'a>(acts: impl IntoIterator<Item = &'a Act>, take: impl Fn(&Act) -> Ta
       continue;
     }
     let place = held.steps.len();
-    held.steps.push((act, (taken == Take::Ear).then(|| vec![act.id.as_str()])));
+    held.steps.push((act, (taken == Take::Ear).then(|| vec![act.id.as_ref()])));
     held.place.insert(&act.id, place);
     match held.kinds.iter_mut().find(|one| one.0 == act.kind.as_str()) {
       Some(kind) => kind.1.push(place),
@@ -130,11 +130,15 @@ impl<'a> Walk<'a, '_> {
   /// The steps under a step: each act that a prompt made, and each prompt that a rung made on the
   /// chain.
   fn under(&self, act: &Act) -> Listed<'a> {
-    let made = self.index.list(self.index.made.get(act.id.as_str()));
+    let made = self.index.list(self.index.made.get(act.id.as_ref()));
     match act.kind {
       Kind::Prompt => listed(made, |_| Take::Step),
       Kind::Rung => listed(made, |child| {
-        if child.kind == Kind::Prompt && child.chain == self.chain { Take::Step } else { Take::No }
+        if child.kind == Kind::Prompt && *child.chain == *self.chain {
+          Take::Step
+        } else {
+          Take::No
+        }
       }),
       _ => Listed::default(),
     }
@@ -172,7 +176,7 @@ impl<'a> Walk<'a, '_> {
           .collect();
         heads.sort_unstable();
         self.out.push(Rung::More {
-          head: head.id.clone(),
+          head: head.id.to_string(),
           depth,
           count: place - from,
           of: (if rungs { "rungs" } else { "prompts" }).to_owned(),
@@ -196,7 +200,7 @@ impl<'a> Walk<'a, '_> {
       self.out.push(Rung::Ear { rungs, depth });
       return;
     }
-    self.out.push(Rung::Step { id: act.id.clone(), depth });
+    self.out.push(Rung::Step { id: act.id.to_string(), depth });
     let under = self.under(act);
     let of = if act.kind == Kind::Prompt { "rungs" } else { "prompts" };
     let key = format!("{of}:{}", act.id);
@@ -214,7 +218,7 @@ fn blank(word: Option<&Value>) -> bool {
 pub(super) fn folded(index: &Index<'_>, chain: &str, asked: Asked<'_>) -> Vec<Rung> {
   let Asked { opened, owed, taken, shown } = asked;
   let local =
-    |id: &str| index.get(id).is_some_and(|act| act.chain == chain && act.kind != Kind::Chain);
+    |id: &str| index.get(id).is_some_and(|act| *act.chain == *chain && act.kind != Kind::Chain);
   // A rung that no act wrote: an ear of the outside wrote it, or the chain wrote it on itself and
   // it retells no word of another rung.
   let ear = |act: &Act| {
@@ -236,7 +240,7 @@ pub(super) fn folded(index: &Index<'_>, chain: &str, asked: Asked<'_>) -> Vec<Ru
     let mut at = Some(act);
     while let Some(now) = at.filter(|_| path.len() <= index.acts.len()) {
       path.push(&now.id);
-      if now.chain == chain && now.kind != Kind::Chain && !local(&now.by) {
+      if *now.chain == *chain && now.kind != Kind::Chain && !local(&now.by) {
         if !ear(now) {
           for (place, id) in path.iter().enumerate() {
             let marked = alive.entry(path.get(place + 1).copied().unwrap_or("")).or_default();
@@ -249,7 +253,7 @@ pub(super) fn folded(index: &Index<'_>, chain: &str, asked: Asked<'_>) -> Vec<Ru
       }
       at = index.get(&now.by).filter(|maker| {
         maker.kind == Kind::Prompt
-          || (maker.kind == Kind::Rung && now.kind == Kind::Prompt && now.chain == chain)
+          || (maker.kind == Kind::Rung && now.kind == Kind::Prompt && *now.chain == *chain)
       });
     }
   }
@@ -257,13 +261,13 @@ pub(super) fn folded(index: &Index<'_>, chain: &str, asked: Asked<'_>) -> Vec<Ru
   let on = index
     .list(index.on.get(chain))
     .filter(|act| act.kind != Kind::Chain)
-    .filter(|act| taken.as_ref().is_none_or(|taken| taken.contains(act.id.as_str())));
+    .filter(|act| taken.as_ref().is_none_or(|taken| taken.contains(act.id.as_ref())));
   let top = listed(on, |act| match (local(&act.by), ear(act)) {
     (true, _) => Take::No,
     (false, true) => Take::Ear,
     (false, false) => Take::Step,
   });
-  let key = format!("prompts:{}", top.steps.first().map_or("", |one| one.0.chain.as_str()));
+  let key = format!("prompts:{}", top.steps.first().map_or("", |one| one.0.chain.as_ref()));
   let opened = opened.iter().map(String::as_str).collect();
   let mut walk = Walk { chain, index, alive, opened, shown, out: Vec::new() };
   walk.level(&Level { list: top, depth: 0, key: &key, above: "" });

@@ -189,7 +189,7 @@ impl Queue {
   /// The act of a chain, which says the state of its work and its pause.
   fn act(&mut self, act: &Act) {
     if act.kind == Kind::Chain {
-      let chain = self.chains.entry(act.id.clone()).or_default();
+      let chain = self.chains.entry(act.id.to_string()).or_default();
       chain.state = Some(act.state);
       chain.paused = act.pause.is_some();
     }

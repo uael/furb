@@ -181,8 +181,11 @@ async fn a_life_by_its_record_across_a_crossing_and_by_its_image_reads_the_same(
   // life that crosses below finds no act in flight.
   let later = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(later.events(0));
-  until(&mut events, |event| matches!(event, Event::Act(act) if act.id == "stand3" && act.done()))
-    .await;
+  until(
+    &mut events,
+    |event| matches!(event, Event::Act(act) if *act.id == *"stand3" && act.done()),
+  )
+  .await;
   ended(later).await;
   // The record crosses, as if another build had made its last segment, and a life of this build
   // moves it there, so a replay of the record boots its last engine on the carry across it.

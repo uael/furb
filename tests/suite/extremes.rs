@@ -95,7 +95,7 @@ fn a_frame_a_fact_and_a_word_read_each_extreme_with_no_panic() {
       let mut fold = view::Fold::default();
       if let Some(value) = &value {
         drop(fold.recorded(value));
-        drop(fold.hear(value, &[String::new()], None));
+        drop(fold.hear(value, &["".into()], None));
       }
     });
     read("a word that a model writes", &line, || drop(view::writing(&text, &text)));

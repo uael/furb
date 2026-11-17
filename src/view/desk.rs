@@ -19,9 +19,9 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
     let word = |at: usize| act.words.get(at).and_then(|one| one.as_str()).unwrap_or_default();
     let shape = if notice { "None" } else { word(0) };
     Ask {
-      id: act.id.clone(),
-      chain: act.chain.clone(),
-      by: act.by.clone(),
+      id: act.id.to_string(),
+      chain: act.chain.to_string(),
+      by: act.by.to_string(),
       shape: shape.to_owned(),
       message: word(1).to_owned(),
       notice,
@@ -33,7 +33,7 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
   };
   let asks = acts.into_iter().flat_map(|act| {
     let question = act.owed().then(|| asked(act, false));
-    question.into_iter().chain(notices.contains(&act.id.as_str()).then(|| asked(act, true)))
+    question.into_iter().chain(notices.contains(&act.id.as_ref()).then(|| asked(act, true)))
   });
   let mut asks: Vec<Ask> = asks.collect();
   // A question stands before a notice of the same moment.

@@ -22,11 +22,11 @@ use serde_json::{Value, json};
 fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>) -> Act {
   let mut made = Act {
     kind: Kind::from(kind),
-    id: id.to_owned(),
-    by: by.to_owned(),
+    id: id.into(),
+    by: by.into(),
     maker: Maker::Engine,
-    on: if kind == "chain" { id } else { on }.to_owned(),
-    chain: if kind == "chain" { id } else { on }.to_owned(),
+    on: if kind == "chain" { id } else { on }.into(),
+    chain: if kind == "chain" { id } else { on }.into(),
     words: Vec::new(),
     phase: if ended.is_some() { Phase::Done(Value::Null) } else { Phase::Asked },
     operator: false,
@@ -68,19 +68,19 @@ fn asked(act: Act) -> Act {
 
 /// The acts by their names.
 fn rows(acts: &[Act]) -> Rows<'_> {
-  acts.iter().map(|one| (one.id.as_str(), one)).collect()
+  acts.iter().map(|one| (one.id.as_ref(), one)).collect()
 }
 
 /// The ids of acts.
 fn ids(acts: &[Act]) -> Vec<&str> {
-  acts.iter().map(|one| one.id.as_str()).collect()
+  acts.iter().map(|one| one.id.as_ref()).collect()
 }
 
 /// The state of a chain, from each act of a life.
 fn state_of(acts: &[Act], chain: &str) -> State {
   let mut all = acts.to_vec();
   restate(&mut all);
-  match all.into_iter().find(|one| one.id == chain) {
+  match all.into_iter().find(|one| *one.id == *chain) {
     Some(one) => one.state,
     None => panic!("{chain} is no act"),
   }
@@ -136,7 +136,7 @@ fn each_act_takes_one_state_of_the_one_set() {
     (act("read1", "read", "chain1", "rung1", 1, Some(2)), State::Done),
   ];
   for (one, state) in table {
-    assert_eq!((one.id.as_str(), one.state), (one.id.as_str(), state));
+    assert_eq!((one.id.as_ref(), one.state), (one.id.as_ref(), state));
   }
 }
 
@@ -367,7 +367,7 @@ fn prompt(id: &str, began: u64) -> Act {
 
 /// A prompt on a thread.
 fn on_thread(act: Act, thread: &str) -> Act {
-  Act { on: thread.to_owned(), ..act }
+  Act { on: thread.into(), ..act }
 }
 
 /// The threads of a chain, each with the ids of its messages.
@@ -390,10 +390,7 @@ fn a_prompt_on_a_thread_and_the_acknowledgment_of_an_act_of_a_thread_join_that_t
     on_thread(prompt("prompt3", 3), "prompt2"),
     act("rung1", "rung", "chain1", "prompt1", 4, None),
     act("bash5", "bash", "chain1", "rung1", 5, None),
-    Act {
-      by: "chain1".to_owned(),
-      ..worded(prompt("prompt9", 6), json!(["None", "bash5 done", ""]))
-    },
+    Act { by: "chain1".into(), ..worded(prompt("prompt9", 6), json!(["None", "bash5 done", ""])) },
   ];
   let messages = ["prompt2", "prompt3", "prompt9"].map(str::to_owned).to_vec();
   assert_eq!(listed(&all), [("prompt1".to_owned(), messages)]);
@@ -427,8 +424,8 @@ fn a_question_and_a_notice_that_a_thread_made_stand_in_that_thread_and_one_of_no
 /// A thread of a list, which asks while a question waits in it, and else runs.
 fn thread(act: &Act, asks: &[&str]) -> ChainThread {
   ChainThread {
-    prompt: act.id.clone(),
-    title: act.id.clone(),
+    prompt: act.id.to_string(),
+    title: act.id.to_string(),
     messages: Vec::new(),
     asked: Vec::new(),
     asks: asks.iter().map(|one| (*one).to_owned()).collect(),
@@ -617,11 +614,11 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
   ];
   assert_eq!(moments_of(&acts), [1, 2, 3, 4, 5, 7, 8, 9]);
   let then = as_of(&acts, 5);
-  let done: Vec<(&str, bool)> = then.iter().map(|one| (one.id.as_str(), one.done())).collect();
+  let done: Vec<(&str, bool)> = then.iter().map(|one| (one.id.as_ref(), one.done())).collect();
   assert_eq!(done, [("chain1", false), ("prompt1", false), ("rung2", true), ("bash1", false)]);
   assert_eq!([then[1].value(), then[3].value()], [None, None]);
   let owed = |acts: &[Act]| {
-    acts.iter().filter(|one| one.owed()).map(|one| one.id.clone()).collect::<Vec<_>>()
+    acts.iter().filter(|one| one.owed()).map(|one| one.id.to_string()).collect::<Vec<_>>()
   };
   assert_eq!(owed(&then), ["prompt1"]);
   assert_eq!(then[0].state, State::Asks);

@@ -12,11 +12,11 @@ use crate::event::Event;
 fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
   Act {
     kind: Kind::from(kind),
-    id: id.to_owned(),
-    by: String::new(),
+    id: id.into(),
+    by: "".into(),
     maker: Maker::Engine,
-    on: chain.to_owned(),
-    chain: chain.to_owned(),
+    on: chain.into(),
+    chain: chain.into(),
     words: words.to_vec(),
     phase: Phase::Started,
     operator: false,

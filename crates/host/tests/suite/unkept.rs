@@ -129,7 +129,7 @@ mod unix {
     let made = life.send(Command::Rung { word: word.to_owned(), on: None }).await;
     let Ok(Reply::Act(rung)) = made else { panic!("{word} did not run: {made:?}") };
     until(events, |event| {
-      matches!(event, Event::Act(act) if act.id == rung && matches!(act.phase, Phase::Done(_)))
+      matches!(event, Event::Act(act) if *act.id == *rung && matches!(act.phase, Phase::Done(_)))
     })
     .await
   }
@@ -277,7 +277,7 @@ mod unix {
 
   /// Whether an event is the end of one of some rungs.
   fn done(rungs: &[String]) -> impl Fn(&Event) -> bool + '_ {
-    move |event| matches!(event, Event::Act(act) if rungs.contains(&act.id) && matches!(act.phase, Phase::Done(_)))
+    move |event| matches!(event, Event::Act(act) if rungs.iter().any(|one| **one == *act.id) && matches!(act.phase, Phase::Done(_)))
   }
 
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]

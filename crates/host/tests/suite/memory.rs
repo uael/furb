@@ -157,7 +157,7 @@ async fn until(
 
 /// Whether an event is the act of a name, done.
 fn done(id: String) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)))
+  move |event| matches!(event, Event::Act(act) if *act.id == *id && matches!(act.phase, Phase::Done(_)))
 }
 
 /// The act that a command made.
@@ -177,7 +177,7 @@ async fn attached(life: &LifeHandle, last: Seq) -> (usize, usize, usize, usize, 
   let mut acts = HashSet::new();
   while let Some((seq, event)) = events.next().await {
     if let Event::Act(act) = &*event {
-      acts.insert(act.id.clone());
+      acts.insert(Arc::clone(&act.id));
     }
     count += 1;
     let json = serde_json::to_vec(&*event).expect("an event is JSON");
@@ -412,7 +412,7 @@ impl Peer {
       let Frame::Event { event, .. } = self.read().await else { continue };
       match &*event {
         Event::Fact(_) => facts += 1,
-        Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)) => {
+        Event::Act(act) if *act.id == *id && matches!(act.phase, Phase::Done(_)) => {
           return (facts, frames);
         }
         _ => {}
