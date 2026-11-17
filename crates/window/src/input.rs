@@ -16,7 +16,7 @@ use furb_client::{Aim, Anchor, Asked, Chosen, FOLDED, Outgoing, Pending, RENAME,
 
 use crate::{
   keys::Does,
-  line::{BARRED, Line, barred, clipped, cut, run, spread, wrapped},
+  line::{BARRED, Line, barred, blank, clipped, cut, rows_of, run, spread},
   link::Heard,
   list::{NO_PROJECT, project},
   model::{Key, Model},
@@ -529,7 +529,7 @@ impl Model {
     let prompt = if self.client.draft.python { PROMPT_WIDTH } else { 0 };
     let room = self.wide().saturating_sub(BARRED + 4 + prompt).max(1);
     // The editor wraps at a word boundary, as the box of a message does.
-    self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum()
+    self.client.draft.text.split('\n').map(|line| rows_of(line, room).max(1)).sum()
   }
 
   /// How many rows the input, the launcher, the hints and the bar of the time take at the bottom of
@@ -724,7 +724,7 @@ impl Model {
     let (message, python) =
       if self.client.draft.python { (muted, on.fg(t.accent)) } else { (on, muted) };
     let switch = [run(" Message ", message), run(" Python ", python)];
-    let gap = || run(" ".repeat(APART), raised);
+    let gap = || run(blank(APART), raised);
     let (mark, target, color) = match self.client.target() {
       Aim::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(key)),
       Aim::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
@@ -740,10 +740,8 @@ impl Model {
     // The target leaves room for the mark before it and the arrow of its picker after it.
     let head = width(left.get(..3).unwrap_or(&left));
     let fits = |right: &(Line, _)| room.saturating_sub(width(&right.0) + 2 + head + 2 + 2);
-    let (right, clicks) = [right(0), right(1), right(2)]
-      .into_iter()
-      .find(|one| fits(one) >= wanted.min(SESSION))
-      .unwrap_or_else(|| right(2));
+    let (right, clicks) =
+      (0..3).map(right).find(|one| fits(one) >= wanted.min(SESSION)).unwrap_or_else(|| right(2));
     let fits = room.saturating_sub(width(&right) + 2 + head + 2 + 2);
     // The mark and the accent of a new thread say what the words say, so a target too long for
     // its room drops its words before the name of its session.
@@ -792,7 +790,7 @@ impl Model {
     // A session with no project has no badge to give way to, so its name stays, cut if it must.
     let alone = project == NO_PROJECT;
     let badge = if alone { run("", raised) } else { self.badge(&project) };
-    let gap = || run(" ".repeat(APART), raised);
+    let gap = || run(blank(APART), raised);
     let mut left: Line = switch.into();
     let fixed = width(&left) + APART + 2 + APART + badge.content.width() + 2;
     // The names give way before the effort, the one control whose label is its value, which a
@@ -852,7 +850,7 @@ impl Model {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
-    let gap = || (run(" ".repeat(APART), raised), None);
+    let gap = || (run(blank(APART), raised), None);
     let key = |does| Some(Click::Key(does));
     let mut right = Vec::new();
     if let Some((model, effort)) = self.maker() {
@@ -1099,15 +1097,17 @@ impl Model {
     let kept = if place { 2 } else { width(&left) };
     let room = wide.saturating_sub(kept + width(&key) + 2);
     let others = self.others_ask(room);
-    let right: Line = others.iter().chain(&key).cloned().collect();
-    let left = if place { self.place(wide.saturating_sub(2 + width(&right))) } else { left };
-    let line = spread(left, right.clone(), wide, Style::new());
+    let (asks, key_width) = ((!others.is_empty()).then(|| width(&others)), width(&key));
+    let right: Line = others.into_iter().chain(key).collect();
+    let right_width = width(&right);
+    let left = if place { self.place(wide.saturating_sub(2 + right_width)) } else { left };
+    let line = spread(left, right, wide, Style::new());
     hot.extend(branched(&line).filter(|_| place));
-    let (end, start) = (width(&line), width(&line) - width(&right));
-    if !others.is_empty() {
-      hot.push((start..start + width(&others) - 3, Some(Click::Key(Does::Needed))));
+    let (end, start) = (width(&line), width(&line) - right_width);
+    if let Some(asks) = asks {
+      hot.push((start..start + asks - 3, Some(Click::Key(Does::Needed))));
     }
-    hot.push((end - width(&key)..end, Some(Click::Key(does))));
+    hot.push((end - key_width..end, Some(Click::Key(does))));
     Row { hot, loaders, ..Row::of(line) }
   }
 

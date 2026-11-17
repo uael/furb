@@ -854,7 +854,8 @@ impl Model {
         let room = self.feed_room(dock.len());
         let items = feed.items();
         let shown = items.shown(feed.opened.top, room, |item| feed.part_rows(item));
-        let mut rows = vec![Rc::new(feed.head())];
+        let mut rows = Vec::with_capacity(usize::from(self.size.1));
+        rows.push(Rc::new(feed.head()));
         rows.extend(self.open_rows().into_iter().map(Rc::new));
         let above = rows.len();
         rows.extend(shown.rows);

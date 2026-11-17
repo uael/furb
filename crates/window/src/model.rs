@@ -48,8 +48,8 @@ const PINNED: usize = 2;
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<Rc<thread::Row>>);
 
 /// What the rows of the list show: the count of changes that it can show, the moment or the second,
-/// the scroll, the size of the window and the row under the pointer.
-pub(crate) type Listed = (u64, Duration, usize, (u16, u16), Option<Row>);
+/// the scroll and the size of the window; the line of the list under the pointer, and its row.
+pub(crate) type Listed = ((u64, Duration, usize, (u16, u16)), Option<u16>, Option<Row>);
 
 /// The layout of a left side and what the pointer touches of it, as `thread::touched` says.
 pub(crate) type Touched = ((u64, Duration, Option<(u16, u16)>), Option<thread::Touch>);

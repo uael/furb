@@ -85,20 +85,27 @@ impl Model {
   /// The runs of each row of the list that shows, which the parts that show them share. The list
   /// is laid out again only when a change that it can show, the moment while a mark of it moves or
   /// else the second, its scroll, the size of the window or the row under the pointer changed, so a
-  /// move of the pointer that stays on one row, or a key typed in the input, lays out nothing.
+  /// move of the pointer that stays on one row, or a key typed in the input, lays out nothing. The
+  /// pointer on the line of the list where it stood asks no row again, since the row of a line lays
+  /// out the box of the context to find where the box starts.
   pub(crate) fn list(&mut self) -> Rc<[Line]> {
-    let on = self.pointer.filter(|(x, _)| self.on_list(*x));
-    let pointed = on.and_then(|(_, y)| self.row(usize::from(y)));
+    let on = self.pointer.filter(|(x, _)| self.on_list(*x)).map(|(_, y)| y);
     // A loader, an open or a pulse of a card moves with each moment, and an age with each second.
     let clock = if self.moves() { self.client.moved } else { Duration::from_secs(self.second()) };
-    let key = (self.shows, clock, self.scroll, self.size, pointed);
-    if let Some((was, lines)) = &self.kept_list
-      && *was == key
+    let shows = (self.shows, clock, self.scroll, self.size);
+    let kept = self.kept_list.as_ref().filter(|(was, _)| was.0 == shows);
+    if let Some((_, lines)) = kept.filter(|(was, _)| was.1 == on) {
+      return Rc::clone(lines);
+    }
+    let pointed = on.and_then(|y| self.row(usize::from(y)));
+    if let Some((was, lines)) = &mut self.kept_list
+      && (was.0, was.2) == (shows, pointed)
     {
+      was.1 = on;
       return Rc::clone(lines);
     }
     let lines: Rc<[Line]> = self.shown().map(|row| self.line(row, pointed)).collect();
-    self.kept_list = Some((key, Rc::clone(&lines)));
+    self.kept_list = Some(((shows, on, pointed), Rc::clone(&lines)));
     lines
   }
 

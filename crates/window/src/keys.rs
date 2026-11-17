@@ -2,6 +2,8 @@
 //! each key that the operator presses in it, and each text that names a key draws it from it, as
 //! the system of the client writes a key.
 
+use std::fmt::Write as _;
+
 use opentui::prelude::{KeyCode, KeyEvent, Modifiers};
 
 /// The system of the client, which says how a text writes a key: with the signs of the keys on
@@ -342,37 +344,46 @@ impl Stroke {
       && held(Modifiers::SUPER) == self.cmd
   }
 
-  /// The stroke as a system writes it: on macOS the signs in the order of Apple, then the key in
-  /// upper case, with no `+`; elsewhere each held key as a word with a `+`.
-  fn drawn(self, system: System) -> String {
+  /// The stroke as a system writes it, at the end of a text: on macOS the signs in the order of
+  /// Apple, then the key in upper case, with no `+`; elsewhere each held key as a word with a `+`.
+  fn write(self, system: System, text: &mut String) {
     let mac = system == System::MacOs;
-    let name = match (self.code, mac) {
-      (KeyCode::Char(' '), _) => "Space".to_owned(),
-      (KeyCode::Char(letter), _) => letter.to_uppercase().to_string(),
-      (KeyCode::Up, _) => "↑".to_owned(),
-      (KeyCode::Down, _) => "↓".to_owned(),
-      (KeyCode::Left, _) => "←".to_owned(),
-      (KeyCode::Right, _) => "→".to_owned(),
-      (KeyCode::Escape, true) => "⎋".to_owned(),
-      (KeyCode::BackTab, true) => "⇧⇥".to_owned(),
-      (KeyCode::BackTab, false) => "Shift+Tab".to_owned(),
-      (KeyCode::Enter, true) => "⏎".to_owned(),
-      (KeyCode::PageUp, true) => "⇞".to_owned(),
-      (KeyCode::PageDown, true) => "⇟".to_owned(),
-      (KeyCode::End, true) => "↘".to_owned(),
-      (KeyCode::Tab, true) => "⇥".to_owned(),
-      (KeyCode::Escape, false) => "Esc".to_owned(),
-      (KeyCode::Enter, false) => "Enter".to_owned(),
-      (KeyCode::PageUp, false) => "PgUp".to_owned(),
-      (KeyCode::PageDown, false) => "PgDn".to_owned(),
-      (KeyCode::End, false) => "End".to_owned(),
-      (KeyCode::Tab, false) => "Tab".to_owned(),
-      (KeyCode::F(number), _) => format!("F{number}"),
-      (code, _) => format!("{code:?}"),
-    };
     let held = [(self.ctrl, "⌃", "Ctrl+"), (self.alt, "⌥", "Alt+"), (self.cmd, "⌘", "Super+")];
-    let signs = held.iter().filter(|one| one.0).map(|one| if mac { one.1 } else { one.2 });
-    signs.chain([name.as_str()]).collect()
+    for (_, sign, word) in held.iter().filter(|one| one.0) {
+      text.push_str(if mac { sign } else { word });
+    }
+    let name = match (self.code, mac) {
+      (KeyCode::Char(' '), _) => "Space",
+      (KeyCode::Char(letter), _) => return text.extend(letter.to_uppercase()),
+      (KeyCode::Up, _) => "↑",
+      (KeyCode::Down, _) => "↓",
+      (KeyCode::Left, _) => "←",
+      (KeyCode::Right, _) => "→",
+      (KeyCode::Escape, true) => "⎋",
+      (KeyCode::BackTab, true) => "⇧⇥",
+      (KeyCode::BackTab, false) => "Shift+Tab",
+      (KeyCode::Enter, true) => "⏎",
+      (KeyCode::PageUp, true) => "⇞",
+      (KeyCode::PageDown, true) => "⇟",
+      (KeyCode::End, true) => "↘",
+      (KeyCode::Tab, true) => "⇥",
+      (KeyCode::Escape, false) => "Esc",
+      (KeyCode::Enter, false) => "Enter",
+      (KeyCode::PageUp, false) => "PgUp",
+      (KeyCode::PageDown, false) => "PgDn",
+      (KeyCode::End, false) => "End",
+      (KeyCode::Tab, false) => "Tab",
+      // A text takes each write, so neither fails.
+      (KeyCode::F(number), _) => {
+        write!(text, "F{number}").ok();
+        return;
+      }
+      (code, _) => {
+        write!(text, "{code:?}").ok();
+        return;
+      }
+    };
+    text.push_str(name);
   }
 }
 
@@ -382,7 +393,15 @@ fn forms(does: Does) -> &'static [&'static [Stroke]] {
 
 /// A form of a key, as a system writes it.
 fn form(strokes: &[Stroke], system: System) -> String {
-  strokes.iter().map(|one| one.drawn(system)).collect::<Vec<_>>().join(" ")
+  // The longest form, as `Ctrl+Shift+Tab`, fits, so the text takes one allocation.
+  let mut text = String::with_capacity(16);
+  for (at, one) in strokes.iter().enumerate() {
+    if at > 0 {
+      text.push(' ');
+    }
+    one.write(system, &mut text);
+  }
+  text
 }
 
 /// The key that does a thing, as a system writes it.

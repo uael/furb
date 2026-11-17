@@ -45,28 +45,43 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
 /// A row of a count of columns: the runs of its left, of which the one that crosses its room gives
 /// way and those after it go, then the runs of its right at its end, two columns after the left at
 /// least.
-pub(crate) fn spread(left: Line, right: Line, room: usize, fill: Style) -> Line {
+pub(crate) fn spread(mut left: Line, right: Line, room: usize, fill: Style) -> Line {
   let wide = |line: &Line| line.iter().map(|span| span.content.width()).sum::<usize>();
   let taken = match wide(&right) {
     0 => 0,
     wide => wide + 2,
   };
   let free = room.saturating_sub(taken);
-  let mut left: Line = left
-    .into_iter()
-    .scan(0, |used, one| {
-      let content =
-        (*used < free || one.content.is_empty()).then(|| cut(&one.content, free - *used))?;
-      let whole = content == one.content;
+  let (mut used, mut kept) = (0, 0);
+  for one in &mut left {
+    if used >= free && !one.content.is_empty() {
+      break;
+    }
+    kept += 1;
+    let width = one.content.width();
+    if used + width <= free {
+      used += width;
+    } else {
       // The run that gave way ends the left.
-      *used = if whole { *used + content.width() } else { free };
-      Some(run(content, one.style))
-    })
-    .collect();
+      one.content = Cow::Owned(cut(&one.content, free - used));
+      used = free;
+    }
+  }
+  left.truncate(kept);
   let used = wide(&left) + wide(&right);
-  left.push(run(" ".repeat(room.saturating_sub(used)), fill));
+  left.push(run(blank(room.saturating_sub(used)), fill));
   left.extend(right);
   left
+}
+
+/// A text of blanks as wide as a count of columns: a part of one text that the program holds, as
+/// wide as a row of the widest terminal, else a copy.
+pub(crate) fn blank(columns: usize) -> Cow<'static, str> {
+  const BLANKS: &str = match str::from_utf8(&[b' '; 512]) {
+    Ok(blanks) => blanks,
+    Err(_) => "",
+  };
+  BLANKS.get(..columns).map_or_else(|| Cow::Owned(" ".repeat(columns)), Cow::Borrowed)
 }
 
 /// A line in a box of a count of columns on a ground: one column of the ground on each side, and
@@ -94,39 +109,59 @@ pub(crate) fn boxed(line: Line, room: usize, ground: Color) -> Line {
 /// A text as lines of a count of columns at most, broken between words. A word wider than a line,
 /// as a path, breaks where the line ends.
 pub(crate) fn wrapped(text: &str, room: usize) -> Vec<String> {
-  let mut lines: Vec<String> = Vec::new();
-  for word in text.split(' ') {
-    match lines.last_mut() {
-      Some(last) if last.width() + 1 + word.width() <= room => *last = format!("{last} {word}"),
-      _ => lines.push(word.to_owned()),
-    }
-    if let Some(last) = lines.pop_if(|last| last.width() > room) {
-      lines.extend(broken(&last, room));
-    }
-  }
+  let mut lines = Vec::new();
+  wrap(text, room, |line| lines.push(line.to_owned()));
   lines
+}
+
+/// How many lines [`wrapped`] gives, with no line made.
+pub(crate) fn rows_of(text: &str, room: usize) -> usize {
+  let mut rows = 0;
+  wrap(text, room, |_| rows += 1);
+  rows
 }
 
 /// A text wrapped to a count of columns at most, on as few rows as [`wrapped`] gives and each as
 /// near the others as it can, so no word stands alone on its last row.
 pub(crate) fn balanced(text: &str, room: usize) -> Vec<String> {
-  let rows = wrapped(text, room).len();
-  let least = (1..=room).rev().take_while(|one| wrapped(text, *one).len() == rows).last();
+  let rows = rows_of(text, room);
+  let least = (1..=room).rev().take_while(|one| rows_of(text, *one) == rows).last();
   wrapped(text, least.unwrap_or(room))
 }
 
-/// A word as parts of a count of columns at most, each of one character at least.
-fn broken(word: &str, room: usize) -> Vec<String> {
-  let mut parts = vec![String::new()];
-  for (one, wide) in characters(word) {
-    if parts.last().is_some_and(|last| !last.is_empty() && last.width() + wide > room) {
-      parts.push(String::new());
+/// Each line of a text wrapped as [`wrapped`] says, in order, as the part of the text that it
+/// holds: the words of a line and the one blank between each two stand in the text as they do in
+/// the line. A word wider than a line breaks into parts of the room, each of one character at
+/// least, and its last part goes on as the line that the next word may join.
+fn wrap<'a>(text: &'a str, room: usize, mut line: impl FnMut(&'a str)) {
+  let part = |range: Range<usize>| text.get(range).unwrap_or_default();
+  let (mut last, mut start): (Option<Range<usize>>, usize) = (None, 0);
+  for word in text.split(' ') {
+    let end = start + word.len();
+    last = match last {
+      Some(was) if part(was.clone()).width() + 1 + word.width() <= room => Some(was.start..end),
+      Some(was) => {
+        line(part(was));
+        Some(start..end)
+      }
+      None => Some(start..end),
+    };
+    if let Some(wide) = last.clone().filter(|one| part(one.clone()).width() > room) {
+      let (mut from, mut at, mut used) = (wide.start, wide.start, 0);
+      for (one, cells) in characters(part(wide.clone())) {
+        if at > from && used + cells > room {
+          line(part(from..at));
+          (from, used) = (at, 0);
+        }
+        (at, used) = (at + one.len(), used + cells);
+      }
+      last = Some(from..wide.end);
     }
-    if let Some(last) = parts.last_mut() {
-      last.push_str(one);
-    }
+    start = end + 1;
   }
-  parts
+  if let Some(was) = last {
+    line(part(was));
+  }
 }
 
 /// The runs of a line of code cut to a count of columns: a cut line ends with `…+` and the count of
