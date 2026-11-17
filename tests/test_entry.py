@@ -83,11 +83,11 @@ async def test_an_entry_that_an_ear_of_the_outside_said_as_it_heard_a_fact_the_j
   await engine.rung(word, on=root)
   await engine.rung("act('pong', '', None)", on=root)
   await settle()
-  assert engine.peek("pong1") == 7 and engine.get("pong2") and engine.get("note1") is None
+  assert engine.peek("pong1") == 7 and engine.get("pong2")[:2] == ("pong", "pong2") and engine.get("note1") is None
   assert [e[3] for e in sand.record if e[0][:2] == ("done", "pong1")] == [2]
   life(Sand(), plain(sand.record), echo=echoing())
   await settle(300)
-  assert engine.peek("pong1") == 7 and engine.get("pong2") and engine.get("note1") is None
+  assert engine.peek("pong1") == 7 and engine.get("pong2")[:2] == ("pong", "pong2") and engine.get("note1") is None
 
 
 def echoing() -> Generator[tuple | None, tuple]:

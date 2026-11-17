@@ -247,7 +247,10 @@ async def test_a_literal_that_the_operator_answers_is_named_with_str_as_well() -
   engine.prompt(Literal["a", "b"], "which?", to="m/low", on=root)
   await settle()
   bindings = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if ": Act[" in line]
-  assert bindings[1:] == ["prompt1: Act[Literal['a', 'b'] | str] = Act('prompt1')", "prompt2: Act[Literal['a', 'b']] = Act('prompt2')"]
+  assert bindings[1:] == [
+    "prompt1: Act[Literal['a', 'b'] | str] = Act('prompt1')",
+    "prompt2: Act[Literal['a', 'b']] = Act('prompt2')",
+  ]
 
 
 async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:

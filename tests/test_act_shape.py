@@ -85,7 +85,7 @@ async def test_an_act_is_dropped_at_its_done_and_only_the_ear_of_a_command_lives
   # An ear that no controlled wraps is dropped at the done of its act too, so it hears nothing after it.
   heard = []
 
-  def plain(id: str) -> Generator[object, object]:
+  def plain(id: str) -> Generator[tuple | set[str], object]:
     yield "started", id
     yield "done", id, 1
     while True:
