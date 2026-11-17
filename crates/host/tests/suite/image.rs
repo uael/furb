@@ -1,6 +1,7 @@
 //! A life that opens from the image beside its record: it stands where the life before it stood,
 //! reads no fact of its record, and takes again each act that the life before it held in flight.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "a test blocks on the runtime that tokio starts for it"
@@ -150,12 +151,13 @@ async fn a_life_opens_from_its_image_where_the_life_before_it_stood() {
   // that a later event of that act replaced, so a reader from the first place reads that later
   // event alone, as `Spent` says.
   let act = |event: &Event| match event {
-    Event::Act(act) => Some(act.id.clone()),
+    Event::Act(act) => Some(Arc::clone(&act.id)),
     _ => None,
   };
   let replaced = |(at, event): &Logged| {
-    act(event)
-      .is_some_and(|id| told.iter().any(|(later, one)| later > at && act(one) == Some(id.clone())))
+    act(event).is_some_and(|id| {
+      told.iter().any(|(later, one)| later > at && act(one) == Some(Arc::clone(&id)))
+    })
   };
   let kept: Vec<Logged> =
     told.iter().filter(|one| tip.contains(one) || !replaced(one)).cloned().collect();

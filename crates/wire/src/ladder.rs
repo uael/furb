@@ -4,6 +4,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::act::{Name, read_name};
+
 /// How many of the last prompts of a thread, and of the last rungs of each ladder, show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Shown {
@@ -19,7 +21,11 @@ pub const SHOWN: Shown = Shown { prompts: 6, rungs: 4 };
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Rung {
   /// A step, with the steps under it after it, each one level deeper.
-  Step { id: String, depth: usize },
+  Step {
+    #[serde(deserialize_with = "read_name")]
+    id: Name,
+    depth: usize,
+  },
   /// The rungs in a row that one maker wrote on the chain with no word of its own, as the words of
   /// the skills and the setup of a chain.
   Ear { rungs: Vec<String>, depth: usize },

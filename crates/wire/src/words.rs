@@ -44,10 +44,11 @@ pub fn elapsed(took: Duration) -> String {
 /// A count of bytes, rounded, in the first unit by steps of a thousand where it stays under a
 /// thousand.
 pub fn size(bytes: u64) -> String {
-  let units = ["B", "KB", "MB", "GB", "TB"];
-  let rounded = |unit: u32| (bytes + 1000_u64.pow(unit) / 2) / 1000_u64.pow(unit);
-  let unit = (0..4).find(|unit| rounded(*unit) < 1000).unwrap_or(4);
-  format!("{} {}", rounded(unit), units[unit as usize])
+  let rounded = |unit: u32| bytes.saturating_add(1000_u64.pow(unit) / 2) / 1000_u64.pow(unit);
+  let units = [(0, "B"), (1, "KB"), (2, "MB"), (3, "GB"), (4, "TB")];
+  let (unit, name) =
+    units.into_iter().find(|(unit, _)| *unit == 4 || rounded(*unit) < 1000).unwrap_or((4, "TB"));
+  format!("{} {name}", rounded(unit))
 }
 
 /// A count with a space between each group of three digits, so the counts of a column align.

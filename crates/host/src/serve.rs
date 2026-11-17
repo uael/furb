@@ -1,10 +1,5 @@
 //! The door of the daemon to one peer: its hello, the role of each verb, and the frames of its
 //! answers and of what the daemon pushes to it.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   env, fs,
   future::Future,
@@ -169,9 +164,9 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
     tokio::select! {
       heard = heard(&mut lines) => match heard? {
         None => return Ok(()),
-        Some(Ok(Request { id, verb })) => match allowed(&peer, &verb) {
-          Ok(()) => answers.push(answered(host, peer.clone(), &outbox, id, verb)),
-          Err(error) => send(&mut out, &Frame::refused(Some(id), error)).await?,
+        Some(Ok(request)) => match allowed(&peer, &request.verb) {
+          Ok(()) => answers.push(answered(host, peer.clone(), &outbox, request)),
+          Err(error) => send(&mut out, &Frame::refused(Some(request.id), error)).await?,
         },
         Some(Err((_, error @ ProtocolError::Large { .. }))) => {
           return closed(&mut out, None, error).await;
@@ -268,7 +263,7 @@ async fn heard<R: AsyncRead + Unpin>(
       None => Ok(None),
       Some(Ok(line)) if line.trim().is_empty() => continue,
       Some(Ok(line)) => Ok(Some(serde_json::from_str(&line).map_err(|no| {
-        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one["id"].as_u64());
+        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one.get("id")?.as_u64());
         (id, ProtocolError::Unread { why: no.to_string() })
       }))),
       Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {
@@ -289,8 +284,9 @@ fn allowed(peer: &Peer, verb: &Verb) -> Result<(), ProtocolError> {
   }
 }
 
-/// The frame of what the host answered to a verb.
-async fn answered<H: Host>(host: &H, peer: Peer, outbox: &Outbox, id: u64, verb: Verb) -> Frame {
+/// The frame of what the host answered to the verb of a request.
+async fn answered<H: Host>(host: &H, peer: Peer, outbox: &Outbox, request: Request) -> Frame {
+  let Request { id, verb } = request;
   match host.answer(&peer, verb, outbox).await {
     Ok(answer) => Frame::Reply { id, answer },
     Err(error) => Frame::refused(Some(id), error),

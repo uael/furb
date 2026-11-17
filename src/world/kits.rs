@@ -27,11 +27,13 @@ use std::{
   fs, io,
   path::{Path, PathBuf},
   process::{ExitStatus, Stdio},
+  sync::Arc,
 };
 
 mod uv;
 
 use furb_wire::{
+  Name,
   error::ProtocolError,
   event::Event as Told,
   protocol::{Answer, Config, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
@@ -41,6 +43,7 @@ use serde_json::{Value, json};
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
   process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
+  runtime::Handle,
   sync::{mpsc, oneshot},
   time::{Duration, timeout},
 };
@@ -143,10 +146,17 @@ pub(crate) fn kits(
   places: Places,
 ) -> Box<dyn Ear> {
   ear(move |mut co: Co<Worked>| async move {
-    let mut kits =
-      Kits { life, here, images, places, played: Vec::new(), held: HashMap::new(), seq: 0 };
-    let kept = co.keeps(Vec::<(String, Option<String>)>::new())?;
-    for (name, program) in kept.borrow().iter() {
+    let mut kits = Kits {
+      life: Name::from(life),
+      here,
+      images,
+      places,
+      played: Vec::new(),
+      held: HashMap::new(),
+      seq: 0,
+    };
+    co.keeps(Programs::new())?;
+    for (name, program) in co.kept::<Programs>()?.iter() {
       kits.learn(name, program.as_deref());
     }
     loop {
@@ -155,7 +165,7 @@ pub(crate) fn kits(
         Next::Resumed(a) if kits.answering(a.kind()).is_some() => interrupted(&mut co, &a).await?,
         Next::Heard(a) | Next::Resumed(a) => {
           if let Some(one) = enabled_by(&a) {
-            let mut known = kept.borrow_mut();
+            let known = co.kept::<Programs>()?;
             known.retain(|(name, _)| *name != one.name);
             known.push((one.name.clone(), one.program.clone()));
             kits.learn(&one.name, one.program.as_deref());
@@ -169,11 +179,14 @@ pub(crate) fn kits(
   })
 }
 
+/// The program of each kit that the life enabled, by its name, in order.
+type Programs = Vec<(String, Option<String>)>;
+
 /// What the ear holds: the life, its folder, the places of the skills, each kit that the life
 /// plays in the order of its enables, the kit of each act that a process holds, and how many facts
 /// the ear told.
 struct Kits {
-  life: String,
+  life: Name,
   here: PathBuf,
   images: Option<PathBuf>,
   places: Places,
@@ -205,42 +218,51 @@ impl Kits {
   fn heard(&mut self, co: &mut Co<Worked>, a: &Fact) {
     if a.question()
       && a.by() != JOURNAL
-      && let Some(at) = self.answering(a.kind())
+      && let Some(one) = self.answering(a.kind()).and_then(|at| self.played.get_mut(at))
     {
       say(co, Fact::says("started", a.about(), []));
-      self.held.insert(a.about().to_owned(), self.played[at].name.clone());
-      if self.played[at].running.is_none() {
-        self.played[at].running = Some(self.started(co, at));
+      self.held.insert(a.about().to_owned(), one.name.clone());
+      if one.running.is_none() {
+        let running = Self::started(&self.life, co, one);
+        one.running = Some(running);
       }
     }
     if a.kind() == "done" {
       self.held.remove(a.about());
     }
     self.seq += 1;
+    let mut running = self.played.iter_mut().filter_map(|one| one.running.as_mut()).peekable();
+    // A life with no process of a kit makes no frame of the fact.
+    if running.peek().is_none() {
+      return;
+    }
     let frame = Frame::Event {
-      life: self.life.clone(),
+      life: Arc::clone(&self.life),
       seq: self.seq,
-      event: Told::Fact(outward(a.0.as_ref())),
+      event: Arc::new(Told::Fact(outward(a.object().as_ref()))),
     };
-    for running in self.played.iter_mut().filter_map(|one| one.running.as_mut()) {
-      running.tell(&frame);
+    for one in running {
+      one.tell(&frame);
     }
   }
 
-  /// The process of the kit at a place of the list, started, or its process that ends at once
-  /// with why it did not start.
-  fn started(&self, co: &mut Co<Worked>, at: usize) -> Running {
-    let Played { name, kit, .. } = &self.played[at];
+  /// The process of a kit of a life, started, or its process that ends at once with why it did not
+  /// start.
+  fn started(life: &str, co: &mut Co<Worked>, played: &Played) -> Running {
+    let Played { name, kit, .. } = played;
     let program = kit.as_ref().map(|one| one.program.clone()).unwrap_or_default();
     let (stdin, lines) = mpsc::unbounded_channel();
     let (stop, stopped) = oneshot::channel();
-    let (life, name, stopped) = (self.life.clone(), name.clone(), stopped.shared());
+    let (life, name, stopped) = (life.to_owned(), name.clone(), stopped.shared());
     let ending = stopped.clone();
     let work = stream::once(async move {
-      match spawned(&life, &name, &program).await {
-        Ok((mut child, group)) => {
-          runtime().spawn(written(child.stdin.take(), lines));
-          ran(name, program, (child, group), ending)
+      match spawned(&life, &name, &program)
+        .await
+        .and_then(|child| Ok((runtime().map_err(Unborn::Start)?, child)))
+      {
+        Ok((runtime, (mut child, group))) => {
+          runtime.spawn(written(child.stdin.take(), lines));
+          ran(&runtime, name, program, (child, group), ending)
         }
         Err(no) => {
           let why = format!("The process {} of the kit {name} {no}", program.display());
@@ -252,6 +274,11 @@ impl Kits {
     Running { stdin, waiting: Some(Vec::new()), _stop: stop }
   }
 
+  /// The process of the kit at a place of the list, while it runs.
+  fn running(&mut self, at: usize) -> Option<&mut Running> {
+    self.played.get_mut(at).and_then(|one| one.running.as_mut())
+  }
+
   /// One line that the process of a kit wrote, answered as a verb of the protocol.
   async fn said(&mut self, co: &mut Co<Worked>, name: &str, line: &str) {
     let Some(at) = self.played.iter().position(|one| one.name == name) else { return };
@@ -259,7 +286,7 @@ impl Kits {
       Ok(request) => request,
       Err(no) => {
         let why = format!("The kit {name} wrote a line that is no verb: {no}");
-        if let Some(running) = &self.played[at].running {
+        if let Some(running) = self.running(at) {
           let frame = Frame::refused(None, ProtocolError::Refused { why });
           drop(running.stdin.send(serde_json::to_string(&frame).unwrap_or_default()));
         }
@@ -267,7 +294,7 @@ impl Kits {
       }
     };
     let answer = self.answered(co, name, request.verb).await;
-    if let Some(running) = self.played[at].running.as_mut() {
+    if let Some(running) = self.running(at) {
       running.reply(request.id, answer);
       if running.waiting.is_some() && attached(line) {
         for line in running.waiting.take().unwrap_or_default() {
@@ -387,7 +414,7 @@ impl Kits {
 
 /// Whether a line of a process is its attach, after which it hears the facts of the life.
 fn attached(line: &str) -> bool {
-  serde_json::from_str::<Value>(line).is_ok_and(|one| one["verb"] == json!("attach"))
+  serde_json::from_str::<Value>(line).is_ok_and(|one| one.get("verb") == Some(&json!("attach")))
 }
 
 /// The process of a kit, in the folder of its program, with the variables that name its kit and
@@ -449,13 +476,18 @@ async fn written(input: Option<ChildStdin>, mut lines: mpsc::UnboundedReceiver<S
 /// The lines that a process writes on its stdout, then its end, told with its exit and the last
 /// lines of its stderr. A stop of the work ends the process with each process that it started, as
 /// [`waited`] says.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the process of a kit takes the runtime of its tasks, the name of the kit, its program, the child with its group, and the stop of its work"
+)]
 fn ran(
+  runtime: &Handle,
   name: String,
   program: PathBuf,
   (mut child, group): (Child, Group),
   stopped: Shared<oneshot::Receiver<()>>,
 ) -> stream::LocalBoxStream<'static, Worked> {
-  let stderr = runtime().spawn(tail(child.stderr.take()));
+  let stderr = runtime.spawn(tail(child.stderr.take()));
   let lines = child.stdout.take().map(|one| BufReader::new(one).lines());
   let said = stream::unfold(lines, |lines: Option<Lines<BufReader<ChildStdout>>>| async move {
     let mut lines = lines?;
@@ -464,7 +496,7 @@ fn ran(
   });
   let line_of = name.clone();
   let said = said.map(move |line| Worked::Line(line_of.clone(), line));
-  let waiting = runtime().spawn(waited(child, group, stopped));
+  let waiting = runtime.spawn(waited(child, group, stopped));
   let end = stream::once(async move {
     let (status, slain) = waiting.await.unwrap_or_else(|no| (Err(io::Error::other(no)), None));
     let lines = timeout(DRAIN, stderr).await.ok().and_then(Result::ok).unwrap_or_default();

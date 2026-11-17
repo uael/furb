@@ -4,7 +4,7 @@
 //! each box as wide inside on its left as on its right, and as high above as below; each slot of a
 //! repeated row in one column; and each box the same at each size.
 
-use std::{array, collections::BTreeMap, ops::RangeInclusive};
+use std::{collections::BTreeMap, ops::RangeInclusive};
 
 use furb_window::tokens::{HEAD, SYNTAX, TEXT, Tokens};
 
@@ -102,10 +102,12 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
   let mut colors: Vec<Rgb> = named.chain(SYNTAX.map(|(_, value)| Rgb::hex(value))).collect();
   let (veil, alpha) = ([tokens.veil.r, tokens.veil.g, tokens.veil.b], u16::from(tokens.veil.a));
   let veiled = colors.iter().map(|color| {
-    Rgb(array::from_fn(|at| {
-      let mixed = (u16::from(color.0[at]) * (255 - alpha) + u16::from(veil[at]) * alpha) / 255;
-      u8::try_from(mixed).unwrap_or(u8::MAX)
-    }))
+    let mut mixed = color.0;
+    for (one, over) in mixed.iter_mut().zip(veil) {
+      let both = (u16::from(*one) * (255 - alpha) + u16::from(over) * alpha) / 255;
+      *one = u8::try_from(both).unwrap_or(u8::MAX);
+    }
+    Rgb(mixed)
   });
   colors.extend(veiled.collect::<Vec<_>>());
   colors
@@ -200,21 +202,22 @@ impl Boxed {
 pub(crate) fn boxes(cells: &[Vec<Cell>], base: Rgb) -> Vec<Boxed> {
   let (rows, cols) = (cells.len(), cells.first().map_or(0, Vec::len));
   let mut seen = vec![vec![false; cols]; rows];
+  let at = |y: usize, x: usize| cells.get(y).and_then(|line| line.get(x));
   let mut found = Vec::new();
   for row in 0..rows {
     for col in 0..cols {
-      if seen[row][col] || cells[row][col].bg == base {
+      let Some(ground) = at(row, col).map(|cell| cell.bg).filter(|bg| *bg != base) else {
+        continue;
+      };
+      if !marked(&mut seen, row, col) {
         continue;
       }
-      let ground = cells[row][col].bg;
       let (mut stack, mut area) = (vec![(row, col)], Vec::new());
-      seen[row][col] = true;
       while let Some((y, x)) = stack.pop() {
         area.push((y, x));
         let next = [(y + 1, x), (y.wrapping_sub(1), x), (y, x + 1), (y, x.wrapping_sub(1))];
         for (y, x) in next {
-          if y < rows && x < cols && !seen[y][x] && cells[y][x].bg == ground {
-            seen[y][x] = true;
+          if at(y, x).is_some_and(|cell| cell.bg == ground) && marked(&mut seen, y, x) {
             stack.push((y, x));
           }
         }
@@ -232,6 +235,17 @@ pub(crate) fn boxes(cells: &[Vec<Cell>], base: Rgb) -> Vec<Boxed> {
   found
 }
 
+/// Whether a cell of a grid was not seen yet, which it now is; a cell outside the grid never is.
+fn marked(seen: &mut [Vec<bool>], y: usize, x: usize) -> bool {
+  match seen.get_mut(y).and_then(|line| line.get_mut(x)) {
+    Some(one) if !*one => {
+      *one = true;
+      true
+    }
+    _ => false,
+  }
+}
+
 impl Boxed {
   /// The box with each side that a row or a column of half blocks carries on: such a side, as the
   /// round edge or the bar of a card, stands in the cell of the half block. The sides of a column
@@ -239,7 +253,9 @@ impl Boxed {
   fn halves(&mut self, cells: &[Vec<Cell>]) {
     let half = |row: usize, col: usize, side: usize| {
       let cell = cells.get(row).and_then(|line| line.get(col));
-      cell.is_some_and(|cell| !cell.glyph.is_empty() && HALVES[side].contains(&cell.glyph))
+      cell.is_some_and(|cell| {
+        !cell.glyph.is_empty() && HALVES.get(side).is_some_and(|one| one.contains(&cell.glyph))
+      })
     };
     let Self { top, bottom, .. } = *self;
     let column = |col: usize, side| (top..=bottom).all(|row| half(row, col, side));
@@ -275,7 +291,7 @@ fn insets(cells: &[Vec<Cell>], one: &Boxed) -> Option<[usize; 4]> {
   };
   let content = (one.top..=one.bottom).flat_map(|row| {
     (one.left..=one.right).filter_map(move |col| {
-      let cell = &cells[row][col];
+      let cell = cells.get(row)?.get(col)?;
       let shows = !cell.glyph.trim().is_empty() || cell.bg != one.ground;
       (shows && !edge(col, cell) && !grounds(cell)).then_some((row, col))
     })
@@ -308,29 +324,36 @@ fn slots(cells: &[Vec<Cell>]) -> Vec<Finding> {
   }
   let mut findings = Vec::new();
   for rows in parts.values().filter(|rows| rows.len() >= 2) {
-    for slot in 0..rows[0].1.len() {
+    // Each row of one part holds as many pieces as its looks, so each holds each slot.
+    let Some(&(first_row, ref first)) = rows.first() else { continue };
+    for slot in 0..first.len() {
       // A slot that follows the slot before it with no blank flows with it, as code and prose do.
       let glued = |(_, pieces): &(usize, Vec<(usize, usize)>)| {
-        slot > 0 && pieces[slot].0 == pieces[slot - 1].1 + 1
+        let before = slot.checked_sub(1).and_then(|before| pieces.get(before));
+        pieces.get(slot).zip(before).is_some_and(|(this, before)| this.0 == before.1 + 1)
       };
       if rows.iter().all(glued) {
         continue;
       }
-      let starts: Vec<usize> = rows.iter().map(|(_, pieces)| pieces[slot].0).collect();
-      let ends: Vec<usize> = rows.iter().map(|(_, pieces)| pieces[slot].1).collect();
-      if starts.iter().all(|start| *start == starts[0]) || ends.iter().all(|end| *end == ends[0]) {
+      let taken = rows.iter().filter_map(|(row, pieces)| Some((row, *pieces.get(slot)?)));
+      let starts: Vec<usize> = taken.clone().map(|(_, piece)| piece.0).collect();
+      let ends: Vec<usize> = taken.clone().map(|(_, piece)| piece.1).collect();
+      let one = |all: &[usize]| all.iter().all(|at| Some(at) == all.first());
+      if one(&starts) || one(&ends) {
         continue;
       }
-      let places: Vec<String> = rows
-        .iter()
-        .map(|(row, pieces)| format!("row {row} {}-{}", pieces[slot].0, pieces[slot].1))
-        .collect();
+      let places: Vec<String> =
+        taken.map(|(row, piece)| format!("row {row} {}-{}", piece.0, piece.1)).collect();
       let says = format!(
         "the slot {} of a repeated row neither starts nor ends in one column: {}",
         slot + 1,
         places.join(", ")
       );
-      findings.push(Finding { row: rows[0].0, col: starts[0], says });
+      findings.push(Finding {
+        row: first_row,
+        col: starts.first().copied().unwrap_or_default(),
+        says,
+      });
     }
   }
   findings
@@ -391,7 +414,9 @@ pub(crate) fn sizes(frames: &[(String, Frame)]) -> Vec<String> {
       .enumerate()
       .all(|(side, (a, b))| above(side) || a == b || *a > PAD || *b > PAD)
   };
-  let differ = ranks.into_iter().filter(|(_, seen)| seen.iter().any(|one| !same(one, &seen[0])));
+  let differ = ranks
+    .into_iter()
+    .filter(|(_, seen)| seen.first().is_some_and(|first| seen.iter().any(|one| !same(one, first))));
   differ
     .map(|((ground, start, _), seen)| {
       let each: Vec<String> = seen
@@ -413,7 +438,7 @@ pub(crate) fn sizes(frames: &[(String, Frame)]) -> Vec<String> {
 /// blanks.
 fn start(cells: &[Vec<Cell>], one: &Boxed) -> String {
   let rows = (one.top..=one.bottom).map(|row| {
-    let line = &cells[row][one.left..=one.right];
+    let line = cells.get(row).and_then(|line| line.get(one.left..=one.right)).unwrap_or_default();
     line
       .iter()
       .filter(|cell| !grounds(cell) && !BARS.contains(cell.glyph.as_str()))

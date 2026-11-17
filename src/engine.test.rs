@@ -15,8 +15,7 @@ fn answered(nth: usize) {
 }
 
 use std::{
-  cell::RefCell,
-  rc::Rc,
+  sync::mpsc,
   task::Waker,
   time::{Duration, Instant},
 };
@@ -41,7 +40,7 @@ fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
-  let read = lived.read.borrow();
+  let read = lived.read();
   assert!(read[1].contains("TimeoutError('turn time limit exceeded: 500ms')"), "{}", read[1]);
 }
 
@@ -92,7 +91,7 @@ fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
   bounded();
   let mut second = Lived::new("replayed", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
-  assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
+  assert_eq!(second.read().len(), 0, "a later life asks no model for what the record holds");
   let again =
     second.engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
   let again = again.iter().filter_map(said).collect::<Vec<_>>();
@@ -124,7 +123,7 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
   assert!(no.message().starts_with("The life stopped at TimeoutError: "), "{no}");
   let view = lived.engine.word("len(transcript(ROOT))", vec![]).expect_err("nor reads one");
   assert_eq!(view.message(), no.message());
-  assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
+  assert_eq!(lived.read().len(), 1, "the model was asked once");
 }
 
 #[test]
@@ -210,12 +209,11 @@ fn a_replay_takes_the_answer_of_each_question_that_the_record_holds_and_a_live_w
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = second.engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(9), "the chain asks again");
-  let read = second.read.borrow();
+  let read = second.read();
   assert!(
     read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
     "a live word past the bound is refused: {read:?}"
   );
-  drop(read);
   drop(second);
   // The record keeps the end that the bound gave the word that spins, so its replay ends it so.
   let third = Lived::new("settled", &[], false).expect("the replay of the spin opens");
@@ -248,15 +246,15 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
   let refused =
     |read: &[String]| read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded"));
   let started = Instant::now();
-  while !refused(&second.read.borrow()) && started.elapsed() < Duration::from_secs(8) {
+  while !refused(second.read()) && started.elapsed() < Duration::from_secs(8) {
     let pause = second
       .engine
       .wait(&[root.as_str()], verbs::Wait { seconds: Some(0.2), on: on(&root) })
       .unwrap();
     block_on(pause).unwrap();
   }
-  let read = second.read.borrow();
-  assert!(refused(&read), "the word that spins after its wait is refused by the bound: {read:?}");
+  let read = second.read();
+  assert!(refused(read), "the word that spins after its wait is refused by the bound: {read:?}");
 }
 
 /// Each sandbox that this thread makes from now on, with a turn bound short enough for a
@@ -332,14 +330,14 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
     .unwrap()
     .id()
     .to_owned();
-  let told = Rc::new(RefCell::new(Vec::new()));
-  let held = Rc::clone(&told);
-  engine.watch(&id, move |value| held.borrow_mut().push(value.py_repr())).unwrap();
+  let (tell, told) = mpsc::channel();
+  engine.watch(&id, move |value| tell.send(value.py_repr()).unwrap()).unwrap();
   let before = engine.sand.fed();
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 0, "a drive where no ear says anything feeds nothing");
   gate.send(()).unwrap();
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
-  assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
+  let told: Vec<String> = told.try_iter().collect();
+  assert_eq!(told, ["None"], "whoever watches the wait is told in that feed");
 }

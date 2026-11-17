@@ -2,8 +2,6 @@
 //! them. A test of the home of the user runs again as a child of itself, whose home is a folder of
 //! its yard, as a user starts a host.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   fs,
   path::{MAIN_SEPARATOR, Path},

@@ -22,7 +22,7 @@ pub(crate) struct Sessions {
 pub(crate) fn recorded(config: &Path, data: &Path) -> Vec<Sessions> {
   let text = fs::read_to_string(config.join("workspaces.json")).unwrap_or_default();
   let list = serde_json::from_str::<Value>(&text).unwrap_or_default();
-  let saved = list["workspaces"].as_array().into_iter().flatten();
+  let saved = list.get("workspaces").and_then(Value::as_array).into_iter().flatten();
   let mut found = Vec::new();
   for main in saved.filter_map(|one| one["directory"].as_str()) {
     for checkout in checkouts(Path::new(main)) {

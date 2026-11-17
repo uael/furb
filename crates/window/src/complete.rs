@@ -4,10 +4,12 @@
 //! stands among the rows that match, the chosen one on the lifted ground. The completion itself
 //! stands in the client.
 
+use std::borrow::Cow;
+
 use crate::cells::Cells;
 use opentui::style::Style;
 
-use furb_client::{Asked, Completes, Kind, Offer, Target};
+use furb_client::{Aim, Asked, Completes, Kind, Offer};
 
 use crate::{
   input::named,
@@ -100,7 +102,11 @@ impl Model {
     match offer.kind {
       Kind::File => {
         // The name of a file leads, so a file deep in folders reads by its name.
-        let split = offer.name.rfind('/').map_or(0, |at| offer.name[..=at].chars().count());
+        let split = offer
+          .name
+          .rfind('/')
+          .and_then(|at| offer.name.get(..=at))
+          .map_or(0, |head| head.chars().count());
         let name: String = offer.name.chars().skip(split).collect();
         let folder: String = offer.name.chars().take(split).collect();
         let named: Vec<usize> = letters.iter().filter_map(|at| at.checked_sub(split)).collect();
@@ -202,16 +208,19 @@ impl Model {
 
   /// The name of the folder whose files a mention lists.
   fn mentioned_in(&self) -> String {
-    let at = self.client.target().machine();
-    let folder = match self.client.target() {
-      Target::Thread(key) => self.client.cwd(at, &key.1),
-      Target::Session(_, life) => self.client.cwd(at, &life),
-      Target::New(_, folder) => Some(folder),
+    let target = self.client.target();
+    let at = target.machine();
+    let folder = match target {
+      Aim::Thread(key) => self.client.cwd(at, &key.1),
+      Aim::Session(_, life) => self.client.cwd(at, life),
+      Aim::New(_, folder) => Some(Cow::Borrowed(folder)),
     };
-    let word = self.client.completion.as_ref().map(|one| one.word.clone()).unwrap_or_default();
+    let word = self.client.completion.as_ref().map_or("", |one| one.word.as_str());
     let query = word.trim_start_matches(['@', '"']);
     match query.rfind('/') {
-      Some(end) if query.starts_with(['/', '~', '.']) => query[..=end].to_owned(),
+      Some(end) if query.starts_with(['/', '~', '.']) => {
+        query.get(..=end).unwrap_or(query).to_owned()
+      }
       _ => folder.map_or_else(|| "this project".to_owned(), |one| named_or(&one)),
     }
   }

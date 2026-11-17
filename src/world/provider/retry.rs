@@ -82,7 +82,10 @@ pub(super) fn status(no: &CompletionError) -> Option<u16> {
   let lower = said.to_lowercase();
   let after = lower.split_once("status code").map_or(lower.as_str(), |(_, rest)| rest.trim_start());
   let head: String = after.chars().take_while(char::is_ascii_digit).collect();
-  let ends = after[head.len()..].chars().next().is_none_or(|one| !one.is_ascii_alphanumeric());
+  let ends = after
+    .get(head.len()..)
+    .and_then(|rest| rest.chars().next())
+    .is_none_or(|one| !one.is_ascii_alphanumeric());
   if head.len() == 3 && ends { head.parse().ok() } else { None }
 }
 

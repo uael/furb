@@ -6,19 +6,16 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-#[cfg(test)]
-use std::cell::Cell;
 use std::{
-  cell::RefCell,
   collections::HashMap,
-  io,
+  io, mem,
   path::{Path, PathBuf},
   rc::Rc,
   time::Duration,
 };
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, ENDS, Fold, HOLD, Hold, Listing, Step, Time};
+use furb_client::{Ask, Asked, Client, ENDS, HOLD, Hold, Listing, Step};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event, ProtocolError,
@@ -34,6 +31,7 @@ use crate::{
   input::{Armed, Word},
   kept,
   keys::{self, Does, System},
+  line::Line,
   link::Heard,
   list::Row,
   names::Names,
@@ -47,11 +45,75 @@ const PINNED: usize = 2;
 
 /// The rows of the left side, with the count of changes, the clock and the place of the pointer
 /// that they show.
-pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
+pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<Rc<thread::Row>>);
 
-/// The rows of each part of the feed, with the count of changes and the clock that they show.
-pub(crate) type Parts = (Option<(u64, Duration)>, HashMap<thread::Item, Vec<thread::Row>>);
+/// The foot of the list: the rows of the part of the changes and of the box of the context.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Foot {
+  pub(crate) changes: usize,
+  pub(crate) context: usize,
+}
 
+impl Foot {
+  /// The rows that the foot takes, with the blank row above it, as the input has one above it.
+  fn boxed(self) -> usize {
+    let rows = self.changes + self.context;
+    if rows == 0 { 0 } else { rows + 1 }
+  }
+}
+
+/// What the rows of the list show: the count of changes that it can show, the moment or the second,
+/// the scroll and the size of the window; the line of the list under the pointer, and its row.
+pub(crate) type Listed = ((u64, Duration, usize, (u16, u16)), Option<u16>, Option<Row>);
+
+/// The layout of a left side and what the pointer touches of it, as `thread::touched` says.
+pub(crate) type Touched = ((u64, Duration, Option<(u16, u16)>), Option<thread::Touch>);
+
+/// What the window keeps of each layout, so the next layout reads again only what changed: the
+/// colors and the names of each text of python, the code of each block by the message of its
+/// answer, the lines of each text of markdown that an answer said, and the rows of each part of the
+/// feed that it laid out, so a scroll lays out only the parts that come into sight.
+#[derive(Default)]
+pub(crate) struct Kept {
+  pub(crate) colors: Colors,
+  pub(crate) names: Names,
+  pub(crate) read: HashMap<String, Rc<Read>>,
+  /// The lines of each text of markdown that an answer said, by the text, with the columns that
+  /// they fill.
+  pub(crate) prose: HashMap<String, (usize, Rc<[Line]>)>,
+  pub(crate) parts: Parts,
+}
+
+/// The rows of each part of the feed as a layout made them, under the count of the changes that
+/// reach each part when it made them, each with the clock that its rows read, if they read one.
+#[derive(Default)]
+pub(crate) struct Parts {
+  pub(crate) lays: Option<u64>,
+  pub(crate) rows: HashMap<thread::Item, (thread::Rows, Option<Duration>)>,
+}
+
+impl Parts {
+  /// The rows of some parts let go, so the next layout lays them out again.
+  pub(crate) fn forget(&mut self, parts: &[thread::Item]) {
+    for part in parts {
+      self.rows.remove(part);
+    }
+  }
+}
+
+/// The parts of the feed that a change of the model reaches: each part, or only some, as a change
+/// of the exchanges of the open thread reaches the parts that read them.
+#[derive(Debug, Default)]
+pub(crate) enum Reach {
+  #[default]
+  Each,
+  Parts(Vec<thread::Item>),
+}
+
+#[expect(
+  clippy::struct_excessive_bools,
+  reason = "four facts of the window that change apart: no state joins them"
+)]
 pub(crate) struct Model {
   /// What each machine told, and the cards of all of them in the order of the list.
   pub(crate) client: Client,
@@ -91,36 +153,42 @@ pub(crate) struct Model {
   pub(crate) fault: Option<String>,
   /// The last levels of the microphone while his voice records, from 0 to 100, the newest last.
   pub(crate) listening: Option<Vec<u8>>,
-  /// The colors of each text of python that the window drew.
-  pub(crate) colors: Colors,
-  /// The names of each text of python that the window read.
-  pub(crate) names: Names,
-  /// The code of each block that the window read, by the message of its answer.
-  pub(crate) read: RefCell<HashMap<String, Rc<Read>>>,
+  /// What the window keeps of each layout, which the next layout reads again.
+  pub(crate) kept: Kept,
   /// How many changes of what the left side shows the model heard: each change but a step of the
   /// clocks and a move of the pointer, which change no row of it but through the clock.
   pub(crate) changes: u64,
   /// The rows of the left side, with what they show: a layout costs the most of what the window
   /// does, and a step of the loaders or a move of the pointer takes them again.
-  pub(crate) laid: RefCell<Option<Laid>>,
-  /// How many changes of what the parts of the feed show the model heard: each change of the left
-  /// side but one that only scrolls the feed, which moves it and changes no part of it.
+  pub(crate) laid: Option<Laid>,
+  /// The left side as it stood under the pointer, by the layout that it came from and what the
+  /// pointer touched there: a move that touches the same lays out nothing again.
+  pub(crate) kept_left: Option<(Touched, thread::Left)>,
+  /// The rows of the list as they stood, by what they show, as [`Model::list`] says.
+  pub(crate) kept_list: Option<(Listed, Rc<[Line]>)>,
+  /// How many changes of what the parts of the feed and the list show the model heard: each change
+  /// of the left side but one that leaves each of them as it was.
   pub(crate) shows: u64,
-  /// Whether the change that the model hears only scrolled the feed.
-  pub(crate) scrolled: bool,
-  /// The rows of each part of the feed that the window laid out, with what they show, so a scroll
-  /// lays out only the parts that come into sight.
-  pub(crate) parts: RefCell<Parts>,
+  /// How many changes the model heard that reach each part of the feed: a change of what shows
+  /// that reaches only some parts, as [`Reach`] says, lays out those parts again alone.
+  pub(crate) lays: u64,
+  /// The parts of the feed that the change that the model hears reaches.
+  pub(crate) reach: Reach,
+  /// Whether the change that the model hears leaves each part of the feed and the list as they
+  /// were: it scrolls the feed, or it edits the input or moves its caret, which neither shows.
+  pub(crate) same_parts: bool,
   /// The count of changes for which the window last told the images and the whole outputs of the
   /// open thread.
   pub(crate) pictured: u64,
   /// How many times the left side was laid out, which a test of speed counts.
   #[cfg(test)]
-  pub(crate) layouts: Cell<u64>,
+  pub(crate) layouts: u64,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
   /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
+  /// How many rows of the diff of the review stand above its first row that shows.
+  pub(crate) review_top: usize,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
   /// What the choices of sessions act on, while the list part shows them or a leave waits.
@@ -167,22 +235,34 @@ impl Model {
       tokens,
       fault: None,
       listening: None,
-      colors: Colors::new(),
-      names: Names::default(),
-      read: RefCell::default(),
+      kept: Kept::default(),
       changes: 0,
-      laid: RefCell::default(),
+      laid: None,
+      kept_left: None,
+      kept_list: None,
       shows: 0,
-      scrolled: false,
-      parts: RefCell::default(),
+      lays: 0,
+      reach: Reach::Each,
+      same_parts: false,
       pictured: 0,
       #[cfg(test)]
-      layouts: Cell::default(),
+      layouts: 0,
       armed: None,
       picker: None,
+      review_top: 0,
       word: None,
       acts: None,
     }
+  }
+
+  /// A layout, on what the window keeps of the layouts before, which the next layout reads again.
+  pub(crate) fn laying<T>(&mut self, lay: impl FnOnce(&Self, &mut Kept) -> T) -> T {
+    // An empty `Kept` holds no allocation, so its place costs nothing while the layout reads the
+    // model whole.
+    let mut kept = mem::take(&mut self.kept);
+    let laid = lay(self, &mut kept);
+    self.kept = kept;
+    laid
   }
 
   /// One frame of the daemon of a machine, or the end of its connection: whether what the machine
@@ -216,8 +296,8 @@ impl Model {
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.client.let_go(at, life);
       }
-      Ok(Frame::Event { life, event: Event::Ended(Some(fault)), .. }) => {
-        return self.failed(at, &life, fault);
+      Ok(Frame::Event { ref life, ref event, .. }) if let Event::Ended(Some(fault)) = &**event => {
+        return self.failed(at, life, fault.clone());
       }
       _ => {}
     }
@@ -228,12 +308,19 @@ impl Model {
     }
   }
 
+  /// A change of what a machine of the list told, which a machine that left the list does not take.
+  fn told(&mut self, at: usize, change: impl FnOnce(&mut Told)) {
+    if let Some(told) = self.client.machines.get_mut(at) {
+      change(told);
+    }
+  }
+
   /// The connection to a machine ended, while the window dials it again: each request
   /// that waits for its answer there goes nowhere. Each message on its way there comes back to the
   /// input with each message after it, since the window cannot know whether the daemon took it,
   /// and each life of the machine opens again, with the page of the open thread, once it answers.
   fn lost(&mut self, at: usize) -> bool {
-    let name = self.client.machines[at].name.clone();
+    let name = self.client.machines.get(at).map(|one| one.name.clone()).unwrap_or_default();
     let gone: Vec<Asked> =
       self.client.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
     // A take back that the machine may not have done gives its text back all the same: the input
@@ -284,10 +371,21 @@ impl Model {
     true
   }
 
+  /// The answer to an ask that the client reads alone. The moments of the bar of the time at now
+  /// reach no part of the feed, which follows now.
+  fn answered_here(&mut self, at: usize, asked: Asked, heard: Heard) {
+    let time = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
+    let now = matches!(asked, Asked::Moments(_)) && time.is_some_and(|one| one.at.is_none());
+    self.client.answered(at, asked, heard.ok());
+    if now {
+      self.reach = Reach::Parts(Vec::new());
+    }
+  }
+
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     if asked.read_here() {
-      return self.client.answered(at, asked, heard.ok());
+      return self.answered_here(at, asked, heard);
     }
     match (asked, heard) {
       (Asked::Open, Ok(Frame::Reply { .. })) => self.client.answered_open(at, id),
@@ -322,17 +420,18 @@ impl Model {
         (self.acts, self.fault) = (None, Some(why));
       }
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
-        self.client.machines[at].lives = lives;
+        self.told(at, |told| told.lives = lives);
       }
       (Asked::Projects, Ok(Frame::Reply { answer: Answer::Projects(projects), .. })) => {
-        self.client.machines[at].projects = projects;
+        self.told(at, |told| told.projects = projects);
       }
       (Asked::Models, Ok(Frame::Reply { answer: Answer::Models(models), .. })) => {
-        self.client.machines[at].models = Some(models);
+        self.told(at, |told| told.models = Some(models));
       }
       // A catalog that gave no models leaves the launcher with none, and says why once.
       (Asked::Models, Ok(Frame::Refused { why, .. })) => {
-        (self.client.machines[at].models, self.fault) = (Some(Vec::new()), Some(why));
+        self.told(at, |told| told.models = Some(Vec::new()));
+        self.fault = Some(why);
       }
       (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
         self.client.historied(&target, sent);
@@ -429,12 +528,7 @@ impl Model {
         self.jump();
       }
       // The bar of an open box shows its other split, and each other row folds it.
-      Some(Row::Context(1))
-        if self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context)) =>
-      {
-        self.client.split_again();
-      }
-      Some(Row::Context(_)) => self.fold_context(),
+      Some(Row::Context(at)) => self.context_clicked(at),
       Some(Row::Changes(at)) => return self.changes_clicked(at),
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
@@ -448,7 +542,8 @@ impl Model {
 
   /// The list moved by a count of rows, as far as it has rows.
   pub(crate) fn scrolled(&mut self, by: isize) {
-    let most = (self.rows().len().saturating_sub(PINNED)).saturating_sub(self.room());
+    let most =
+      (self.rows().len().saturating_sub(PINNED)).saturating_sub(self.room(self.list_foot()));
     self.scroll = self.scroll.saturating_add_signed(by).min(most);
   }
 
@@ -545,7 +640,9 @@ impl Model {
   pub(crate) fn steps(&self) -> bool {
     let opens = self.client.holds.values().any(Hold::runs);
     let thread = self.client.thread.as_ref().map(|one| &one.thread);
-    let reads = thread.and_then(|one| one.time.as_ref()).is_some_and(Time::reads);
+    // A bar that he holds shows its read; the bar that stands at rest reads with no clock.
+    let reads =
+      thread.and_then(|one| one.time.as_ref()).is_some_and(|one| one.engaged() && one.reads());
     let settles = thread.is_some_and(|one| {
       one.ended.values().any(|at| self.client.moved.saturating_sub(*at) < self.settles)
     });
@@ -553,12 +650,12 @@ impl Model {
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {
-    card.needs(&self.client.machines[key.0].login)
+    self.client.machines.get(key.0).is_some_and(|one| card.needs(&one.login))
   }
 
   /// Whether the machine of a card told the card in this connection.
   pub(crate) fn confirmed(&self, key: &Key) -> bool {
-    self.client.machines[key.0].link == Link::Listed
+    self.client.machines.get(key.0).is_some_and(|one| one.link == Link::Listed)
   }
 
   /// A text with the home folder of the operator as `~`.
@@ -591,27 +688,37 @@ impl Model {
     age(since, self.second())
   }
 
-  /// The rows of the list that scroll, and how many of them show.
-  fn room(&self) -> usize {
-    usize::from(self.size.1).saturating_sub(PINNED + self.boxed())
+  /// The rows of the list that scroll, and how many of them show above its foot.
+  fn room(&self, foot: Foot) -> usize {
+    usize::from(self.size.1).saturating_sub(PINNED + foot.boxed() + self.beside_bar(foot))
   }
 
-  /// The rows at the foot of the list that the part of the changes and the box of the context take,
-  /// with the blank row above them, as the input has one above it.
-  fn boxed(&self) -> usize {
-    let rows = self.changes_rows().len() + self.context_rows().len();
-    if rows == 0 { 0 } else { rows + 1 }
+  /// The foot of the list, by the rows of the part of the changes and of the box of the context,
+  /// which it lays out to count them.
+  pub(crate) fn list_foot(&self) -> Foot {
+    Foot { changes: self.changes_rows().len(), context: self.context_rows().len() }
+  }
+
+  /// The blank rows of the list under the box of the context, beside the bar of the time, so the
+  /// box ends on the row of the hints, as it ends on the row of the input.
+  fn beside_bar(&self, foot: Foot) -> usize {
+    if foot.boxed() == 0 { 0 } else { self.time_count() }
   }
 
   /// The row of the list at a row of the window: a row of the box of the context at its foot.
   pub(crate) fn row(&self, y: usize) -> Option<Row> {
-    let foot = usize::from(self.size.1).saturating_sub(self.boxed());
-    if y >= foot {
-      let (at, changes) = ((y - foot).saturating_sub(1), self.changes_rows().len());
+    let foot = self.list_foot();
+    let bottom = usize::from(self.size.1).saturating_sub(self.beside_bar(foot));
+    if y >= bottom {
+      return Some(Row::Blank);
+    }
+    let top = bottom.saturating_sub(foot.boxed());
+    if y >= top {
+      let at = (y - top).saturating_sub(1);
       return Some(match () {
-        () if y == foot => Row::Blank,
-        () if at < changes => Row::Changes(at),
-        () => Row::Context(at - changes),
+        () if y == top => Row::Blank,
+        () if at < foot.changes => Row::Changes(at),
+        () => Row::Context(at - foot.changes),
       });
     }
     let rows = self.rows();
@@ -620,18 +727,18 @@ impl Model {
 
   /// The rows of the list that show, from the top of the window, and the box of the context at
   /// its foot.
-  pub(crate) fn shown(&self) -> impl Iterator<Item = Row> {
+  pub(crate) fn shown(&self, foot: Foot) -> impl Iterator<Item = Row> {
     let rows = self.rows();
     let pinned = rows.len().min(PINNED);
+    let room = self.room(foot);
     let mut scrolled: Vec<Row> =
-      rows[pinned..].iter().skip(self.scroll).take(self.room()).copied().collect();
-    let boxed = self.boxed();
-    if boxed > 0 {
-      scrolled.resize(self.room(), Row::Blank);
+      rows.iter().skip(pinned + self.scroll).take(room).copied().collect();
+    if foot.boxed() > 0 {
+      scrolled.resize(room, Row::Blank);
       scrolled.push(Row::Blank);
-      let changes = self.changes_rows().len();
-      scrolled.extend((0..changes).map(Row::Changes));
-      scrolled.extend((0..boxed - 1 - changes).map(Row::Context));
+      scrolled.extend((0..foot.changes).map(Row::Changes));
+      scrolled.extend((0..foot.context).map(Row::Context));
+      scrolled.extend((0..self.beside_bar(foot)).map(|_| Row::Blank));
     }
     rows.into_iter().take(pinned).chain(scrolled)
   }
@@ -641,7 +748,9 @@ impl Model {
   fn reveal(&mut self) {
     let Some(key) = &self.client.selected else { return };
     let card = |row: &Row| match row {
-      Row::Card(at, _) | Row::Resolved(at) => self.client.settled[*at].1 == *key,
+      Row::Card(at, _) | Row::Resolved(at) => {
+        self.client.settled.get(*at).is_some_and(|one| one.1 == *key)
+      }
       _ => false,
     };
     let rows = self.rows();
@@ -650,7 +759,7 @@ impl Model {
       return;
     };
     let (above, under) = (first.saturating_sub(PINNED + 1), (last + 2).saturating_sub(PINNED));
-    self.scroll = self.scroll.max(under.saturating_sub(self.room())).min(above);
+    self.scroll = self.scroll.max(under.saturating_sub(self.room(self.list_foot()))).min(above);
   }
 }
 

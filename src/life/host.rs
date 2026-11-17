@@ -8,12 +8,11 @@
 //! work.
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   env,
   future::{IntoFuture, poll_fn},
   marker::PhantomData,
-  rc::Rc,
+  sync::mpsc::{self, Receiver, Sender},
   task::Poll,
 };
 
@@ -135,8 +134,8 @@ impl Open {
       let here = env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
       opening.directory = here.display().to_string();
     }
-    let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let ears = [("console", console(Rc::clone(&asked)))];
+    let (ask, asked) = mpsc::channel();
+    let ears = [("console", console(ask))];
     // The life finds the acts that its program made in the entries of its record, so it stands
     // on no image.
     let (engine, record) = opening.open(ears, Progress::default(), &mut |_| false, None).await?;
@@ -160,7 +159,7 @@ impl IntoFuture for Open {
 }
 
 /// The ear that takes each prompt to the operator as a question.
-fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
+fn console(ask: Sender<Question>) -> Box<dyn crate::Ear> {
   ear(move |mut co| async move {
     loop {
       let fact = hear(&mut co).await;
@@ -174,8 +173,10 @@ fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
           shape: word(1),
           message: word(2),
         };
-        asked.borrow_mut().push_back(question);
-        say(&mut co, Fact::says("started", fact.about(), []));
+        // The life that reads the questions holds this ear, so it stands while the ear does.
+        if ask.send(question).is_ok() {
+          say(&mut co, Fact::says("started", fact.about(), []));
+        }
       }
     }
   })
@@ -185,7 +186,7 @@ fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
 pub struct Life {
   engine: Engine,
   made: VecDeque<Fact>,
-  asked: Rc<RefCell<VecDeque<Question>>>,
+  asked: Receiver<Question>,
 }
 
 impl Life {
@@ -358,9 +359,14 @@ impl Life {
 
   /// The next question to the operator, or none once the thread named is done.
   pub async fn question<T>(&mut self, until: &Thread<T>) -> Result<Option<Question>, Fault> {
-    let asked = Rc::clone(&self.asked);
-    self.until(|life| Ok(!asked.borrow().is_empty() || life.done(until)?)).await?;
-    Ok(asked.borrow_mut().pop_front())
+    let mut next = None;
+    self
+      .until(|life| {
+        next = next.take().or_else(|| life.asked.try_recv().ok());
+        Ok(next.is_some() || life.done(until)?)
+      })
+      .await?;
+    Ok(next)
   }
 
   /// The words of the rungs of a thread, as python, in order.
@@ -388,11 +394,8 @@ impl Life {
     }
     let mut plan = Vec::new();
     for (whose, word) in words {
-      let under = self.engine.verb(
-        "under",
-        vec![Object::string(&whose), Object::string(&thread.id)],
-        vec![],
-      )?;
+      let under =
+        self.engine.verb("under", &[Object::string(&whose), Object::string(&thread.id)], vec![])?;
       if under.py_repr() == "True" {
         plan.push(word);
       }

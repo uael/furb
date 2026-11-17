@@ -1,7 +1,8 @@
 //! The settings of the session of the input, as a list part: each key with what it does, the
 //! value that wins for it and the layer that gives it. Enter flips a boolean or takes the next of
 //! the values of a key that takes some values only. Its skills and extensions, as a list part too:
-//! enter turns an extension on or off, and adds the mention of a skill with no code to the draft.
+//! enter opens the view of an extension, where he turns it on or off and reloads it, and adds the
+//! mention of a skill with no code to the draft.
 
 use std::borrow::Cow;
 
@@ -11,7 +12,8 @@ use furb::world::config::{Layer, Property, Setting};
 use serde_json::Value;
 
 use crate::{
-  line::cut,
+  keys::Does,
+  line::{cut, wrapped},
   model::Model,
   pick::{Choice, Entry},
 };
@@ -32,7 +34,7 @@ impl Model {
     // The layers take the room of the widest, so the values and the layers each end in one column.
     let layers = read.iter().map(|one| layer(one).len()).max().unwrap_or_default();
     let row = |(place, one): (usize, &Setting)| {
-      let property = one.property.as_ref().or_else(|| under(&one.key[..1])?.property.as_ref());
+      let property = one.property.as_ref().or_else(|| under(one.key.get(..1)?)?.property.as_ref());
       let says = property.map(|one| format!("  {}", one.description));
       // Each kit names its keys, a name in an object of furb stands with furb, and a key that no
       // schema names stands apart.
@@ -158,3 +160,39 @@ const fn layer(one: &Setting) -> &'static str {
     None => "default",
   }
 }
+
+impl Model {
+  /// The rows of the view of one extension, by its place among the skills: what it is for, where
+  /// it comes from, how it plays now and the change that waits for the next session, then what he
+  /// does to it in place: turn it on or off, reload the extensions of the session, or mention it in
+  /// the message.
+  pub(crate) fn skill(&self, place: usize) -> Vec<Entry> {
+    let Some(one) = self.client.skill_at(place) else { return Vec::new() };
+    let about =
+      |left: String| Entry { part: Cow::Owned(one.name.clone()), left, ..Entry::default() };
+    let mut rows: Vec<Entry> = wrapped(&one.description, ABOUT).into_iter().map(about).collect();
+    rows.push(about(format!("From      {}", one.from)));
+    let now = if one.plays { "plays in this session" } else { "plays not in this session" };
+    rows.push(about(format!("Now       {now}")));
+    if one.plays != one.on && !one.turned_by.is_null() {
+      let next = if one.on { "on" } else { "off" };
+      rows.push(about(format!("Next      {next} at the next session")));
+    }
+    let act = |left: &str, choice| Entry {
+      part: Cow::Borrowed("Do"),
+      left: left.to_owned(),
+      choice,
+      ..Entry::default()
+    };
+    if !one.turned_by.is_null() {
+      let turn = if one.on { "Turn it off" } else { "Turn it on" };
+      rows.push(act(turn, Choice::Turn(place)));
+    }
+    rows.push(act("Reload the extensions of this session", Choice::Key(Does::Reload)));
+    rows.push(act("Mention it in the message", Choice::Added(format!("/{}", one.name))));
+    rows
+  }
+}
+
+/// The columns of the rows of what an extension is for in its view.
+const ABOUT: usize = 72;

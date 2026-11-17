@@ -11,7 +11,7 @@ use std::{
 use furb::{
   Ear, Fact, Fault, Object,
   ear::{Co, ear, hear, hearing, say},
-  view::{Fold, Pause, followed},
+  view::{Fold, Name, Pause, followed},
   wire::outward,
   world::{Asked, CONSOLE},
 };
@@ -130,14 +130,14 @@ struct Heard {
 /// first fact tells it first, as the log of a life shows it.
 fn events(told: UnboundedSender<Event>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
-    let kept = co.keeps(Heard::default())?;
+    co.keeps(Heard::default())?;
     loop {
       let a = hear(&mut co).await;
       // The ear holds what it keeps while it steps, and gives it back before it waits again,
       // where the image of the life reads it, between two runs.
-      let mut heard = kept.take();
+      let mut heard: Heard = co.held()?;
       let goes = stepped(&mut co, &mut heard, a, &told).await;
-      kept.replace(heard);
+      co.keep(heard);
       if !goes? {
         return Ok(());
       }
@@ -185,7 +185,7 @@ async fn stepped<W: 'static>(
 pub(crate) fn json_of(a: &Fact) -> Value {
   match a.kind() {
     "module" => json!(["module", a.about(), a.by()]),
-    _ => outward(a.0.as_ref()),
+    _ => outward(a.object().as_ref()),
   }
 }
 
@@ -195,10 +195,10 @@ pub(crate) fn json_of(a: &Fact) -> Value {
 pub(crate) fn json_of_line(line: &str) -> Option<Value> {
   let mut fact: Value = serde_json::from_str(line).ok()?;
   let held = fact.as_array_mut()?;
-  if held.len() < 2 || !held[..2].iter().all(Value::is_string) {
+  if held.len() < 2 || !held.iter().take(2).all(Value::is_string) {
     return None;
   }
-  if held[0] == "module" {
+  if held.first().and_then(Value::as_str) == Some("module") {
     held.resize(3, json!(""));
   }
   Some(fact)
@@ -211,7 +211,7 @@ async fn covered<W: 'static>(
   fold: &Fold,
   controls: &mut Vec<Fact>,
   a: &Fact,
-) -> Result<(Vec<String>, Option<Pause>), Fault> {
+) -> Result<(Vec<Name>, Option<Pause>), Fault> {
   let mut found = Vec::new();
   if !a.question() && matches!(a.kind(), "pause" | "wake") {
     controls.retain(|one| one.about() != a.about());
@@ -223,7 +223,7 @@ async fn covered<W: 'static>(
     }
   } else if a.question() && followed(a.kind()) {
     let oldest = controls.iter().position(|one| one.kind() == "pause").unwrap_or(controls.len());
-    for control in controls[oldest..].iter().rev() {
+    for control in controls.iter().skip(oldest).rev() {
       if covers(co, control, a.about()).await? {
         return Ok((found, Pause::of(&json_of(control))));
       }
@@ -234,6 +234,6 @@ async fn covered<W: 'static>(
 
 /// Whether a pause or a wake covers an act, as the engine reads it.
 async fn covers<W: 'static>(co: &mut Co<W>, control: &Fact, id: &str) -> Result<bool, Fault> {
-  let got = co.call("covers", vec![control.0.clone(), Object::string(id)], vec![]).await?;
+  let got = co.call("covers", vec![control.object().clone(), Object::string(id)], vec![]).await?;
   Ok(got.as_ref().as_bool().unwrap_or_default())
 }

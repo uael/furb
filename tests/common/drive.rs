@@ -69,5 +69,5 @@ pub(crate) fn pause(time: Duration) {
   reason = "the one block on the reactor in the tests: a test fails by a panic, and the reactor waits for nothing else"
 )]
 pub(crate) fn on_reactor<T>(fut: impl Future<Output = T>) -> T {
-  ear::reactor().block_on(fut)
+  ear::reactor().expect("the system gives the ears a reactor").block_on(fut)
 }

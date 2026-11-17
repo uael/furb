@@ -19,6 +19,7 @@ use std::{
 use furb::{
   Object,
   life::{Answer as Answered, Log, Opening},
+  world::Told,
 };
 use furb_host::{
   GRACE, STALL, STARTING, Settings, Tailnet, TransportError,
@@ -449,18 +450,18 @@ impl Peer {
       on: None,
     };
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
-    let stands = if [WORKS, THINKS, PONDERS, RETRIES, FANS].iter().any(|one| message.contains(one))
-    {
-      "thinks"
-    } else if [LONG, DELEGATES, AWAITS].iter().any(|one| message.contains(one)) {
-      "runs"
-    } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
-      "asks"
-    } else {
-      "resolved"
-    };
+    let stands =
+      if [WORKS, THINKS, PONDERS, RETRIES, FANS, STREAMS].iter().any(|one| message.contains(one)) {
+        "thinks"
+      } else if [LONG, DELEGATES, AWAITS].iter().any(|one| message.contains(one)) {
+        "runs"
+      } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
+        "asks"
+      } else {
+        "resolved"
+      };
     // Each life names its first prompt alike, so a card is the thread of this life by both.
-    let ours = |card: &Card| card.life == life && card.thread.prompt == prompt;
+    let ours = |card: &Card| card.life == life && *card.thread.prompt == *prompt;
     self.card(|card| ours(card) && json!(card.thread.standing)["is"] == stands);
     prompt
   }
@@ -544,6 +545,10 @@ pub(crate) const THINKS: &str = "(the model thinks)";
 /// The words of a message of a test that make the model think for ever.
 pub(crate) const PONDERS: &str = "(the model thinks for ever)";
 pub(crate) const LONG: &str = "(the model writes a long word)";
+/// The words of a message of a test that make the model stream a reply in [`STREAMED`] parts, one
+/// for each file `part<n>` of the folder of the test that the test makes, and never end it.
+pub(crate) const STREAMS: &str = "(the model streams)";
+pub(crate) const STREAMED: usize = 12;
 pub(crate) const ANSWERS: &str = "(the model answers)";
 pub(crate) const FAILS: &str = "(the model fails)";
 
@@ -580,6 +585,9 @@ pub(crate) const TABLES: &str = "(the model answers a table)";
 /// GitHub.
 pub(crate) const MARKDOWN: &str = "(the model answers markdown)";
 
+/// The words of a message of a test that make the model run a command that writes forty lines.
+pub(crate) const PRINTS: &str = "(the model prints much)";
+
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
@@ -598,8 +606,9 @@ pub(crate) const DRAWS: &str = "(the model draws a view)";
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
 /// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
 /// and the second waits on its chain.
-const ANSWERED: [(&str, &str); 11] = [
+const ANSWERED: [(&str, &str); 12] = [
   (MARKDOWN, GFM),
+  (PRINTS, "out = await bash('seq 1 40')\nclose('It printed 40 lines.')"),
   (
     DRAWS,
     r#"todo = prompt(str, '{"view": 1, "slot": "footer", "tree": {"id": "todo", "node": "text", "runs": [{"text": "buy milk"}]}}', to=OPERATOR, on=chain('todo'))"#,
@@ -667,21 +676,7 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
       if request.contains(RETRIES) {
         return Err(failing(&failed));
       }
-      if request.contains(WORKS) {
-        future::pending::<()>().await;
-      }
-      // A model that thinks for ever writes no line of a word.
-      if request.contains(THINKS) || request.contains(PONDERS) {
-        told(
-          "",
-          "I read the stages from the frames and sum them, so the open shows where its time goes. ",
-        );
-        if request.contains(THINKS) {
-          told("", "Then the seed");
-          told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
-        }
-        future::pending::<()>().await;
-      }
+      endless(&request, &held, &told).await;
       let named = QUESTIONS.iter().chain(&ANSWERED).find(|one| request.contains(one.0));
       let read = format!("close({READ:?})");
       let told = "await prompt(None, 'The bench ran.', to=OPERATOR)\nclose(None)";
@@ -713,6 +708,38 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
     skills: Some(false),
     answer: Some(answer),
     ..Opening::default()
+  }
+}
+
+/// The models of a test that never end their answer, which return for each other request: one that
+/// works, one that thinks, and one that streams [`STREAMS`], each part once the test made its file
+/// beside the file `held`. Each part is a line of one string, so no statement of the word ends and
+/// none runs.
+async fn endless(request: &str, held: &Path, told: &Told) {
+  if request.contains(WORKS) {
+    future::pending::<()>().await;
+  }
+  if request.contains(STREAMS) {
+    told("said = '''", "");
+    for part in 0..STREAMED {
+      while !held.with_file_name(format!("part{part}")).exists() {
+        sleep(Duration::from_millis(1)).await;
+      }
+      told(&format!("part {part} of the reply\n"), "");
+    }
+    future::pending::<()>().await;
+  }
+  // A model that thinks for ever writes no line of a word.
+  if request.contains(THINKS) || request.contains(PONDERS) {
+    told(
+      "",
+      "I read the stages from the frames and sum them, so the open shows where its time goes. ",
+    );
+    if request.contains(THINKS) {
+      told("", "Then the seed");
+      told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
+    }
+    future::pending::<()>().await;
   }
 }
 

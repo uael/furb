@@ -660,10 +660,14 @@ impl Suite {
       }
     };
     let crates = if words.is_empty() { &["--workspace".to_owned()][..] } else { words };
+    // A test of a daemon waits on it far more than it computes, so twice as many tests as cores
+    // keep each core busy: on 11-17 a run took 61 to 90 s at 14 tests at once and 53 s at 28, for
+    // the same CPU time.
+    let threads = thread::available_parallelism().map_or(1, |cores| cores.get() * 2).to_string();
     match self {
       Self::Rust => vec![
         with("cargo", &["nextest", "run", "--no-run"], crates),
-        limited("cargo", with("cargo", &["nextest", "run"], crates)),
+        limited("cargo", with("cargo", &["nextest", "run", "--test-threads", &threads], crates)),
       ],
       Self::Python => vec![
         with("uv", &["sync", "--inexact"], &[]),
@@ -822,7 +826,7 @@ fn about(source: &str) -> String {
     .join(" ");
   let end =
     [". ", "? "].iter().filter_map(|stop| text.find(stop)).min().map_or(text.len(), |at| at + 1);
-  text[..end].to_owned()
+  text.get(..end).unwrap_or(&text).to_owned()
 }
 
 fn is_doc(line: &str) -> bool {
@@ -835,6 +839,17 @@ fn imports_furb(line: &str) -> bool {
 
 fn words_of(matches: &ArgMatches) -> Vec<String> {
   matches.get_many::<String>("words").map(|words| words.cloned().collect()).unwrap_or_default()
+}
+
+/// A field of a map of JSON, or null when it holds none, as an index of serde reads it.
+fn field<'v>(value: &'v serde_json::Value, key: &str) -> &'v serde_json::Value {
+  const NULL: &serde_json::Value = &serde_json::Value::Null;
+  value.get(key).unwrap_or(NULL)
+}
+
+/// The text of a group of a match, or nothing when the group took no part in it.
+fn group<'t>(hit: &fancy_regex::Captures<'t, str>, at: usize) -> &'t str {
+  hit.get(at).map_or("", |one| one.as_str())
 }
 
 fn strs(words: &[String]) -> Vec<&str> {

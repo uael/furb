@@ -1,20 +1,24 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
+use std::sync::Arc;
+
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-  Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads, card,
+  Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads,
+  act::{Name, read_name, read_names},
+  card,
   error::ProtocolError,
   event::{Event, Seq},
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 76;
+pub const PROTOCOL: u32 = 77;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -707,7 +711,13 @@ pub enum Frame {
   /// text that a person reads.
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
-  Event { life: String, seq: Seq, event: Event },
+  // The frame shares the event that the log holds, so the frame of each window copies none of it.
+  Event {
+    #[serde(deserialize_with = "read_name")]
+    life: Name,
+    seq: Seq,
+    event: Arc<Event>,
+  },
   /// Each operator that a window of a life holds now, pushed to each of its windows after each
   /// attach, detach and draft.
   Presence { life: String, operators: Vec<Present> },
@@ -716,7 +726,12 @@ pub enum Frame {
   Granted { role: Role },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
-  Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
+  Cards {
+    life: String,
+    changed: Vec<Card>,
+    #[serde(deserialize_with = "read_names")]
+    gone: Vec<Name>,
+  },
   /// How far the daemon stands in the index of the cards of a record that no life holds, pushed to
   /// each peer that asked the cards while the daemon reads the record: the thousandths of the read
   /// done, of 1000, which never go back. The frame with `done` equal to `of` comes before the frame

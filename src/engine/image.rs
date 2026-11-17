@@ -3,11 +3,11 @@
 //! A life that opens from its image runs no boot and replays no entry: its session is the one that
 //! monty loads, and each of its ears is a fresh one that stands where the ear before it stood.
 
-use std::{collections::HashMap, num::ParseIntError};
+use std::{collections::HashMap, num::ParseIntError, sync::Arc};
 
 use monty_types::MontyUuid;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::value::RawValue;
 
 use super::{
   Engine, Outside, crossing,
@@ -42,7 +42,7 @@ pub(crate) struct Half {
   holding: Vec<String>,
   parked: Vec<(String, String)>,
   taken: Object,
-  ears: Vec<(String, Value)>,
+  ears: Vec<(String, Box<RawValue>)>,
   pub(crate) stood: Object,
   pub(crate) systems: Systems,
   /// The line of the word that made each act, which the session alone does not hold.
@@ -68,11 +68,11 @@ impl Engine {
     }
     let parts = handed.ears.iter().map(|(name, ear)| Some((name.clone(), ear.image()?)));
     let Some(ears) = parts.collect::<Option<Vec<_>>>() else { return Ok(None) };
-    let stood = self.verb("standing", vec![], vec![])?;
+    let stood = self.verb("standing", &[], vec![])?;
     let (hosted, crossing) = (&self.outside.hosted, &self.outside.crossing);
     let half = Half {
       made: self.made.clone(),
-      opened: self.outside.opened.clone(),
+      opened: Opened::clone(&self.outside.opened),
       given: self.outside.given.to_string(),
       standing: hosted.standing.iter().map(|(id, (name, at))| (*id, name.clone(), *at)).collect(),
       waits: hosted.waits.iter().map(|(id, wait)| (*id, wait.clone())).collect(),
@@ -105,12 +105,13 @@ impl Engine {
     sand.lined(half.lines);
     for (name, part) in half.ears {
       if let Some(ear) = handed.ears.get_mut(&name) {
-        ear.imaged(part);
+        // A part that is no JSON value is torn, so it holds nothing, as a part that is no map.
+        ear.imaged(serde_json::from_str(part.get()).unwrap_or_default());
       }
     }
     let mut outside = Outside {
       hosted: Hosted { handed, ..Hosted::default() },
-      opened: half.opened,
+      opened: Arc::new(half.opened),
       given: half.given.parse().map_err(|no: ParseIntError| Fault::refused(no.to_string()))?,
       ..Outside::default()
     };

@@ -3,10 +3,6 @@
 //! the queue as it stood. The life sends the first follow-up of a chain as a prompt once the chain
 //! rests: no pause holds it, it asks the operator nothing, and no work of it lives.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
@@ -140,6 +136,10 @@ impl Queue {
 
   /// One step of a follow-up, with the words of its fact after its entry: for an add, its shape,
   /// its message and its thread, which a follow-up of a new thread does not name.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a step takes the chain, the step, the entry that it moves, and the words of its fact"
+  )]
   fn step(
     &mut self,
     chain: &str,
@@ -189,7 +189,7 @@ impl Queue {
   /// The act of a chain, which says the state of its work and its pause.
   fn act(&mut self, act: &Act) {
     if act.kind == Kind::Chain {
-      let chain = self.chains.entry(act.id.clone()).or_default();
+      let chain = self.chains.entry(act.id.to_string()).or_default();
       chain.state = Some(act.state);
       chain.paused = act.pause.is_some();
     }

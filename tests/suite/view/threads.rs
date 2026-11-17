@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use furb::view::{Act, Fold, Held, State};
+use furb::view::{Act, Fold, Held, Name, Reader, State};
 use furb::view::{
   Aside, Attention, NoteRun, Rows, ThreadNode, chain_asides, chain_notes, chain_threads,
   chain_tree, open,
@@ -32,7 +32,7 @@ fn conductor() -> Vec<Act> {
   let mut acts: HashMap<String, Act> = HashMap::new();
   for fact in facts.filter(Value::is_array).chain(more) {
     for act in fold.hear(&fact, &[], None) {
-      acts.insert(act.id.clone(), act);
+      acts.insert(act.id.to_string(), act);
     }
   }
   let mut all: Vec<Act> = acts.into_values().collect();
@@ -46,7 +46,7 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut acts: HashMap<String, Act> = HashMap::new();
   for fact in facts {
     for act in fold.hear(&fact, &[], None) {
-      acts.insert(act.id.clone(), act);
+      acts.insert(act.id.to_string(), act);
     }
   }
   let mut all: Vec<Act> = acts.into_values().collect();
@@ -58,11 +58,11 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
 fn tree(acts: &[Act], chain: &str) -> Vec<(usize, String, String)> {
   fn walk(nodes: &[ThreadNode], depth: usize, out: &mut Vec<(usize, String, String)>) {
     for node in nodes {
-      out.push((depth, node.thread.prompt.clone(), node.thread.title.clone()));
+      out.push((depth, node.thread.prompt.to_string(), node.thread.title.clone()));
       walk(&node.agents, depth + 1, out);
     }
   }
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
   let all: Vec<&Act> = acts.iter().collect();
   let mut out = Vec::new();
   walk(&chain_tree(chain, &all, &rows), 0, &mut out);
@@ -71,15 +71,21 @@ fn tree(acts: &[Act], chain: &str) -> Vec<(usize, String, String)> {
 
 /// The threads of a chain, and its asides with what each is.
 fn listed(acts: &[Act], chain: &str) -> (Vec<String>, Vec<(String, Aside)>) {
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
-  let threads = chain_threads(&on, &rows).into_iter().map(|one| one.prompt).collect();
-  let asides = chain_asides(&on, &rows).into_iter().map(|one| (one.prompt, one.aside)).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+  let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *chain).collect();
+  let threads = chain_threads(&on, &rows).into_iter().map(|one| one.prompt.to_string()).collect();
+  let asides =
+    chain_asides(&on, &rows).into_iter().map(|one| (one.prompt.to_string(), one.aside)).collect();
   (threads, asides)
 }
 
 fn names(ids: &[&str]) -> Vec<String> {
   ids.iter().map(|id| (*id).to_owned()).collect()
+}
+
+/// The names of acts as texts, as a test compares them.
+fn texts(ids: &[Name]) -> Vec<String> {
+  ids.iter().map(ToString::to_string).collect()
 }
 
 #[test]
@@ -88,7 +94,7 @@ fn a_notice_a_word_of_the_operator_a_wake_and_a_question_of_another_chain_are_no
   // Before, main listed as the threads of chain1 each prompt of these, and of the asides below.
   let (threads, asides) = listed(&acts, "chain1");
   assert_eq!(threads, names(&["prompt1", "prompt29", "prompt34", "prompt95", "prompt97"]));
-  let question = |from: &str| Aside::Question(from.to_owned());
+  let question = |from: &str| Aside::Question(from.into());
   let expected = [
     ("prompt43", Aside::Notice),
     ("prompt46", question("chain8")),
@@ -118,11 +124,11 @@ fn a_notice_a_word_of_the_operator_a_wake_and_a_question_of_another_chain_are_no
 
 /// The runs of notes of a chain, each with its prompts and its unread count.
 fn runs(acts: &[Act], chain: &str, read: u64) -> Vec<(Vec<String>, usize)> {
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+  let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *chain).collect();
   let notes = chain_notes(&on, &rows, read);
   assert!(notes.iter().all(|run| run.count == run.prompts.len()), "{notes:?}");
-  notes.into_iter().map(|NoteRun { prompts, unread, .. }| (prompts, unread)).collect()
+  notes.into_iter().map(|NoteRun { prompts, unread, .. }| (texts(&prompts), unread)).collect()
 }
 
 #[test]
@@ -134,7 +140,7 @@ fn the_notes_that_follow_one_another_in_a_chain_stand_as_one_run_with_the_ones_n
   assert_eq!(runs(&acts, "chain2", 0), [(two.clone(), 2)]);
   assert_eq!(runs(&acts, "chain7", 0), [(names(&["prompt36"]), 1)]);
   // A note that began after the place that was read counts as unread, and none else does.
-  let began = |id: &str| acts.iter().find(|act| act.id == id).map(|act| act.began).unwrap();
+  let began = |id: &str| acts.iter().find(|act| *act.id == *id).map(|act| act.began).unwrap();
   assert_eq!(runs(&acts, "chain2", began("prompt47")), [(two.clone(), 1)]);
   assert_eq!(runs(&acts, "chain2", u64::MAX), [(two, 0)]);
   // On chain1 the word of the operator that runs between the wake and the acknowledgment of that
@@ -189,7 +195,7 @@ fn each_worker_nests_under_the_thread_that_made_it_and_takes_the_label_of_its_ch
   ];
   assert_eq!(agents, labels);
   // The record names no session, so the first thread of the operator keeps its first line.
-  let message = acts.iter().find(|act| act.id == "prompt1").and_then(|act| act.words[1].as_str());
+  let message = acts.iter().find(|act| *act.id == *"prompt1").and_then(|act| act.words[1].as_str());
   assert_eq!(message.and_then(|one| one.lines().next()), Some(got[0].2.as_str()));
 }
 
@@ -295,8 +301,8 @@ fn shape(nodes: &[ThreadNode]) -> Vec<(String, Vec<String>)> {
   nodes
     .iter()
     .map(|node| {
-      let agents = node.agents.iter().map(|one| one.thread.prompt.clone()).collect();
-      (node.thread.prompt.clone(), agents)
+      let agents = node.agents.iter().map(|one| one.thread.prompt.to_string()).collect();
+      (node.thread.prompt.to_string(), agents)
     })
     .collect()
 }
@@ -314,8 +320,8 @@ fn a_question_and_a_notice_that_a_thread_made_for_the_operator_stand_in_it_with_
   ])
   .threads("chain1", None, 0);
   let [node] = got.threads.as_slice() else { panic!("{got:?}") };
-  assert_eq!(node.thread.asked, names(&["prompt2", "prompt3"]));
-  assert_eq!(node.thread.asks, names(&["prompt2"]));
+  assert_eq!(texts(&node.thread.asked), names(&["prompt2", "prompt3"]));
+  assert_eq!(texts(&node.thread.asks), names(&["prompt2"]));
   assert_eq!(node.state, State::Asks);
   assert_eq!(got.attention, Attention { asks: 1, failed: 0, paused: 0, unread: 0 });
 }
@@ -333,7 +339,7 @@ fn an_acknowledgment_that_a_chain_makes_is_a_message_of_the_thread_of_the_act_th
   .threads("chain1", None, 0);
   let messages: Vec<(String, Vec<String>)> = iter::once(&got.threads[0])
     .chain(&got.threads[0].agents)
-    .map(|node| (node.thread.prompt.clone(), node.thread.messages.clone()))
+    .map(|node| (node.thread.prompt.to_string(), texts(&node.thread.messages)))
     .collect();
   assert_eq!(
     messages,
@@ -433,16 +439,16 @@ fn the_rail_holds_the_closed_threads_first_and_the_open_ones_last_each_by_its_la
   let rail = life.rail(&[], None);
   // prompt1 had its last message after prompt2; prompt6 is over, and stands open while a question
   // waits in its agent prompt7; prompt3 had its last message after prompt4.
-  let tops: Vec<&str> = rail.iter().map(|node| node.thread.prompt.as_str()).collect();
+  let tops: Vec<&str> = rail.iter().map(|node| node.thread.prompt.as_ref()).collect();
   assert_eq!(tops, ["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
   assert_eq!(rail.iter().map(open).collect::<Vec<_>>(), [false, false, true, true, true]);
   assert_eq!(shape(&rail[3..4]), vec![("prompt6".to_owned(), names(&["prompt8", "prompt7"]))]);
   // The rail leaves out each chain that it names, and stands as it stood at a moment.
-  assert!(life.rail(&names(&["chain1"]), None).is_empty());
+  assert_eq!(life.rail(&names(&["chain1"]), None), Vec::<ThreadNode>::new());
   let moments = life.moments(None);
   let early = life.rail(&[], moments.get(2).copied());
   assert_eq!(
-    early.iter().map(|node| node.thread.prompt.as_str()).collect::<Vec<_>>(),
+    early.iter().map(|node| node.thread.prompt.as_ref()).collect::<Vec<_>>(),
     ["prompt1", "prompt2"]
   );
 }
@@ -457,8 +463,8 @@ fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
     ];
     facts.extend(more);
     let acts = folded(facts);
-    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), act)).collect();
+    let on: Vec<&Act> = acts.iter().filter(|act| *act.chain == *"chain1").collect();
     chain_threads(&on, &rows).into_iter().map(|one| one.state).collect::<Vec<_>>()
   };
   // A model that writes the word of the rung of the thread thinks, as the session does.
@@ -619,7 +625,9 @@ fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
     json!(["seen", "chain1", "operator/ann"]),
   ];
   let got = held(facts);
-  let unread = |operator: &str| got.threads_as(operator, "chain1", None, 0).attention.unread;
+  let unread = |operator: &str| {
+    got.threads_as("chain1", None, Reader { site: operator, read: 0 }).attention.unread
+  };
   // Ann read the chain, so it is no unread mark of hers, and Bob has not read it, so it stays his.
   assert_eq!(unread("operator/ann"), 0);
   assert_eq!(unread("operator/bob"), 1);
@@ -645,23 +653,23 @@ fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_who_asked_
   let tracks = life.tracks();
   let began = |id: &str| life.shared(id).map_or(0, |act| act.began);
   let named: Vec<(&str, &str)> =
-    tracks.iter().map(|one| (one.chain.as_str(), one.label.as_str())).collect();
+    tracks.iter().map(|one| (one.chain.as_ref(), one.label.as_str())).collect();
   assert_eq!(named, [("chain1", "root"), ("chain2", "worker")]);
   // A message to a thread starts no thread of its own. A prompt that the word of the root asked
   // names the root, which a window draws as a link between the two tracks.
   let ended = life.shared("prompt1").and_then(|act| act.ended);
   assert!(ended.is_some());
   let first = Began {
-    prompt: "prompt1".to_owned(),
+    prompt: "prompt1".into(),
     at: began("prompt1"),
     by: None,
     ended,
     says: "Fix the setup.".to_owned(),
   };
   let asked = Began {
-    prompt: "prompt2".to_owned(),
+    prompt: "prompt2".into(),
     at: began("prompt2"),
-    by: Some("chain1".to_owned()),
+    by: Some("chain1".into()),
     ended: None,
     says: "Choose what stays.".to_owned(),
   };

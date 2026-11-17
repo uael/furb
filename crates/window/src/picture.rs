@@ -47,7 +47,7 @@ pub(crate) fn shown(text: &str) -> String {
 /// each file that it mentions in the style of a mark, as the input shows them.
 pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
   let images = line.match_indices(PICTURE).map(|(at, _)| {
-    let after = &line[at + PICTURE.len()..];
+    let after = line.get(at + PICTURE.len()..).unwrap_or_default();
     at..at + PICTURE.len() + after.find(' ').unwrap_or(after.len())
   });
   let mut spans: Vec<Range<usize>> =
@@ -61,13 +61,13 @@ pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
       continue;
     }
     if span.start > from {
-      out.push(run(&line[from..span.start], plain));
+      out.push(run(line.get(from..span.start).unwrap_or_default().to_owned(), plain));
     }
-    out.push(run(&line[span.clone()], mark));
+    out.push(run(line.get(span.clone()).unwrap_or_default().to_owned(), mark));
     from = span.end;
   }
   if from < line.len() || out.is_empty() {
-    out.push(run(&line[from..], plain));
+    out.push(run(line.get(from..).unwrap_or_default().to_owned(), plain));
   }
   out
 }

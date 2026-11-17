@@ -313,7 +313,7 @@ fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
     }
     if said(tree, &["update-ref", &named, &head, &carrier]).is_some() {
       let count = git(tree, &["rev-list", "--count", &format!("{carrier}..{head}")])?;
-      println!("landed: {branch} is {} ({} commits)", &head[..9], count.trim());
+      println!("landed: {branch} is {} ({} commits)", head.get(..9).unwrap_or(&head), count.trim());
       return Ok(());
     }
   }

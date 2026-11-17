@@ -28,10 +28,6 @@
 //! An ask of the system to stop, as SIGTERM, ends each life with its image before the daemon ends,
 //! as [`crate::stops`] says.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   cmp::Reverse,
   collections::{BTreeSet, HashMap, HashSet},
@@ -50,7 +46,7 @@ use furb::{
   life::{Answer as Answered, Log, Opening},
   skill::Places,
   value::Fault,
-  view::{self, Reach, Sent, WATCH},
+  view::{self, Name, Reach, Sent, WATCH},
   wire::parsed,
   world::{
     self, Members, Roster, catalog,
@@ -683,7 +679,7 @@ async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answe
     loop {
       match heard.recv().await {
         Ok((_, event)) => match &*event {
-          Event::Act(one) if one.id == act => break,
+          Event::Act(one) if *one.id == *act => break,
           Event::Ended(_) => return Err(ProtocolError::Closed { life }),
           _ => {}
         },
@@ -876,7 +872,10 @@ async fn models(opening: Opening, reply: Replied) {
 
 /// The models that the catalog of an opening offers.
 async fn offered(opening: Opening) -> Result<Answer, ProtocolError> {
-  let offered = spawn_blocking(move || Ok::<_, Fault>(opening.catalog()?.offered())).await;
+  let offered = spawn_blocking(move || {
+    opening.catalog()?.offered().map_err(|no| Fault::refused(no.to_string()))
+  })
+  .await;
   match offered {
     Ok(Ok(models)) => Ok(Answer::Models(models.iter().map(model).collect())),
     Ok(Err(fault)) => Err(ProtocolError::Refused { why: fault.to_string() }),
@@ -1006,6 +1005,10 @@ async fn signed(
 /// it connects, the user config turns codex on, checked against the catalog of the folder of an
 /// opening, each life stands again, so each project offers its models, and the answer gives the
 /// models that the catalog of the opening offers now.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the sign-in takes the opening whose catalog it checks, the kind of sign-in, the outbox that tells its steps, the asks of the daemon that stand each life again, and the reply"
+)]
 async fn signed_in(
   opening: Opening,
   device: bool,
@@ -1188,6 +1191,10 @@ impl Lives {
   }
 
   #[expect(clippy::too_many_lines, reason = "the match gives each verb of the daemon its arm")]
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "each verb takes the peer that asked it, the verb, the outbox of the peer, and the reply that it answers"
+  )]
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
       Verb::Open { life, cwd, actor, roster, skills, config, claude, answers, attach } => {
@@ -1402,6 +1409,10 @@ impl Lives {
 
   /// A peer attached to a life, which hears each event of the life from a place in its log. A
   /// window holds the life, and a skill, under its name, serves views of it and holds nothing.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "an attach takes the life, the place in its log, the peer, and the outbox that the events go to"
+  )]
   fn attach(
     &mut self,
     life: &str,
@@ -1458,7 +1469,7 @@ impl Lives {
     }
     (was || skill)
       .then_some(Answer::Done)
-      .ok_or(ProtocolError::Unattached { life: life.to_owned() })
+      .ok_or_else(|| ProtocolError::Unattached { life: life.to_owned() })
   }
 
   /// The skills attached to a life told to each of its windows, after a skill attached or left.
@@ -1815,7 +1826,7 @@ impl Lives {
       .filter(|(life, held)| matches!(held.stage, Stage::Living(_)) && from != Some(life.as_str()));
     let runs =
       living.map(|(life, held)| (life.clone(), held.handle.clone(), held.handle.commands()));
-    let lives: Vec<(String, LifeHandle, BTreeSet<String>)> =
+    let lives: Vec<(String, LifeHandle, BTreeSet<Name>)> =
       runs.filter(|(_, _, commands)| !commands.is_empty()).collect();
     let (log, asks) = (self.settings.opening.log.clone(), self.asks.clone());
     let still = self.settings.stall;
@@ -2016,6 +2027,10 @@ impl Watch {
 
 /// The message of a stall sent to a chain of a life, or to its root with no chain, as a prompt of
 /// None, or the report of why the life refused it.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a wake takes the life, its record and the notice that it says, the chain that it goes to, and the log that tells a refusal"
+)]
 async fn woken(
   life: LifeHandle,
   record: String,
@@ -2051,6 +2066,8 @@ impl Teller {
     asks: mpsc::WeakUnboundedSender<Asked>,
   ) {
     let Self { life, mut opens, outbox } = self;
+    // Each frame of an event names the life by this one text, which it shares.
+    let named = Name::from(life.as_str());
     let mut events = pin!(events);
     loop {
       let event = tokio::select! {
@@ -2068,11 +2085,7 @@ impl Teller {
       let paced = event.is_none();
       let due = |opens: &&mut Heard| paced || opens.ended();
       let opening = opens.iter_mut().filter(due).flat_map(|opens| opens.frames(&life));
-      let event = event.map(|(seq, event)| Frame::Event {
-        life: life.clone(),
-        seq,
-        event: Event::clone(&event),
-      });
+      let event = event.map(|(seq, event)| Frame::Event { life: Arc::clone(&named), seq, event });
       if opening.chain(event).any(|frame| outbox.send(frame).is_err()) {
         break;
       }

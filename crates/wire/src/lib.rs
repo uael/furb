@@ -19,7 +19,7 @@ pub mod threads;
 pub mod words;
 
 pub use act::{
-  Act, Answer, Kind, Maker, OPERATOR, Pause, Phase, Read, RunState, Spend, WATCH, fault,
+  Act, Answer, Kind, Maker, Name, OPERATOR, Pause, Phase, Read, RunState, Spend, WATCH, fault,
   interruption, operator, reason,
 };
 pub use card::{Card, Part, Sent, Skill, Standing};

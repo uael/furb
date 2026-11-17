@@ -1,12 +1,55 @@
 //! An act with its meaning, and what its models cost.
 
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{
+  Deserialize, Deserializer, Serialize,
+  de::{self, Visitor},
+};
 use serde_json::Value;
 
 use crate::{page::Viewed, state::State};
+
+/// The name of an act or of a chain. A name is made once from its fact and shared: each place that
+/// holds it holds the same text.
+pub type Name = Arc<str>;
+
+/// A name read from the text that a frame holds, made in one allocation: serde reads an `Arc<str>`
+/// through a `String` that it then copies.
+pub(crate) fn read_name<'de, D: Deserializer<'de>>(from: D) -> Result<Name, D::Error> {
+  struct Text;
+  impl Visitor<'_> for Text {
+    type Value = Name;
+    fn expecting(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+      out.write_str("a name")
+    }
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<Name, E> {
+      Ok(Name::from(text))
+    }
+  }
+  from.deserialize_str(Text)
+}
+
+/// A name in a list or an option, read as [`read_name`] reads it.
+#[repr(transparent)]
+struct Named(Name);
+
+impl<'de> Deserialize<'de> for Named {
+  fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
+    read_name(from).map(Self)
+  }
+}
+
+/// A list of names, each read in one allocation; the list keeps the place that it was read into.
+pub(crate) fn read_names<'de, D: Deserializer<'de>>(from: D) -> Result<Vec<Name>, D::Error> {
+  Vec::<Named>::deserialize(from).map(|names| names.into_iter().map(|one| one.0).collect())
+}
+
+/// A name that may be absent, read in one allocation.
+pub(crate) fn read_some_name<'de, D: Deserializer<'de>>(from: D) -> Result<Option<Name>, D::Error> {
+  Option::<Named>::deserialize(from).map(|name| name.map(|one| one.0))
+}
 
 /// The kind of an act, read once from its fact: each kind that the view reads by name, and any
 /// other as its text. It serializes to that text, so a window reads the string of the fact.
@@ -142,16 +185,20 @@ impl Maker {
 pub struct Act {
   #[schemars(with = "String")]
   pub kind: Kind,
-  pub id: String,
-  pub by: String,
+  #[serde(deserialize_with = "read_name")]
+  pub id: Name,
+  #[serde(deserialize_with = "read_name")]
+  pub by: Name,
   /// Who made the act: for a rung that waits for the word of an actor, that actor; for any
   /// other act, the role of the act or the person that made it.
   #[serde(default)]
   pub maker: Maker,
   /// What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
-  pub on: String,
+  #[serde(deserialize_with = "read_name")]
+  pub on: Name,
   /// The chain that the act stands in.
-  pub chain: String,
+  #[serde(deserialize_with = "read_name")]
+  pub chain: Name,
   /// The words of the act after its kind, its name, its maker and what it is on.
   pub words: Vec<Value>,
   pub phase: Phase,
@@ -278,8 +325,8 @@ impl Read {
     reason = "the usage holds each count of tokens, a whole number of at least 0, as a float"
   )]
   fn of(usage: &[f64; 5]) -> Self {
-    let whole = |at: usize| usage[at] as u64;
-    Self { tokens: whole(0), cached: whole(2), written: whole(3) }
+    let [tokens, _, cached, written, _] = *usage;
+    Self { tokens: tokens as u64, cached: cached as u64, written: written as u64 }
   }
 }
 
@@ -334,7 +381,7 @@ impl Act {
 
   /// The thread that a prompt on a thread is on: the prompt that it is on.
   pub fn thread(&self) -> Option<&str> {
-    (self.kind == Kind::Prompt && self.on != self.chain).then_some(self.on.as_str())
+    (self.kind == Kind::Prompt && self.on != self.chain).then_some(self.on.as_ref())
   }
 
   /// Whether the act is a prompt to the operator: a question, or a view that a word draws.

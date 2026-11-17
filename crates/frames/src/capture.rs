@@ -219,8 +219,8 @@ impl Rig {
     put(&rig.project().join(SHOT.0), SHOT.1)?;
     committed(&rig.project())?;
     let mut skills = serde_json::json!({ "naming": false });
-    for kit in walk.kits {
-      skills[*kit] = true.into();
+    if let Some(named) = skills.as_object_mut() {
+      named.extend(walk.kits.iter().map(|kit| ((*kit).to_owned(), true.into())));
     }
     write(root.join("config/config.json"), &serde_json::json!({ "skills": skills }).to_string())?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
@@ -655,13 +655,13 @@ pub(crate) fn stamp(path: &Path) -> Result<(), Error> {
     if read == 0 {
       return Ok(());
     }
-    held.extend_from_slice(&buffer[..read]);
+    held.extend_from_slice(buffer.get(..read).unwrap_or_default());
     let whole = match str::from_utf8(&held) {
       Ok(_) => held.len(),
       Err(cut) if cut.error_len().is_none() => cut.valid_up_to(),
       Err(cut) => cut.valid_up_to() + cut.error_len().unwrap_or(1),
     };
-    let text = String::from_utf8_lossy(&held[..whole]).into_owned();
+    let text = String::from_utf8_lossy(held.get(..whole).unwrap_or_default()).into_owned();
     held.drain(..whole);
     let micros = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros();
     writeln!(file, "{micros}\t{}", serde_json::to_string(&text)?).map_err(wrote)?;
@@ -763,10 +763,9 @@ impl Tmux {
   /// The first cell of a text on the screen: its column and its row.
   async fn place(&self, text: &str) -> Result<(usize, usize), Error> {
     let screen = self.screen().await?;
-    let found = screen
-      .lines()
-      .enumerate()
-      .find_map(|(row, line)| line.find(text).map(|at| (width(&line[..at]), row)));
+    let found = screen.lines().enumerate().find_map(|(row, line)| {
+      line.find(text).map(|at| (width(line.get(..at).unwrap_or_default()), row))
+    });
     found.ok_or_else(|| Error::Step { step: "pointer".to_owned(), until: text.to_owned(), screen })
   }
 }

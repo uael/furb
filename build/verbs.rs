@@ -20,6 +20,15 @@
 //!
 //! Each constant of the contract that is a number or a text becomes a constant of the engine, with
 //! its sentence, so no ear of the crate writes it again.
+#![expect(
+  clippy::string_slice,
+  reason = "a build script fails the build by a panic, as cargo reports it"
+)]
+#![expect(clippy::panic, reason = "a build script fails the build by a panic, as cargo reports it")]
+#![expect(
+  clippy::expect_used,
+  reason = "a build script fails the build by a panic, as cargo reports it"
+)]
 
 use ruff_python_ast::{Expr, Number, Stmt, StmtFunctionDef};
 use ruff_python_parser::parse_module;
@@ -176,7 +185,7 @@ impl Kind {
   fn word(self, name: &str) -> String {
     match self {
       Self::Fielded(one) => one.word(name),
-      Self::Ear => format!("handed({name}, false)"),
+      Self::Ear => format!("self.handed({name}, false)"),
       Self::Template => format!("templated({name})"),
     }
   }
@@ -354,7 +363,7 @@ impl Verb {
       .vararg
       .as_deref()
       .map(|one| Parameter { name: one.name.as_str().to_owned(), kind: annotated(one) });
-    let answer = Answer::of(&def.returns.as_deref().map(text).unwrap_or_else(|| "None".to_owned()));
+    let answer = Answer::of(&def.returns.as_deref().map_or_else(|| "None".to_owned(), text));
     Self { name: def.name.as_str().to_owned(), doc: doc(def), needed, optional, rest, answer }
   }
 
@@ -459,6 +468,13 @@ pub(crate) fn methods(verbs: &[Verb]) -> String {
       given.push(format!("with: verbs::{with}"));
     }
     out!(out, "  /// {}", verb.doc);
+    // 4 is the too-many-arguments-threshold of clippy.toml, the one home of the bound.
+    if given.len() + 1 > 4 {
+      out!(
+        out,
+        "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
+      );
+    }
     out!(
       out,
       "  pub fn {}(&mut self, {}) -> Result<{}, Fault> {{",
@@ -483,9 +499,9 @@ pub(crate) fn methods(verbs: &[Verb]) -> String {
       let held = one.kind.held("one");
       out!(out, "    if let Some(one) = with.{0} {{ kwargs.push(({0:?}, {held})); }}", one.name);
     }
-    out!(out, "    let got = self.verb({:?}, args, kwargs)?;", verb.name);
+    out!(out, "    let got = self.verb({:?}, &args, kwargs)?;", verb.name);
     let answered =
-      if let Answer::Act(_) = verb.answer { "self.awaited(got)" } else { "Plain::plain(got)" };
+      if let Answer::Act(_) = verb.answer { "self.awaited(&got)" } else { "Plain::plain(got)" };
     out!(out, "    {answered}\n  }}\n");
   }
   out.push_str("}\n");
@@ -522,7 +538,13 @@ pub(crate) fn structs(verbs: &[Verb]) -> String {
        engine.",
       verb.name
     );
-    out!(out, "#[derive(Debug, Clone, Default)]\npub struct {with} {{");
+    // A struct of numbers and booleans alone is copied, as each of its fields is.
+    let copy = verb
+      .optional
+      .iter()
+      .all(|one| matches!(one.kind, Fielded::Int | Fielded::Float | Fielded::Bool));
+    let copy = if copy { "Copy, " } else { "" };
+    out!(out, "#[derive(Debug, Clone, {copy}Default)]\npub struct {with} {{");
     for one in &verb.optional {
       out!(out, "  pub {}: {},", one.name, one.kind.field());
     }
@@ -690,9 +712,13 @@ fn python_words(verb: &Verb) -> Python {
     Fielded::MaybeStr => format!("{}: Maybe", one.name),
     _ => format!("{}: Option<Value>", one.name),
   }));
-  let mut words: Vec<String> = verb.needed.iter().map(|one| format!("{}.0", one.name)).collect();
+  let mut words: Vec<String> =
+    verb.needed.iter().map(|one| format!("{}.handed(&mut hands)", one.name)).collect();
   words.extend(placed.iter().filter_map(|one| {
-    one.placed.as_ref().map(|value| format!("{}.map_or_else(|| {value}, |one| one.0)", one.name))
+    one
+      .placed
+      .as_ref()
+      .map(|value| format!("{}.map_or_else(|| {value}, |one| one.handed(&mut hands))", one.name))
   }));
   let keys: Vec<String> = named
     .iter()
@@ -709,7 +735,7 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
   let Python { signature, given, words, keys } = python_words(verb);
   let (answer, made) = match verb.answer {
     Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
-    _ => ("Value", "Value(got)"),
+    _ => ("Value", "Value::of(got)"),
   };
   out!(out, "  /// {}", verb.doc);
   out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
@@ -726,16 +752,18 @@ fn pythonic_verb(out: &mut String, verb: &Verb) {
     verb.name,
     given.join(", ")
   );
+  out!(out, "    let mut hands = Hands::default();");
   let mutable = if verb.rest.is_some() { "mut " } else { "" };
   out!(out, "    let {mutable}args: Vec<Object> = vec![{}];", words.join(", "));
   if let Some(rest) = &verb.rest {
-    out!(out, "    args.extend({}.into_iter().map(|one| one.0));", rest.name);
+    out!(out, "    args.extend({}.into_iter().map(|one| one.handed(&mut hands)));", rest.name);
   }
   out!(out, "    let kwargs: [(&str, Option<Value>); {}] = [{}];", keys.len(), keys.join(", "));
   out!(
     out,
-    "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
+    "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, \
+     one?.handed(&mut hands)))).collect();"
   );
-  out!(out, "    let got = slf.borrow().said({:?}, args, kwargs)?;", verb.name);
+  out!(out, "    let got = slf.try_borrow_mut()?.said({:?}, &args, kwargs, hands)?;", verb.name);
   out!(out, "    Ok({made})\n  }}\n");
 }

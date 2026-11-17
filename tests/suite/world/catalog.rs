@@ -2,8 +2,7 @@
 //! process, through an Opening in a process of its own: each test runs again as a child of itself,
 //! with the variables that it gives, as a user starts a host with them, and a provider on a port of
 //! this machine answers the child and keeps each request that it read.
-
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 
 use std::{
   fs,
@@ -23,7 +22,7 @@ use furb::{
 };
 use serde_json::{Value, json};
 
-use super::provider::{asked, counted, on, said, taken, until, yard};
+use super::provider::{asked, counted, said, taken, until, yard};
 use crate::{
   child::{child, here, ran},
   drive::{block_on, pause},
@@ -266,7 +265,7 @@ fn a_gateway_of_pi_ai_gets_an_image_in_the_middle_of_a_message_and_reads_a_lette
     };
     let mut engine = opening.boot::<String>([]).expect("the life opens").0;
     let root = engine.root().to_owned();
-    let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+    let with = verbs::Prompt { message: Some(message), on: Some(root), ..Default::default() };
     let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
     let got = block_on(Act::<Object>::of(&mut engine, &id)).unwrap_or_else(|fault| fault.object());
     assert_eq!(got.as_ref().as_int(), Some(1), "the letter is one letter: {got:?}");
@@ -451,7 +450,7 @@ pub(super) fn replied(engine: &mut Engine) -> String {
 fn ran_word(engine: &mut Engine, text: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let holds = |one: &Fact| {
     (0..4)
@@ -809,7 +808,7 @@ fn priced(input: f64) -> Value {
 fn a_model_takes_the_class_of_the_catalog_else_the_one_of_its_price_else_dear() {
   if let Some(at) = child() {
     let catalog = opened(&at).catalog().expect("the catalog");
-    let class = |name: &str| catalog.find(name).map(|one| one.class());
+    let class = |name: &str| catalog.find(name).unwrap().map(|one| one.class());
     assert_eq!(class("claude-cli:haiku"), Some(Class::Cheap));
     assert_eq!(class("claude-cli:opus"), Some(Class::Dear));
     assert_eq!(class("codex:gpt-5-mini"), Some(Class::Cheap));
@@ -822,7 +821,7 @@ fn a_model_takes_the_class_of_the_catalog_else_the_one_of_its_price_else_dear() 
     let priced = ["p:under", "p:even", "p:over"].map(|name| class(name).expect("a model of p"));
     assert_eq!(priced, [Class::Cheap, Class::Cheap, Class::Dear]);
     assert_eq!(class("p:free"), Some(Class::Dear), "a model with no price is dear");
-    let classed = catalog.find("p:under").expect("a model of p").classed(Class::Dear);
+    let classed = catalog.find("p:under").unwrap().expect("a model of p").classed(Class::Dear);
     assert_eq!(classed.class(), Class::Dear, "a class that is given wins over the price");
     return;
   }
@@ -1112,8 +1111,11 @@ fn each_request_of_a_chain_starts_with_the_request_before_it_across_a_stand_an_e
   let door = Text::new(first, "x = 4\ndebug(t'{x}')");
   engine.write(&door, verbs::Write { on: Some(root.clone()) }).expect("the door is written");
   counted(&mut engine, &root, 3);
-  let fork =
-    verbs::Chain { label: Some("side".to_owned()), source: on(&root), ..Default::default() };
+  let fork = verbs::Chain {
+    label: Some("side".to_owned()),
+    source: Some(root.clone()),
+    ..Default::default()
+  };
   let side = engine.chain(fork).expect("the fork is made").id().to_owned();
   counted(&mut engine, &side, 4);
   counted(&mut engine, &root, 5);

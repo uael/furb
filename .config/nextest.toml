@@ -11,6 +11,14 @@ slow-timeout = { period = "15s", terminate-after = 4 }
 fail-fast = false
 failure-output = "immediate-final"
 
+# The longest tests start first, so none of them starts late and holds the end of the run alone: the tests that
+# run a test alone in a child, that open a life past its tail, that kill a daemon, that walk a window or capture
+# it, that measure memory, and the replay of the engine past its bound. On 11-17 they ended last, and a run took 53
+# s with them first where it took 61 to 90 s, at the same CPU time.
+[[profile.default.overrides]]
+filter = "test(/^(apart|rebirth|walk|kills|capture|memory)::/) | test(/a_replay_takes_the_answer_of_each_question/)"
+priority = 100
+
 # A capture walks a scenario in tmux at three sizes, and bounds each of its own waits, for a screen and for its
 # daemon, by its patience of 30 s, so its own error names the wait that failed. The runner ends it only past the sum
 # of those bounds, which a loaded machine reaches before the bound of each other test.
@@ -37,10 +45,22 @@ command = [
   'mkdir -p target/data && echo "XDG_DATA_HOME=$(mktemp -d "$PWD/target/data/run-XXXXXX")" >> "$NEXTEST_ENV"',
 ]
 
+# A life of a test keeps its scratch directory and what its claude command line said in the cache of furb, which is the
+# one of the person unless XDG_CACHE_HOME names another: each tree gives its tests a cache of its own in /tmp, under a
+# short name that holds a hash of the root, as the tests of TypeScript name theirs, since a socket that a command makes
+# in a scratch directory takes 104 bytes of path at the most. The hook of the tests names the same folder, and reads
+# there each scratch directory that a run left.
+[scripts.setup.cache]
+command = [
+  "sh",
+  "-c",
+  'cache="/tmp/furb-cache-$(pwd -P | tr -d "\n" | shasum -a 256 | cut -c1-8)" && mkdir -p "$cache" && echo "XDG_CACHE_HOME=$cache" >> "$NEXTEST_ENV"',
+]
+
 [[profile.default.scripts]]
 platform = "cfg(unix)"
 filter = "all()"
-setup = ["claude", "data"]
+setup = ["claude", "data", "cache"]
 
 # The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
 # so a flake never hides behind a retry. `cargo nextest run --profile census`.

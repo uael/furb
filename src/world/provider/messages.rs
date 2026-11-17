@@ -14,7 +14,8 @@ use super::{
 };
 use crate::fact;
 use crate::{
-  value::{ObjectRef, entry},
+  value::{ObjectRef, entry, items},
+  view::closes,
   wire,
 };
 use std::mem;
@@ -49,7 +50,7 @@ fn forgotten(blocks: Vec<AssistantContent>) -> Vec<AssistantContent> {
 /// The last characters of a text, this many at most.
 pub(super) fn tail(text: &str, most: usize) -> &str {
   let skip = text.chars().count().saturating_sub(most);
-  text.char_indices().nth(skip).map_or("", |(at, _)| &text[at..])
+  text.char_indices().nth(skip).and_then(|(at, _)| text.get(at..)).unwrap_or_default()
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the
@@ -75,12 +76,11 @@ pub(super) fn messages(
   // The word of the turn of the model that the gate of an earlier build refused, which the next
   // user turn holds under its finding.
   let mut quoted: Option<(String, usize)> = None;
-  let all = turns.items().unwrap_or_default();
-  for (at, turn) in all.iter().enumerate() {
-    let Some(role) = entry(turn, 0).and_then(|one| one.as_str()) else { continue };
-    let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
+  for (at, turn) in items(turns).into_iter().flatten().enumerate() {
+    let Some(role) = entry(&turn, 0).and_then(|one| one.as_str()) else { continue };
+    let python = entry(&turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
     if role == "assistant" {
-      let next = all.get(at + 1).and_then(|one| entry(one, 1)?.as_str().map(str::to_owned));
+      let next = entry(&turns, at + 1).and_then(|one| entry(&one, 1)?.as_str().map(str::to_owned));
       if let Some(place) = next.as_deref().and_then(refusal) {
         // The quote holds the word less the marks of a fence or of a tool call, which the model
         // would write again.
@@ -89,7 +89,7 @@ pub(super) fn messages(
         joins = true;
         continue;
       }
-      let blocks = entry(turn, 3)
+      let blocks = entry(&turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
         .map(|blocks| if model.forgets { forgotten(blocks) } else { blocks })
         .filter(|blocks| !blocks.is_empty())
@@ -151,9 +151,9 @@ pub(super) fn spoken(
 /// paragraph after another, which the setup of the chain stands before.
 pub(crate) fn banner(python: &str) -> Option<usize> {
   python.match_indices("\n\n#chain").map(|(at, _)| at + 2).find(|&at| {
-    let rest = &python[at + "#chain".len()..];
+    let rest = python.get(at + "#chain".len()..).unwrap_or_default();
     let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
-    digits > 0 && rest[digits..].starts_with('\n')
+    digits > 0 && rest.get(digits..).is_some_and(|rest| rest.starts_with('\n'))
   })
 }
 
@@ -163,17 +163,20 @@ pub(crate) fn banner(python: &str) -> Option<usize> {
 pub(super) fn refusal(python: &str) -> Option<usize> {
   let mut from = 0;
   let head = loop {
-    let at = from + python[from..].find(" refused\n")?;
-    let start = python[..at].rfind('\n').map_or(0, |one| one + 1);
-    let name = python[start..at].strip_prefix('#').unwrap_or_default();
-    if fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
+    let at = from + python.get(from..)?.find(" refused\n")?;
+    let before = python.get(..at)?;
+    let start = before.rfind('\n').map_or(0, |one| one + 1);
+    let name = before.get(start..)?.strip_prefix('#').unwrap_or_default();
+    if fact::named(name, "rung") && (start == 0 || before.get(..start)?.ends_with("\n\n")) {
       break (name, at + " refused\n".len());
     }
     from = at + 1;
   };
   let (name, body) = head;
-  let rest = &python[body..];
-  let line = |from: usize| rest[from..].find('\n').map_or(rest.len(), |one| from + one);
+  let rest = python.get(body..)?;
+  let line = |from: usize| {
+    rest.get(from..).and_then(|tail| tail.find('\n')).map_or(rest.len(), |one| from + one)
+  };
   let end = if rest.starts_with(&format!("{name}_findings = ")) {
     line(0)
   } else {
@@ -187,14 +190,15 @@ pub(super) fn refusal(python: &str) -> Option<usize> {
 /// that ends at this place, under the name `rungN_word` that a rung tells its word by, so the model
 /// reads it as the word of that rung.
 pub(super) fn refused(python: &str, place: usize, word: &str) -> String {
-  let start = python[..place].rfind("\n\n").map_or(0, |one| one + 2);
-  let rung = python[start + 1..].split(' ').next().unwrap_or_default();
+  let (head, tail) = python.split_at_checked(place).unwrap_or((python, ""));
+  let start = head.rfind("\n\n").map_or(0, |one| one + 2);
+  let rung = python.get(start + 1..).and_then(|rest| rest.split(' ').next()).unwrap_or_default();
   let mut name = format!("{rung}_word");
-  while format!("{word}\n").contains(&format!("</s:{name}>\n")) {
+  while closes(word, &name) {
     name.push('_');
   }
   let word = word.trim_end_matches('\n');
-  format!("{}\n<s:{name}>\n{word}\n</s:{name}>{}", &python[..place], &python[place..])
+  format!("{head}\n<s:{name}>\n{word}\n</s:{name}>{tail}")
 }
 
 /// The blocks of a turn of a model less the marks of a fence or of a tool call in each text, which

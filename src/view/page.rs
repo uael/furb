@@ -6,6 +6,7 @@
 use std::{
   collections::{HashMap, HashSet},
   mem,
+  sync::Arc,
 };
 
 use anstream::adapter::strip_str;
@@ -14,7 +15,7 @@ use serde_json::Value;
 use similar::{ChangeTag, TextDiff};
 
 use furb_wire::{
-  act::{Act, Kind, Maker, Phase, RunState, fault, operator, reason},
+  act::{Act, Kind, Maker, Name, Phase, RunState, fault, operator, reason},
   card::{Card, Standing},
   page::{
     Agent, Answered, Block, Context, DIFF, Exchange, LITERAL, Line, Made, Mark, Output, Page,
@@ -48,7 +49,7 @@ fn output_of([stdout, stderr]: &[Kept; 2], took: Option<u64>, act: &str) -> Opti
   let lines: Vec<&str> = stdout.end.lines().chain(stderr.end.lines()).collect();
   let skip = lines.len().saturating_sub(TAIL);
   let more = stdout.before + stderr.before + skip;
-  let tail: Vec<String> = lines[skip..].iter().map(|line| shown_line(line)).collect();
+  let tail: Vec<String> = lines.iter().skip(skip).map(|line| shown_line(line)).collect();
   let acts = vec![act.to_owned()];
   (!tail.is_empty() || took.is_some()).then_some(Output { tail, more, took, acts })
 }
@@ -83,7 +84,8 @@ impl Kept {
         start += 1;
       }
     }
-    Self { end: text[start..].to_owned(), before: text[..start].matches('\n').count() }
+    let (before, end) = text.split_at_checked(start).unwrap_or((text, ""));
+    Self { end: end.to_owned(), before: before.matches('\n').count() }
   }
 
   /// The end once the stream wrote a text more.
@@ -155,8 +157,11 @@ impl Streamed {
 
   /// What a model added to the text and to the thought of a rung, at a millisecond of the epoch.
   pub fn wrote(&mut self, rung: &str, [text, thinking]: [&str; 2], now: u64) {
-    let wrote =
-      self.wrote.entry(rung.to_owned()).or_insert_with(|| Wrote { began: now, ..Wrote::default() });
+    // A rung that wrote before holds its name already, so a later part copies none.
+    if !self.wrote.contains_key(rung) {
+      self.wrote.insert(rung.to_owned(), Wrote { began: now, ..Wrote::default() });
+    }
+    let Some(wrote) = self.wrote.get_mut(rung) else { return };
     wrote.text.push_str(text);
     wrote.thinking.push_str(thinking);
     wrote.retry = None;
@@ -177,7 +182,12 @@ impl Streamed {
     let word = |at: usize| fact.get(at).and_then(Value::as_str);
     let (true, Some(about), Some(text)) = (wrote(fact), word(1), word(3)) else { return };
     let stream = usize::from(word(4) == Some("stderr"));
-    self.outs.entry(about.to_owned()).or_default()[stream].push(text);
+    if !self.outs.contains_key(about) {
+      self.outs.insert(about.to_owned(), <[Kept; 2]>::default());
+    }
+    if let Some(one) = self.outs.get_mut(about).and_then(|streams| streams.get_mut(stream)) {
+      one.push(text);
+    }
   }
 
   /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
@@ -187,30 +197,30 @@ impl Streamed {
   pub fn heard(&mut self, act: &Act, now: u64) {
     if act.kind == Kind::Reply
       && act.done()
-      && let Some(wrote) = self.wrote.get_mut(&act.by)
+      && let Some(wrote) = self.wrote.get_mut(&*act.by)
     {
       wrote.retry = None;
     }
     if act.done() && act.kind == Kind::Bash {
-      self.outs.remove(&act.id);
+      self.outs.remove(&*act.id);
     }
     if act.done() && matches!(act.kind, Kind::Prompt | Kind::Bash) {
-      if self.began.contains_key(&act.id) {
-        self.ended.entry(act.id.clone()).or_insert(now);
+      if self.began.contains_key(&*act.id) {
+        once(&mut self.ended, &act.id, now);
       }
     } else if act.kind == Kind::Rung && act.cancelled() {
-      self.began.remove(&act.id);
-      self.ended.entry(act.id.clone()).or_insert(now);
+      self.began.remove(&*act.id);
+      once(&mut self.ended, &act.id, now);
     } else if act.done() && act.run != Some(RunState::Running) {
-      self.began.remove(&act.id);
+      self.began.remove(&*act.id);
     } else {
-      self.began.entry(act.id.clone()).or_insert(now);
+      once(&mut self.began, &act.id, now);
     }
     if (act.word.is_some() || act.done())
-      && let Some(wrote) = self.wrote.get_mut(&act.id)
+      && let Some(wrote) = self.wrote.get_mut(&*act.id)
     {
       if wrote.thinking.is_empty() {
-        self.wrote.remove(&act.id);
+        self.wrote.remove(&*act.id);
       } else {
         wrote.text = String::new();
         wrote.thought.get_or_insert(now);
@@ -232,16 +242,16 @@ impl Held {
         threads.insert(message_of(prompt, &self).unwrap_or(&prompt.id));
       }
     }
-    let shown: HashSet<String> = threads
+    let shown: HashSet<Name> = threads
       .into_iter()
       .filter_map(|thread| reader.told(thread))
       .flat_map(|told| {
         told.answers.iter().filter_map(|one| reader.thinker(one)).collect::<Vec<_>>()
       })
-      .map(|rung| rung.id.clone())
+      .map(|rung| Arc::clone(&rung.id))
       .collect();
     let writes = |id: &str| self.act(id).is_none_or(|rung| rung.word.is_none() && !rung.done());
-    streams.wrote.retain(|id, _| shown.contains(id) || writes(id));
+    streams.wrote.retain(|id, _| shown.contains(id.as_str()) || writes(id));
   }
 }
 
@@ -297,8 +307,9 @@ impl<'a> Reader<'a> {
     };
     let end = before.unwrap_or(answers.len()).min(answers.len());
     let start = end.saturating_sub(limit);
-    let mut number: usize = answers[..start]
+    let mut number: usize = answers
       .iter()
+      .take(start)
       .flat_map(|one| &one.rungs)
       .map(|rung| count(rung, self.streams))
       .sum();
@@ -308,7 +319,8 @@ impl<'a> Reader<'a> {
     for (at, one) in answers.iter_mut().enumerate() {
       one.more = busy && (at + 1 == messages || one.rungs.last().is_some_and(|rung| lives(rung)));
     }
-    let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
+    let shown = answers.iter().enumerate().take(end).skip(start);
+    let exchanges = shown.map(|(at, one)| self.exchange(at, one, &mut number)).collect();
     // The count of the lines of the thread before each rung, which numbers each line of its word.
     let mut before: HashMap<&str, usize> = HashMap::new();
     let mut lined = 0;
@@ -326,7 +338,7 @@ impl<'a> Reader<'a> {
     });
     let mut agents: Vec<Agent> = agents
       .map(|(rung, agent)| Agent {
-        at: before.get(rung.id.as_str()).and_then(|before| self.made_at(rung, *before, agent)),
+        at: before.get(rung.id.as_ref()).and_then(|before| self.made_at(rung, *before, agent)),
         ..self.agent(agent)
       })
       .collect();
@@ -336,9 +348,11 @@ impl<'a> Reader<'a> {
         && anchor_of(act).is_some()
         && parent_of(act, &self.held) == Some(thread)
     };
-    agents.extend(self.held.on_chain(&prompts[0].chain).filter(sub).map(|act| self.agent(act)));
-    let sub = anchor_of(prompts[0]).map(|_| Box::new(self.agent(prompts[0])));
-    let (context, folder) = (self.context(&prompts[0].chain), self.folder(&prompts[0].chain));
+    // A thread is told with its first prompt, which `told` gives first.
+    let Some(first) = prompts.first().copied() else { return Page::default() };
+    agents.extend(self.held.on_chain(&first.chain).filter(sub).map(|act| self.agent(act)));
+    let sub = anchor_of(first).map(|_| Box::new(self.agent(first)));
+    let (context, folder) = (self.context(&first.chain), self.folder(&first.chain));
     Page { exchanges, above: start, agents, context, sub, folder, views: self.views() }
   }
 
@@ -346,14 +360,32 @@ impl<'a> Reader<'a> {
   fn made_at(self, rung: &Act, before: usize, made: &Act) -> Option<usize> {
     let source = self.source(made)?;
     let lines = self.lines(rung, before);
-    at_line(&lines, before, source).map(|at| lines[at].number)
+    at_line(&lines, before, source).and_then(|at| lines.get(at)).map(|line| line.number)
   }
 
-  /// The context of a chain at its last answer, and none before it.
+  /// The context of a chain at its last answer, and none before it: of the chain that it stands
+  /// as now, since each name of a chain that jumped names the chain that it jumped to.
   fn context(self, chain: &str) -> Option<Context> {
-    let spend = self.held.act(chain)?.spend.as_ref()?;
+    let spend = self.held.act(&self.landed(chain))?.spend.as_ref()?;
     let window = spend.actor.as_deref().and_then(|actor| self.held.window(actor));
     Some(Context { read: spend.read?, window, dollars: spend.dollars })
+  }
+
+  /// The chain that a chain stands as now: the chain that its last jump made, and on through each
+  /// jump of that one.
+  fn landed(self, chain: &str) -> String {
+    let jumped = |on: &str| {
+      let to = |act: &Act| match (&act.kind, &act.phase) {
+        (Kind::Other(kind), Phase::Done(Value::String(to))) if kind == "jump" => Some(to.clone()),
+        _ => None,
+      };
+      self.held.on_chain(on).filter_map(to).last()
+    };
+    let mut at = chain.to_owned();
+    while let Some(to) = jumped(&at).filter(|to| *to != at) {
+      at = to;
+    }
+    at
   }
 
   /// The views of the session that stand open: each prompt to the operator, not done, whose
@@ -375,7 +407,7 @@ impl<'a> Reader<'a> {
   fn told(self, thread: &str) -> Option<Told<'a>> {
     let prompt = self.held.act(thread).filter(|act| act.kind == Kind::Prompt)?;
     let on = |act: &&Act| {
-      act.kind == Kind::Prompt && act.id != thread && message_of(act, &self.held) == Some(thread)
+      act.kind == Kind::Prompt && *act.id != *thread && message_of(act, &self.held) == Some(thread)
     };
     // Each prompt of the thread, whose rungs answer the thread, and the messages that the operator
     // said among them: a wake or an acknowledgment that the engine says is no message.
@@ -389,7 +421,7 @@ impl<'a> Reader<'a> {
     // A message that the operator took back is no message of the thread: its text went back to
     // his input, and the message that he sends in its place stands there. A message that a stop
     // of its thread cancelled was said all the same.
-    let said = |one: &&Act| one.id == thread || operator(&one.by) && !one.taken_back();
+    let said = |one: &&Act| *one.id == *thread || operator(&one.by) && !one.taken_back();
     let mut messages: Vec<&Act> = prompts.iter().copied().filter(said).collect();
     messages.extend(&words);
     messages.sort_by_key(|one| one.began);
@@ -411,19 +443,28 @@ impl<'a> Reader<'a> {
     rungs.extend(words);
     rungs.sort_by_key(|rung| rung.began);
     // A sub thread that asks the operator about a line is its own first question.
-    if prompt.asks_operator() {
-      answers[0].asked.push(prompt);
+    // Each act goes to the message that it answers, which `after` finds among the messages.
+    if prompt.asks_operator()
+      && let Some(first) = answers.first_mut()
+    {
+      first.asked.push(prompt);
     }
     for rung in &rungs {
-      answers[after(rung.began)].rungs.push(rung);
+      if let Some(one) = answers.get_mut(after(rung.began)) {
+        one.rungs.push(rung);
+      }
       let asks = |act: &&Act| act.asks_operator() && anchor_of(act).is_none();
       for asked in self.held.made_by(&rung.id).filter(asks) {
-        answers[after(asked.began)].asked.push(asked);
+        if let Some(one) = answers.get_mut(after(asked.began)) {
+          one.asked.push(asked);
+        }
       }
     }
     for message in messages.iter().filter(|one| one.kind == Kind::Prompt) {
-      if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string)) {
-        answers[after(ended)].closes.push(message);
+      if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string))
+        && let Some(one) = answers.get_mut(after(ended))
+      {
+        one.closes.push(message);
       }
     }
     Some(Told { prompts, answers, rungs })
@@ -431,7 +472,7 @@ impl<'a> Reader<'a> {
 
   /// The rung whose thought an exchange shows: the last of its rungs that thought.
   fn thinker(self, answers: &Answers<'a>) -> Option<&'a Act> {
-    answers.rungs.iter().rev().copied().find(|rung| self.streams.wrote.contains_key(&rung.id))
+    answers.rungs.iter().rev().copied().find(|rung| self.streams.wrote.contains_key(&*rung.id))
   }
 
   /// The rungs that advance on a prompt, in order.
@@ -462,7 +503,7 @@ impl<'a> Reader<'a> {
       } else {
         Saying::Question { shape, answered: Answered::of(asked) }
       };
-      let one = Said { act: asked.id.clone(), kind, text: said_of(asked).to_owned() };
+      let one = Said { act: Arc::clone(&asked.id), kind, text: said_of(asked).to_owned() };
       said.push((asked.began, one));
     }
     for closed in &answers.closes {
@@ -471,11 +512,11 @@ impl<'a> Reader<'a> {
         Some(by @ (Maker::Operator | Maker::Member { .. })) => Saying::Resolved { by: by.clone() },
         _ => Saying::Answer,
       };
-      let one = Said { act: closed.id.clone(), kind, text: text(closed.value()) };
+      let one = Said { act: Arc::clone(&closed.id), kind, text: text(closed.value()) };
       said.push((closed.ended.unwrap_or(closed.began), one));
     }
     said.sort_by_key(|(place, _)| *place);
-    let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&rung.id));
+    let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&*rung.id));
     let thought = streamed.and_then(|wrote| {
       let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began) / 1000);
       (!wrote.thinking.trim().is_empty()).then(|| Thought {
@@ -494,7 +535,7 @@ impl<'a> Reader<'a> {
     let python = message.kind == Kind::Rung;
     Exchange {
       at,
-      message: message.id.clone(),
+      message: Arc::clone(&message.id),
       said_at: message.began,
       by: message.maker.clone(),
       text: if python { String::new() } else { text(message.words.get(1)) },
@@ -516,17 +557,18 @@ impl<'a> Reader<'a> {
     let made: Vec<(&Act, Option<usize>)> = acts.map(|act| (act, self.source(act))).collect();
     let mut lines = self.marked(rung, before, &made);
     for (act, place) in &made {
-      let Some(at) = place.and_then(|source| at_line(&lines, before, source)) else { continue };
+      let at = place.and_then(|source| at_line(&lines, before, source));
+      let Some(line) = at.and_then(|at| lines.get_mut(at)) else { continue };
       // A chain is where an act runs, not what the line came to.
       if act.kind != Kind::Chain {
-        lines[at].made.push(outcome(act));
+        line.made.push(outcome(act));
       }
       if let Phase::Done(value) = &act.phase {
         let named = images::references(&literal(value)).into_iter().map(|one| one.text);
-        lines[at].pictures.extend(named);
+        line.pictures.extend(named);
       }
       if let Some(output) = self.output(act) {
-        lines[at].output = Some(match lines[at].output.take() {
+        line.output = Some(match line.output.take() {
           Some(before) => joined(before, output),
           None => output,
         });
@@ -534,11 +576,7 @@ impl<'a> Reader<'a> {
       if act.kind == Kind::Other("write".to_owned())
         && let Some((path, after)) = self.held.filed(act)
       {
-        lines[at].writes.push(changed(
-          &act.id,
-          (path, self.held.text_before(path, &act.id)),
-          after,
-        ));
+        line.writes.push(changed(&act.id, (path, self.held.text_before(path, &act.id)), after));
       }
     }
     lines
@@ -546,7 +584,7 @@ impl<'a> Reader<'a> {
 
   /// The line of the word that made an act, counted from 0, as the sandbox saw it made.
   fn source(self, act: &Act) -> Option<usize> {
-    usize::try_from(*self.streams.lines.get(&act.id)?).ok()?.checked_sub(1)
+    usize::try_from(*self.streams.lines.get(&*act.id)?).ok()?.checked_sub(1)
   }
 
   /// The lines of the word of a rung, each with the mark of how it stands, from the acts that the
@@ -577,23 +615,23 @@ impl<'a> Reader<'a> {
       let raised = made.iter().rposition(|(act, _)| act.failed()).or(made.len().checked_sub(1));
       let source = line_of(why)
         .map(|at| at.saturating_sub(1))
-        .or_else(|| raised.and_then(|at| made[at].1))
+        .or_else(|| raised.and_then(|at| made.get(at)?.1))
         .unwrap_or_else(|| word.split('\n').count());
-      if let Some(at) = line(&lines, Some(source)) {
-        lines[at].mark = Mark::Failed { why: readable(why, made) };
+      if let Some(one) = line(&lines, Some(source)).and_then(|at| lines.get_mut(at)) {
+        one.mark = Mark::Failed { why: readable(why, made) };
       }
     } else if let RunState::Cancelled(_) = run {
       // The stop ended the word on the line of the act that it cut, else where the word stood,
       // else, while its model still wrote it, on its last line.
-      let cut = made.iter().rposition(|(act, _)| act.cancelled()).and_then(|at| made[at].1);
+      let cut = made.iter().rev().find(|(act, _)| act.cancelled()).and_then(|(_, place)| *place);
       let stood = rung.word.as_ref().map(|_| next.unwrap_or_default());
       let cut = cut.or(stood);
-      if let Some(at) = line(&lines, cut) {
-        lines[at].mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
+      if let Some(one) = line(&lines, cut).and_then(|at| lines.get_mut(at)) {
+        one.mark = Mark::Stopped { at: self.streams.ended.get(&*rung.id).copied() };
       }
     } else {
-      let open = made.iter().rposition(|(act, _)| !act.done());
-      let mark = match open.map(|at| made[at].0) {
+      let open = made.iter().rev().find(|(act, _)| !act.done());
+      let mark = match open.map(|(act, _)| *act) {
         Some(act) if act.asks_operator() => Mark::Asks,
         Some(act) if act.kind == Kind::Prompt => {
           Mark::Runs { work: Work::Agent, began: began(&act.id) }
@@ -607,19 +645,19 @@ impl<'a> Reader<'a> {
         .filter(|(act, _)| act.asks_operator() && !act.done())
         .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
         .collect();
-      let awaits = open.map(|at| awaited(made[at].0)).unwrap_or_default();
-      let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
+      let awaits = open.map(|(act, _)| awaited(act)).unwrap_or_default();
+      let source = open.map_or(Some(next.unwrap_or_default()), |(_, place)| *place);
       let stands = line(&lines, source);
-      if let Some(at) = stands {
-        (lines[at].mark, lines[at].awaits) = (mark, awaits);
+      if let Some(one) = stands.and_then(|at| lines.get_mut(at)) {
+        (one.mark, one.awaits) = (mark, awaits);
       }
       // The lines under the last line where the word stands have not run in this pass: they wait.
       let last = asking.iter().copied().chain(stands).max();
-      for one in last.map_or(&mut [][..], |at| &mut lines[at + 1..]) {
+      for one in lines.iter_mut().skip(last.map_or(usize::MAX, |at| at.saturating_add(1))) {
         one.mark = Mark::Waits;
       }
-      for at in asking {
-        lines[at].mark = Mark::Asks;
+      for (_, one) in lines.iter_mut().enumerate().filter(|(at, _)| asking.contains(at)) {
+        one.mark = Mark::Asks;
       }
     }
     lines
@@ -631,7 +669,7 @@ impl<'a> Reader<'a> {
     if act.kind != Kind::Bash {
       return None;
     }
-    let took = self.streams.began.get(&act.id).zip(self.streams.ended.get(&act.id));
+    let took = self.streams.began.get(&*act.id).zip(self.streams.ended.get(&*act.id));
     let took = took.map(|(began, ended)| ended.saturating_sub(*began) / 1000);
     match act.value() {
       Some(exit) => {
@@ -639,7 +677,7 @@ impl<'a> Reader<'a> {
         let (stdout, stderr) = (stream("stdout")?, stream("stderr")?);
         output_of(&[Kept::of(stdout), Kept::of(stderr)], took, &act.id)
       }
-      None => output_of(self.streams.outs.get(&act.id)?, None, &act.id),
+      None => output_of(self.streams.outs.get(&*act.id)?, None, &act.id),
     }
   }
 
@@ -652,12 +690,12 @@ impl<'a> Reader<'a> {
       let (_, args) = fault(one.value()?)?;
       Some(Mark::Failed { why: reason(&text(args.first())) })
     });
-    let at = self.streams.ended.get(&rung.id).copied();
+    let at = self.streams.ended.get(&*rung.id).copied();
     let stopped = rung.cancelled().then_some(Mark::Stopped { at });
-    let streamed = self.streams.wrote.get(&rung.id);
+    let streamed = self.streams.wrote.get(&*rung.id);
     let mark = failed.or(stopped).or_else(|| streamed?.retry.clone().map(Mark::Retries));
     // The model of a reply that runs is asked: its line comes from then, before its first part.
-    let asked = reply.filter(|one| !one.done()).and_then(|one| self.streams.began.get(&one.id));
+    let asked = reply.filter(|one| !one.done()).and_then(|one| self.streams.began.get(&*one.id));
     let (text, began) =
       streamed.map_or(("", asked.copied()), |one| (one.text.as_str(), Some(one.began)));
     if text.is_empty() && mark.is_none() && began.is_none() {
@@ -675,9 +713,9 @@ impl<'a> Reader<'a> {
       mark => mark.unwrap_or(Mark::Runs { work: Work::Writes, began }),
     };
     lines.push(Line::of(before + came.count + 1, came.tail, mark));
-    if whole {
-      lines[0].mark =
-        Mark::Runs { work: Work::Command, began: self.streams.began.get(&rung.id).copied() };
+    if whole && let Some(first) = lines.first_mut() {
+      first.mark =
+        Mark::Runs { work: Work::Command, began: self.streams.began.get(&*rung.id).copied() };
     }
     lines
   }
@@ -710,7 +748,7 @@ impl<'a> Reader<'a> {
     });
     let title = said_of(prompt).lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
     let card = Card {
-      prompt: prompt.id.clone(),
+      prompt: Arc::clone(&prompt.id),
       title: title.to_owned(),
       standing: Standing::of(state, now.done(), now.pause.as_ref()),
       model,
@@ -720,15 +758,15 @@ impl<'a> Reader<'a> {
     let lines = rungs.last().map(|last| self.lines(last, 0)).unwrap_or_default();
     // A rung with no word yet is what its model thinks and writes now.
     let thinks = rungs.last().filter(|last| last.word.is_none());
-    let wrote = thinks.and_then(|last| self.streams.wrote.get(&last.id));
+    let wrote = thinks.and_then(|last| self.streams.wrote.get(&*last.id));
     let thought = wrote.and_then(|one| one.thinking.lines().rfind(|line| !line.trim().is_empty()));
-    let began = self.streams.began.get(&prompt.id);
-    let ended = self.streams.ended.get(&prompt.id);
+    let began = self.streams.began.get(&*prompt.id);
+    let ended = self.streams.ended.get(&*prompt.id);
     Agent {
       card,
       began: began.copied(),
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
-      line: stands(&lines).map(|at| lines[at].clone()),
+      line: stands(&lines).and_then(|at| lines.get(at)).cloned(),
       at: None,
       thought: thought.map(|line| line.trim().to_owned()),
       anchor,
@@ -740,7 +778,7 @@ impl<'a> Reader<'a> {
 /// the act that the line made, which the line shows as code.
 fn readable(why: &str, made: &[(&Act, Option<usize>)]) -> String {
   let why = reason(why);
-  let named = made.iter().find_map(|(act, _)| why.strip_prefix(&format!("{} ", act.id)));
+  let named = made.iter().find_map(|(act, _)| why.strip_prefix(act.id.as_ref())?.strip_prefix(' '));
   named.map_or_else(|| why.clone(), str::to_owned)
 }
 
@@ -758,7 +796,7 @@ fn waits(act: &Act) -> bool {
 /// How many lines of the thread a rung takes: the lines of its word, or of what its model wrote of
 /// it.
 fn count(rung: &Act, streams: &Streamed) -> usize {
-  match (&rung.word, streams.wrote.get(&rung.id)) {
+  match (&rung.word, streams.wrote.get(&*rung.id)) {
     (Some(word), _) => word.split('\n').count(),
     (None, Some(wrote)) if !wrote.text.is_empty() => wrote.text.split('\n').count(),
     _ => 0,
@@ -776,7 +814,7 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     .collect();
   let mut out = Vec::new();
   let mut at = 0;
-  while at < source.len() {
+  while let Some(first) = source.get(at) {
     if let Some((end, binding)) = quoted.get(&at) {
       out.push((at, binding.clone()));
       at = end + 1;
@@ -785,13 +823,13 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     let mut end = at;
     let opens =
       |line: &str| ["\"\"\"", "'''"].iter().any(|mark| line.matches(mark).count() % 2 == 1);
-    if opens(source[at]) {
-      while end + 1 < source.len() && !opens(source[end + 1]) {
+    if opens(first) {
+      while source.get(end + 1).is_some_and(|one| !opens(one)) {
         end += 1;
       }
-      end = (end + 1).min(source.len() - 1);
+      end = (end + 1).min(source.len().saturating_sub(1));
     }
-    out.push((at, source[at..=end].join("\\n")));
+    out.push((at, source.get(at..=end).unwrap_or_default().join("\\n")));
     at = end + 1;
   }
   out
@@ -804,7 +842,10 @@ fn outcome(act: &Act) -> Made {
     Phase::Done(value) => {
       let literal = literal(value);
       let cut = literal.char_indices().nth(LITERAL - 1).map_or(literal.len(), |(at, _)| at);
-      Made::Done(if cut < literal.len() { format!("{}…", &literal[..cut]) } else { literal })
+      Made::Done(match literal.get(..cut) {
+        Some(head) if cut < literal.len() => format!("{head}…"),
+        _ => literal,
+      })
     }
     Phase::Asked | Phase::Started => Made::Works,
   }
@@ -845,8 +886,9 @@ fn at_line(lines: &[Line], before: usize, source: usize) -> Option<usize> {
 /// after it, which the interpreter puts at the end of the reason.
 fn line_of(why: &str) -> Option<usize> {
   why.rmatch_indices("line ").find_map(|(at, mark)| {
-    let starts = why[..at].chars().next_back().is_none_or(|one| !one.is_alphanumeric());
-    let number = why[at + mark.len()..].split(|one: char| !one.is_ascii_digit()).next()?;
+    let (head, rest) = why.split_at_checked(at)?;
+    let starts = head.chars().next_back().is_none_or(|one| !one.is_alphanumeric());
+    let number = rest.get(mark.len()..)?.split(|one: char| !one.is_ascii_digit()).next()?;
     starts.then(|| number.parse().ok()).flatten()
   })
 }
@@ -855,7 +897,14 @@ fn line_of(why: &str) -> Option<usize> {
 /// act.
 fn awaited(act: &Act) -> Vec<String> {
   if act.kind != Kind::Wait {
-    return vec![act.id.clone()];
+    return vec![act.id.to_string()];
   }
   act.words.iter().skip(1).filter_map(Value::as_str).map(str::to_owned).collect()
+}
+
+/// The time of a name, kept from the first time that it is told, so a later time copies no name.
+fn once(times: &mut HashMap<String, u64>, id: &str, now: u64) {
+  if !times.contains_key(id) {
+    times.insert(id.to_owned(), now);
+  }
 }

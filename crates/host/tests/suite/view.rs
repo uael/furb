@@ -1,32 +1,33 @@
 //! The meaning of a life: the state of each act and of each chain in one set, the desk, the
 //! threads, the spend, and the acts as they stood at a moment, each with the values that the views
 //! of TypeScript give.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 use std::collections::HashMap;
 use std::iter;
+use std::sync::Arc;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, NoteRun, Origin, Pause, Phase, Read,
-  Rows, RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads,
-  choices, concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
-  takes_nothing, ticks, wants, working,
+  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, Name, NoteRun, Origin, Pause, Phase,
+  Read, Rows, RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes,
+  chain_threads, choices, concerns, desk, hint, moments_of, nest_threads, open, operator,
+  order_threads, restate, takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
 
 /// An act of a life, made at a moment, and done at another when it is done, in the state that this
 /// gives it.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "each test writes an act as one row of the six fields that the views read"
+)]
 fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>) -> Act {
   let mut made = Act {
     kind: Kind::from(kind),
-    id: id.to_owned(),
-    by: by.to_owned(),
+    id: id.into(),
+    by: by.into(),
     maker: Maker::Engine,
-    on: if kind == "chain" { id } else { on }.to_owned(),
-    chain: if kind == "chain" { id } else { on }.to_owned(),
+    on: if kind == "chain" { id } else { on }.into(),
+    chain: if kind == "chain" { id } else { on }.into(),
     words: Vec::new(),
     phase: if ended.is_some() { Phase::Done(Value::Null) } else { Phase::Asked },
     operator: false,
@@ -68,19 +69,19 @@ fn asked(act: Act) -> Act {
 
 /// The acts by their names.
 fn rows(acts: &[Act]) -> Rows<'_> {
-  acts.iter().map(|one| (one.id.as_str(), one)).collect()
+  acts.iter().map(|one| (one.id.as_ref(), one)).collect()
 }
 
 /// The ids of acts.
 fn ids(acts: &[Act]) -> Vec<&str> {
-  acts.iter().map(|one| one.id.as_str()).collect()
+  acts.iter().map(|one| one.id.as_ref()).collect()
 }
 
 /// The state of a chain, from each act of a life.
 fn state_of(acts: &[Act], chain: &str) -> State {
   let mut all = acts.to_vec();
   restate(&mut all);
-  match all.into_iter().find(|one| one.id == chain) {
+  match all.into_iter().find(|one| *one.id == *chain) {
     Some(one) => one.state,
     None => panic!("{chain} is no act"),
   }
@@ -136,7 +137,7 @@ fn each_act_takes_one_state_of_the_one_set() {
     (act("read1", "read", "chain1", "rung1", 1, Some(2)), State::Done),
   ];
   for (one, state) in table {
-    assert_eq!((one.id.as_str(), one.state), (one.id.as_str(), state));
+    assert_eq!((one.id.as_ref(), one.state), (one.id.as_ref(), state));
   }
 }
 
@@ -293,7 +294,7 @@ fn the_desk_holds_the_questions_and_the_notices_the_oldest_first_and_drops_a_que
   let asks: Vec<(&str, &str, bool, Vec<String>)> = got
     .asks
     .iter()
-    .map(|one| (one.id.as_str(), one.chain.as_str(), one.notice, one.choices.clone()))
+    .map(|one| (one.id.as_ref(), one.chain.as_ref(), one.notice, one.choices.clone()))
     .collect();
   let yes = vec!["yes".to_owned(), "no".to_owned()];
   let want = [
@@ -367,14 +368,14 @@ fn prompt(id: &str, began: u64) -> Act {
 
 /// A prompt on a thread.
 fn on_thread(act: Act, thread: &str) -> Act {
-  Act { on: thread.to_owned(), ..act }
+  Act { on: thread.into(), ..act }
 }
 
 /// The threads of a chain, each with the ids of its messages.
 fn listed(acts: &[Act]) -> Vec<(String, Vec<String>)> {
   let on: Vec<&Act> = acts.iter().collect();
   let threads = chain_threads(&on, &rows(acts));
-  threads.into_iter().map(|one| (one.prompt, one.messages)).collect()
+  threads.into_iter().map(|one| (one.prompt.to_string(), texts(&one.messages))).collect()
 }
 
 #[test]
@@ -390,10 +391,7 @@ fn a_prompt_on_a_thread_and_the_acknowledgment_of_an_act_of_a_thread_join_that_t
     on_thread(prompt("prompt3", 3), "prompt2"),
     act("rung1", "rung", "chain1", "prompt1", 4, None),
     act("bash5", "bash", "chain1", "rung1", 5, None),
-    Act {
-      by: "chain1".to_owned(),
-      ..worded(prompt("prompt9", 6), json!(["None", "bash5 done", ""]))
-    },
+    Act { by: "chain1".into(), ..worded(prompt("prompt9", 6), json!(["None", "bash5 done", ""])) },
   ];
   let messages = ["prompt2", "prompt3", "prompt9"].map(str::to_owned).to_vec();
   assert_eq!(listed(&all), [("prompt1".to_owned(), messages)]);
@@ -419,19 +417,19 @@ fn a_question_and_a_notice_that_a_thread_made_stand_in_that_thread_and_one_of_no
   ];
   let on: Vec<&Act> = acts.iter().collect();
   let [thread] = &chain_threads(&on, &rows(&acts))[..] else { panic!("one thread") };
-  assert_eq!(thread.asked, ["prompt2", "prompt3"]);
-  assert_eq!(thread.asks, ["prompt2"]);
+  assert_eq!(texts(&thread.asked), ["prompt2", "prompt3"]);
+  assert_eq!(texts(&thread.asks), ["prompt2"]);
   assert_eq!(thread.state, State::Asks);
 }
 
 /// A thread of a list, which asks while a question waits in it, and else runs.
 fn thread(act: &Act, asks: &[&str]) -> ChainThread {
   ChainThread {
-    prompt: act.id.clone(),
-    title: act.id.clone(),
+    prompt: Arc::clone(&act.id),
+    title: act.id.to_string(),
     messages: Vec::new(),
     asked: Vec::new(),
-    asks: asks.iter().map(|one| (*one).to_owned()).collect(),
+    asks: asks.iter().map(|one| Name::from(*one)).collect(),
     state: if asks.is_empty() { State::Runs } else { State::Asks },
     over: false,
     origin: Origin::Rung,
@@ -441,7 +439,7 @@ fn thread(act: &Act, asks: &[&str]) -> ChainThread {
 
 /// The ids of the threads of a level of a tree.
 fn level(nodes: &[ThreadNode]) -> Vec<&str> {
-  nodes.iter().map(|one| one.thread.prompt.as_str()).collect()
+  nodes.iter().map(|one| one.thread.prompt.as_ref()).collect()
 }
 
 #[test]
@@ -477,7 +475,7 @@ fn the_threads_that_the_ladder_of_a_thread_made_nest_under_it_and_a_question_in_
     [tree[0].state, deepest.state, tree[1].state],
     [State::Asks, State::Asks, State::Runs]
   );
-  assert!(tree[0].thread.asks.is_empty());
+  assert_eq!(tree[0].thread.asks, Vec::<Name>::new());
   assert_eq!(tree[0].thread.state, State::Runs);
 }
 
@@ -497,7 +495,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
     .collect();
   let rows = rows(&all);
   let closed = |id: &str, messages: &[&str]| ChainThread {
-    messages: messages.iter().map(|one| (*one).to_owned()).collect(),
+    messages: messages.iter().map(|one| Name::from(*one)).collect(),
     over: true,
     state: State::Done,
     ..thread(rows[id], &[])
@@ -505,7 +503,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
   let list = vec![
     closed("prompt1", &["prompt5"]),
     closed("prompt2", &[]),
-    ChainThread { messages: vec!["prompt9".to_owned()], ..thread(rows["prompt3"], &[]) },
+    ChainThread { messages: vec!["prompt9".into()], ..thread(rows["prompt3"], &[]) },
     thread(rows["prompt4"], &[]),
     closed("prompt6", &[]),
     thread(&agents[0], &["prompt10"]),
@@ -565,7 +563,7 @@ fn a_question_concerns_the_operator_in_any_thread_and_a_failure_or_a_pause_only_
         .flat_map(|top| iter::once(top).chain(&top.agents))
         .map(|node| {
           (
-            node.thread.prompt.clone(),
+            node.thread.prompt.to_string(),
             (
               node.thread.origin,
               node.thread.yours,
@@ -617,11 +615,11 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
   ];
   assert_eq!(moments_of(&acts), [1, 2, 3, 4, 5, 7, 8, 9]);
   let then = as_of(&acts, 5);
-  let done: Vec<(&str, bool)> = then.iter().map(|one| (one.id.as_str(), one.done())).collect();
+  let done: Vec<(&str, bool)> = then.iter().map(|one| (one.id.as_ref(), one.done())).collect();
   assert_eq!(done, [("chain1", false), ("prompt1", false), ("rung2", true), ("bash1", false)]);
   assert_eq!([then[1].value(), then[3].value()], [None, None]);
   let owed = |acts: &[Act]| {
-    acts.iter().filter(|one| one.owed()).map(|one| one.id.clone()).collect::<Vec<_>>()
+    acts.iter().filter(|one| one.owed()).map(|one| one.id.to_string()).collect::<Vec<_>>()
   };
   assert_eq!(owed(&then), ["prompt1"]);
   assert_eq!(then[0].state, State::Asks);
@@ -660,10 +658,15 @@ fn wake(id: &str, began: u64) -> Act {
   )
 }
 
+/// The names of acts as texts, as a test compares them.
+fn texts(ids: &[Name]) -> Vec<String> {
+  ids.iter().map(ToString::to_string).collect()
+}
+
 /// A run of notes, from its prompts and its unread count.
 fn run(prompts: &[&str], unread: usize) -> NoteRun {
   NoteRun {
-    prompts: prompts.iter().map(|id| (*id).to_owned()).collect(),
+    prompts: prompts.iter().map(|id| Name::from(*id)).collect(),
     count: prompts.len(),
     unread,
   }

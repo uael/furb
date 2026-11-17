@@ -64,14 +64,20 @@ impl Client {
     for (at, told) in self.machines.iter().enumerate() {
       for card in told.cards.iter().filter(|card| card.held) {
         let place = all.iter().position(|one| one.at == at && one.life == card.life);
-        let place = place.unwrap_or_else(|| {
+        if place.is_none() {
           all.push(self.runs(at, card));
-          all.len() - 1
-        });
+        }
+        let one = match place {
+          Some(place) => all.get_mut(place),
+          None => all.last_mut(),
+        };
+        let Some(one) = one else {
+          continue;
+        };
         let standing = &card.thread.standing;
         if standing.works() || matches!(standing, Standing::Asks { .. }) {
           let title = card.thread.title.clone();
-          all[place].live.push(Live { title, standing: standing.clone() });
+          one.live.push(Live { title, standing: standing.clone() });
         }
       }
     }
@@ -103,7 +109,7 @@ impl Client {
       present.is_none_or(|all| all.iter().map(|one| one.windows).sum::<usize>() <= 1)
     };
     let held = |one: &Running| {
-      let controls = self.only_reads(one.at).is_none();
+      let controls = !self.only_reads(one.at);
       one.here && !one.live.is_empty() && !one.background && controls && last(one.at, &one.life)
     };
     let mut all: Vec<Running> = self.running().into_iter().filter(held).collect();

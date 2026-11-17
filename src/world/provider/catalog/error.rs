@@ -6,6 +6,8 @@ use std::{io, path::PathBuf};
 /// Each text names the setting that fails.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+  #[error("The configs could not be read: {0}")]
+  Unread(io::Error),
   #[error("Could not read {}: {source}", .path.display())]
   Read { path: PathBuf, source: io::Error },
   #[error("Invalid config at {}: {source}", .path.display())]

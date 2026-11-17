@@ -7,13 +7,13 @@ assertion_line: 34
   ┃ which keys does the form take                              Needs you 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
     Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
-    ▌Search a key                                 1 / 43      ▐   FU furb                    opus ▌
+    ▌Search a key                                 1 / 45      ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     Go                                                    ┃
-    ▌Ctrl+P or Ctrl+O    go to anything, or run a…        ┃
+    ▌Ctrl+P              go to anything, or run a…        ┃
      Ctrl+X ? or F1      each key                         ┃
      F5                  reload on the newest build       ┃
-     Alt+A or Ctrl+X A   the next thread that needs…      ┃
+     Alt+A or Ctrl+X A   the next thread that needs…
      Alt+↓ or Ctrl+X J   the next card
      Alt+↑ or Ctrl+X K   the card before
      Ctrl+X L or Ctrl+\  show or hide the list
@@ -28,7 +28,7 @@ assertion_line: 34
      Esc Esc             stop the work of the thread
 
     ↑↓ move · Enter run · Esc close
-
-  ┃  Message  Python    → which keys… ▾   opus   + Ctrl+N      Context
+                                                               Context
   ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

@@ -11,6 +11,7 @@ use std::path::Path;
 
 use furb::{Engine, Fault, Object, verbs, wire::outward, world};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// How many facts the record of a life may lack before the life pauses its work, which bounds the
 /// memory that holds them: twice the facts after which a life writes its image, so a life that
@@ -86,7 +87,7 @@ impl Backlog {
       if self.paused.contains(&chain) || engine.outcome(&chain)?.is_some() {
         continue;
       }
-      let paused = engine.verb("paused", vec![Object::string(&chain)], vec![])?;
+      let paused = engine.verb("paused", &[Object::string(&chain)], vec![])?;
       if outward(paused.as_ref()).as_bool() == Some(true) {
         continue;
       }
@@ -102,8 +103,14 @@ impl Backlog {
 fn last_ours(engine: &mut Engine, chain: &str) -> Result<bool, Fault> {
   let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("pause".to_owned()), at: None };
   let facts = engine.transcript(of)?;
-  let last = facts.iter().map(|one| outward(one.0.as_ref())).rfind(|fact| fact[1] == chain);
-  Ok(last.is_some_and(|fact| fact[0] == "pause" && fact[3] == WHY))
+  let word = |fact: &Value, at: usize| fact.get(at).and_then(Value::as_str).map(str::to_owned);
+  let last = facts
+    .iter()
+    .map(|one| outward(one.object().as_ref()))
+    .rfind(|fact| word(fact, 1).as_deref() == Some(chain));
+  Ok(last.is_some_and(|fact| {
+    word(&fact, 0).as_deref() == Some("pause") && word(&fact, 3).as_deref() == Some(WHY)
+  }))
 }
 
 /// Why a life does not end yet while its record does not hold a number of the facts that it said.

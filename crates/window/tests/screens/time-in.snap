@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · time of the bench                       Resolve     All projects ▾        This computer
+  ┃
+  ┃ time of the bench                                          Working 1
+  ┃ (the model delegates)                                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● time of the bench     ◐ Working ▌
+                                                opus/high     ▐   FU furb                 opus ↳2 ▌
+    ◐  bench = prompt(str, 'Run the bench of the repl…+42     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    2  boot = prompt(str, 'Read the boot of the host\…+44
+    3  lines = await prompt(str, 'Count the lines of…+52
+    4  await wait(600, bench)
+    …
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ Reply to this thread
+  ┃
+  ┃  Message  Python    → time of… ▾    opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8 moments back · time of the bench              ⌃P find      No answer yet
+  ▶  ━━━━●─────────────────────────── 9 back ×1.4  chains ▾

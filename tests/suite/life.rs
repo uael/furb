@@ -1,12 +1,7 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that
 //! the store keeps.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
-#![cfg_attr(
-  unix,
-  expect(clippy::expect_used, reason = "a test of the systems of unix fails where its call fails")
-)]
 
 use crate::opened::{
   changed, closed, corpus, crossed, crossing, elsewhere, made_of, named, names, opening, ours,
@@ -19,6 +14,7 @@ fn drop_image(record: &Path) {
 }
 
 use std::{
+  collections::HashMap,
   env, fs,
   io::Write,
   path::{Path, PathBuf},
@@ -30,7 +26,11 @@ use std::{
 #[cfg(unix)]
 use std::time::Instant;
 
-use futures::{channel::mpsc::unbounded, executor, future, future::select};
+use futures::channel::mpsc::unbounded;
+use futures::{executor, future, future::select};
+use num_bigint::BigInt;
+use serde::Serialize;
+use serde_json::value::to_raw_value;
 use tokio::runtime;
 
 use crate::yard::Yard;
@@ -892,6 +892,41 @@ fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_r
   assert_eq!(imaged, recorded, "the image of an earlier build gives the state of its record");
 }
 
+/// The image holds the part of each ear as the text that its value writes, where an earlier build
+/// wrote the text of a tree of values made of it: the two texts are the same for each shape that a
+/// part holds, so no image changes and each image of an earlier build reads the same.
+#[test]
+fn the_part_of_an_ear_in_an_image_is_the_text_of_its_tree_of_values() {
+  let wide = BigInt::from(u64::MAX) * 3;
+  let words = [
+    Object::string("a \"quoted\" text\n"),
+    Object::int(-7),
+    Object::bigint(wide),
+    Object::float(1.0),
+    Object::float(0.1),
+    Object::float(f64::INFINITY),
+    Object::bool(true),
+    Object::none(),
+    Object::bytes(*b"bytes"),
+    Object::set([Object::int(1)]),
+    Object::dict([(Object::string("b"), Object::list([])), (Object::string("a"), Object::int(1))]),
+  ];
+  let fact = Fact::says("done", "run1", words);
+  let kept: HashMap<String, Vec<Object>> =
+    (0..9).map(|n| (format!("act{n}"), vec![Object::int(n)])).collect();
+  for text in [image_text(&fact), image_text(&kept), image_text(&()), image_text(&"tip")] {
+    let (raw, tree) = text;
+    assert_eq!(raw, tree);
+  }
+}
+
+/// The text of a part as the image writes it now, and as the text of its tree of values.
+fn image_text(part: &impl Serialize) -> (String, String) {
+  let raw = to_raw_value(part).unwrap().get().to_owned();
+  let tree = serde_json::to_value(part).map_or_else(|_| raw.clone(), |tree| tree.to_string());
+  (raw, tree)
+}
+
 /// The record of the life of `WORK`, and that record once it crossed to another build, which a
 /// later life carries across, so the rung by which a birth plays each life word again shows in a
 /// turn too. A record of the corpus replays on the checkpointer that made it, which
@@ -1522,6 +1557,26 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   drop(later);
 }
 
+/// An image of a build whose python of the record differs agrees with its record, as the image of
+/// another engine does: the session holds that python, and the life goes on from the image.
+#[test]
+fn an_image_of_another_python_of_the_record_agrees_with_its_record() {
+  let at = yard("image-record");
+  let record = at.join("record.jsonl");
+  let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut life, "x = 1\nclose(x)");
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
+  drop(life);
+  let path = at.join("record.jsonl.image");
+  let mut text = fs::read(&path).unwrap();
+  let end = text.iter().position(|one| *one == b'\n').unwrap();
+  let key = String::from_utf8(text[..end].to_vec()).unwrap();
+  let at_digest = key.find("\"record\":\"").unwrap() + "\"record\":\"".len();
+  text[at_digest..at_digest + 64].copy_from_slice(&[b'0'; 64]);
+  fs::write(&path, &text).unwrap();
+  assert!(image::agrees(&record), "the image of another python of the record agrees");
+}
+
 /// A life whose image stands at the tip of its record keeps that image as it is: the end of a life
 /// that said nothing after its last image writes none again.
 #[test]
@@ -1613,6 +1668,38 @@ fn a_life_opens_on_the_image_of_another_engine_and_then_moves_to_this_build() {
   let kept = moved.word(kept, vec![("__b", before)]).unwrap();
   assert_eq!(kept.as_ref().py_repr(), "True", "the move appends the engine that differs");
   assert_eq!(read(&mut moved), "[1, None]", "the next word runs on this build");
+}
+
+/// A life on the image of an earlier build moves to this build with the carry of its tip, so the
+/// open after the move boots on that carry and replays no segment before it: a segment that an
+/// earlier engine cannot replay, as one whose order drifts, keeps its life.
+#[test]
+fn a_life_that_moves_from_its_image_opens_on_the_carry_of_its_tip_and_replays_nothing_before() {
+  let at = yard("image-carries");
+  let (made, _) = elsewhere("crossed = True");
+  let (record, _) = made_elsewhere(&at, &made);
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let open = || {
+    let opening = Opening { skills: Some(false), ..opening(&at, true) };
+    reactor.block_on(opening.open::<String>([], Progress::default(), &mut |_| true, None))
+  };
+  let mut first = open().unwrap().0;
+  // A long word after the first one, so the tip that the image names holds none of the first one.
+  closed(&mut first, &format!("y = '{}'\nclose(y)", "z".repeat(5000)));
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  // A replay of the segment makes the run of the first word again, which the record now holds with
+  // another word, so it drifts there.
+  let text = fs::read_to_string(&record).unwrap();
+  let run =
+    text.lines().find(|line| line.starts_with("[[\"run\"") && line.contains("x = 1")).unwrap();
+  fs::write(&record, text.replace(run, &run.replace("x = 1", "x = 2"))).unwrap();
+  let shown = open().unwrap().0;
+  assert!(shown.crosses() && image::agrees(&record), "the life opens on its image");
+  shown.cross().unwrap().keep(&record).unwrap();
+  let mut moved = open().expect("the open boots on the carry of the tip and replays nothing");
+  assert!(!moved.0.crosses(), "the life runs this build");
+  assert_eq!(closed(&mut moved.0, "close([x, y[:1]])").as_ref().py_repr(), "[1, 'z']");
 }
 
 /// A wait that a life left open takes its time again in the life that resumes its record: the ear

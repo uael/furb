@@ -19,7 +19,6 @@ assertion_line: 34
 
 
 
-
   ┃
   ┃ ◆ opus/high asks
   ┃ Which keys does the form take?
@@ -27,8 +26,9 @@ assertion_line: 34
   ┃   [x] up
   ┃   [ ] down
   ┃ › [x] tab
-  ┃   type another answer
+  ┃   type your own answer
   ┃
   ┃  Message  Python    → which… ▾      opus  high   + ⌃N      Context
   ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

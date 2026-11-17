@@ -475,6 +475,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The actor that a prompt leaves unsaid, and that its thread leaves unsaid too, is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
+  A Literal that the operator answers is named with str as well, as Act[Literal['a', 'b'] | str], since his own words answer it too.
   A rung whose word closes nothing ends its step, and the chain asks the model again when something new comes, as a message or the end of an act that the word awaited.
   The completion of a prompt leaves no command and no prompt under it running, since its own word cannot close it while one runs and a close by another cancels each.
   The operator prompts on any chain, by the id of the chain.
@@ -827,9 +828,10 @@ type Standing = list[list[Actor] | str | list[list[str | bool]]]
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
 A standing holds no source: the engine is one file the model imports, and a record replays only on an engine that makes each of its acts again, and else drifts.
 """
-type Entry = tuple[Fact, int, bool] | tuple[Fact]
-"""One entry of the record: a fact, its place, which counts the facts that the life said before it, and whether the life rested as it said it, an act among them, and the answer of an act after it, as every other fact about it.
+type Entry = tuple[Fact, int, bool, int] | tuple[Fact, int, bool] | tuple[Fact]
+"""One entry of the record: a fact, its place, which counts the facts that the life said before it, whether the life rested as it said it, and the count of the facts that waited for their ears as the life said it, an act among them, and the answer of an act after it, as every other fact about it.
 An entry that the life said as it rested, and an entry with no place, as each entry that seed gives, the journal says only once the life rests again, so each ear heard each fact before it, as in the life that said it.
+An entry that an ear of the outside said as it heard a fact the journal says once as many facts wait as its count, as the first ear of the outside is about to hear the first of them, so each ear of the engine heard that fact before it, as in the life that said it.
 The order of the record is what puts an entry back in its place in a later life.
 The World keeps each entry as the journal says it, plain or not.
 The record is a sequence of entries about acts.

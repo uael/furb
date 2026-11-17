@@ -1282,6 +1282,32 @@ How a file differs from the last commit.
 """
 
 
+class Lines(TypedDict):
+  """
+  The lines that a checkout adds and removes against the point where its branch leaves the
+  default branch of its remote, its tree included.
+  """
+
+  added: int
+  removed: int
+
+
+class Pull(TypedDict):
+  """
+  The pull request of the branch of a checkout: its number, its title, its address, the lines
+  that it adds and removes, and how many of its checks fail, wait and pass.
+  """
+
+  number: int
+  title: str
+  url: str
+  added: int
+  removed: int
+  failing: int
+  pending: int
+  passing: int
+
+
 Standing1 = TypedDict("Standing1", {"of": NotRequired[str | None], "is": Literal["asks"]})
 
 
@@ -1822,8 +1848,8 @@ withdrawal, when a cancel ended it before anyone answered, with the reason that 
 
 class Where1(TypedDict):
   """
-  A line of the file: its number in the file after the change, or before it for a line that the
-  change removed, and its text then.
+  A line of the file, or the lines from it: its number in the file after the change, or before
+  it for a line that the change removed, and its text then, one line of the quote for each line.
   """
 
   line: int
@@ -2734,12 +2760,16 @@ class Changes(TypedDict):
   """
   The changes of a checkout of git against its last commit: its branch, none when its head names
   no branch, each file that differs, and the diff of the file that the peer named, as git writes
-  a unified diff, a file that git does not track yet added whole.
+  a unified diff, a file that git does not track yet added whole. With no file named, also the
+  lines that it adds and removes against the base of its branch, and the pull request of its
+  branch, as gh gives it.
   """
 
   branch: NotRequired[str | None]
   files: list[Changed]
   diff: NotRequired[str | None]
+  base: NotRequired[Lines | None]
+  pull: NotRequired[Pull | None]
 
 
 class Desk(TypedDict):
@@ -3416,4 +3446,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 76
+PROTOCOL = 77

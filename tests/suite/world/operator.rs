@@ -50,6 +50,9 @@ fn a_literal_is_one_of_its_values_which_a_line_names_as_python_shows_it_or_as_it
   );
   assert_eq!(read(shape, "c"), format!("Refused: \"c\" is none of {shape}"));
   assert_eq!(read(shape, "1"), format!("Refused: \"1\" is none of {shape}"));
+  // A Literal that the operator answers is named with str, which takes his own words.
+  let own = "Literal['a', 'b'] | str";
+  assert_eq!((read(own, "b"), read(own, " at the top ")), ("'b'".into(), "' at the top '".into()));
   for shape in ["Literal[]", "Literal[1.5]", "Literal[b'a']", "Literal['a'] | set", "Literal['a"] {
     assert!(!answers(shape), "{shape}");
     assert_eq!(read(shape, "a"), format!("Refused: the operator answers no {shape}"));

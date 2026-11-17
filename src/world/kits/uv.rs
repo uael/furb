@@ -17,7 +17,7 @@ use std::{
 
 use reqwest::{Client, StatusCode};
 use sha2::{Digest, Sha256};
-use tokio::{process::Command, task::JoinError};
+use tokio::process::Command;
 
 use super::beside;
 use crate::{ear::spawned, world::cache};
@@ -97,7 +97,7 @@ pub(crate) enum Error {
   #[error("the archive of {url} has the sha256 {found}, not the one that furb pins. {}", BY_HAND)]
   Checked { url: String, found: String },
   #[error("the fetch of uv ended before it was done: {source}. {}", BY_HAND)]
-  Lost { source: JoinError },
+  Lost { source: io::Error },
   #[error("furb could not unpack uv in {}: {why}. {}", folder.display(), BY_HAND)]
   Unpacked { folder: PathBuf, why: String },
 }

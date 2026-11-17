@@ -17,15 +17,6 @@
 //! `tests/suite/world/provider.rs`, and the models that the catalog makes of the configs and of the
 //! environment of a process in `tests/suite/world/catalog.rs`.
 
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
-
 use std::{
   collections::HashMap,
   path::{Path, PathBuf},
@@ -114,15 +105,11 @@ fn scripted(model: &MockCompletionModel) -> Model {
     .effort("high", json!({"thinking": 8192}))
 }
 
-fn on(root: &str) -> Option<String> {
-  Some(root.to_owned())
-}
-
 /// A prompt on the root that wants an int.
 fn asked(engine: &mut Engine) -> String {
   let root = engine.root().to_owned();
   let with =
-    verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
+    verbs::Prompt { message: Some("count".to_owned()), on: Some(root), ..Default::default() };
   engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
 }
 
@@ -133,7 +120,7 @@ fn asked(engine: &mut Engine) -> String {
 fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let mut names: HashMap<String, String> = HashMap::new();
   let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -164,7 +151,7 @@ fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
 fn taken(engine: &mut Engine) -> (String, String) {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+    .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let id = facts
     .iter()
@@ -261,7 +248,7 @@ fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_c
   let mut engine = lived(provider);
   let root = engine.root().to_owned();
   fake.away();
-  let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
+  let with = verbs::Prompt { message: Some("task".into()), on: Some(root), ..Default::default() };
   let id = engine.prompt(Object::string("str"), with).expect("a prompt is made").id().to_owned();
   let waited = until(&mut engine, |_| told.lock().expect("the retries told").len() >= 2);
   assert!(waited, "the call is made again while the program is away");
@@ -278,7 +265,7 @@ fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_c
 fn failing(reasons: &[&str]) -> (Hosted, Arc<AtomicUsize>) {
   let calls = Arc::new(AtomicUsize::new(0));
   let (counted, reasons) =
-    (Arc::clone(&calls), reasons.iter().map(|one| one.to_string()).collect::<Vec<_>>());
+    (Arc::clone(&calls), reasons.iter().map(ToString::to_string).collect::<Vec<_>>());
   let host: Hosted = Arc::new(move |_, told| {
     let call = counted.fetch_add(1, Ordering::SeqCst);
     if let Some(why) = reasons.get(call).cloned() {
@@ -722,7 +709,7 @@ fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
   let other = verbs::Chain { label: Some("other".to_owned()), ..Default::default() };
   let other = engine.chain(other).expect("a chain is made").id().to_owned();
   let with =
-    verbs::Prompt { message: Some("count".to_owned()), on: on(&other), ..Default::default() };
+    verbs::Prompt { message: Some("count".to_owned()), on: Some(other), ..Default::default() };
   let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
   let done = |engine: &mut Engine| {
     engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))

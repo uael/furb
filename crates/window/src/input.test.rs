@@ -65,7 +65,7 @@ fn the_word_of_one_life_shows_its_hints_beside_a_thread_of_another_life_of_the_s
   let mut model = running();
   let exchange = |message: &str| Exchange {
     at: 0,
-    message: message.to_owned(),
+    message: message.into(),
     said_at: 0,
     by: Maker::Operator,
     text: "x = 1".to_owned(),

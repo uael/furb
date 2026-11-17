@@ -1,10 +1,6 @@
 //! The models of the provider, their class in the configs, and what a chain stands on and asks of a
 //! model.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use futures::future::BoxFuture;
@@ -369,6 +365,10 @@ impl Model {
 /// model of the roster gives its class, and a model of the list of automatic work its place in that
 /// list, which the configs of the user, in the config directory, and of the project give, as
 /// [`configured`] reads them.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the standing tells each thing that a chain stands on, and each comes from a separate field of the provider"
+)]
 pub(super) fn standing(
   models: &[Model],
   directory: &str,

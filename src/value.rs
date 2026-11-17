@@ -10,15 +10,10 @@
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 use serde_json::Value;
-use std::{error, fmt, fmt::Write as _};
+use std::{borrow::Cow, error, fmt, fmt::Write as _, mem};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
@@ -103,11 +98,10 @@ pub fn repr(text: &str) -> String {
 
 /// Bytes as the lowercase digits of base sixteen.
 pub(crate) fn hex(bytes: &[u8]) -> String {
-  const DIGITS: &[u8; 16] = b"0123456789abcdef";
   bytes
     .iter()
-    .flat_map(|one| [DIGITS[usize::from(one >> 4)], DIGITS[usize::from(one & 15)]])
-    .map(char::from)
+    .flat_map(|one| [one >> 4, one & 15])
+    .filter_map(|digit| char::from_digit(u32::from(digit), 16))
     .collect()
 }
 
@@ -247,7 +241,7 @@ impl Fault {
     if matches!(said.type_name(), "dict" | "list" | "tuple") {
       return None;
     }
-    let args = field(&said, "args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
+    let args = items(field(&said, "args")?)?.map(|one| one.to_owned()).collect();
     Some(Self::new(said.type_name(), args))
   }
 
@@ -277,12 +271,47 @@ impl error::Error for Fault {}
 
 /// One field of an instance or a map, by its name.
 pub fn field<'a>(said: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {
-  said.pairs()?.into_iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| one)
+  pairs(*said)?.find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| one)
 }
 
 /// One entry of a list or a tuple, by its place.
 pub fn entry<'a>(said: &ObjectRef<'a>, at: usize) -> Option<ObjectRef<'a>> {
-  said.items()?.into_iter().nth(at)
+  held(*said)?.get(at).map(|id| unstable::child(*said, *id))
+}
+
+/// The items of a list, a tuple, a set or a namedtuple, each where it stands in the arena of the
+/// value, with no list of them, which `items` of monty allocates at each call.
+pub fn items(said: ObjectRef<'_>) -> Option<impl ExactSizeIterator<Item = ObjectRef<'_>> + Clone> {
+  Some(held(said)?.iter().map(move |id| unstable::child(said, *id)))
+}
+
+/// The places of the items of a list, a tuple, a set or a namedtuple in the arena of the value.
+fn held(said: ObjectRef<'_>) -> Option<&[NodeId]> {
+  match unstable::node(said) {
+    MontyNode::List(ids)
+    | MontyNode::Tuple(ids)
+    | MontyNode::Set(ids)
+    | MontyNode::FrozenSet(ids)
+    | MontyNode::NamedTuple { values: ids, .. } => Some(ids),
+    _ => None,
+  }
+}
+
+/// The pairs of a dict, or the fields of an instance, a class or a module, each where it stands in
+/// the arena of the value, with no list of them, which `pairs` of monty allocates at each call.
+pub fn pairs(
+  said: ObjectRef<'_>,
+) -> Option<impl ExactSizeIterator<Item = (ObjectRef<'_>, ObjectRef<'_>)> + Clone> {
+  let held = match unstable::node(said) {
+    MontyNode::Dict(held)
+    | MontyNode::ClassInstance { attrs: held, .. }
+    | MontyNode::Module { attrs: held, .. } => held,
+    MontyNode::ClassType(class) => &class.attrs,
+    _ => return None,
+  };
+  Some(
+    held.iter().map(move |(key, one)| (unstable::child(said, *key), unstable::child(said, *one))),
+  )
 }
 
 /// A value as it goes in: every instance of a class of a sandbox in it, wherever it came from, as its name and
@@ -290,9 +319,20 @@ pub fn entry<'a>(said: &ObjectRef<'a>, at: usize) -> Option<ObjectRef<'a>> {
 /// monty makes no instance on a host's behalf. An object of the host, which monty made for the host, and plain
 /// data go in as they are. This is the one rule, applied to everything the crate hands in, so a record a World
 /// kept of one life opens the next.
-pub(crate) fn inward(said: &Object) -> Object {
-  let (graph, root) = unstable::into_graph_parts(said.clone());
-  walk(&graph, root)
+/// A value with no such instance goes in as it stands, with no copy.
+pub(crate) fn inward(said: &Object) -> Cow<'_, Object> {
+  let (graph, root) = unstable::graph_parts(said);
+  let sandboxed = |node: &MontyNode| match node {
+    MontyNode::ClassInstance { class_type, .. } => {
+      matches!(graph.node(*class_type), MontyNode::ClassType(class) if !class.host_defined)
+    }
+    _ => false,
+  };
+  if graph.nodes().iter().any(sandboxed) {
+    Cow::Owned(walk(graph, root))
+  } else {
+    Cow::Borrowed(said)
+  }
 }
 
 /// The most levels of a value that a host is given. Each door walks a value one level at a time on the stack of its
@@ -319,61 +359,57 @@ pub(crate) const REPEATED: &str = "<repeated too often>";
 /// host over the value is bounded by its depth and by its size in the sandbox.
 pub(crate) fn carried(value: Object) -> Object {
   let (graph, root) = unstable::graph_parts(&value);
-  let (mut height, mut size) = (vec![0usize; graph.len()], vec![0usize; graph.len()]);
+  let mut measured: Vec<(usize, usize)> = Vec::with_capacity(graph.len());
   // The arena holds each part after the parts it holds, so one pass gives each part its height and its size.
-  for (at, node) in graph.nodes().iter().enumerate() {
+  for node in graph.nodes() {
     let (mut high, mut many) = (0usize, 1usize);
     node.for_each_child(|one| {
-      high = high.max(height[one.index()] + 1);
-      many = many.saturating_add(size[one.index()]);
+      if let Some((held_high, held_many)) = measured.get(one.index()) {
+        high = high.max(held_high.saturating_add(1));
+        many = many.saturating_add(*held_many);
+      }
     });
-    (height[at], size[at]) = (high, many);
+    measured.push((high, many));
   }
   let limit = graph.len().saturating_mul(REPEATS);
-  if height[root.index()] < DEEPEST && size[root.index()] <= limit {
+  if measured.get(root.index()).is_some_and(|(high, many)| *high < DEEPEST && *many <= limit) {
     return value;
   }
-  let (mut cut, mut left) = (MontyGraph::new(), limit);
-  let root = cutting(graph, root, 0, &mut left, &mut cut, false);
-  unstable::object_from_graph(cut, root).unwrap_or_else(|_| Object::repr(NESTED))
+  let mut cut = Cut { graph, into: MontyGraph::new(), left: limit };
+  let root = cut.part(root, 0, false);
+  unstable::object_from_graph(cut.into, root).unwrap_or_else(|_| Object::repr(NESTED))
 }
 
-/// One part of a value as `carried` cuts it into the arena of the cut, at a level, from what is left of its bound.
-/// The class of an instance stays a class, since an instance names a class, and only what the class holds is cut.
-fn cutting(
-  graph: &MontyGraph,
-  id: NodeId,
-  level: usize,
-  left: &mut usize,
-  cut: &mut MontyGraph,
-  class: bool,
-) -> NodeId {
-  let node = graph.node(id);
-  if !node.is_leaf() && !class {
-    if level + 1 >= DEEPEST {
-      return cut.push(MontyNode::Repr(NESTED.to_owned()));
+/// The cut that `carried` makes of a value: the arena of the value, the arena of the cut, and what
+/// is left of the bound of its parts.
+struct Cut<'a> {
+  graph: &'a MontyGraph,
+  into: MontyGraph,
+  left: usize,
+}
+
+impl Cut<'_> {
+  /// One part of the value, cut into the arena of the cut at a level, after the parts that it
+  /// holds. The class of an instance stays a class, since an instance names a class, and only what
+  /// the class holds is cut.
+  fn part(&mut self, id: NodeId, level: usize, class: bool) -> NodeId {
+    let graph = self.graph;
+    let node = graph.node(id);
+    if !node.is_leaf() && !class {
+      if level + 1 >= DEEPEST {
+        return self.into.push(MontyNode::Repr(NESTED.to_owned()));
+      }
+      if self.left == 0 {
+        return self.into.push(MontyNode::Repr(REPEATED.to_owned()));
+      }
     }
-    if *left == 0 {
-      return cut.push(MontyNode::Repr(REPEATED.to_owned()));
-    }
+    self.left = self.left.saturating_sub(1);
+    let instance = matches!(node, MontyNode::ClassInstance { .. });
+    let mut node = node.clone();
+    let mut first = instance;
+    node.for_each_child_mut(|one| *one = self.part(*one, level + 1, mem::take(&mut first)));
+    self.into.push(node)
   }
-  *left = left.saturating_sub(1);
-  let mut held = Vec::new();
-  node.for_each_child(|one| held.push(one));
-  let instance = matches!(node, MontyNode::ClassInstance { .. });
-  let held: Vec<NodeId> = held
-    .into_iter()
-    .enumerate()
-    .map(|(at, one)| cutting(graph, one, level + 1, left, cut, instance && at == 0))
-    .collect();
-  let mut node = node.clone();
-  let mut each = held.into_iter();
-  node.for_each_child_mut(|one| {
-    if let Some(made) = each.next() {
-      *one = made;
-    }
-  });
-  cut.push(node)
 }
 
 fn walk(graph: &MontyGraph, id: NodeId) -> Object {
@@ -495,6 +531,6 @@ mod tests {
     let held = Object::exception(monty_types::ExcType::CancelledError, None);
     let fault = Fault::of(held.as_ref()).unwrap();
     assert_eq!(fault.name, "CancelledError");
-    assert!(fault.args.is_empty());
+    assert_eq!(fault.args, Vec::<Object>::new());
   }
 }

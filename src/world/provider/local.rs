@@ -389,17 +389,17 @@ impl Asking {
       && one.window.is_none()
       && let Ok(props) = self.asked("/props", None).await
     {
-      one.window = positive(&props["default_generation_settings"]["n_ctx"]);
+      one.window = positive(field(field(&props, "default_generation_settings"), "n_ctx"));
     }
     if offers.iter().any(|one| one.window.is_none())
       && let Ok(listed) = self.asked("/api/v0/models", None).await
     {
-      for entry in listed["data"].as_array().into_iter().flatten() {
-        let Some(one) = offers.iter_mut().find(|one| entry["id"] == one.id.as_str()) else {
+      for entry in field(&listed, "data").as_array().into_iter().flatten() {
+        let Some(one) = offers.iter_mut().find(|one| *field(entry, "id") == one.id.as_str()) else {
           continue;
         };
-        let kind = entry["type"].as_str().unwrap_or_default();
-        one.window = one.window.or(positive(&entry["loaded_context_length"]));
+        let kind = field(entry, "type").as_str().unwrap_or_default();
+        one.window = one.window.or(positive(field(entry, "loaded_context_length")));
         one.chat &= kind != "embeddings";
         one.images |= kind == "vlm";
       }
@@ -412,20 +412,22 @@ impl Asking {
     for one in offers.iter_mut().filter(|one| one.window.is_none()) {
       let Ok(shown) = self.asked("/api/show", Some(&json!({"model": one.id}))).await else { break };
       let capabilities =
-        shown["capabilities"].as_array().into_iter().flatten().filter_map(Value::as_str);
+        field(&shown, "capabilities").as_array().into_iter().flatten().filter_map(Value::as_str);
       let capabilities: Vec<&str> = capabilities.collect();
       if !capabilities.is_empty() {
         one.chat &= capabilities.contains(&"completion");
         one.images |= capabilities.contains(&"vision");
       }
-      let parameters = shown["parameters"].as_str().unwrap_or_default();
+      let parameters = field(&shown, "parameters").as_str().unwrap_or_default();
       let set = parameters
         .lines()
         .find_map(|line| line.trim().strip_prefix("num_ctx")?.trim().parse().ok());
-      let running = loaded["models"].as_array().into_iter().flatten();
-      let mut running = running
-        .filter(|model| model["name"] == one.id.as_str() || model["model"] == one.id.as_str());
-      let running = running.find_map(|model| positive(&model["context_length"]));
+      let running = field(&loaded, "models").as_array().into_iter().flatten();
+      let named = |model: &&Value| {
+        *field(model, "name") == one.id.as_str() || *field(model, "model") == one.id.as_str()
+      };
+      let running =
+        running.filter(named).find_map(|model| positive(field(model, "context_length")));
       one.window = set.filter(|one| *one > 0).or(running);
     }
   }
@@ -461,6 +463,12 @@ pub(super) fn efforts() -> Vec<(String, Map<String, Value>)> {
 }
 
 /// A count of JSON that is more than zero.
+/// A field of a map of JSON, or null when it holds none, as an index of serde reads it.
+fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
+  const NULL: &Value = &Value::Null;
+  value.get(key).unwrap_or(NULL)
+}
+
 fn positive(one: &Value) -> Option<u64> {
   one.as_u64().filter(|one| *one > 0)
 }

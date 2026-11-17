@@ -32,7 +32,7 @@ use host::{Held, Word};
 use super::{Given, Inspection, NativeEar, Outcome, Record, Said, Told, Value, words};
 use crate::world;
 use crate::{
-  Engine, Fault, Object,
+  Engine, Fault, Hands, Object,
   life::{Answer, Log, Opening, Retrying, Stream},
   wire,
 };
@@ -71,7 +71,9 @@ impl FromNapiValue for Value {
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
     let value = unsafe { Unknown::from_raw_unchecked(env, value) };
-    Ok(Self(host::inward(&Env::from_raw(env), value, Word::Plain, 0)?))
+    let mut hands = Hands::default();
+    let object = host::inward(Env::from_raw(env), value, Word::Plain, &mut hands)?;
+    Ok(Self { object, hands })
   }
 }
 
@@ -79,7 +81,7 @@ impl FromNapiValue for Value {
 impl ToNapiValue for Value {
   unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
     // SAFETY: the env is the one napi gives the value to.
-    unsafe { Json::to_napi_value(env, wire::outward(value.0.as_ref())) }
+    unsafe { Json::to_napi_value(env, wire::outward(value.object().as_ref())) }
   }
 }
 
@@ -332,7 +334,9 @@ impl JsEngine {
   )]
   pub fn boot(env: Env, record: Vec<Value>, ears: Vec<(String, Given)>) -> napi::Result<Self> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
-    let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
+    // A record is data: what its entries name of JavaScript goes nowhere.
+    let hands = &mut Hands::default();
+    let engine = Engine::boot(record.into_iter().map(|one| one.handed(hands)), ears)?;
     Self::held(env, engine, Vec::new())
   }
 
@@ -376,14 +380,13 @@ impl JsEngine {
   /// sandbox, or at once when the life stopped already.
   #[napi(ts_args_type = "listener: (why: string) => void")]
   pub fn on_stop(&self, listener: Function<'_, String, ()>) -> napi::Result<()> {
-    *self.held.listener.borrow_mut() = Some(listener.create_ref()?);
-    self.held.stops();
+    self.held.listen(listener.create_ref()?);
     Ok(())
   }
 
   #[napi(getter)]
   pub fn disposed(&self) -> bool {
-    self.held.engine.try_borrow().is_ok_and(|engine| engine.is_none())
+    self.held.disposed()
   }
 
   /// Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the work
@@ -402,10 +405,11 @@ impl JsEngine {
     &self,
     name: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    self.said(&name, args, kwargs).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    self.said(&name, args, kwargs, hands).map(Value::of)
   }
 
   /// One callable the engine made, called back by the number it went out under, with these words.
@@ -417,10 +421,15 @@ impl JsEngine {
     &self,
     n: i64,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    self.held.call(|engine| engine.made(n, args, kwargs)).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    let made = |engine: &mut Engine| {
+      engine.hand(hands);
+      engine.made(n, &args, kwargs)
+    };
+    self.held.call(made).map(Value::of)
   }
 
   /// A callable the engine made, forgotten: the host holds its number no more.
@@ -439,7 +448,7 @@ impl JsEngine {
   #[napi]
   pub fn outcome(&self, act: String) -> napi::Result<Outcome> {
     let got = self.held.call(|engine| engine.outcome(&act))?;
-    Ok(Outcome { done: got.is_some(), value: Value(got.unwrap_or_else(Object::none)) })
+    Ok(Outcome { done: got.is_some(), value: Value::of(got.unwrap_or_else(Object::none)) })
   }
 
   /// The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
@@ -479,10 +488,14 @@ impl JsEngine {
     key: String,
     kind: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<JsAct> {
-    let (args, kwargs) = words(args, kwargs.as_ref());
-    let id = self.held.call(|engine| engine.keyed(&key, &kind, args, kwargs))?;
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    let id = self.held.call(|engine| {
+      engine.hand(hands);
+      engine.keyed(&key, &kind, &args, kwargs)
+    })?;
     Ok(JsAct { held: Rc::clone(&self.held), id })
   }
 
@@ -491,7 +504,7 @@ impl JsEngine {
   pub fn inspect(&self, name: String, chain: Option<String>) -> napi::Result<Inspection> {
     let (kind, representation, value) =
       self.held.call(|engine| engine.inspect(&name, chain.as_deref()))?;
-    Ok(Inspection { name, kind, representation, value: Value(value) })
+    Ok(Inspection { name, kind, representation, value: Value::of(value) })
   }
 
   /// Every name the module of a chain binds, the root when none is given, in the order it bound them.
@@ -521,21 +534,26 @@ impl JsEngine {
     name: &str,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
+    hands: Hands,
   ) -> napi::Result<Object> {
-    self.held.call(|engine| engine.verb(name, args, kwargs))
+    self.held.call(|engine| {
+      engine.hand(hands);
+      engine.verb(name, &args, kwargs)
+    })
   }
 
   /// One verb of the contract with the words JavaScript gave, each as the contract says its type, and what it gave.
   fn worded(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Object> {
     let Words { given, placed, rest, options, keys } = words;
+    let mut hands = Hands::default();
     let mut args = Vec::new();
     for (one, word) in given {
-      args.push(host::inward(&env, one, word, 0)?);
+      args.push(host::inward(env, one, word, &mut hands)?);
     }
     let known: Vec<(&str, Word)> =
       placed.iter().map(|(key, word, _)| (*key, *word)).chain(keys.iter().copied()).collect();
     let mut kwargs = match options {
-      Some(options) => host::named(env, options, &known)?,
+      Some(options) => host::named(env, options, &known, &mut hands)?,
       None => Vec::new(),
     };
     // A word with a default that stands before the star goes by its place, so the words of the star follow it.
@@ -544,15 +562,15 @@ impl JsEngine {
       args.push(at.map_or_else(|| default.clone(), |at| kwargs.remove(at).1));
     }
     for one in rest.unwrap_or_default() {
-      args.push(host::inward(&env, one, Word::Plain, 0)?);
+      args.push(host::inward(env, one, Word::Plain, &mut hands)?);
     }
     let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-    self.said(name, args, kwargs)
+    self.said(name, args, kwargs, hands)
   }
 
   /// One verb of the contract that gives a value, as JavaScript reads it.
   fn plain(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Value> {
-    self.worded(env, name, words).map(Value)
+    self.worded(env, name, words).map(Value::of)
   }
 
   /// One verb of the contract that makes an act, and the act.

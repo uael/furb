@@ -1,7 +1,7 @@
 //! A recording of a terminal in the format 3 of asciinema: a head with the size of the terminal,
 //! then one event a line, each at its time after the event before it.
 
-use std::time::Duration;
+use std::{borrow::Cow, fmt::Write as _, time::Duration};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -67,19 +67,21 @@ impl Cast {
   /// The text of the recording. An event that no frame shows is not written.
   pub(crate) fn write(&self) -> String {
     let head = json!({ "version": 3, "term": { "cols": self.cols, "rows": self.rows } });
-    let mut text = head.to_string() + "\n";
+    let mut text = format!("{head}\n");
     let mut before = Duration::ZERO;
     for event in &self.events {
       let (code, data) = match &event.what {
-        What::Output(data) => ("o", data.clone()),
-        What::Input(data) => ("i", data.clone()),
-        What::Marker(label) => ("m", label.clone()),
-        What::Resize { cols, rows } => ("r", format!("{cols}x{rows}")),
+        What::Output(data) => ("o", Cow::Borrowed(data.as_str())),
+        What::Input(data) => ("i", Cow::Borrowed(data.as_str())),
+        What::Marker(label) => ("m", Cow::Borrowed(label.as_str())),
+        What::Resize { cols, rows } => ("r", Cow::Owned(format!("{cols}x{rows}"))),
         What::Other => continue,
       };
       let interval = event.at.saturating_sub(before).as_secs_f64();
       before = event.at;
-      text += &(json!([(interval * 1e6).round() / 1e6, code, data]).to_string() + "\n");
+      let line = json!([(interval * 1e6).round() / 1e6, code, data]);
+      // A String takes each write.
+      writeln!(text, "{line}").ok();
     }
     text
   }

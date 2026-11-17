@@ -2,7 +2,7 @@
 //! whether its line binds it, and what the contract says of each verb of the engine. The pointer on
 //! a name shows what it holds, and a click on it goes to the line that bound it.
 
-use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
+use std::{collections::HashMap, ops::Range, rc::Rc};
 
 use crate::cells::Cells;
 use opentui::syntax::tree_sitter::{Node, Parser};
@@ -22,22 +22,21 @@ const KEPT: usize = 256;
 /// reads no grammar.
 #[derive(Default)]
 pub(crate) struct Names {
-  kept: RefCell<HashMap<String, Rc<Vec<Vec<Named>>>>>,
+  kept: HashMap<String, Rc<Vec<Vec<Named>>>>,
 }
 
 impl Names {
   /// The names of each line of a text of python. A text that the grammar cannot read names what
   /// it reads.
-  pub(crate) fn of(&self, text: &str) -> Rc<Vec<Vec<Named>>> {
-    if let Some(kept) = self.kept.borrow().get(text) {
+  pub(crate) fn of(&mut self, text: &str) -> Rc<Vec<Vec<Named>>> {
+    if let Some(kept) = self.kept.get(text) {
       return Rc::clone(kept);
     }
     let names = Rc::new(read(text));
-    let mut kept = self.kept.borrow_mut();
-    if kept.len() >= KEPT {
-      kept.clear();
+    if self.kept.len() >= KEPT {
+      self.kept.clear();
     }
-    kept.insert(text.to_owned(), Rc::clone(&names));
+    self.kept.insert(text.to_owned(), Rc::clone(&names));
     names
   }
 }
@@ -62,7 +61,9 @@ fn read(text: &str) -> Vec<Vec<Named>> {
     let (from, to) = (start.column, node.end_position().column);
     let (Some(before), Some(name)) = (line.get(..from), line.get(from..to)) else { continue };
     let at = before.width()..before.width() + name.width();
-    names[start.row].push(Named { at, name: name.to_owned(), binds: binds(node) });
+    if let Some(row) = names.get_mut(start.row) {
+      row.push(Named { at, name: name.to_owned(), binds: binds(node) });
+    }
   }
   for line in &mut names {
     line.sort_by_key(|one| one.at.start);
@@ -107,14 +108,14 @@ fn binds(node: Node<'_>) -> bool {
 pub(crate) fn verb(name: &str) -> Option<(String, String)> {
   let head = format!("def {name}");
   let start = furb::CONTRACT.match_indices(&head).map(|(at, _)| at).find(|at| {
-    let rest = &furb::CONTRACT[at + head.len()..];
-    let line = *at == 0 || furb::CONTRACT[..*at].ends_with('\n');
+    let rest = furb::CONTRACT.get(at + head.len()..).unwrap_or_default();
+    let line = *at == 0 || furb::CONTRACT.get(..*at).is_some_and(|before| before.ends_with('\n'));
     line && (rest.starts_with('(') || rest.starts_with('['))
   })?;
-  let def = &furb::CONTRACT[start..];
+  let def = furb::CONTRACT.get(start..)?;
   let open = def.find('(')?;
   let mut depth = 0;
-  let close = def[open..].char_indices().find_map(|(at, one)| {
+  let close = def.get(open..)?.char_indices().find_map(|(at, one)| {
     depth += match one {
       '(' | '[' => 1,
       ')' | ']' => -1,
@@ -123,9 +124,9 @@ pub(crate) fn verb(name: &str) -> Option<(String, String)> {
     (depth == 0).then_some(open + at)
   })?;
   let parameters: Vec<String> =
-    split(&def[open + 1..close]).into_iter().filter_map(parameter).collect();
-  let body = &def[close..];
-  let said = body.find("\"\"\"").and_then(|at| body[at + 3..].lines().next());
+    split(def.get(open + 1..close)?).into_iter().filter_map(parameter).collect();
+  let body = def.get(close..)?;
+  let said = body.split_once("\"\"\"").and_then(|(_, after)| after.lines().next());
   let said = said.map(|one| one.trim_end_matches("\"\"\"").trim().to_owned()).unwrap_or_default();
   Some((format!("{name}({})", parameters.join(", ")), said))
 }
@@ -138,13 +139,13 @@ fn split(text: &str) -> Vec<&str> {
       '(' | '[' | '{' => depth += 1,
       ')' | ']' | '}' => depth -= 1,
       ',' if depth == 0 => {
-        parts.push(&text[from..at]);
+        parts.push(text.get(from..at).unwrap_or_default());
         from = at + 1;
       }
       _ => {}
     }
   }
-  parts.push(&text[from..]);
+  parts.push(text.get(from..).unwrap_or_default());
   parts
 }
 

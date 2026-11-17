@@ -112,46 +112,52 @@ fn kinds(turns: &[Value], system: &str) -> Vec<(Content, u64)> {
   let answers: Vec<(usize, f64)> = turns
     .iter()
     .enumerate()
-    .filter(|(_, turn)| turn[0] == "assistant")
-    .filter_map(|(at, turn)| Some((at, turn[2][0].as_f64()?)))
+    .filter(|(_, turn)| turn.get(0).and_then(Value::as_str) == Some("assistant"))
+    .filter_map(|(at, turn)| Some((at, turn.get(2)?.get(0)?.as_f64()?)))
     .collect();
   let (Some(&(first, opened)), Some(&(last, read))) = (answers.first(), answers.last()) else {
     return Vec::new();
   };
-  let mut characters = [0.0; Content::ALL.len()];
-  characters[slot(Content::Engine)] = count(system);
+  let mut characters =
+    Content::ALL.map(|kind| (kind, if kind == Content::Engine { count(system) } else { 0.0 }));
   let mut before = count(system);
-  let mut kit = false;
-  for (at, turn) in turns[..last].iter().enumerate() {
-    let python = turn[1].as_str().unwrap_or_default();
-    let parts = if turn[0] == "assistant" {
-      // The setup reads the code of each kit in a rung of its own, and tells it whole.
-      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
-      vec![(Content::Turns, python)]
-    } else if mem::take(&mut kit) {
-      vec![(Content::Kits, python)]
-    } else {
-      paragraphs(python).into_iter().map(|paragraph| (kind(paragraph), paragraph)).collect()
-    };
-    for (kind, text) in parts {
-      characters[slot(kind)] += count(text);
-      before += if at < first { count(text) } else { 0.0 };
+  for (at, _, kind, text) in pieces(turns.get(..last).unwrap_or_default()) {
+    for one in characters.iter_mut().filter(|one| one.0 == kind) {
+      one.1 += count(text);
     }
+    before += if at < first { count(text) } else { 0.0 };
   }
   let rate = if before > 0.0 { opened / before } else { 1.0 / CHARACTERS };
   let mut kinds: Vec<(Content, u64)> =
-    Content::ALL.into_iter().map(|kind| (kind, tokens(characters[slot(kind)] * rate))).collect();
+    characters.into_iter().map(|(kind, characters)| (kind, tokens(characters * rate))).collect();
   // The turns take what the rounding left, so the kinds sum to what the answer read.
-  let turns = slot(Content::Turns);
-  let others: u64 = kinds.iter().enumerate().filter(|one| one.0 != turns).map(|one| one.1.1).sum();
-  kinds[turns].1 = tokens(read).saturating_sub(others);
+  let others: u64 = kinds.iter().filter(|one| one.0 != Content::Turns).map(|one| one.1).sum();
+  for one in kinds.iter_mut().filter(|one| one.0 == Content::Turns) {
+    one.1 = tokens(read).saturating_sub(others);
+  }
   kinds.retain(|one| one.1 > 0);
   kinds
 }
 
-/// The place of a kind in the order of the bar.
-fn slot(kind: Content) -> usize {
-  Content::ALL.iter().position(|one| *one == kind).unwrap_or_default()
+/// Each piece of turns with its kind, in their order: the place of its turn, whether the model
+/// wrote it, its kind and its text. A turn of the model is one piece of the work; a turn that tells
+/// the code of a kit is one piece of the kits; any other turn is a piece for each paragraph.
+pub(crate) fn pieces(turns: &[Value]) -> Vec<(usize, bool, Content, &str)> {
+  let mut pieces = Vec::new();
+  let mut kit = false;
+  for (at, turn) in turns.iter().enumerate() {
+    let python = turn[1].as_str().unwrap_or_default();
+    if turn[0] == "assistant" {
+      // The setup reads the code of each kit in a rung of its own, and tells it whole.
+      kit = python.starts_with("rung(read(") && python.ends_with(", HIDDEN).content)");
+      pieces.push((at, true, Content::Turns, python));
+    } else if mem::take(&mut kit) {
+      pieces.push((at, false, Content::Kits, python));
+    } else {
+      pieces.extend(paragraphs(python).into_iter().map(|one| (at, false, kind(one), one)));
+    }
+  }
+  pieces
 }
 
 /// The kind of a paragraph of a user turn, by the path that it tells or by its act.
@@ -176,10 +182,12 @@ fn kind(paragraph: &str) -> Content {
 /// markdown in a text that a paragraph quotes, as `# Title`, starts none.
 fn paragraphs(python: &str) -> Vec<&str> {
   let heads = python.match_indices("\n\n#").map(|(at, _)| at + 2).filter(|at| {
-    python[at + 1..].starts_with(|next: char| next.is_ascii_alphanumeric() || next == '_')
+    python.get(at + 1..).is_some_and(|rest| {
+      rest.starts_with(|next: char| next.is_ascii_alphanumeric() || next == '_')
+    })
   });
   let starts: Vec<usize> = [0].into_iter().chain(heads).chain([python.len()]).collect();
-  starts.windows(2).map(|pair| &python[pair[0]..pair[1]]).collect()
+  starts.windows(2).filter_map(|pair| python.get(*pair.first()?..*pair.last()?)).collect()
 }
 
 /// The characters of a text.

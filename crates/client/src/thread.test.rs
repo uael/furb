@@ -11,7 +11,7 @@ fn page(mark: Mark) -> Page {
   let block = Block { maker, lines: vec![line], more: false, thought: None };
   let exchange = Exchange {
     at: 0,
-    message: "prompt1".to_owned(),
+    message: "prompt1".into(),
     said_at: 0,
     by: Maker::Operator,
     text: "Run it.".to_owned(),
@@ -40,7 +40,7 @@ fn a_line_ends_when_its_work_ends_and_not_when_it_waits_to_run() {
 #[test]
 fn what_a_thread_said_last_is_its_last_answer_or_notice_and_never_a_question() {
   let said =
-    |act: &str, kind: Saying, text: &str| Said { act: act.to_owned(), kind, text: text.to_owned() };
+    |act: &str, kind: Saying, text: &str| Said { act: act.into(), kind, text: text.to_owned() };
   let mut first = page(Mark::Ran);
   first.exchanges[0].said = vec![said("close1", Saying::Answer, "The first answer.")];
   let mut second = first.exchanges[0].clone();

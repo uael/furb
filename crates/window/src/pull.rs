@@ -2,8 +2,8 @@
 //! list: one card of the pull request of its branch, with its title, its number, the lines that it
 //! adds and removes and how its checks stand, or, with no pull request, its branch and the lines
 //! that its checkout adds and removes against its base. A click on the title opens the pull
-//! request, on the counts the review of the changes, on the checks the checks of the pull request,
-//! and the menu reads the changes again.
+//! request, on the counts the review of the changes, and on the checks the checks of the pull
+//! request: each thing of the card is its own target, so it holds no menu.
 
 use std::{mem, ops::Range};
 
@@ -23,7 +23,6 @@ pub(crate) enum Changing {
   Pull,
   Diff,
   Checks,
-  Menu,
 }
 
 /// A row of the part: its runs, and the columns of the list that take a click.
@@ -54,10 +53,10 @@ impl Model {
       ),
       None => (branch, None, based.unwrap_or_else(sums), Changing::Diff),
     };
-    let title = cut(title, inner.saturating_sub(4));
+    let title = cut(title, inner.saturating_sub(2));
     let left = vec![run("⑂ ", Style::new().fg(t.accent)), run(title.clone(), prose)];
-    let first = spread(left, vec![run("⋯", muted)], inner, Style::new());
-    let mut hot = vec![(1..3 + title.width(), opens), (inner..inner + 1, Changing::Menu)];
+    let first = spread(left, Vec::new(), inner, Style::new());
+    let mut hot = vec![(1..3 + title.width(), opens)];
     let first = (indented(first), mem::take(&mut hot));
     let mut left = Vec::new();
     let mut column = 1;
@@ -96,8 +95,8 @@ impl Model {
 
   /// A row of the part as the list draws it: the thing under the pointer that takes a click goes
   /// bright.
-  pub(crate) fn changes_line(&self, at: usize, pointed: bool) -> Line {
-    let Some((line, hot)) = self.changes_rows().into_iter().nth(at) else { return Vec::new() };
+  pub(crate) fn changes_line(&self, piece: Option<Piece>, pointed: bool) -> Line {
+    let Some((line, hot)) = piece else { return Vec::new() };
     let column = self.pointer.and_then(|(x, _)| self.list_column(x)).filter(|_| pointed);
     let range =
       column.and_then(|x| hot.iter().find(|one| one.0.contains(&x)).map(|one| one.0.clone()));
@@ -117,11 +116,6 @@ impl Model {
       self.client.changes(at, &folder)?.pull.as_ref().map(|one| one.url.clone())
     });
     let to = match (does, pull) {
-      (Changing::Menu, _) => {
-        self.client.focused();
-        self.client.notice = Some("Reading the changes and the pull request again.".to_owned());
-        return None;
-      }
       (Changing::Diff, _) | (_, None) => return Some(Does::Changes),
       (Changing::Checks, Some(url)) => format!("{url}/checks"),
       (Changing::Pull, Some(url)) => url,
@@ -140,9 +134,10 @@ impl Model {
     pull.is_some_and(|one| one.failing == 0 && one.pending > 0) && !self.changes_rows().is_empty()
   }
 
-  /// The column of the list at a column of the window, past the padding of its panel.
-  fn list_column(&self, x: u16) -> Option<usize> {
-    usize::from(x).checked_sub(usize::from(self.size.0.saturating_sub(self.list_width())) + 1)
+  /// The column of a row of the list at a column of the window: the panel stands one column wider
+  /// than the list, and that column is its padding.
+  pub(crate) fn list_column(&self, x: u16) -> Option<usize> {
+    usize::from(x).checked_sub(usize::from(self.size.0.saturating_sub(self.list_width())))
   }
 }
 
@@ -158,7 +153,7 @@ fn grouped(count: u32) -> String {
   let digits = count.to_string();
   let mut out = String::new();
   for (at, digit) in digits.chars().enumerate() {
-    if at > 0 && (digits.len() - at) % 3 == 0 {
+    if at > 0 && (digits.len() - at).is_multiple_of(3) {
       out.push(',');
     }
     out.push(digit);

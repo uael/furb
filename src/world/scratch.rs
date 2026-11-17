@@ -1,10 +1,5 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::HashMap,
   fs, io,
@@ -25,7 +20,7 @@ use super::{
 };
 use crate::{
   fact::named,
-  value::{Fault, Object, Text, hex},
+  value::{Fault, Object, Text, entry, hex},
 };
 use std::env;
 use std::process;
@@ -107,12 +102,16 @@ impl Scratch {
     let path = absolute(record)?;
     let path = match (path.parent(), path.file_name()) {
       (Some(folder), Some(name)) => {
-        fs::canonicalize(folder).map_or(path.clone(), |real| real.join(name))
+        fs::canonicalize(folder).map_or_else(|_| path.clone(), |real| real.join(name))
       }
       _ => path,
     };
     let digest = Sha256::digest(path.to_string_lossy().as_bytes());
-    Ok(cache().map(|cache| Self::kept(cache.join("scratch").join(hex(&digest[..8])))))
+    Ok(
+      cache().map(|cache| {
+        Self::kept(cache.join("scratch").join(hex(digest.get(..8).unwrap_or(&digest))))
+      }),
+    )
   }
 
   /// A scratch directory of its own, in the temporary directory of the machine under a short name, which goes when
@@ -291,7 +290,7 @@ pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathB
   for entry in entries.flatten() {
     let name = entry.file_name().to_string_lossy().into_owned();
     let digest = name.get(..16).is_some_and(|one| one.bytes().all(|b| b.is_ascii_hexdigit()));
-    if !digest || !matches!(&name[16..], "" | ".new") {
+    if !digest || !matches!(name.get(16..), Some("" | ".new")) {
       continue;
     }
     let at = entry.path();
@@ -352,12 +351,11 @@ fn gone(at: &Path, log: &dyn Fn(&str)) {
 }
 
 /// The text that the done of a write in an entry of a record came to, read before anything of the entry is copied.
-fn written(entry: &Object) -> Option<Text> {
-  let entry = entry.as_ref();
-  let held = entry.items()?;
-  let fact = held.first()?.items()?;
-  let kind = fact.first()?.as_str()? == "done";
-  (kind && named(fact.get(1)?.as_str()?, "write")).then(|| Text::of(*fact.get(3)?)).flatten()
+fn written(kept: &Object) -> Option<Text> {
+  let fact = entry(&kept.as_ref(), 0)?;
+  let word = |at: usize| entry(&fact, at);
+  let kind = word(0)?.as_str()? == "done";
+  (kind && named(word(1)?.as_str()?, "write")).then(|| Text::of(word(3)?)).flatten()
 }
 
 /// A file put at a path of a directory, with its folders, where a file or a folder that stands in its way goes.
@@ -394,6 +392,10 @@ pub(crate) struct Beneath<'a> {
 /// the entries of a folder, one on each line, each folder with `/` at its end. Each text and each
 /// refusal names the path under the scheme, and never as the machine names it, and a path that
 /// leaves the directory, by `..` or by a link, is refused.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a read or a write takes the directory, the path, the content of a write, the gallery of the images, and how the scheme makes its directory, and each scheme gives them apart"
+)]
 pub(crate) fn beneath(
   dir: Beneath<'_>,
   path: &str,

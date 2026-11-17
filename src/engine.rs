@@ -18,29 +18,22 @@
 //! of a class of the engine comes in as the name of its class and its fields, and it is made in the sandbox. A map
 //! that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
 //! of a word or of a host as a mark.
-
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: a method that the build makes takes its words by value and only borrows them"
-)]
 #![expect(
   clippy::unreadable_literal,
   reason = "debt: a constant that the build makes is a long literal with no separator"
-)]
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 
 mod crossing;
 mod hosted;
 mod image;
 mod opening;
+mod order;
 mod plain;
 mod record;
 
 use std::{
   collections::{HashMap, HashSet},
+  sync::{Arc, LazyLock},
   task::Waker,
   time::Instant,
 };
@@ -53,7 +46,7 @@ use self::{
   opening::OPENING,
 };
 pub use self::{
-  hosted::{Life, callable, handed, lending},
+  hosted::{Hands, Life},
   plain::{Act, Plain},
   record::CRASHES,
 };
@@ -71,7 +64,7 @@ use crate::{
   sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value,
-  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
+  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry, field, items, pairs},
   world,
   world::{CHECKPOINT_SCHEMA, Systems},
 };
@@ -127,11 +120,9 @@ fn seeded(
   else {
     return Ok((record, 0));
   };
-  let pairs = data.as_ref().pairs().unwrap_or_default();
-  let field =
-    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|one| one.1);
-  CHECKPOINT_SCHEMA.opens("checkpoint", field("schema"))?;
-  let lines = field("lines").and_then(|one| one.pairs()).unwrap_or_default().into_iter();
+  let data_field = |name: &str| field(&data.as_ref(), name);
+  CHECKPOINT_SCHEMA.opens("checkpoint", data_field("schema"))?;
+  let lines = data_field("lines").and_then(pairs).into_iter().flatten();
   sand.lined(
     lines
       .filter_map(|(name, line)| {
@@ -142,16 +133,15 @@ fn seeded(
   let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
-    sand.call(outside, &outside.opened.seed.clone(), vec![data], vec![])
+    sand.call(outside, &Arc::clone(&outside.opened).seed, vec![data], vec![])
   })??;
   // The sandbox gives a part that many heads share as one part, and a copy of a head walks the
   // arena down to its lowest part, so each head is made here from its two texts.
   let head = |one: ObjectRef<'_>| {
-    let texts = one.items().unwrap_or_default().into_iter().filter_map(|text| text.as_str());
+    let texts = items(one).into_iter().flatten().filter_map(|text| text.as_str());
     Object::list([Object::tuple(texts.map(Object::string))])
   };
-  let heads: Vec<Object> =
-    heads.as_ref().items().unwrap_or_default().into_iter().map(head).collect();
+  let heads: Vec<Object> = items(heads.as_ref()).into_iter().flatten().map(head).collect();
   let born = heads.len();
   record.splice(..1, heads);
   Ok((record, born))
@@ -168,23 +158,26 @@ fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result
   let mut entries = Vec::new();
   for one in record {
     let one = outside.inward(sand, one)?;
-    let held = one.as_ref().items().unwrap_or_default();
-    let fact = held.first().and_then(ObjectRef::items);
+    let mut held = items(one.as_ref()).into_iter().flatten();
+    let fact = held.next().and_then(items);
     let fact = fact.ok_or_else(|| Fault::refused("a record holds a fact first in each entry"))?;
-    let fact = Object::tuple(fact.into_iter().map(|one| one.to_owned()));
-    entries.push(Object::tuple(iter::once(fact).chain(held[1..].iter().map(ObjectRef::to_owned))));
+    let fact = Object::tuple(fact.map(|one| one.to_owned()));
+    let rest = held.map(|one| one.to_owned());
+    entries.push(Object::tuple(iter::once(fact).chain(rest)));
   }
   Ok(Object::list(entries))
 }
 
 /// The side of the host in one life: its ears and its functions, which the sandbox calls, and what
 /// the host holds of the sandbox, by which each value crosses. Its default is the side of the host
-/// of a life of nothing, which stands in for one that is lent to code of a host.
-#[derive(Default)]
+/// of a life of nothing, which stands in for one that is lent to code of a host at each step of an
+/// ear, so it allocates nothing.
 struct Outside {
   hosted: Hosted,
   crossing: Crossing,
-  opened: Opened,
+  /// The callables of the opening, which a life of nothing shares with each other one, and which a
+  /// call of one of them borrows with no copy of its value.
+  opened: Arc<Opened>,
   /// How many ids the host gave, which names the next.
   given: u128,
   /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
@@ -202,6 +195,26 @@ struct Outside {
   /// The questions of the record that the life opened on, as [`settled`] gives them: while boot
   /// replays the record, no bound of a turn holds a step of the word of such a run.
   settled: HashSet<String>,
+}
+
+/// The callables of a life of nothing, made once: each of its values is a graph of its own, which a
+/// life of nothing at each step of an ear would allocate again.
+static NOTHING: LazyLock<Arc<Opened>> = LazyLock::new(|| Arc::new(Opened::default()));
+
+impl Default for Outside {
+  fn default() -> Self {
+    Self {
+      hosted: Hosted::default(),
+      crossing: Crossing::default(),
+      opened: Arc::clone(&NOTHING),
+      given: 0,
+      stepping: Vec::new(),
+      past: None,
+      asking: HashMap::new(),
+      ending: None,
+      settled: HashSet::new(),
+    }
+  }
 }
 
 impl Host for Outside {
@@ -230,7 +243,7 @@ impl Host for Outside {
         self.asking.clear();
         Ok(Object::bool(sand.bound(bounded)))
       }
-      None => self.called(sand, name, &args),
+      None => self.called(sand, name, args),
       Some(on) if name == "send" => return self.sent(sand, on, args.into_iter().next()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
     };
@@ -255,8 +268,9 @@ impl Outside {
   /// The side of the host, on what the opening gave: a dict of its callables by name, each of which
   /// the engine keeps.
   fn new(handed: Handed, opened: &Object) -> Result<Self, Fault> {
-    let mut held: HashMap<String, Object> = (opened.as_ref().pairs().unwrap_or_default())
+    let mut held: HashMap<String, Object> = pairs(opened.as_ref())
       .into_iter()
+      .flatten()
       .filter_map(|(name, one)| Some((name.as_str()?.to_owned(), one.to_owned())))
       .collect();
     let kept = held.values().filter_map(|one| one.as_ref().handle()).collect();
@@ -266,7 +280,7 @@ impl Outside {
     Ok(Self {
       hosted: Hosted { handed, ..Hosted::default() },
       crossing: Crossing { kept, ..Crossing::default() },
-      opened,
+      opened: Arc::new(opened),
       given: 0,
       stepping: Vec::new(),
       past: None,
@@ -317,11 +331,11 @@ impl Outside {
 
   /// The names of the engine that are callable, read where they stand now. Each is the engine's to hold.
   fn bound(&mut self, sand: &mut Sand) -> Result<(), Fault> {
-    let names = self.opened.names.clone();
-    let got = sand.call(self, &names, vec![], vec![])?;
+    let opened = Arc::clone(&self.opened);
+    let got = sand.call(self, &opened.names, vec![], vec![])?;
     self.crossing.names.clear();
     self.crossing.named.clear();
-    for (name, one) in got.as_ref().pairs().unwrap_or_default() {
+    for (name, one) in pairs(got.as_ref()).into_iter().flatten() {
       let (Some(name), one) = (name.as_str(), one.to_owned()) else { continue };
       if let Some(handle) = one.as_ref().handle() {
         self.crossing.kept.insert(handle);
@@ -333,6 +347,10 @@ impl Outside {
   }
 
   /// A name of the engine, called with values of the sandbox where it stands now, and what it gave.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn named_call(
     &mut self,
     sand: &mut Sand,
@@ -341,13 +359,17 @@ impl Outside {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     args.insert(0, Object::string(name));
-    let call = self.opened.call.clone();
-    sand.call(self, &call, args, kwargs)
+    let opened = Arc::clone(&self.opened);
+    sand.call(self, &opened.call, args, kwargs)
   }
 
   /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
   /// engine with values of the host, and what it gave, as it goes out: the checkpointer of the
   /// record, or the one whose text `by` holds.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a function of the checkpointer is its name, its values and the text that it runs on"
+  )]
   fn checkpointed(
     &mut self,
     sand: &mut Sand,
@@ -357,10 +379,10 @@ impl Outside {
   ) -> Result<Object, Fault> {
     let (mut args, _) = self.inwards(sand, args, vec![])?;
     args.insert(0, Object::string(name));
-    let call = self.opened.checkpoint.clone();
+    let opened = Arc::clone(&self.opened);
     let by = by.map(|text| ("by", Object::string(text))).into_iter().collect();
-    let got = sand.call(self, &call, args, by)?;
-    self.outward(sand, &got)
+    let got = sand.call(self, &opened.checkpoint, args, by)?;
+    self.outward(sand, got)
   }
 
   /// The words of a call, values of the host, as they come in.
@@ -379,39 +401,47 @@ impl Outside {
   }
 
   /// One verb of the engine, said by its name with values of the host, and what it gave, as it goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn verb(
     &mut self,
     sand: &mut Sand,
     name: &str,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let (args, kwargs) = self.inwards(sand, &args, kwargs)?;
+    let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = self.named_call(sand, name, args, kwargs)?;
-    self.outward(sand, &got)
+    self.outward(sand, got)
   }
 
   /// One callable the engine made, called back by the number it went out under.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a call is its callee, its values and its keyword values"
+  )]
   fn called_back(
     &mut self,
     sand: &mut Sand,
     n: i64,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     let made = self.held(n)?;
-    let (args, kwargs) = self.inwards(sand, &args, kwargs)?;
+    let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = sand.call(self, &made, args, kwargs)?;
-    self.outward(sand, &got)
+    self.outward(sand, got)
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given.
   fn site(&mut self, sand: &mut Sand, value: Option<&Object>) -> Result<Object, Fault> {
-    let (site, speaks) = (self.opened.site.clone(), self.opened.speaks.clone());
-    let previous = sand.call(self, &site, vec![], vec![])?;
+    let opened = Arc::clone(&self.opened);
+    let previous = sand.call(self, &opened.site, vec![], vec![])?;
     if let Some(value) = value.filter(|one| !one.as_ref().is_none()) {
       let by = value.as_ref().as_str().map_or_else(|| value.py_repr(), str::to_owned);
-      let token = sand.call(self, &speaks, vec![Object::string(by)], vec![])?;
+      let token = sand.call(self, &opened.speaks, vec![Object::string(by)], vec![])?;
       if let Some(handle) = token.as_ref().handle() {
         self.drop_handle(sand, &handle);
       }
@@ -426,13 +456,14 @@ impl Outside {
     if got.as_ref().type_name() == "ellipsis" {
       return Ok(None);
     }
-    self.outward(sand, &got).map(Some)
+    self.outward(sand, got).map(Some)
   }
 
   /// A function of the host, called back by the sandbox: what it is given goes out as any value goes out, and what
   /// it gives comes in as any value comes in, so a function that gives an ear gives the object that stands in for it.
-  fn called(&mut self, sand: &mut Sand, name: &str, args: &[Object]) -> Result<Object, Fault> {
-    let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
+  fn called(&mut self, sand: &mut Sand, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    let args =
+      args.into_iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
     let missing = || Fault::refused(format!("{name} is no function of the host"));
     let mut call = self.hosted.handed.calls.remove(name).ok_or_else(missing)?;
     let got = self.lent(sand, |life| call(args, life));
@@ -452,14 +483,13 @@ impl Outside {
         let n = n.ok_or_else(|| {
           Fault::refused("a callable the engine made is called back by its number")
         })?;
-        let words = args.get(1).and_then(|one| one.as_ref().items()).unwrap_or_default();
-        let words = words.into_iter().map(|one| one.to_owned()).collect();
-        let pairs = args.get(2).and_then(|one| one.as_ref().pairs()).unwrap_or_default();
-        let named =
-          pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
-        self.called_back(sand, n, words, named)
+        let words = args.get(1).and_then(|one| items(one.as_ref())).into_iter().flatten();
+        let words: Vec<Object> = words.map(|one| one.to_owned()).collect();
+        let named = args.get(2).and_then(|one| pairs(one.as_ref())).into_iter().flatten();
+        let named = named.filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
+        self.called_back(sand, n, &words, named)
       }
-      _ => self.verb(sand, &verb, args, kwargs),
+      _ => self.verb(sand, &verb, &args, kwargs),
     }
   }
 
@@ -506,40 +536,41 @@ fn fields(value: ObjectRef<'_>, depth: usize) -> String {
   if depth >= FIELDS {
     return "…".to_owned();
   }
-  let pairs = value.pairs().unwrap_or_default();
-  let at = |name: &str| pairs.iter().find(|one| one.0.as_str() == Some(name)).map(|one| one.1);
+  let at = |name: &str| field(&value, name);
   if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("instance") {
-    let inner = at("value").and_then(|one| Some((one.pairs()?, one.type_name().to_owned())));
+    let inner = at("value").and_then(|one| Some((pairs(one)?, one.type_name())));
     let Some((attributes, class)) = inner else { return value.py_repr() };
-    let shown = attributes.iter().map(|(name, one)| {
-      format!("{}={}", name.as_str().unwrap_or_default(), fields(*one, depth + 1))
+    let shown = attributes.map(|(name, one)| {
+      format!("{}={}", name.as_str().unwrap_or_default(), fields(one, depth + 1))
     });
     return format!("{class}({})", shown.collect::<Vec<_>>().join(", "));
   }
   // A map that holds the key `is` goes out as its pairs, under the mark `dict`.
   if value.type_name() == "dict" && at("is").and_then(|one| one.as_str()) == Some("dict") {
-    let held = at("args").and_then(|one| one.items()?.first()?.items()).unwrap_or_default();
-    let pairs = held.iter().filter_map(|pair| {
-      let items = pair.items()?;
-      let [key, one] = items[..] else { return None };
+    let held = at("args").and_then(|one| items(entry(&one, 0)?)).into_iter().flatten();
+    let pairs = held.filter_map(|pair| {
+      let mut held = items(pair).filter(|held| held.len() == 2)?;
+      let (key, one) = (held.next()?, held.next()?);
       Some(format!("{}: {}", fields(key, depth + 1), fields(one, depth + 1)))
     });
     return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
   }
-  let shown = |items: Vec<ObjectRef<'_>>| -> Vec<String> {
-    items.into_iter().map(|one| fields(one, depth + 1)).collect()
+  let shown = |held: &mut dyn Iterator<Item = ObjectRef<'_>>| -> Vec<String> {
+    held.map(|one| fields(one, depth + 1)).collect()
   };
-  match (value.type_name(), value.items()) {
-    ("list", Some(items)) => return format!("[{}]", shown(items).join(", ")),
-    ("tuple", Some(items)) => return format!("({})", shown(items).join(", ")),
-    ("set" | "frozenset", Some(items)) => return format!("{{{}}}", shown(items).join(", ")),
+  match (value.type_name(), items(value)) {
+    ("list", Some(mut held)) => return format!("[{}]", shown(&mut held).join(", ")),
+    ("tuple", Some(mut held)) => return format!("({})", shown(&mut held).join(", ")),
+    ("set" | "frozenset", Some(mut held)) => {
+      return format!("{{{}}}", shown(&mut held).join(", "));
+    }
     _ => {}
   }
   if value.type_name() == "dict" {
-    let pairs = pairs
-      .iter()
-      .map(|(key, one)| format!("{}: {}", fields(*key, depth + 1), fields(*one, depth + 1)));
-    return format!("{{{}}}", pairs.collect::<Vec<_>>().join(", "));
+    let each = pairs(value).into_iter().flatten();
+    let each =
+      each.map(|(key, one)| format!("{}: {}", fields(key, depth + 1), fields(one, depth + 1)));
+    return format!("{{{}}}", each.collect::<Vec<_>>().join(", "));
   }
   value.py_repr()
 }
@@ -705,17 +736,19 @@ impl Engine {
   ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
-    // A record replays on the engine that the fact made of its last segment holds.
+    // A record replays on the engine that the fact made of its last segment holds, in the order of
+    // this build, and carries on the checkpointer of this build in place of one that drops a chain.
     let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
+    let (source, checkpointer) = (order::ordered(source)?, order::carrier(&checkpointer));
     let mut sand = Sand::new(source != crate::ENGINE);
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
     let opened =
-      sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
+      sand.run(OPENING, inputs(&source, &kernel, checkpointer), &mut Nobody("the opening"))?;
     sand.watch();
     let mut outside = Outside::new(given, &opened)?;
-    let Opened { kernel, lasting, parking, park, .. } = outside.opened.clone();
+    let Opened { kernel, lasting, parking, park, .. } = Opened::clone(&outside.opened);
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     outside.hosted.replay = Some(Replay::of(&record, replayed));
@@ -726,7 +759,7 @@ impl Engine {
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       outside.crossing.recorded = true;
-      let entries = recorded(sand, outside, &record[born..]);
+      let entries = recorded(sand, outside, record.get(born..).unwrap_or_default());
       outside.crossing.recorded = false;
       let mut given = vec![("kernel".to_owned(), kernel)];
       for name in names {
@@ -746,7 +779,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = sand.call(outside, &outside.opened.boot.clone(), vec![entries?], given);
+      let got = sand.call(outside, &Arc::clone(&outside.opened).boot, vec![entries?], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
@@ -782,7 +815,7 @@ impl Engine {
         outside.crossing.recorded = true;
         let entries = recorded(sand, outside, tail);
         outside.crossing.recorded = false;
-        sand.call(outside, &outside.opened.fed.clone(), vec![entries?], vec![]).map(drop)
+        sand.call(outside, &Arc::clone(&outside.opened).fed, vec![entries?], vec![]).map(drop)
       })
     });
     self.outside.settled.clear();
@@ -793,8 +826,8 @@ impl Engine {
   /// took and that is not done, as `held` of the checkpointer gives them.
   pub fn held(&mut self) -> Result<Object, Fault> {
     self.run(|sand, outside| {
-      let got = sand.call(outside, &outside.opened.held.clone(), vec![], vec![])?;
-      outside.outward(sand, &got)
+      let got = sand.call(outside, &Arc::clone(&outside.opened).held, vec![], vec![])?;
+      outside.outward(sand, got)
     })
   }
 
@@ -827,8 +860,8 @@ impl Engine {
     let mut lineage = vec![chain.to_owned()];
     loop {
       let last = lineage.last().map(|one| Object::string(one.as_str()));
-      let act = self.verb("get", last.into_iter().collect(), vec![])?;
-      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      let act = self.verb("get", last.as_slice(), vec![])?;
+      let source = entry(&act.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
       match source.filter(|one| !one.is_empty()) {
         Some(source) => lineage.push(source),
         None => return Ok(lineage),
@@ -846,6 +879,20 @@ impl Engine {
   /// an end of the life before that loses them.
   pub fn unkept(&self) -> usize {
     self.outside.hosted.handed.ears.values().map(|ear| ear.unkept()).sum()
+  }
+
+  /// The ears and the functions of the host that the values of the next calls name, which the
+  /// life takes as each value comes into its sandbox.
+  pub fn hand(&mut self, hands: Hands) {
+    self.outside.hosted.given.join(hands);
+  }
+
+  /// An ear of the host, as the value a verb is given, which [`Hands::ear`] says.
+  pub(crate) fn handed(&mut self, ear: Box<dyn Ear>, started: bool) -> Object {
+    let mut hands = Hands::default();
+    let handed = hands.ear(ear, started);
+    self.hand(hands);
+    handed
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -875,7 +922,7 @@ impl Engine {
   pub fn verb(
     &mut self,
     name: &str,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.verb(sand, name, args, kwargs))
@@ -883,14 +930,15 @@ impl Engine {
 
   /// A function of the checkpointer of the engine, `seed` or `gathered`, by its name, said with
   /// these words, and what it gave.
-  pub fn checkpointed(&mut self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
-    self.run(|sand, outside| outside.checkpointed(sand, name, &args, None))
+  pub fn checkpointed(&mut self, name: &str, args: &[Object]) -> Result<Object, Fault> {
+    self.run(|sand, outside| outside.checkpointed(sand, name, args, None))
   }
 
   /// The carry of the life to the texts of a fact made, as `gathered` of the checkpointer that the
   /// fact names gives it, with these words.
-  pub(crate) fn gathered_for(&mut self, made: &str, args: Vec<Object>) -> Result<Object, Fault> {
-    self.run(|sand, outside| outside.checkpointed(sand, "gathered", &args, Some(made)))
+  pub(crate) fn gathered_for(&mut self, made: &str, args: &[Object]) -> Result<Object, Fault> {
+    let made = order::carrier(made);
+    self.run(|sand, outside| outside.checkpointed(sand, "gathered", args, Some(made)))
   }
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how
@@ -898,9 +946,9 @@ impl Engine {
   pub fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
     let names = Object::dict(inputs.into_iter().map(|(name, one)| (Object::string(name), one)));
     self.run(|sand, outside| {
-      let (word_of, names) = (outside.opened.word.clone(), outside.inward(sand, &names)?);
-      let got = sand.call(outside, &word_of, vec![Object::string(word), names], vec![])?;
-      outside.outward(sand, &got)
+      let (opened, names) = (Arc::clone(&outside.opened), outside.inward(sand, &names)?);
+      let got = sand.call(outside, &opened.word, vec![Object::string(word), names], vec![])?;
+      outside.outward(sand, got)
     })
   }
 
@@ -908,7 +956,7 @@ impl Engine {
   pub fn made(
     &mut self,
     n: i64,
-    args: Vec<Object>,
+    args: &[Object],
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.called_back(sand, n, args, kwargs))
@@ -1010,8 +1058,8 @@ impl Engine {
   /// the outside took and that is not done.
   pub(crate) fn flight(&mut self) -> Result<(), Fault> {
     let held = self.held()?;
-    let ids = held.as_ref().items().unwrap_or_default();
-    self.woken(ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect())
+    let ids = items(held.as_ref()).into_iter().flatten();
+    self.woken(ids.filter_map(|one| one.as_str().map(str::to_owned)).collect())
   }
 
   /// A wake of each act of a list that waits and that no pause holds, which puts it to the outside
@@ -1048,9 +1096,10 @@ impl Engine {
       return Err(Fault::refused(format!("{id} is not parked")));
     }
     self.parked.retain(|(one, _)| one != id);
-    let unpark = self.outside.opened.unpark.clone();
-    self.run(|sand, outside| sand.call(outside, &unpark, vec![Object::string(id)], vec![]))?;
-    self.verb("wake", vec![Object::string(id)], vec![]).map(|_| ())
+    let opened = Arc::clone(&self.outside.opened);
+    self
+      .run(|sand, outside| sand.call(outside, &opened.unpark, vec![Object::string(id)], vec![]))?;
+    self.verb("wake", &[Object::string(id)], vec![]).map(|_| ())
   }
 
   /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client. A
@@ -1058,11 +1107,15 @@ impl Engine {
   /// is the first question that the operator makes on that chain after it. When the chain holds such an act, it is
   /// given back and nothing is made. When it holds none, as when the host crashed after it kept the key and before it
   /// kept the act, the key is said again and the act is made. The chain is the one that `on` names, or the root.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a verb said once by its key: the key, the kind of its act, and its values and keyword values as the verb takes them"
+  )]
   pub fn keyed(
     &mut self,
     key: &str,
     kind: &str,
-    args: Vec<Object>,
+    args: &[Object],
     mut kwargs: Vec<(&str, Object)>,
   ) -> Result<String, Fault> {
     let named = kwargs.iter().find(|(name, _)| *name == "on");
@@ -1132,7 +1185,7 @@ impl Engine {
   pub fn watch(&mut self, id: &str, then: impl FnMut(&Object) + 'static) -> Result<(), Fault> {
     self.run(|sand, outside| {
       sand
-        .call(outside, &outside.opened.settles.clone(), vec![Object::string(id)], vec![])
+        .call(outside, &Arc::clone(&outside.opened).settles, vec![Object::string(id)], vec![])
         .map(drop)
     })?;
     self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
@@ -1140,7 +1193,7 @@ impl Engine {
   }
 
   /// One act a verb made, to await.
-  fn awaited<T>(&mut self, got: Object) -> Result<Act<'_, T>, Fault> {
+  fn awaited<T>(&mut self, got: &Object) -> Result<Act<'_, T>, Fault> {
     let id = got
       .as_ref()
       .as_str()

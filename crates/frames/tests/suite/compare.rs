@@ -1,5 +1,6 @@
 //! The command `compare`: the frame of the window in a scenario beside the two winner frames of
 //! the other programs, with the scores of the judgment.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{
   path::MAIN_SEPARATOR_STR,

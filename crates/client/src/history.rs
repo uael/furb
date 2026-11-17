@@ -40,7 +40,7 @@ impl Client {
       (Some(walk), _) => walk,
       (None, false) => return false,
       (None, true) => {
-        self.history = Some(History { target: self.target(), asked: false, sent: None });
+        self.history = Some(History { target: self.target().owned(), asked: false, sent: None });
         Walk { from: self.draft.clone(), place: None }
       }
     };
@@ -62,16 +62,17 @@ impl Client {
   /// The ask of the history of the target of the input, when the client did not ask it yet, with
   /// its machine and that target.
   pub fn history_due(&mut self) -> Option<(usize, Verb, Target)> {
-    let target = self.target();
-    if self.history.as_ref().is_none_or(|heard| heard.target != target) {
-      self.history = Some(History { target: target.clone(), asked: false, sent: None });
+    let aim = self.target();
+    if self.history.as_ref().is_none_or(|heard| heard.target.aim() != aim) {
+      self.history = Some(History { target: aim.owned(), asked: false, sent: None });
     }
     let heard = self.history.as_mut().filter(|heard| !heard.asked)?;
     heard.asked = true;
-    let (at, life) = match target.clone() {
-      Target::Thread(key) => (key.0, key.1),
-      Target::Session(at, life) => (at, life),
-      Target::New(at, folder) => (at, self.record(&folder)),
+    let target = heard.target.clone();
+    let (at, life) = match &target {
+      Target::Thread(key) => (key.0, key.1.clone()),
+      Target::Session(at, life) => (*at, life.clone()),
+      Target::New(at, folder) => (*at, self.record(folder)),
     };
     Some((at, Verb::History { life }, target))
   }
@@ -146,14 +147,18 @@ impl Client {
   fn stepped(&mut self) {
     let Some(walk) = self.walk.as_ref() else { return };
     let Some(found) = self.found(walk) else { return };
-    let (shown, place) = match (walk.place, found.len().checked_sub(1)) {
+    // A walk past the oldest text that it found stays on that text.
+    let oldest = walk.place.and_then(|place| {
+      let at = place.min(found.len().checked_sub(1)?);
+      Some((at, *found.get(at)?))
+    });
+    let (shown, place) = match (walk.place, oldest) {
       (None, _) => (walk.from.clone(), None),
-      (Some(place), Some(oldest)) => {
-        let one = found[place.min(oldest)];
+      (Some(_), Some((place, one))) => {
         let anchor = walk.from.anchor.clone();
         let draft =
           Draft { text: one.text.clone(), python: one.python, anchor, ..Draft::default() };
-        (draft, Some(place.min(oldest)))
+        (draft, Some(place))
       }
       (Some(_), None) => {
         let says = if walk.from.text.is_empty() {

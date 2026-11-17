@@ -14,7 +14,7 @@ use opentui::{
   style::{Color, Style},
 };
 
-use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
+use furb_client::{Aim, Client, Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
 
 use crate::{
@@ -24,7 +24,7 @@ use crate::{
   list::{NO_PROJECT, project},
   model::{Key, Model},
   thread::{Click, Row, hued, width},
-  tokens::{APART, BESIDE, OVER, PART, PARTS, Role},
+  tokens::{APART, BESIDE, OVER, PART, PARTS, Role, turn},
 };
 
 /// What a list part lists.
@@ -58,6 +58,8 @@ pub(crate) enum Pick {
   Value(usize),
   /// The skills of the session that the input sends to, with how each plays.
   Skills,
+  /// One skill, by its place among the skills: what it is, how it plays, and what he does to it.
+  Skill(usize),
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, the place of the
@@ -106,6 +108,8 @@ pub(crate) enum Choice {
   /// A skill, by its place among the skills of the session: one with code turns on or off, and the
   /// draft adds the mention of one with none.
   Skill(usize),
+  /// An extension, by its place among the skills, turned on or off in its view.
+  Turn(usize),
   /// The sign-in of Codex on the machine that the input sends to, in the browser of this computer
   /// or from any device with a code.
   SignIn(bool),
@@ -208,6 +212,7 @@ impl Pick {
       Self::Leave => "Leave the window",
       Self::Settings | Self::Value(_) => "Settings",
       Self::Skills => "Extensions",
+      Self::Skill(_) => "Extension",
     }
   }
 
@@ -225,6 +230,7 @@ impl Pick {
       Self::Settings => "Search a setting",
       Self::Value(_) => "Write the value",
       Self::Skills => "Search a skill or an extension",
+      Self::Skill(_) => "Search what to do",
     }
   }
 
@@ -236,10 +242,10 @@ impl Pick {
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models | Self::Efforts => "take it",
       Self::History => "write it",
-      Self::Session | Self::Leave => "do it",
+      Self::Session | Self::Leave | Self::Skill(_) => "do it",
       Self::Settings => "change it",
       Self::Value(_) => "set it",
-      Self::Skills => "turn it on or off",
+      Self::Skills => "open it",
     }
   }
 }
@@ -272,9 +278,10 @@ impl Model {
     self.chose(0);
     // The sessions open on the one that the input sends to, and the models on the one in use.
     let now = match self.client.target() {
-      Target::Thread(key) => Target::Session(key.0, key.1),
+      Aim::Thread(key) => Aim::Session(key.0, &key.1),
       other => other,
-    };
+    }
+    .owned();
     let entries = self.entries();
     let at = entries.iter().position(|one| match of {
       Pick::Sessions => one.choice == Choice::Session(now.clone()),
@@ -304,7 +311,7 @@ impl Model {
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
     let mut all: Vec<Option<Entry>> = all.into_iter().map(Some).collect();
     let taken = |one: Matched| {
-      let mut entry = all[one.at].take()?;
+      let mut entry = all.get_mut(one.at)?.take()?;
       let letters = entry.left.chars().count();
       entry.lit = one.lit.into_iter().filter(|at| *at < letters).collect();
       Some(entry)
@@ -339,6 +346,7 @@ impl Model {
       Pick::Leave => self.leave_choices(),
       Pick::Settings => self.settings(),
       Pick::Skills => self.played(),
+      Pick::Skill(place) => self.skill(place),
       // The part that writes a value stands in the columns of the settings that it came from.
       Pick::Value(place) => self.settings().into_iter().chain(self.value(place)).collect(),
     }
@@ -697,7 +705,9 @@ impl Model {
     let Some(last) = model.efforts.len().checked_sub(1) else { return true };
     let taken = actor.strip_prefix(model.name.as_str()).and_then(|rest| rest.strip_prefix('/'));
     let now = model.efforts.iter().position(|one| Some(one.as_str()) == taken).unwrap_or_default();
-    let next = model.efforts[now.saturating_add_signed(by).min(last)].clone();
+    let Some(next) = model.efforts.get(now.saturating_add_signed(by).min(last)).cloned() else {
+      return true;
+    };
     if let Some(picker) = self.picker.as_mut() {
       picker.effort = Some((model.name.clone(), next));
     }
@@ -847,13 +857,10 @@ impl Model {
         self.client.write_setting(place, &filter);
         self.set_back(place);
       }
-      Choice::Skill(place) => {
-        if self.client.turn_skill(place) {
-          self.picker = Some(Picker { of, filter, at, effort: None, tab: String::new() });
-        } else if let Some(one) = self.client.skill_at(place) {
-          let mention = format!("/{}", one.name);
-          self.client.added(&mention);
-        }
+      Choice::Skill(place) => self.took_skill(place),
+      Choice::Turn(place) => {
+        self.client.turn_skill(place);
+        self.opened_skill(place);
       }
       Choice::SignIn(device) => {
         self.client.sign_in(device);
@@ -874,6 +881,46 @@ impl Model {
       }
     }
     None
+  }
+
+  /// A skill taken from the extensions: the view of an extension opens, and the mention of a skill
+  /// with no code goes to the draft.
+  fn took_skill(&mut self, place: usize) {
+    match self.client.skill_at(place) {
+      Some(one) if one.turned_by.is_null() => {
+        let mention = format!("/{}", one.name);
+        self.client.added(&mention);
+      }
+      Some(_) => self.opened_skill(place),
+      None => {}
+    }
+  }
+
+  /// The view of an extension open, on its first action.
+  fn opened_skill(&mut self, place: usize) {
+    let of = Pick::Skill(place);
+    self.picker =
+      Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
+    self.chose(0);
+  }
+
+  /// The list part closed, or, from the view of an extension, back to the extensions on its row.
+  pub(crate) fn closed_part(&mut self) {
+    let Some(Pick::Skill(place)) = self.picker.as_ref().map(|one| one.of) else {
+      self.picker = None;
+      return;
+    };
+    self.picker = Some(Picker {
+      of: Pick::Skills,
+      filter: String::new(),
+      at: 0,
+      effort: None,
+      tab: String::new(),
+    });
+    let at = self.entries().iter().position(|one| one.choice == Choice::Skill(place));
+    if let Some(picker) = self.picker.as_mut() {
+      picker.at = at.unwrap_or_default();
+    }
   }
 
   /// The part open again on the rows of the sign-in of Codex, which change as it goes, so no
@@ -974,8 +1021,8 @@ impl Model {
     };
     // The count counts the rows that take something, and the place of the chosen one among them.
     // The filter of a value is the value that he writes, which no count follows.
-    let takes: Vec<usize> =
-      (0..entries.len()).filter(|at| entries[*at].choice != Choice::None).collect();
+    let takes = entries.iter().enumerate().filter(|(_, one)| one.choice != Choice::None);
+    let takes: Vec<usize> = takes.map(|(at, _)| at).collect();
     let count = match takes.len() {
       _ if matches!(picker.of, Pick::Value(_)) => String::new(),
       0 => "nothing".to_owned(),
@@ -1054,10 +1101,10 @@ impl Model {
       ]);
       // A row that takes nothing takes no click, and the pointer does not light it.
       let clicked = at
-        .filter(|at| entries[*at].choice != Choice::None)
+        .filter(|at| entries.get(*at).is_some_and(|one| one.choice != Choice::None))
         .map(|at| (2..2 + room, Some(Click::Pick(at))));
       // The bar of the chosen row and the badge of a project keep their hues under the pointer.
-      let badge = at.is_some_and(|at| entries[at].project.is_some());
+      let badge = at.and_then(|at| entries.get(at)).is_some_and(|one| one.project.is_some());
       let keeps = Some(2..if badge { 5 } else { 3 });
       Row { hot: clicked.into_iter().collect(), keeps, ..Row::of(row) }
     };
@@ -1074,7 +1121,7 @@ impl Model {
     let link = chosen.is_some_and(|one| matches!(one.choice, Choice::Link(_)));
     let scope = match self.client.target() {
       _ if !model => "",
-      Target::New(..) => " for the new session",
+      Aim::New(..) => " for the new session",
       _ => " for this session",
     };
     let moves = format!("{} move", [Does::Up, Does::Down].map(|one| self.key(one)).join(""));
@@ -1125,7 +1172,7 @@ impl Model {
       }
       let chosen = at == picker.at;
       let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style };
-      let hue = entry.hue.map_or(t.accent, |hue| t.hues[hue % t.hues.len()]);
+      let hue = entry.hue.and_then(|hue| turn(&t.hues, hue)).unwrap_or(t.accent);
       let bar =
         if chosen { run("▌", ground(Style::new().fg(hue))) } else { run(" ", Style::new()) };
       let badge = match &entry.project {

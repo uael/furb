@@ -103,7 +103,7 @@ impl Holders {
       match present.iter_mut().find(|held| held.operator == *operator) {
         Some(held) => {
           held.role = held.role.max(*role);
-          held.writes = one.writes.clone().or(held.writes.take());
+          held.writes = one.writes.clone().or_else(|| held.writes.take());
           held.windows += 1;
         }
         None => present.push(Present {

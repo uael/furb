@@ -74,22 +74,24 @@ impl Journal {
     ear(move |mut co| async move {
       // The change that each write that is not done began, with its chain, which the image of a
       // life holds, so a write that a later life ends keeps its change.
-      let before = co.keeps(HashMap::<String, (String, Value)>::new())?;
+      co.keeps(Before::new())?;
       loop {
         let a = hear(&mut co).await;
         let fact = json_of(&a);
         if a.question() && a.kind() == "write" {
           if let Some(change) = replaced(&mut co, &folder, &fact).await? {
-            let chain = fact[3].as_str().unwrap_or_default().to_owned();
-            before.borrow_mut().insert(a.about().to_owned(), (chain, change));
+            let chain = fact.get(3).and_then(Value::as_str).unwrap_or_default().to_owned();
+            co.kept::<Before>()?.insert(a.about().to_owned(), (chain, change));
           }
         } else if a.kind() == "done"
-          && let Some((chain, mut change)) = before.borrow_mut().remove(a.about())
-          && fact[3]["is"] == "Text"
-          && let Some(after) = fact[3]["content"].as_str()
+          && let Some((chain, mut change)) = co.kept::<Before>()?.remove(a.about())
+          && let Some(made) = fact.get(3)
+          && made.get("is").and_then(Value::as_str) == Some("Text")
+          && let Some(after) = made.get("content").and_then(Value::as_str)
+          && let Some(fields) = change.as_object_mut()
         {
-          change["after"] = json!(after);
-          change["act"] = json!(a.about());
+          fields.insert("after".to_owned(), json!(after));
+          fields.insert("act".to_owned(), json!(a.about()));
           if lines.send(Line::Change { chain, change: change.to_string() }).is_err() {
             return Ok(());
           }
@@ -98,6 +100,9 @@ impl Journal {
     })
   }
 }
+
+/// The change that each write that is not done began, with its chain, by its act.
+type Before = HashMap<String, (String, Value)>;
 
 /// The task of a journal: each line taken in order, until the journal and each of its ears are
 /// gone.
@@ -155,7 +160,8 @@ async fn replaced<W: 'static>(
   folder: &Path,
   fact: &Value,
 ) -> Result<Option<Value>, furb::Fault> {
-  let (Some(on), Some(path)) = (fact[3].as_str(), fact[4]["path"].as_str()) else {
+  let path = fact.get(4).and_then(|one| one.get("path")?.as_str());
+  let (Some(on), Some(path)) = (fact.get(3).and_then(Value::as_str), path) else {
     return Ok(None);
   };
   if path.contains("://") {
@@ -171,11 +177,14 @@ async fn replaced<W: 'static>(
 /// made by the write. A file that cannot be read keeps `before` empty for the readers that do not
 /// know `unread`, and `unread` says why, so no undo puts back a text that the file never held.
 fn before(file: &Path) -> Value {
+  let (key, value) = match fs::read_to_string(file) {
+    Ok(text) => ("before", json!(text)),
+    Err(no) if no.kind() == io::ErrorKind::NotFound => ("made", json!(true)),
+    Err(no) => ("unread", json!(no.to_string())),
+  };
   let mut change = json!({ "path": file.display().to_string(), "before": "" });
-  match fs::read_to_string(file) {
-    Ok(text) => change["before"] = json!(text),
-    Err(no) if no.kind() == io::ErrorKind::NotFound => change["made"] = json!(true),
-    Err(no) => change["unread"] = json!(no.to_string()),
+  if let Some(fields) = change.as_object_mut() {
+    fields.insert(key.to_owned(), value);
   }
   change
 }

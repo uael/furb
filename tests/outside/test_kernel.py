@@ -134,6 +134,9 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   assert (
     held == furb.record.Recorded("<f at 0x1>") and repr(furb.record.Recorded()) == "<a callable of an earlier life>"
   )
+  coroutine = type("Coroutine", (), {"__repr__": lambda _: "<coroutine object c at 0x1f>"})()
+  shown = furb.record.Recorded("Repr('<coroutine object c>')")
+  assert shown == coroutine and shown == "Repr('<coroutine object c>')" and shown != "<coroutine object c>"
   wrote = (
     ("write", "write1", "rung1", "chain1", engine.Text("a", "<A at 0x1>"), ["<B at 0x1>"], {"c": "<C at 0xAB>"}),
   )

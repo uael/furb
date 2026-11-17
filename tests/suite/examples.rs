@@ -3,7 +3,6 @@
 //! runs this test.
 #![cfg(unix)]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 use crate::pipes;
 use crate::yard;
@@ -63,9 +62,14 @@ impl Yard {
   /// The example, as a process in the yard, on the fake claude and on the config and the cache of
   /// the yard.
   fn command(&self, name: &str) -> Command {
+    // Cargo builds a test in its build directory and an example in the folder of the profile,
+    // which stands above it, at a depth that its layout sets.
     let here = env::current_exe().expect("this test");
-    let example =
-      here.parent().and_then(|deps| deps.parent()).expect("the target").join("examples").join(name);
+    let example = here
+      .ancestors()
+      .map(|one| one.join("examples").join(name))
+      .find(|one| one.is_file())
+      .expect("cargo built the example beside the target of this test");
     let mut command = Command::new(example);
     command.current_dir(&self.at).env("FURB_CLAUDE_BIN", self.fake.join("claude"));
     for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_WINDOW"] {

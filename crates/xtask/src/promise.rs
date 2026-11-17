@@ -57,7 +57,10 @@ fn proven(root: &Path, found: &[Proof]) -> Result<Vec<Proof>, Fault> {
       }
     }
     if !missed.is_empty() {
-      println!("{}", &out[out.floor_char_boundary(out.len().saturating_sub(4000))..]);
+      println!(
+        "{}",
+        out.get(out.floor_char_boundary(out.len().saturating_sub(4000))..).unwrap_or_default()
+      );
     }
     failed.extend(missed);
   }
@@ -68,11 +71,16 @@ fn proven(root: &Path, found: &[Proof]) -> Result<Vec<Proof>, Fault> {
 /// before what no machine proves yet, once each.
 fn proofs(text: &str) -> Result<Vec<Proof>, Fault> {
   let Some(start) = text.find("## The proofs that a machine runs") else { return Ok(Vec::new()) };
-  let end = text[start..].find("What no machine proves yet").map_or(text.len(), |at| start + at);
+  let end = text
+    .get(start..)
+    .and_then(|rest| rest.find("What no machine proves yet"))
+    .map_or(text.len(), |at| start + at);
   let mut found: Vec<Proof> = Vec::new();
-  for one in Regex::new(r"`([\w./\\:-]+\.(?:py|rs))::(\w+)`")?.captures_iter(&text[start..end]) {
+  for one in Regex::new(r"`([\w./\\:-]+\.(?:py|rs))::(\w+)`")?
+    .captures_iter(text.get(start..end).unwrap_or_default())
+  {
     let one = one?;
-    let proof = (one[1].to_owned(), one[2].to_owned());
+    let proof = (crate::group(&one, 1).to_owned(), crate::group(&one, 2).to_owned());
     if !found.contains(&proof) {
       found.push(proof);
     }

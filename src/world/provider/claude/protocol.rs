@@ -2,11 +2,6 @@
 //! the types that serde reads. A field that the protocol gives is required here, so an event that
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::collections::HashMap;
 
 use rig_core::{
@@ -411,8 +406,8 @@ impl<'a> Reply<'a> {
       if let Some(streamed) = &self.streamed {
         let at = streamed.get(&self.settled).copied();
         self.settled += 1;
-        if let (Some(at), Some(block)) = (at, block) {
-          self.blocks[at] = block;
+        if let (Some(at), Some(block)) = (at.and_then(|at| self.blocks.get_mut(at)), block) {
+          *at = block;
         }
       } else {
         let Some(block) = block else { continue };
@@ -438,6 +433,10 @@ impl<'a> Reply<'a> {
   /// turn, and the command line makes many when the model calls a tool, which it refuses, or stops
   /// at its limit of output, so only the last request says what the answer read of the window. A
   /// result that no message with a usage came before gives its own usage.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the response takes the result, the name of the model and the id of the session that the conversation holds, and the cost paid so far that the process holds"
+  )]
   pub(super) fn response(
     mut self,
     result: &Finished,
@@ -456,10 +455,11 @@ impl<'a> Reply<'a> {
     usage.output_tokens = spent.output;
     usage.cached_input_tokens = spent.cache_read;
     usage.cache_creation_input_tokens = spent.cache_creation;
-    usage.total_tokens = usage.input_tokens
-      + usage.output_tokens
-      + usage.cached_input_tokens
-      + usage.cache_creation_input_tokens;
+    // The counts come from the command line, so their sum saturates.
+    usage.total_tokens =
+      [usage.output_tokens, usage.cached_input_tokens, usage.cache_creation_input_tokens]
+        .into_iter()
+        .fold(usage.input_tokens, u64::saturating_add);
     let total = result.total_cost_usd.unwrap_or(*paid);
     let cost = (total - *paid).max(0.0);
     *paid = total;

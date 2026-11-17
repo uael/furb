@@ -1,6 +1,6 @@
 //! A life that writes its image at its rest past a tail of facts, from which a later life goes on,
 //! and the readers of a life whose log let go of the facts of its past.
-
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "a test blocks on the runtime that tokio starts for it"
@@ -239,7 +239,7 @@ async fn a_reader_that_comes_late_reads_each_fact_that_the_log_let_go_as_a_reade
   assert_eq!((chances(&late), chances(&log)), (ASKED, ASKED), "no reader loses a fact of the past");
   let last = |of: &[Logged]| -> BTreeMap<String, Logged> {
     let acts = of.iter().filter_map(|one| match &*one.1 {
-      Event::Act(act) => Some((act.id.clone(), one.clone())),
+      Event::Act(act) => Some((act.id.to_string(), one.clone())),
       _ => None,
     });
     acts.collect()

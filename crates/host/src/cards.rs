@@ -11,12 +11,13 @@ use std::{
   collections::HashMap,
   fs, io,
   path::{Path, PathBuf},
+  sync::Arc,
   time::{SystemTime, UNIX_EPOCH},
 };
 
 use furb::{
   Fault,
-  view::{self, Fold, Held, Sent, Skill, Standing},
+  view::{self, Fold, Held, Name, Sent, Skill, Standing},
   world::{self, Tip},
 };
 use serde::{Deserialize, Serialize};
@@ -146,7 +147,7 @@ pub(crate) fn folded(record: &Path, told: &mut dyn FnMut(u64)) -> Result<(), Err
 #[derive(Default)]
 pub(crate) struct Times {
   /// The kind of the standing of each thread, and since when it stands so.
-  since: HashMap<String, (u8, u64)>,
+  since: HashMap<Name, (u8, u64)>,
 }
 
 impl Times {
@@ -154,7 +155,7 @@ impl Times {
   /// with no index: a thread whose standing changed since takes a new time.
   pub(crate) fn kept(record: Option<&str>) -> Self {
     let kept = record.and_then(|one| kept(Path::new(one)));
-    let timed = |one: &Timed| (one.thread.prompt.clone(), (kind(&one.thread), one.since));
+    let timed = |one: &Timed| (Arc::clone(&one.thread.prompt), (kind(&one.thread), one.since));
     Self { since: kept.iter().flat_map(|(kept, _)| &kept.threads).map(timed).collect() }
   }
 
@@ -163,7 +164,7 @@ impl Times {
   pub(crate) fn timed(&mut self, cards: Vec<view::Card>, at: u64) -> Vec<Timed> {
     let timed = |thread: view::Card| {
       let now = kind(&thread);
-      let stands = self.since.entry(thread.prompt.clone()).or_insert((now, at));
+      let stands = self.since.entry(Arc::clone(&thread.prompt)).or_insert((now, at));
       if stands.0 != now {
         *stands = (now, at);
       }
@@ -229,8 +230,8 @@ impl Told {
     let before = self.shown.get(life).map(|one| one.1.as_slice()).unwrap_or_default();
     let changed: Vec<Card> = cards.iter().filter(|one| !before.contains(one)).cloned().collect();
     let stays = |was: &&Card| !cards.iter().any(|one| one.thread.prompt == was.thread.prompt);
-    let gone: Vec<String> =
-      before.iter().filter(stays).map(|was| was.thread.prompt.clone()).collect();
+    let gone: Vec<Name> =
+      before.iter().filter(stays).map(|was| Arc::clone(&was.thread.prompt)).collect();
     if !changed.is_empty() || !gone.is_empty() {
       let frame = Frame::Cards { life: life.to_owned(), changed, gone };
       for one in &self.watchers {

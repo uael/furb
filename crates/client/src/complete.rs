@@ -16,7 +16,7 @@ use furb_wire::{
   protocol::{Answer, Files, Verb},
 };
 
-use crate::{Asked, Client, Matched, Target, pathed, ranked};
+use crate::{Aim, Asked, Client, Matched, pathed, ranked};
 
 /// What a word of the input completes: a slash that starts a message, or a mention of a file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,12 +83,14 @@ impl Client {
   pub fn complete_at(&mut self, caret: usize) {
     let chars: Vec<char> = self.draft.text.chars().collect();
     let caret = caret.min(chars.len());
-    let start = chars[..caret].iter().rposition(|one| one.is_whitespace()).map_or(0, |at| at + 1);
-    let end = chars[caret..]
+    let start =
+      chars.iter().take(caret).rposition(|one| one.is_whitespace()).map_or(0, |at| at + 1);
+    let end = chars
       .iter()
+      .skip(caret)
       .position(|one| one.is_whitespace())
       .map_or(chars.len(), |at| caret + at);
-    let word: String = chars[start..end].iter().collect();
+    let word: String = chars.iter().take(end).skip(start).collect();
     let form = self.thread.as_ref().is_some_and(|opened| opened.form.is_some());
     let completes = match word.chars().next() {
       _ if self.draft.python || form => None,
@@ -160,8 +162,8 @@ impl Client {
       }
       Kind::Emoji => (format!("{} ", offer.says), None),
     };
-    let before: String = chars[..start].iter().collect();
-    let after: String = chars[end..].iter().collect();
+    let before: String = chars.iter().take(start).collect();
+    let after: String = chars.iter().skip(end).collect();
     // A command leaves no blank where its word stood.
     let after = if command.is_some() { after.trim_start().to_owned() } else { after };
     let caret = start + named.chars().count();
@@ -185,7 +187,7 @@ impl Client {
     }
     let (key, life) = self.lived();
     let skills = Asked::Skills(key.clone());
-    let lives = !matches!(self.target(), Target::New(..));
+    let lives = !matches!(self.target(), Aim::New(..));
     if lives && !told.skills.contains_key(&key) && !asking(&skills) {
       due.push((at, Verb::Skills { life }, skills));
     }
@@ -276,7 +278,9 @@ impl Client {
         let looked = self.looked(&completion.word);
         let paths = self.files(&looked.folder).map(|one| &one.paths[..]).unwrap_or_default();
         let named = self.named();
-        let liked = |at: usize| named.get(&format!("{}{}", looked.named, paths[at])).copied();
+        let liked = |at: usize| {
+          paths.get(at).and_then(|path| named.get(&format!("{}{path}", looked.named)).copied())
+        };
         pathed(&looked.query, paths.iter().map(String::as_str), |at| liked(at).unwrap_or_default())
       }
       Completes::Emoji => {
@@ -345,9 +349,9 @@ impl Client {
   /// gives the skills of the last session of its project.
   fn lived(&self) -> (String, String) {
     match self.target() {
-      Target::Thread(key) => (key.1.clone(), key.1),
-      Target::Session(_, life) => (life.clone(), life),
-      Target::New(_, folder) => (folder.clone(), self.record(&folder)),
+      Aim::Thread(key) => (key.1.clone(), key.1.clone()),
+      Aim::Session(_, life) => (life.to_owned(), life.to_owned()),
+      Aim::New(_, folder) => (folder.to_owned(), self.record(folder)),
     }
   }
 
@@ -362,18 +366,19 @@ impl Client {
     let query = word.trim_start_matches('@').trim_start_matches('"');
     let at = self.target().machine();
     let here = match self.target() {
-      Target::Thread(key) => self.cwd(at, &key.1),
-      Target::Session(_, life) => self.cwd(at, &life),
-      Target::New(_, folder) => Some(folder),
+      Aim::Thread(key) => self.cwd(at, &key.1),
+      Aim::Session(_, life) => self.cwd(at, life),
+      Aim::New(_, folder) => Some(folder.into()),
     };
-    let here = here.unwrap_or_else(|| self.folder.clone());
-    let named = query.rfind('/').map_or("", |end| &query[..=end]);
+    let here: String = here.map_or_else(|| self.folder.clone(), Into::into);
+    let named = query.rfind('/').and_then(|end| query.get(..=end)).unwrap_or_default();
     let away = named.starts_with('/') || named.starts_with('~') || named.starts_with("..");
     if !away {
       return Looked { folder: here, named: String::new(), query: query.to_owned() };
     }
     let folder = if named.starts_with("..") { format!("{here}/{named}") } else { named.to_owned() };
-    Looked { folder, named: named.to_owned(), query: query[named.len()..].to_owned() }
+    let query = query.strip_prefix(named).unwrap_or(query).to_owned();
+    Looked { folder, named: named.to_owned(), query }
   }
 }
 
@@ -393,15 +398,16 @@ fn mentions(text: &str) -> Vec<String> {
 pub fn mentioned(text: &str) -> Vec<(Range<usize>, &str)> {
   let mut found = Vec::new();
   let mut from = 0;
-  while let Some(at) = text[from..].find('@').map(|at| from + at) {
-    let rest = &text[at + 1..];
+  while let Some(at) = text.get(from..).and_then(|rest| rest.find('@')).map(|at| from + at) {
+    let rest = text.get(at + 1..).unwrap_or_default();
     // A quoted path takes its two quotes, and one with no closing quote runs to the end.
     let (path, end) = match rest.strip_prefix('"').map(|quoted| quoted.split_once('"')) {
       Some(Some((path, _))) => (path, at + path.len() + 3),
-      Some(None) => (&rest[1..], text.len()),
+      Some(None) => (rest.get(1..).unwrap_or_default(), text.len()),
       None => {
         let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-        let path = rest[..end].trim_end_matches([',', '.', ';', ':', ')', '?', '!']);
+        let path =
+          rest.get(..end).unwrap_or(rest).trim_end_matches([',', '.', ';', ':', ')', '?', '!']);
         (path, at + 1 + path.len())
       }
     };

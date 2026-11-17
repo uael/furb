@@ -11,13 +11,8 @@
 //! process that is gone leaves its conversation on the disk under its id, so a later turn resumes
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
-  env,
+  env, io,
   path::{Path, PathBuf},
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -49,7 +44,7 @@ pub use accounts::{Account, Source, Switch, Token};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
-use futures::stream;
+use futures::{future, stream};
 use keeper::Kept;
 use locate::PROGRAM;
 pub(super) use locate::located;
@@ -180,7 +175,9 @@ pub struct Claude {
   program: Program,
   stall: Duration,
   gone: Duration,
-  keeper: mpsc::UnboundedSender<Kept>,
+  /// The keeper of the conversations, or why the system gave it no runtime, which each turn
+  /// then gives.
+  keeper: Result<mpsc::UnboundedSender<Kept>, Arc<io::Error>>,
 }
 
 impl Claude {
@@ -213,6 +210,10 @@ impl Claude {
   /// account and ends as a failure that passes, so the turn that asks again runs as another
   /// account: a limit parks an account until its reset, and a failed sign in until a new command
   /// line stands, as after a reload. With one account or none, nothing is parked.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the command line takes its program, its words, its accounts, the policy that switches them and its stall, each that a config gives apart"
+  )]
   pub fn with_accounts(
     bin: Option<PathBuf>,
     args: Vec<String>,
@@ -227,7 +228,12 @@ impl Claude {
     });
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
+    let keeper = runtime()
+      .map(|runtime| {
+        drop(runtime.spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade())));
+        keeper
+      })
+      .map_err(Arc::new);
     Self { program: Program::with(bin, args, accounts), stall, gone: GONE, keeper }
   }
 
@@ -370,7 +376,7 @@ impl Program {
     };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
-      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
+      serde_json::from_str::<Value>(&said).ok().and_then(|one| one.get("loggedIn")?.as_bool());
     let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
     logged.unwrap_or(!words.contains("not logged in"))
   }
@@ -403,11 +409,10 @@ impl CompletionModel for Completion {
     self.claude.turn(&self.name, request, None).await
   }
 
-  #[expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
-  async fn stream(
+  fn stream(
     &self,
     request: CompletionRequest,
-  ) -> Result<StreamingCompletionResponse, CompletionError> {
+  ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> + Send {
     let (claude, name) = (self.claude.clone(), self.name.clone());
     let (deltas, mut heard) = mpsc::unbounded_channel();
     let turn = async move {
@@ -415,7 +420,12 @@ impl CompletionModel for Completion {
       // Rig makes the choice of a stream of the parts it streamed, so the raw record of its end
       // holds the blocks the command line settled whole, which stand over those parts.
       let got = got.map(|mut response| {
-        response.raw["settled"] = serde_json::to_value(&response.choice).unwrap_or_default();
+        if let Some(raw) = response.raw.as_object_mut() {
+          raw.insert(
+            "settled".to_owned(),
+            serde_json::to_value(&response.choice).unwrap_or_default(),
+          );
+        }
         RawStreamingChoice::FinalResponse(ended(CLAUDE, response))
       });
       drop(deltas.send(got));
@@ -425,7 +435,7 @@ impl CompletionModel for Completion {
     // ends it.
     let told = stream::poll_fn(move |cx| heard.poll_recv(cx));
     let stream = stream::select(told, stream::once(turn).filter_map(async |one| one));
-    Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
+    future::ready(Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream))))
   }
 }
 
@@ -488,8 +498,10 @@ impl Claude {
     let name = accounts.name(at).to_owned();
     got
       .map(|mut response| {
-        if !name.is_empty() {
-          response.raw["account"] = json!(name);
+        if !name.is_empty()
+          && let Some(raw) = response.raw.as_object_mut()
+        {
+          raw.insert("account".to_owned(), json!(name));
         }
         response
       })

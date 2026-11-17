@@ -107,13 +107,13 @@ fn parts(text: &str, mark: char) -> Vec<&str> {
       (None, '[' | '(' | '{') => depth += 1,
       (None, ']' | ')' | '}') => depth -= 1,
       (None, c) if c == mark && depth == 0 => {
-        found.push(&text[start..at]);
+        found.push(text.get(start..at).unwrap_or_default());
         start = at + c.len_utf8();
       }
       _ => {}
     }
   }
-  found.push(&text[start..]);
+  found.push(text.get(start..).unwrap_or_default());
   found
 }
 
@@ -159,12 +159,14 @@ impl Shape {
     })
   }
 
-  /// The lines that answer a shape that is a choice: yes and no for a bool, and each value of a
-  /// Literal as `named` gives it. Any other shape gives none.
+  /// The lines that answer a shape that is a choice: yes and no for a bool, each value of a
+  /// Literal as `named` gives it, and each of those of the arms of a union that holds no None. A
+  /// union that holds None takes a line of no word, so it is no choice. Any other shape gives none.
   pub fn choices(&self) -> Vec<String> {
     match self {
       Self::Bool => vec!["yes".to_owned(), "no".to_owned()],
       Self::Choice(values) => values.iter().map(named).collect(),
+      Self::Either(arms) if !self.takes_nothing() => arms.iter().flat_map(Self::choices).collect(),
       _ => Vec::new(),
     }
   }
@@ -205,13 +207,14 @@ fn literal(shape: &str) -> Option<Vec<Object>> {
 fn choice(text: &str) -> Option<(Object, &str)> {
   let Some(quote) = text.chars().next().filter(|c| *c == '\'' || *c == '"') else {
     let end = text.find(|c: char| c == ',' || c.is_whitespace()).unwrap_or(text.len());
-    let value = match &text[..end] {
+    let (word, rest) = text.split_at_checked(end)?;
+    let value = match word {
       "None" => Object::none(),
       "True" => Object::bool(true),
       "False" => Object::bool(false),
       word => Object::int(word.parse().ok()?),
     };
-    return Some((value, &text[end..]));
+    return Some((value, rest));
   };
   let mut value = String::new();
   let mut chars = text.char_indices().skip(1);
@@ -238,7 +241,7 @@ fn choice(text: &str) -> Option<(Object, &str)> {
           value.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
         }
       }
-      c if c == quote => return Some((Object::string(value), &text[at + 1..])),
+      c if c == quote => return Some((Object::string(value), text.get(at + c.len_utf8()..)?)),
       c => value.push(c),
     }
   }

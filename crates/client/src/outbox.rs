@@ -38,11 +38,54 @@ pub enum Target {
 }
 
 impl Target {
+  /// The target as a view that borrows it.
+  pub fn aim(&self) -> Aim<'_> {
+    match self {
+      Self::Thread(key) => Aim::Thread(key),
+      Self::Session(at, life) => Aim::Session(*at, life),
+      Self::New(at, folder) => Aim::New(*at, folder),
+    }
+  }
+
   /// The machine that the target stands on.
   pub fn machine(&self) -> usize {
+    self.aim().machine()
+  }
+}
+
+/// Where the input sends, as a view that borrows the thread, the life or the folder that it names,
+/// so a read of the target copies none of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Aim<'a> {
+  Thread(&'a Key),
+  Session(usize, &'a str),
+  New(usize, &'a str),
+}
+
+impl<'a> Aim<'a> {
+  /// The life that the target sends to: none for a new session.
+  pub fn life(self) -> Option<&'a str> {
+    match self {
+      Self::Thread(key) => Some(&key.1),
+      Self::Session(_, life) => Some(life),
+      Self::New(..) => None,
+    }
+  }
+
+  /// The machine that the target stands on.
+  pub fn machine(self) -> usize {
     match self {
       Self::Thread(key) => key.0,
-      Self::Session(at, _) | Self::New(at, _) => *at,
+      Self::Session(at, _) | Self::New(at, _) => at,
+    }
+  }
+
+  /// The target that the view borrows, owned, to keep.
+  pub fn owned(self) -> Target {
+    match self {
+      Self::Thread(key) => Target::Thread(key.clone()),
+      Self::Session(at, life) => Target::Session(at, life.to_owned()),
+      Self::New(at, folder) => Target::New(at, folder.to_owned()),
     }
   }
 }
@@ -60,18 +103,13 @@ pub struct Chosen {
 
 impl Chosen {
   /// The actor chosen for a target.
-  pub fn of(target: &Target, actor: String) -> Self {
-    let (at, life) = match target {
-      Target::Thread(key) => (key.0, Some(key.1.clone())),
-      Target::Session(at, life) => (*at, Some(life.clone())),
-      Target::New(at, _) => (*at, None),
-    };
-    Self { at, life, actor, asked: false }
+  pub fn of(target: Aim<'_>, actor: String) -> Self {
+    Self { at: target.machine(), life: target.life().map(str::to_owned), actor, asked: false }
   }
 
   /// Whether the actor stands for a target.
-  pub fn aims(&self, target: &Target) -> bool {
-    *self == Self { asked: self.asked, ..Self::of(target, self.actor.clone()) }
+  pub fn aims(&self, target: Aim<'_>) -> bool {
+    self.at == target.machine() && self.life.as_deref() == target.life()
   }
 }
 
@@ -140,6 +178,10 @@ pub enum Asked {
   Picture(Shown),
   /// The whole of what a command wrote, which the open thread shows.
   Whole(Command),
+  /// The turns of the chain of a thread, for its transcript.
+  Transcript(Key),
+  /// The page of the conversation of a thread about lines, by its prompt, which the review shows.
+  Talk(String),
 }
 
 impl Asked {
@@ -154,6 +196,8 @@ impl Asked {
         | Self::Inspect(..)
         | Self::Picture(_)
         | Self::Whole(_)
+        | Self::Transcript(_)
+        | Self::Talk(_)
     )
   }
 }
@@ -168,6 +212,8 @@ impl Client {
       Asked::Inspect(key, name) => self.told_inspected((&key, &name), heard),
       Asked::Picture(shown) => self.pictured(&shown, heard),
       Asked::Whole(command) => self.told_whole(command, heard),
+      Asked::Transcript(key) => self.transcribe(&key, heard),
+      Asked::Talk(prompt) => self.told_talk(&prompt, heard),
       _ => {}
     }
   }
@@ -178,7 +224,7 @@ impl Client {
   /// login only reads, which the daemon would refuse.
   pub fn request(&mut self, at: usize, verb: Verb) -> Option<Request> {
     let listed = self.machines.get(at).is_some_and(|told| told.link == Link::Listed);
-    let refused = verb.needs() == Role::Write && self.only_reads(at).is_some();
+    let refused = verb.needs() == Role::Write && self.only_reads(at);
     (listed && !refused).then(|| {
       let id = self.next;
       self.next += 1;
@@ -193,10 +239,12 @@ impl Client {
   /// while the client lists everything that the operator can go to, the files and the skills of
   /// the target of the input.
   pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
+    self.bar_due();
     let mut due = self.views_due();
     due.extend(self.controls_due());
     due.extend(self.changes_due());
     due.extend(self.parts_due());
+    due.extend(self.transcript_due());
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
@@ -204,6 +252,7 @@ impl Client {
     due.extend(self.inspect_due());
     due.extend(self.pictures_due());
     due.extend(self.wholes_due());
+    due.extend(self.talks_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {
@@ -253,7 +302,7 @@ impl Client {
   pub fn opens_due(&self) -> Vec<(Life, Verb)> {
     let due = self.holds.iter().filter(|(_, hold)| hold.ask == Ask::Due);
     let open = |(key, hold): (&Life, &Hold)| {
-      if self.only_reads(key.0).is_some() {
+      if self.only_reads(key.0) {
         return (key.clone(), Verb::Attach { life: key.1.clone(), from: NO_EVENT });
       }
       let open = Verb::Open {

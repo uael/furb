@@ -1,13 +1,12 @@
 //! How each value crosses between the sandbox and the host, both ways, and the numbers by which the
 //! host holds what has no way back.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{HashMap, HashSet},
-  sync::atomic::{AtomicI64, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicI64, Ordering},
+  },
 };
 
 use monty_types::{
@@ -18,7 +17,7 @@ use monty_types::{
 use super::{Outside, hosted::At};
 use crate::{
   sand::{Sand, object},
-  value::{Fault, IS, Object, ObjectRef, carried, entry, inward, marked},
+  value::{Fault, IS, Object, ObjectRef, carried, entry, inward, items, marked},
 };
 
 /// The next number a callable or a class goes out under, in this process.
@@ -89,8 +88,12 @@ impl Outside {
   /// A value as it goes out to the host, as a host is given one, so no walk of a host over it is
   /// deeper or longer than the value bounds. A value with no data form that is not callable is let
   /// go of once the whole value went out, since the value may hold it more than once.
-  pub(super) fn outward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let (graph, root) = unstable::into_graph_parts(carried(value.clone()));
+  pub(super) fn outward(&mut self, sand: &mut Sand, value: Object) -> Result<Object, Fault> {
+    let value = carried(value);
+    if stands(&value) {
+      return Ok(value);
+    }
+    let (graph, root) = unstable::into_graph_parts(value);
     let mut shown = HashMap::new();
     let got = self.goes(sand, &graph, root, &mut shown);
     for held in shown.into_keys() {
@@ -105,6 +108,10 @@ impl Outside {
   /// fields under its class, a map that holds the key `is` as its pairs, and the entries of a
   /// container each as they go out. Anything else goes out as the interpreter carries it, but a
   /// value with no data form that is not callable, which goes out as its representation.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a walk of a value holds its arena, its node and the handles that it showed"
+  )]
   pub(super) fn goes(
     &mut self,
     sand: &mut Sand,
@@ -119,14 +126,14 @@ impl Outside {
       {
         let mut held = Vec::new();
         for (one, value) in pairs {
-          held.push(Object::tuple([key(one), self.goes(sand, graph, *value, shown)?]));
+          held.push(Object::tuple([key(one)?, self.goes(sand, graph, *value, shown)?]));
         }
         marked("dict", [("args", Object::list([Object::list(held)]))])
       }
       MontyNode::Dict(pairs) => {
         let mut held = Vec::new();
         for (one, value) in pairs {
-          held.push((key(one), self.goes(sand, graph, *value, shown)?));
+          held.push((key(one)?, self.goes(sand, graph, *value, shown)?));
         }
         Object::dict(held)
       }
@@ -143,8 +150,8 @@ impl Outside {
         if let Some(repr) = shown.get(handle) {
           return Ok(repr.clone());
         }
-        let shown_of = self.opened.shown.clone();
-        let repr = sand.call(self, &shown_of, vec![held.clone()], vec![])?;
+        let opened = Arc::clone(&self.opened);
+        let repr = sand.call(self, &opened.shown, vec![held.clone()], vec![])?;
         if let Some(repr) = repr.as_ref().as_str() {
           let repr = Object::repr(repr);
           shown.insert(*handle, repr.clone());
@@ -153,22 +160,26 @@ impl Outside {
         marked("made", [("id", Object::int(self.number(*handle, &held)))])
       }
       MontyNode::ClassType(class) if !class.host_defined => {
-        self.class(sand, whole(graph, id), class.id, &class.name)?
+        self.class(sand, whole(graph, id)?, class.id, &class.name)?
       }
       MontyNode::ClassInstance { class_type, .. } => match graph.node(*class_type) {
         MontyNode::ClassType(class)
           if !class.host_defined && !self.crossing.named.contains_key(&class.id) =>
         {
-          let class = self.class(sand, whole(graph, *class_type), class.id, &class.name)?;
-          marked("instance", [("class", class), ("value", whole(graph, id))])
+          let class = self.class(sand, whole(graph, *class_type)?, class.id, &class.name)?;
+          marked("instance", [("class", class), ("value", whole(graph, id)?)])
         }
-        _ => whole(graph, id),
+        _ => whole(graph, id)?,
       },
-      _ => whole(graph, id),
+      _ => whole(graph, id)?,
     })
   }
 
   /// The entries of a container, each as it goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a walk of a value holds its arena, its node and the handles that it showed"
+  )]
   pub(super) fn going(
     &mut self,
     sand: &mut Sand,
@@ -182,6 +193,10 @@ impl Outside {
   /// A class of the sandbox as it goes out: a class of the engine as its name, and a class a word
   /// defined as the number the host holds it by, with its name and the class it was made with as it
   /// goes out.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a class is its value, its handle and its name, which its node holds apart"
+  )]
   pub(super) fn class(
     &mut self,
     sand: &mut Sand,
@@ -193,16 +208,17 @@ impl Outside {
       return Ok(marked("name", [("name", Object::string(name))]));
     }
     let n = self.number(handle, &class);
-    let base_of = self.opened.base.clone();
-    let base = sand.call(self, &base_of, vec![class], vec![])?;
-    let base = self.outward(sand, &base)?;
+    let opened = Arc::clone(&self.opened);
+    let base = sand.call(self, &opened.base, vec![class], vec![])?;
+    let base = self.outward(sand, base)?;
     Ok(marked("class", [("id", Object::int(n)), ("name", Object::string(name)), ("base", base)]))
   }
 
   /// A value of the host as the engine holds it, made in the sandbox from what crossed.
   pub(super) fn inward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let (graph, root) = unstable::into_graph_parts(inward(value));
-    self.comes(sand, &graph, root)
+    let value = inward(value);
+    let (graph, root) = unstable::graph_parts(&value);
+    self.comes(sand, graph, root)
   }
 
   /// One node of a value as it comes in: a map that names what it is under `is` made again as that,
@@ -249,6 +265,10 @@ impl Outside {
 
   /// What a map that names what it is under `is` is made again as, or nothing when it names nothing
   /// the engine makes, so it comes in as the map it is.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a map of a value is its arena, its mark and its pairs"
+  )]
   pub(super) fn remade(
     &mut self,
     sand: &mut Sand,
@@ -272,8 +292,8 @@ impl Outside {
       // A callable of the record, which no later life holds: what stands in its place, which is
       // equal to each callable, as the one that the word makes again.
       "made" if self.crossing.recorded => {
-        let unmade = self.opened.unmade.clone();
-        sand.call(self, &unmade, vec![], vec![]).map(Some)
+        let opened = Arc::clone(&self.opened);
+        sand.call(self, &opened.unmade, vec![], vec![]).map(Some)
       }
       // A callable the engine made, or a class a word defined, back from the host by the number it
       // went out under.
@@ -313,8 +333,8 @@ impl Outside {
             graph.value(spec).to_owned(),
           ]));
         }
-        let template = self.opened.template.clone();
-        sand.call(self, &template, vec![Object::list(each)], vec![]).map(Some)
+        let opened = Arc::clone(&self.opened);
+        sand.call(self, &opened.template, vec![Object::list(each)], vec![]).map(Some)
       }
       _ => self.made_of(sand, graph, mark, pairs),
     }
@@ -324,6 +344,10 @@ impl Outside {
   /// made with, and its fields. An exception takes what it was made with by position, and by
   /// position alone: the interpreter makes a builtin one from at most one string. A dataclass takes
   /// its fields by name.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a map of a value is its arena, its mark and its pairs"
+  )]
   pub(super) fn made_of(
     &mut self,
     sand: &mut Sand,
@@ -351,8 +375,8 @@ impl Outside {
     }
     let args: Vec<Object> = args
       .as_ref()
-      .and_then(|one| one.as_ref().items())
-      .map(|held| held.into_iter().map(|one| one.to_owned()).collect())
+      .and_then(|one| items(one.as_ref()))
+      .map(|held| held.map(|one| one.to_owned()).collect())
       .unwrap_or_default();
     if self.crossing.names.contains_key(mark) {
       let named = fields.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
@@ -362,19 +386,37 @@ impl Outside {
   }
 }
 
+/// Whether a part of a value goes out in another form than it stands in, as `goes` says: a map
+/// that names what it is, a handle, or a class of a word or an instance of one.
+/// Whether each part of a value goes out as it stands, so the value goes out whole, with no copy of
+/// each part: a fact of the engine is one, and goes out at each ear that hears it.
+pub(super) fn stands(value: &Object) -> bool {
+  unstable::graph_parts(value).0.nodes().iter().all(|node| !changes(value, node))
+}
+
+fn changes(value: &Object, node: &MontyNode) -> bool {
+  let graph = unstable::graph_parts(value).0;
+  match node {
+    MontyNode::Dict(pairs) => pairs.iter().any(|(one, _)| graph.value(*one).as_str() == Some(IS)),
+    MontyNode::Handle { .. } => true,
+    MontyNode::ClassType(class) => !class.host_defined,
+    MontyNode::ClassInstance { class_type, .. } => {
+      matches!(graph.node(*class_type), MontyNode::ClassType(class) if !class.host_defined)
+    }
+    _ => false,
+  }
+}
+
 /// A part of a value of the sandbox as it stands, in an arena of its own, with each part that it
 /// holds more than once held once. The sandbox gives a part that many parts share, as the class of
 /// each instance of it, one time in the arena of a value, and the copy that the interpreter makes
 /// of a part walks that arena down to the lowest part that it holds. So the copy of each instance
 /// of a long fact would walk the fact, and this copy walks the part alone.
-#[expect(
-  clippy::expect_used,
-  reason = "a push gives the place of its node, which stands in the arena, and no type holds that"
-)]
-fn whole(graph: &MontyGraph, id: NodeId) -> Object {
+fn whole(graph: &MontyGraph, id: NodeId) -> Result<Object, Fault> {
   let mut arena = MontyGraph::new();
   let root = copied(graph, id, &mut arena, &mut HashMap::new());
-  unstable::object_from_graph(arena, root).expect("the root of a copy stands in its arena")
+  unstable::object_from_graph(arena, root)
+    .map_err(|no| Fault::refused(format!("a part does not copy: {no}")))
 }
 
 /// One part of a value copied into an arena after the parts that it holds, and where it stands
@@ -424,15 +466,15 @@ fn builtin_of(mark: &str, first: Option<ObjectRef<'_>>) -> Result<Option<Object>
         .map(Object::float),
     },
     "dict" => {
-      let pairs = first.and_then(|one| one.items()).unwrap_or_default();
-      let pairs = pairs.into_iter().map(|pair| entry(&pair, 0).zip(entry(&pair, 1)));
+      let pairs = first.and_then(items).into_iter().flatten();
+      let pairs = pairs.map(|pair| entry(&pair, 0).zip(entry(&pair, 1)));
       let pairs = pairs.map(|pair| pair.map(|(key, one)| (key.to_owned(), one.to_owned())));
       let pairs = pairs.collect::<Option<Vec<_>>>();
       Some(Object::dict(pairs.ok_or_else(|| Fault::refused("a map comes in as its pairs of two"))?))
     }
     "tuple" => {
-      let items = first.and_then(|one| one.items()).unwrap_or_default();
-      Some(Object::tuple(items.into_iter().map(|one| one.to_owned())))
+      let held = first.and_then(items).into_iter().flatten();
+      Some(Object::tuple(held.map(|one| one.to_owned())))
     }
     _ => mark.parse::<ExcType>().ok().map(|kind| {
       Object::exception(

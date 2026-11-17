@@ -8,17 +8,12 @@
 //! from it.
 //! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
   fs::File,
   future::{self, poll_fn},
   hash::{DefaultHasher, Hash, Hasher},
-  io::{BufRead, BufReader},
+  io::{self, BufRead, BufReader},
   iter, mem,
   ops::Range,
   path::{Path, PathBuf},
@@ -30,15 +25,15 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb::{
-  Engine, Fact, Fault, Object, checkpoint,
+  Engine, Fault, Object, checkpoint,
   engine::ROOT,
   image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
   skill::ENABLE,
   verbs,
   view::{
-    self, Act, Desk, Fold, Held, Kind, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown,
-    Streamed, ThreadNode, Threads,
+    self, Act, Asked, Desk, Fold, Held, Kind, Name, Named, Page, Phase, Reach, Rung, SHOWN, Sent,
+    Shown, Streamed, ThreadNode, Threads,
   },
   wire::{outward, parsed},
   world::{
@@ -50,7 +45,7 @@ use furb::{
 use furb_wire::{ChainTrack, FollowUp, act::interruption, card::Skill};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Value, json, value::to_raw_value};
 use tokio::{
   runtime,
   sync::{
@@ -359,7 +354,7 @@ pub struct Life {
   /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
   cards: watch::Sender<Option<Arc<Session>>>,
   /// The id of each command of the life that runs, whose end a handover waits for.
-  commands: watch::Sender<BTreeSet<String>>,
+  commands: watch::Sender<BTreeSet<Name>>,
   times: Times,
   /// Whether an event changed what the cards read since the life last told them, and when it may
   /// tell them next.
@@ -382,7 +377,7 @@ pub struct Life {
 /// that the log let go since the record holds them, as [`Life::let_go`] says, and what the models
 /// wrote and thought and when each act that lives began, which no fact holds and a page of a
 /// thread reads. The image holds it as a [`Part`].
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 struct Kept {
   log: Vec<Option<Slot>>,
   spent: Spent,
@@ -405,7 +400,7 @@ struct Kept {
 #[derive(Clone, Serialize, Deserialize)]
 enum Slot {
   Told(Arc<Event>),
-  Held(String),
+  Held(Name),
 }
 
 impl Slot {
@@ -469,7 +464,7 @@ struct Gone {
 #[derive(Clone, Default, Serialize, Deserialize)]
 struct Spent {
   /// The place of the last event of each act.
-  acts: HashMap<String, Seq>,
+  acts: HashMap<Name, Seq>,
   /// The places of the parts that a model wrote for each rung that has no word yet.
   parts: HashMap<String, Vec<Seq>>,
   /// Each place that a later event replaced, under the place of that event, in order.
@@ -481,17 +476,21 @@ impl Spent {
   fn heard(&mut self, seq: Seq, event: &Event) -> Vec<Seq> {
     match event {
       Event::Act(act) => {
-        if let Some(before) = self.acts.insert(act.id.clone(), seq) {
-          self.replaced.push_back((seq, before));
+        // A later event of an act moves the place of its name, which the map holds once.
+        if let Some(at) = self.acts.get_mut(&*act.id) {
+          self.replaced.push_back((seq, mem::replace(at, seq)));
+        } else {
+          self.acts.insert(Arc::clone(&act.id), seq);
         }
         if act.word.is_some() || matches!(act.phase, Phase::Done(_)) {
-          let parts = self.parts.remove(&act.id).unwrap_or_default();
+          let parts = self.parts.remove(&*act.id).unwrap_or_default();
           self.replaced.extend(parts.into_iter().map(|part| (seq, part)));
         }
       }
-      Event::Text { rung, .. } | Event::Retried { rung, .. } => {
-        self.parts.entry(rung.clone()).or_default().push(seq);
-      }
+      Event::Text { rung, .. } | Event::Retried { rung, .. } => match self.parts.get_mut(rung) {
+        Some(parts) => parts.push(seq),
+        None => drop(self.parts.insert(rung.clone(), vec![seq])),
+      },
       _ => {}
     }
     let mut dropped = Vec::new();
@@ -514,7 +513,7 @@ pub struct LifeHandle {
   name: Arc<Mutex<Option<String>>>,
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
-  commands: watch::Receiver<BTreeSet<String>>,
+  commands: watch::Receiver<BTreeSet<Name>>,
   beat: watch::Receiver<Instant>,
 }
 
@@ -578,12 +577,18 @@ impl Life {
         let before = self.kept.held.took(Arc::clone(act)).map(|one| Event::Act(one).into());
         // Each reader hears the act as the life holds it, which keeps who made it through a birth.
         let held = self.kept.held.shared(&act.id).map(Arc::clone);
-        let place = self.kept.spent.acts.get(&act.id).and_then(|at| usize::try_from(*at).ok());
+        let place = self.kept.spent.acts.get(&*act.id).and_then(|at| usize::try_from(*at).ok());
         if let (Some(before), Some(slot)) = (before, place.and_then(|at| self.kept.log.get_mut(at)))
         {
           *slot = Some(Slot::Told(before));
         }
         self.stale = true;
+        // The commands that run change before any reader hears the act, so a reader that hears a
+        // command start, as a handover asked then, finds it among them and waits for its end.
+        if act.kind == Kind::Bash {
+          let commands = &self.kept.held;
+          self.commands.send_if_modified(|was| mem::replace(was, commands.commands()) != *was);
+        }
         if let Some(held) = held {
           event = Event::Act(held);
         }
@@ -603,7 +608,7 @@ impl Life {
     }
     let event = Arc::new(event);
     self.kept.log.push(Some(match &*event {
-      Event::Act(act) => Slot::Held(act.id.clone()),
+      Event::Act(act) => Slot::Held(Arc::clone(&act.id)),
       _ => Slot::Told(Arc::clone(&event)),
     }));
     self.readers.send((seq, event)).ok();
@@ -787,7 +792,10 @@ impl Life {
     let Ok(retold) = world::retold_with(record, reads) else { return true };
     // A fact that the record kept after its last entry stands nowhere, so a whole read reads on to
     // the end of the facts.
-    let last = if whole { retold.entries + 1 } else { marks[marks.len() - 1] };
+    let last = match marks.last() {
+      Some(last) if !whole => *last,
+      _ => retold.entries + 1,
+    };
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
@@ -855,8 +863,9 @@ impl Life {
       };
       Some((at as Seq, event))
     });
-    let wanted =
-      |places: &[(Seq, Digest)]| places[places.partition_point(|(at, _)| *at < from)..].to_vec();
+    let wanted = |places: &[(Seq, Digest)]| {
+      places.iter().skip(places.partition_point(|(at, _)| *at < from)).cloned().collect::<Vec<_>>()
+    };
     let retells = self.record.as_deref().map_or_else(Vec::new, |path| {
       let gone = &self.kept.gone;
       let record = Retell { from: Source::Record(path.to_owned()), wanted: wanted(&gone.places) };
@@ -1071,9 +1080,29 @@ fn kept_kind(fact: &Value) -> Option<&str> {
   (fact.get(0).and_then(Value::as_str) == Some("keep")).then(|| entry?.as_str()).flatten()
 }
 
-/// The digest of a fact, by which the log knows a fact that it told.
+/// The digest of a fact, by which the log knows a fact that it told: the digest of the text that
+/// JSON writes of it, hashed as JSON writes it, with no copy of that text.
 fn digest(fact: &Value) -> u64 {
-  digested(&fact.to_string())
+  let mut hashing = Hashing(DefaultHasher::new());
+  // A value writes to a writer that takes each byte with no fault, so no write fails.
+  serde_json::to_writer(&mut hashing, fact).ok();
+  // The end of a text, as the hash of a str adds it, so the digest is that of `digested`.
+  hashing.0.write_u8(0xff);
+  hashing.0.finish()
+}
+
+/// A writer that hashes each byte that it takes.
+struct Hashing(DefaultHasher);
+
+impl io::Write for Hashing {
+  fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+    self.0.write(bytes);
+    Ok(bytes.len())
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    Ok(())
+  }
 }
 
 /// The digest of a fact as JSON writes it.
@@ -1110,7 +1139,7 @@ struct Tells {
   name: Arc<Mutex<Option<String>>>,
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
-  commands: watch::Sender<BTreeSet<String>>,
+  commands: watch::Sender<BTreeSet<Name>>,
   beat: watch::Sender<Instant>,
 }
 
@@ -1235,6 +1264,10 @@ struct End {
 /// of each entry after it, as after an image at rest. Each other life tells the past of its record
 /// first, as [`Life::recalled`] says, and opens by the record. A life whose image does not load
 /// opens by the record once, and tells its past after that open and before its birth.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the thread of a life owns the opening, the lease of its record, the engine, the inbox, the events and the journal, and lends each to this open"
+)]
 async fn lives(
   opening: Opening,
   lease: Option<world::Lease>,
@@ -1297,9 +1330,14 @@ async fn lives(
 
 /// The life that opened on the texts of an earlier build, as its image or its record holds them,
 /// moved to this build once each reader heard it: the fact made of this build at the tip of its
-/// record, then the open again across that crossing, which tells each chain the lines of the engine
-/// that differ, as an open of its own, whose stages each window shows. Each command waits in the
+/// record, with the carry of the tip beside it, then the open again across that crossing, which
+/// boots on that carry and tells each chain the lines of the engine that differ, as an open of its
+/// own, whose stages each window shows. Each command waits in the
 /// inbox meanwhile, so no word runs on the texts that the life leaves.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a crossing takes the engine and the opening that it leaves, the lease of the record, the life, the events, the journal and the progress of the open"
+)]
 async fn moved(
   engine: Engine,
   opening: Opening,
@@ -1311,9 +1349,12 @@ async fn moved(
 ) -> Result<Engine, Fault> {
   life.opens.born();
   (progress.0)(Stage::Cross, 0, 0);
-  engine.cross()?;
+  let crossed = engine.cross()?;
   if let Some(lost) = flushed(None, journal).await {
     return Err(Fault::refused(lost));
+  }
+  if let Some(record) = opening.record.as_deref() {
+    crossed.keep(Path::new(record))?;
   }
   while let Ok(event) = life.heard.try_recv() {
     life.told(Some(event));
@@ -1400,7 +1441,6 @@ async fn driven(
       }
     }
     drained(&mut engine, life);
-    life.commands.send_if_modified(|was| mem::replace(was, life.kept.held.commands()) != *was);
     life.kept.streams.lined(engine.lines());
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
@@ -1447,8 +1487,13 @@ fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>, imagin
   life.told(None);
   life.kept.watch.imaged();
   life.kept.held.shown(&mut life.kept.streams);
+  // The part of the host goes to the write as its text, which one buffer holds, where a copy of
+  // what the life keeps would allocate each act and each event again.
   match image::take(engine, Path::new(record)) {
-    Ok(Some(taken)) => imaging.start(taken, Part { version: VERSION, kept: life.kept.clone() }),
+    Ok(Some(taken)) => match to_raw_value(&Part { version: VERSION, kept: &life.kept }) {
+      Ok(part) => imaging.start(taken, part),
+      Err(no) => life.put(unimaged(&Fault::refused(no.to_string()))),
+    },
     Ok(None) => {}
     Err(no) => life.put(unimaged(&no)),
   }
@@ -1485,7 +1530,10 @@ async fn pumped(engine: &mut Engine, waits: bool) -> Woke {
 /// chain: a follow-up on a thread waits on the chain of the thread.
 fn queued_on(life: &Life, on: String) -> (String, Option<String>) {
   let thread = life.kept.held.shared(&on).filter(|act| act.kind == Kind::Prompt);
-  thread.map_or((on.clone(), None), |act| (act.chain.clone(), Some(on)))
+  match thread {
+    Some(act) => (act.chain.to_string(), Some(on)),
+    None => (on, None),
+  }
 }
 
 /// What a command comes to: on the configs of the life for a command of its configs, on the home of
@@ -1538,7 +1586,6 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       let cwd = engine.cwd(verbs::Cwd { on: Some(root.clone()) })?;
       let of = verbs::Transcript { on: Some(root.clone()), of: Some(ENABLE.to_owned()), at: None };
       let facts = engine.transcript(of)?;
-      let facts: Vec<Fact> = facts.iter().filter_map(|one| Fact::of(one.0.as_ref())).collect();
       let places = life.configs.places();
       Ok(Reply::Skills(skills::played(&directory, &cwd, &places, &facts)))
     }
@@ -1659,19 +1706,14 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
     Command::Desk { notices } => Ok(Reply::Desk(life.kept.held.desk(&notices))),
     Command::Threads { on, at, read, site } => {
       let site = site.as_deref().unwrap_or("operator");
-      Ok(Reply::Threads(life.kept.held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
+      let reader = view::Reader { site, read: read.unwrap_or_default() };
+      Ok(Reply::Threads(life.kept.held.threads_as(&chain(on), at, reader)))
     }
     Command::Rail { hidden, at } => Ok(Reply::Rail(life.kept.held.rail(&hidden, at))),
     Command::Ladder { on, at, opened, owed, taken, shown } => {
       let shown = shown.unwrap_or(SHOWN);
-      Ok(Reply::Ladder(life.kept.held.ladder(
-        &chain(on),
-        at,
-        &opened,
-        &owed,
-        taken.as_deref(),
-        shown,
-      )))
+      let asked = Asked { opened: &opened, owed: &owed, taken: taken.as_deref(), shown };
+      Ok(Reply::Ladder(life.kept.held.ladder(&chain(on), at, asked)))
     }
     Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
     Command::Folded { id } => match life.kept.held.shared(&id) {
@@ -1773,21 +1815,21 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
     }
     Command::Transcript { on: chain, of } => {
       let facts = engine.transcript(verbs::Transcript { on: Some(on(chain)), of, at: None })?;
-      Reply::Values(facts.iter().map(|one| outward(one.0.as_ref())).collect())
+      Reply::Values(facts.iter().map(|one| outward(one.object().as_ref())).collect())
     }
     Command::Program { on: chain } => {
-      Reply::Value(outward(engine.verb("program", vec![], named(chain))?.as_ref()))
+      Reply::Value(outward(engine.verb("program", &[], named(chain))?.as_ref()))
     }
     Command::Standing => Reply::Value(outward(engine.standing()?.as_ref())),
     Command::Filled { id } => {
-      Reply::Value(outward(engine.verb("filled", vec![Object::string(id)], vec![])?.as_ref()))
+      Reply::Value(outward(engine.verb("filled", &[Object::string(id)], vec![])?.as_ref()))
     }
     Command::Inspect { name, on: chain } => {
       let (kind, repr, value) = engine.inspect(&name, Some(&on(chain)))?;
       Reply::Inspected { kind, repr, value: outward(value.as_ref()) }
     }
     Command::Get { id } => {
-      Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.0.as_ref())))
+      Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.object().as_ref())))
     }
     Command::Peek { id } => match engine.outcome(&id)? {
       Some(got) => Reply::Value(outward(got.as_ref())),
@@ -1822,13 +1864,13 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 impl LifeHandle {
   /// The id of each command of the life that runs now.
   #[must_use]
-  pub fn commands(&self) -> BTreeSet<String> {
+  pub fn commands(&self) -> BTreeSet<Name> {
     self.commands.borrow().clone()
   }
 
   /// Once none of these commands of the life runs, or the life ended: the end of a life cuts each
   /// command that it runs, which no later life takes again.
-  pub async fn settled(&self, of: &BTreeSet<String>) {
+  pub async fn settled(&self, of: &BTreeSet<Name>) {
     let mut commands = self.commands.clone();
     // A life that ended runs no command.
     commands.wait_for(|runs| runs.is_disjoint(of)).await.ok();

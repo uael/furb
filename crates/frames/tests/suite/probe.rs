@@ -1,5 +1,6 @@
 //! The command `probe`: the findings of the probes on frames of the window, from their cells as
 //! JSON, on each frame and across the sizes of a step.
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 
 use std::{fs, path::Path};
 

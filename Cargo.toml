@@ -72,14 +72,30 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 unwrap_used = "deny"
-expect_used = "warn"
+# The code of furb does not panic: a site that can fail gives the caller a value that it handles,
+# and a site that truly cannot fail says why in an expect, as rule 4 of the skill rust says.
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+get_unwrap = "deny"
+panic_in_result_fn = "deny"
 let_underscore_must_use = "deny"
 let_underscore_untyped = "warn"
 map_err_ignore = "warn"
-str_to_string = "warn"
-clone_on_ref_ptr = "warn"
-redundant_clone = "warn"
-needless_pass_by_value = "warn"
+# Each copy of a value is an allocation: a site borrows what it reads, and owns only what outlives its source.
+str_to_string = "deny"
+clone_on_ref_ptr = "deny"
+redundant_clone = "deny"
+implicit_clone = "deny"
+unnecessary_to_owned = "deny"
+needless_pass_by_value = "deny"
+box_collection = "deny"
+boxed_local = "deny"
+redundant_allocation = "deny"
 unused_async = "warn"
 too_many_lines = "warn"
 undocumented_unsafe_blocks = "deny"
@@ -183,6 +199,9 @@ base64 = "0.22"
 tokio = { version = "1", features = ["rt", "process", "io-util", "time", "sync", "macros", "net"] }
 # The futures an ear holds and selects over, and the streams of a model.
 futures = "0.3"
+# The cell of the reactor, which stays empty when the system refuses it, so the next call asks again: the std cell
+# gives no fallible init on the pinned toolchain.
+once_cell = "1"
 # The channels between an ear and its work, which stay on the thread of the life.
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.

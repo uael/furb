@@ -297,7 +297,8 @@ fn claims(token: &str) -> Option<Value> {
 }
 
 fn account(access: &str) -> Option<String> {
-  claims(access)?["https://api.openai.com/auth"]["chatgpt_account_id"].as_str().map(str::to_owned)
+  let claims = claims(access)?;
+  claims.get("https://api.openai.com/auth")?.get("chatgpt_account_id")?.as_str().map(str::to_owned)
 }
 
 fn borrowed() -> Option<Credential> {
@@ -307,11 +308,11 @@ fn borrowed() -> Option<Credential> {
       .map(|one| PathBuf::from(one).join(".codex"))
   })?;
   let value: Value = read(&home.join("auth.json"))?;
-  if value["auth_mode"].as_str()? != "chatgpt" {
+  if value.get("auth_mode")?.as_str()? != "chatgpt" {
     return None;
   }
-  let access = value["tokens"]["access_token"].as_str()?.to_owned();
-  let expires = claims(&access)?["exp"].as_u64()?.saturating_mul(1000);
+  let access = value.get("tokens")?.get("access_token")?.as_str()?.to_owned();
+  let expires = claims(&access)?.get("exp")?.as_u64()?.saturating_mul(1000);
   if expires <= now() + 60_000 {
     return None;
   }
@@ -528,6 +529,7 @@ pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
     retry =
       all.get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_)));
   }
+  let runtime = runtime().inspect_err(|no| publish(&path, SignIn::Failed(no.to_string())))?;
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
@@ -544,7 +546,7 @@ pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
     flow.canceled = stop;
     flow.state.send_replace(status.clone());
   }
-  runtime().spawn(finish(path, pending, canceled));
+  runtime.spawn(finish(path, pending, canceled));
   Ok(status)
 }
 
@@ -630,15 +632,16 @@ async fn callback_code(
       let (mut stream, _) = listener.accept().await?;
       let mut bytes = [0; 8192];
       let mut count = 0;
-      while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
-        let read = time::timeout(Duration::from_secs(2), stream.read(&mut bytes[count..]));
+      while !bytes.get(..count).unwrap_or_default().windows(4).any(|part| part == b"\r\n\r\n") {
+        let Some(free) = bytes.get_mut(count..).filter(|free| !free.is_empty()) else { break };
+        let read = time::timeout(Duration::from_secs(2), stream.read(free));
         match read.await {
           Ok(Ok(0)) | Err(_) => break,
           Ok(Ok(read)) => count += read,
           Ok(Err(no)) => return Err(AuthError::from(no)),
         }
       }
-      let text = String::from_utf8_lossy(&bytes[..count]);
+      let text = String::from_utf8_lossy(bytes.get(..count).unwrap_or_default());
       let target = text
         .lines()
         .next()

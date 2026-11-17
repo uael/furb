@@ -32,7 +32,10 @@ const EMOJI: usize = 4;
 ///   face of this rasterizer draws, and a joined emoji or a flag shows as its first part.
 ///
 /// No hint and no rule of layout is read by this rasterizer, so each cut draws as its face.
-#[expect(clippy::expect_used, reason = "the faces that the program carries parse")]
+#[expect(
+  clippy::expect_used,
+  reason = "the faces are files of the build, which each test of `image` draws"
+)]
 static FACES: LazyLock<[Font; 5]> = LazyLock::new(|| {
   let face = |bytes: &[u8]| {
     Font::from_bytes(bytes, FontSettings { scale: PX, ..FontSettings::default() })
@@ -49,9 +52,12 @@ static FACES: LazyLock<[Font; 5]> = LazyLock::new(|| {
 
 /// The height of a cell and the row of its base line, from the face: a line of box drawing then
 /// meets the line above and the line below.
-#[expect(clippy::expect_used, reason = "the regular face that the program carries has its metrics")]
+#[expect(
+  clippy::expect_used,
+  reason = "the regular face of the build has its metrics, as each test of `image` draws"
+)]
 fn rows(density: usize) -> (usize, usize) {
-  let line = FACES[0].horizontal_line_metrics(px(density));
+  let line = FACES.first().and_then(|one| one.horizontal_line_metrics(px(density)));
   let line = line.expect("the regular face has horizontal metrics");
   (to_pixels(line.ascent - line.descent), to_pixels(line.ascent))
 }
@@ -113,11 +119,10 @@ pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
       if face.is_none() && !missing.contains(&glyph) {
         missing.push(glyph);
       }
-      match face {
-        Some(face) => {
-          let rasterized = glyphs
-            .entry((glyph, face))
-            .or_insert_with(|| FACES[face].rasterize(glyph, px(density)));
+      match face.and_then(|face| Some((face, FACES.get(face)?))) {
+        Some((face, font)) => {
+          let rasterized =
+            glyphs.entry((glyph, face)).or_insert_with(|| font.rasterize(glyph, px(density)));
           canvas.glyph(rasterized, cell, place);
         }
         None => canvas.outline(cell.fg, place),
@@ -143,7 +148,9 @@ fn face(attributes: u8, glyph: char, wide: bool) -> Option<usize> {
   };
   let emoji = wide.then_some(EMOJI);
   let faces = emoji.into_iter().chain([wanted, 0, SYMBOLS]);
-  faces.into_iter().find(|&face| FACES[face].lookup_glyph_index(glyph) != 0)
+  faces
+    .into_iter()
+    .find(|&face| FACES.get(face).is_some_and(|one| one.lookup_glyph_index(glyph) != 0))
 }
 
 /// A rectangle of pixels.
@@ -262,7 +269,12 @@ impl Canvas {
       for col in x..x + cell {
         let (dx, dy) = (to_i64(col) * 2 + 1 - middle, to_i64(row) * 2 + 1 - center);
         let inside = dx * dx + dy * dy <= outer;
-        let filled = [dx < 0, dy < 0, dx > 0, dy > 0][half];
+        let filled = match half {
+          0 => dx < 0,
+          1 => dy < 0,
+          2 => dx > 0,
+          _ => dy > 0,
+        };
         if inside && (filled || dx * dx + dy * dy >= inner) {
           self.blend((col, row), color, 255);
         }
@@ -341,7 +353,10 @@ impl Image {
       for x in 0..inner {
         let Some(color) = self.framed_at(x, y) else { continue };
         let at = ((y + margin) * width + x + margin) * 4;
-        pixels[at..at + 4].copy_from_slice(&[color.0[0], color.0[1], color.0[2], 255]);
+        let Rgb([red, green, blue]) = color;
+        if let Some(pixel) = pixels.get_mut(at..at + 4) {
+          pixel.copy_from_slice(&[red, green, blue, 255]);
+        }
       }
     }
     Framed { width, height, pixels }
@@ -373,7 +388,10 @@ impl Image {
     }
     let (ix, iy) = (x - k, y - bar);
     let at = (iy.min(self.height - 1) * self.width + ix.min(self.width - 1)) * 3;
-    Some(Rgb([self.pixels[at], self.pixels[at + 1], self.pixels[at + 2]]))
+    match self.pixels.get(at..at + 3) {
+      Some(&[red, green, blue]) => Some(Rgb([red, green, blue])),
+      _ => None,
+    }
   }
 }
 

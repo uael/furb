@@ -1,6 +1,7 @@
 //! The input and the line of the launcher under it, on a real daemon whose model answers from a
 //! script: a message starts a session or goes to a thread, and the thread shows it.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::{
@@ -78,7 +79,13 @@ pub(crate) fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
   let mut peer = daemon.peer();
   let Answer::Cards(cards) = peer.ask(Verb::Cards) else { panic!("the daemon gives the cards") };
   let Some(card) = cards.into_iter().find(|card| card.life == life) else { return Vec::new() };
-  let page = Verb::Thread { life, thread: card.thread.prompt, before: None, limit: 20, at: None };
+  let page = Verb::Thread {
+    life,
+    thread: card.thread.prompt.to_string(),
+    before: None,
+    limit: 20,
+    at: None,
+  };
   let Answer::Page(page) = peer.ask(page) else { panic!("the daemon gives a page") };
   page.exchanges.into_iter().map(|one| one.text).collect()
 }
@@ -131,14 +138,22 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   screen("input-in-order", &app);
 }
 
+/// The row of the hints of a frame: the last row, or the row above the bar of the time, which
+/// stands under it while a thread is open and ends with the toggle of its chains.
+pub(crate) fn hints(frame: &str) -> usize {
+  let lines: Vec<&str> = frame.lines().collect();
+  let bar = lines.iter().rposition(|line| line.contains("chains ▾") || line.contains("chains ▴"));
+  bar.unwrap_or(lines.len()).saturating_sub(1)
+}
+
 /// The text of an input of one row, which stands above a blank row of its box, the launcher, the
 /// last row of its box and the hints, once it shows a text: the window draws the text that the
 /// editor takes at its next frame. The box of the context stands at its right.
 pub(crate) fn typed(app: &TestApp, text: &str) -> String {
   let row = || {
     let frame = app.text();
-    let lines: Vec<&str> = frame.lines().collect();
-    let input: String = lines[lines.len() - 5].chars().take(LEFT).collect();
+    let at = hints(&frame).saturating_sub(4);
+    let input: String = frame.lines().nth(at).unwrap_or_default().chars().take(LEFT).collect();
     input.trim_start_matches(['┃', ' ']).trim_end().to_owned()
   };
   let shown = app.wait_until(PATIENCE, || row() == text);
@@ -230,7 +245,7 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   app.paste("fi");
   typed(&app, &first);
   let frame = app.render();
-  let row = (frame.height as usize - 5) * frame.width as usize;
+  let row = hints(&app.text()).saturating_sub(4) * frame.width as usize;
   let (written, rest) = (&frame.cells[row + 4], &frame.cells[row + 6]);
   assert_ne!(written.fg, rest.fg, "the rest is grey and what he wrote is not");
   screen("input-suggested", &app);
@@ -496,7 +511,8 @@ fn a_message_takes_the_place_of_the_hints_of_the_word_that_ran_before_it() {
   app.press("ctrl+n");
   clicked(&app, " Python ", 0, 1);
   sent(&app, "raise ValueError('no')");
-  let hint = |frame: &str| frame.lines().last().is_some_and(|one| one.contains("ValueError"));
+  let hint =
+    |frame: &str| frame.lines().nth(hints(frame)).is_some_and(|one| one.contains("ValueError"));
   assert!(app.wait_until(PATIENCE, || hint(&app.text())), "{}", app.text());
   clicked(&app, " Message ", 0, 1);
   sent(&app, "and now a message");
@@ -580,7 +596,7 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
 }
 
 #[test]
-fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
+fn a_click_on_the_number_of_a_line_of_the_diff_starts_a_comment_under_it_that_he_writes() {
   let (app, daemon, sessions) = started();
   let project = daemon.file("furb-try");
   let git = |args: &[&str]| {
@@ -595,23 +611,30 @@ fn a_click_on_a_line_of_the_diff_makes_the_next_message_about_that_line() {
   app.press("ctrl+x");
   app.press("g");
   shows(&app, "one = 2");
+  // A click on the code of a line reads it, and anchors nothing: the review stays.
   let (x, y) = at(&app, "one = 2", 0);
   app.click(x, y);
-  shows(&app, "┃ Say what to do with a.py, line 1");
-  shows(&app, "◆ a.py:1");
-  // An escape turns it back to a plain message.
+  app.advance(Duration::from_millis(50));
+  assert!(!app.text().contains("Comment on"), "{}", app.text());
+  shows(&app, "Changes  1 file");
+  // A click on its number starts a comment under it, which takes his letters at once, and an
+  // escape drops it and leaves the review.
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1");
   app.press("escape");
-  shows(&app, "┃ Ask for a change, a review or an answer");
-  app.press("ctrl+x");
-  app.press("g");
-  shows(&app, "one = 1");
-  let (x, y) = at(&app, "one = 1", 0);
-  app.click(x, y);
-  shows(&app, "┃ Say what to do with a.py, line 1, before the change");
-  sent(&app, "why not one");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Comment on"));
+  assert!(gone, "{}", app.text());
+  shows(&app, "Changes  1 file");
+  let (_, y) = at(&app, "one = 1", 0);
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1 before");
+  app.type_text("why not one");
+  shows(&app, "┃ why not one▏");
+  app.press("enter");
   let wanted = "On `a.py`, line 1 before the change:\n> one = 1\n\nwhy not one";
   let came = app.wait_until(PATIENCE, || told(&daemon, &sessions).iter().any(|one| one == wanted));
-  assert!(came, "{:?}", told(&daemon, &sessions));
+  assert!(came, "{:?}\n{}", told(&daemon, &sessions), app.text());
+  app.press("escape");
   // The thread shows what he said, with the line at its right.
   let shown = shows(&app, "why not one");
   assert!(shown.contains("◆ a.py:1 before"), "{shown}");
@@ -636,9 +659,15 @@ fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line()
   app.press("ctrl+x");
   app.press("g");
   shows(&app, "one = 2");
-  let (x, y) = at(&app, "one = 2", 0);
-  app.click(x, y);
-  sent(&app, "why two");
+  let (_, y) = at(&app, "one = 2", 0);
+  app.click(3, y);
+  shows(&app, "┃ Comment on a.py:1");
+  app.type_text("why two");
+  app.press("enter");
+  // The review stays where he reads; an escape shows the thread.
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Comment on"));
+  assert!(gone, "{}", app.text());
+  app.press("escape");
   // The sub thread opens with its line in its head, and its model answers in it.
   let shown = shows(&app, "◆ a.py:1 · why two");
   assert!(shown.contains("why two"), "{shown}");
@@ -655,8 +684,8 @@ fn a_message_about_a_line_on_a_thread_is_a_sub_thread_that_stands_at_that_line()
   let shown = shows(&app, "one = 2");
   let row = shown.lines().find(|one| one.contains("one = 2")).unwrap_or_default();
   assert!(row.contains("◆"), "{shown}");
-  let (x, y) = at(&app, "one = 2", 0);
-  app.click(x, y);
+  let (_, y) = at(&app, "one = 2", 0);
+  app.click(3, y);
   shows(&app, "◆ a.py:1 · why two");
 }
 
@@ -796,7 +825,7 @@ fn go_to_names_each_session_that_runs_and_a_pause_ends_its_life() {
   let (app, _daemon, _) = started();
   sent(&app, &format!("work on it {WORKS}"));
   paged(&app);
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   shows(&app, "working · here");
   app.press("escape");
   app.press("ctrl+x");
@@ -804,10 +833,10 @@ fn go_to_names_each_session_that_runs_and_a_pause_ends_its_life() {
   shows(&app, "Kill it: its work stops");
   app.type_text("pause");
   app.press("enter");
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   let ended = app.wait_until(PATIENCE, || {
     app.press("escape");
-    app.press("ctrl+o");
+    app.press("ctrl+p");
     !app.text().contains("working · here") && app.text().contains("Go to")
   });
   assert!(ended, "{}", app.text());
@@ -818,7 +847,7 @@ fn a_session_of_go_to_takes_a_kill_which_stops_its_work() {
   let (app, _daemon, _) = started();
   sent(&app, &format!("work on it {WORKS}"));
   paged(&app);
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   shows(&app, "working · here");
   app.type_text("working here");
   app.press("enter");
@@ -827,7 +856,7 @@ fn a_session_of_go_to_takes_a_kill_which_stops_its_work() {
   app.press("enter");
   let stopped = app.wait_until(PATIENCE, || {
     app.press("escape");
-    app.press("ctrl+o");
+    app.press("ctrl+p");
     !app.text().contains("working · here") && app.text().contains("Go to")
   });
   assert!(stopped, "{}", app.text());
@@ -949,7 +978,7 @@ fn commands(app: &TestApp) -> Vec<(String, String)> {
     let chosen = frame
       .lines()
       .find_map(|line| line.trim_start().strip_prefix("▌ /"))
-      .expect("a row is chosen");
+      .unwrap_or_else(|| panic!("a row is chosen:\n{frame}"));
     let parts: Vec<&str> =
       chosen.split("  ").map(str::trim).filter(|one| !one.is_empty()).collect();
     let [name, says, key] = parts[..] else { panic!("/{chosen} names no key") };
@@ -978,13 +1007,15 @@ fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
     clicked(&app, "go to anything", 0, 0);
     shows(&app, "Search a thread, session");
     let (x, y) = at(&app, "Search a", 0);
-    for _ in 0..40 {
-      if app.text().contains(&says) {
-        break;
+    // The wheel turns until the row shows, so a count of the rows above it changes nothing.
+    let reached = app.wait_until(PATIENCE, || {
+      let shown = app.text().contains(&says);
+      if !shown {
+        app.scroll(x, y, true);
       }
-      app.scroll(x, y, true);
-    }
-    assert!(app.text().contains(&says), "/{name}: no row of Go to says {says:?}");
+      shown
+    });
+    assert!(reached, "/{name}: no row of Go to says {says:?}\n{}", app.text());
     lights(&app, &says, 0, 0);
     app.press("escape");
   }

@@ -235,8 +235,11 @@ fn counted(me: &str, table: &str, trees: &[String]) -> Result<Census, Fault> {
 /// Whether a command names a tree as a whole path.
 fn names(command: &str, trees: &[String]) -> bool {
   trees.iter().filter(|tree| !tree.is_empty()).any(|tree| {
-    command
-      .match_indices(tree.as_str())
-      .any(|(at, _)| matches!(command[at + tree.len()..].chars().next(), None | Some('/' | ' ')))
+    command.match_indices(tree.as_str()).any(|(at, _)| {
+      matches!(
+        command.get(at + tree.len()..).map(|rest| rest.chars().next()),
+        Some(None | Some('/' | ' '))
+      )
+    })
   })
 }

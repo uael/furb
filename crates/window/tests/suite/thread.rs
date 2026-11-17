@@ -1,8 +1,8 @@
 //! The thread of a card, on a real daemon whose lives a peer of the test drives.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
-use std::fs;
+use std::{fs, mem, time::Duration};
 
 use furb_host::protocol::{Answer, Draft, Frame, Role, Verb};
 use furb_window::{
@@ -14,9 +14,10 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 use crate::{
   cards::{app, options, row, shows},
   daemon::{
-    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, FANS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES,
-    THINKS, WORKS,
+    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, FANS, LONG, OPENS, PATIENCE, PRINTS, Peer, READS,
+    RETRIES, THINKS, WORKS,
   },
+  question,
   screens::screen,
 };
 
@@ -257,7 +258,13 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
     let message = format!("and the step {n}");
     let on = Some(prompt.clone());
     let verb = Verb::Prompt { life: life.clone(), shape: "None".to_owned(), message, to: None, on };
-    assert!(matches!(peer.ask(verb), Answer::Act(_)));
+    let Answer::Act(step) = peer.ask(verb) else { panic!("no prompt") };
+    // The model answers each message before the next comes, so the marks of the bar of the time
+    // stand at the same moments in each run.
+    peer.heard(&app, |frame| {
+      let data = &serde_json::json!(frame)["event"]["data"];
+      data[0] == "done" && data.as_array().is_some_and(|all| all.iter().any(|one| *one == step))
+    });
   }
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "ground the branch,"));
@@ -529,10 +536,13 @@ fn the_back_key_of_a_mouse_opens_the_thread_left_where_he_read_it_and_forward_go
   app.resize(100, 16);
   app.click(80, row(&app, "how long does an"));
   shows(&app, "See the trace.");
-  // The rows of the feed under its head, whose buttons change with the places that stand ahead.
+  // The rows of the feed under its head, whose buttons change with the places that stand ahead,
+  // and above the bar of the time, which draws its track once the moments of the thread came.
   let feed = |app: &TestApp| {
     let frame = app.text();
-    frame.lines().skip(1).map(|one| one.chars().take(LEFT).collect::<String>()).collect::<Vec<_>>()
+    let rows = frame.lines().count().saturating_sub(2);
+    let left = |one: &str| one.chars().take(LEFT).collect::<String>();
+    frame.lines().skip(1).take(rows).map(left).collect::<Vec<_>>()
   };
   let end = feed(&app);
   app.scroll(10, 6, false);
@@ -551,15 +561,19 @@ fn the_back_key_of_a_mouse_opens_the_thread_left_where_he_read_it_and_forward_go
   shows(&app, "No place stands ahead.");
 }
 
-/// The rows of the box of the context, from its head to the foot of the window, each cut to the
-/// columns of the box and trimmed.
+/// The rows of the box of the context, from its head to the row of the hints, each cut to the
+/// columns of the box and trimmed: the rows beside the bar of the time under it are blank.
 fn boxed(app: &TestApp) -> Vec<String> {
   let frame = app.text();
   let (x, y) = place(&frame, "Context", LEFT);
   let rows = frame.lines().skip(usize::from(y));
-  rows
+  let mut boxed: Vec<String> = rows
     .map(|line| line.chars().skip(usize::from(x)).collect::<String>().trim_end().to_owned())
-    .collect()
+    .collect();
+  while boxed.last().is_some_and(String::is_empty) {
+    boxed.pop();
+  }
+  boxed
 }
 
 #[test]
@@ -587,13 +601,12 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
     .collect();
   assert_eq!(named, ["■ Engine (System…", "■ Doctrine", "■ Turns", "■ Free"]);
   assert_eq!(boxed(&app)[5], "■ Free                   876k   88%");
-  // A click on the bar, whose cells keep their colors under the pointer, shows what came from the
-  // cache, and a click on the head folds the box.
-  let (x, y) = at(&app, &bar, LEFT);
-  app.click(x, y);
+  // The tab of the cache at the head of the open box, which lights alone under the pointer, shows
+  // what came from the cache, and a click on the fold at the head folds the box.
+  clicked(&app, "Cache", LEFT, 0);
   shows(&app, "From the cache");
   let parts = [
-    "Context ▾                       12%",
+    "Context ▾   Kinds · Cache       12%",
     &bar,
     "■ From the cache          98k   10%",
     "■ Written to the cache   8.4k    1%",
@@ -764,7 +777,8 @@ fn a_prompt_of_one_chain_to_another_flows_between_their_tracks_and_a_click_opens
   let (x, y) = cell(&frame, "bench", '▼').unwrap();
   let (x, y) = (u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
   app.hover(x, y);
-  shows(&app, "root asks bench: Run the bench of the replay");
+  // The row of the hints cuts the message where the box of the context stands.
+  shows(&app, "root asks bench: Run the bench of the");
   app.click(x, y);
   // The prompt opens as an agent opens, at its own head.
   shows(&app, "┃ Run the bench of the replay");
@@ -809,4 +823,64 @@ fn a_click_on_the_mark_of_a_cut_line_shows_it_whole_and_a_click_on_it_cuts_it_ag
 fn a_line_that_awaits_more_than_one_act_says_how_many_ended() {
   let (app, _daemon, _peer) = opened(&format!("Run both checks\n{FANS}"), "1 agent done");
   shows(&app, "1 of 2 ended");
+}
+
+#[test]
+fn a_command_that_wrote_past_its_tail_opens_whole_under_its_line_and_folds_again() {
+  let (app, ..) = question::opened(&format!("count to forty\n{PRINTS}"), "It printed 40 lines.");
+  // The tail of the command, under a row that says how many lines came before it.
+  let tail = shows(&app, "… 37 lines · ⌃O whole");
+  assert!(tail.contains("  40") && !tail.contains("▴ 40 lines"), "{tail}");
+  // A click on that row opens the whole of what it wrote, which its machine gives.
+  app.click(30, row(&app, "… 37 lines · ⌃O whole"));
+  let whole = app.wait_until(PATIENCE, || {
+    let text = app.text();
+    !text.contains("… 37 lines") && text.lines().any(|one| one.trim().starts_with("25"))
+  });
+  assert!(whole, "{}", app.text());
+  // The key folds it again.
+  app.press("ctrl+o");
+  shows(&app, "… 37 lines · ⌃O whole");
+}
+
+#[test]
+fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
+  let (app, ..) = question::opened(&format!("time of the bench\n{DELEGATES}"), "Count the lines");
+  // The bar stands under the status row with no click, at now.
+  let bar = |frame: &str| frame.lines().last().unwrap_or_default().to_owned();
+  let ready = app.wait_until(PATIENCE, || bar(&app.text()).contains("now"));
+  assert!(ready, "{}", app.text());
+  // The agents of the thread still add moments for a while: the bar rests once two looks a
+  // second apart show the same track.
+  let mut before = String::new();
+  let rests = app.wait_until(PATIENCE, || {
+    app.advance(Duration::from_secs(1));
+    let now = bar(&app.text());
+    mem::replace(&mut before, now.clone()) == now
+  });
+  assert!(rests, "{}", app.text());
+  // The card of the thread counts the agents at work once its machine tells the end of the third,
+  // which a loaded machine tells after the thread shows it.
+  shows(&app, "opus ↳2");
+  screen("time-out", &app);
+  // A first click on its track holds it and moves nothing in time.
+  let y = u16::try_from(app.text().lines().count() - 1).unwrap_or_default();
+  app.click(12, y);
+  assert!(bar(&app.text()).contains("now"), "{}", app.text());
+  // The next click moves the thread back, and the bar says so with the key back to now.
+  app.click(12, y);
+  let back = app.wait_until(PATIENCE, || bar(&app.text()).contains("back"));
+  assert!(back, "{}", app.text());
+  // The keys zoom its track in, and say it.
+  app.press("+");
+  let zoomed = app.wait_until(PATIENCE, || bar(&app.text()).contains("×"));
+  assert!(zoomed, "{}", app.text());
+  screen("time-in", &app);
+  // Escape goes back to now, and the track shows its whole time again.
+  app.press("escape");
+  let now = app.wait_until(PATIENCE, || {
+    let row = bar(&app.text());
+    row.contains("now") && !row.contains("×") && !row.contains("back")
+  });
+  assert!(now, "{}", app.text());
 }

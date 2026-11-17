@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, Maker, Phase, operator},
+  act::{Act, Kind, Maker, Name, Phase, operator},
   card::{Card, Sent, Skill, Standing},
   state::State,
   threads::ThreadNode,
@@ -26,21 +26,21 @@ impl Held {
   /// order that they began.
   pub fn cards(&self) -> Vec<Card> {
     self.then(None, |acts| {
-      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
+      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), *act)).collect();
       let mut models: HashMap<&str, &str> = HashMap::new();
       for act in acts.iter().filter(|act| act.kind == Kind::Rung) {
         if let Maker::Model { model, .. } = &act.maker {
-          models.insert(act.by.as_str(), model);
+          models.insert(act.by.as_ref(), model);
         }
       }
       let sites: Vec<(&str, HashMap<String, u64>)> =
         self.sites().map(|site| (site, self.seen_by(site))).collect();
       let mut nodes: Vec<ThreadNode> =
         self.rail(&[], None).into_iter().filter(|node| node.thread.yours).collect();
-      nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_str()).map_or(0, |act| act.began));
+      nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_ref()).map_or(0, |act| act.began));
       let card = |node: ThreadNode| {
         let readers = sites.iter().filter(|(_, seen)| !unseen(&node.thread, &rows, seen));
-        let said = |id: &String| models.get(id.as_str()).map(|one| (*one).to_owned());
+        let said = |id: &Name| models.get(id.as_ref()).map(|one| (*one).to_owned());
         let model =
           node.thread.messages.iter().rev().find_map(said).or_else(|| said(&node.thread.prompt));
         Card {
@@ -70,7 +70,7 @@ impl Held {
         };
         let text = text.and_then(Value::as_str).filter(|_| operator(&act.by))?;
         let python = act.kind == Kind::Rung;
-        Some(Sent { by: act.by.clone(), text: text.to_owned(), python })
+        Some(Sent { by: act.by.to_string(), text: text.to_owned(), python })
       };
       acts.iter().filter_map(sent).collect()
     })
@@ -82,7 +82,7 @@ impl Held {
     self.then(None, |acts| {
       let read = |act: &&&Act| {
         act.kind.as_str() == "read"
-          && act.chain == ROOT
+          && *act.chain == *ROOT
           && act.words.first().and_then(Value::as_str) == Some("skills://")
       };
       let index = acts.iter().rev().filter(read).find_map(|act| match &act.phase {
@@ -107,7 +107,7 @@ impl Held {
     let mut nodes = self.rail(&[], None);
     let node = loop {
       let Some(node) = nodes.pop() else { return Vec::new() };
-      if node.thread.prompt == thread {
+      if *node.thread.prompt == *thread {
         break node;
       }
       nodes.extend(node.agents);
@@ -115,7 +115,7 @@ impl Held {
     let ids = [&node.thread.prompt].into_iter().chain(&node.thread.messages);
     let open = ids.filter_map(|id| (&self).act(id)).filter(|act| !act.done());
     let shape = |act: &Act| act.words.first().and_then(Value::as_str).unwrap_or("None").to_owned();
-    open.map(|act| (act.id.clone(), shape(act))).collect()
+    open.map(|act| (act.id.to_string(), shape(act))).collect()
   }
 }
 
@@ -128,7 +128,7 @@ fn working(agents: &[ThreadNode]) -> usize {
 fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
   let thread = &node.thread;
   let acts =
-    || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_str()));
+    || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_ref()));
   match node.state {
     State::Asks => Standing::Asks { of: asked(node, rows) },
     state => Standing::of(state, thread.over, acts().find_map(|act| act.pause.as_ref())),
@@ -138,7 +138,7 @@ fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
 /// The member that the first question of a thread, or of an agent under it, waits for, and none
 /// when it waits for each operator.
 fn asked(node: &ThreadNode, rows: &Rows<'_>) -> Option<String> {
-  let own = node.thread.asks.first().and_then(|ask| rows.get(ask.as_str()));
+  let own = node.thread.asks.first().and_then(|ask| rows.get(ask.as_ref()));
   let to = |act: &&Act| act.words.get(2).and_then(Value::as_str).map(str::to_owned);
   match own {
     Some(ask) => to(ask)?.strip_prefix(OPERATOR)?.strip_prefix('/').map(str::to_owned),

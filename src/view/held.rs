@@ -1,11 +1,6 @@
 //! The acts of a life as a window last heard them, which the life keeps as it tells them, so a
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{BTreeSet, HashMap},
   mem,
@@ -18,16 +13,16 @@ use serde_json::Value;
 use crate::engine::OPERATOR;
 
 use furb_wire::{
-  act::{Act, Kind, Phase},
+  act::{Act, Kind, Name, Phase},
   desk::Desk,
-  ladder::{Rung, Shown},
+  ladder::Rung,
   state::State,
   threads::{Began, ChainTrack, ThreadNode, Threads},
 };
 
 use super::{
   desk::desk,
-  ladder::{Index, folded, lives},
+  ladder::{Asked, Index, folded, lives},
   threads::{
     Lookup, Rows, Works, attention, chain_asides, chain_notes, chain_threads, chain_tree,
     nest_threads, order_threads, works,
@@ -40,10 +35,10 @@ use super::{
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Held {
   acts: Vec<Arc<Act>>,
-  at: HashMap<String, usize>,
+  at: HashMap<Name, usize>,
   /// The places of the acts of each maker, and of each chain, in the order they were first told.
-  made: HashMap<String, Vec<usize>>,
-  on: HashMap<String, Vec<usize>>,
+  made: HashMap<Name, Vec<usize>>,
+  on: HashMap<Name, Vec<usize>>,
   /// The places of the acts that live: not done, or a rung whose word runs.
   live: BTreeSet<usize>,
   /// Whether an act was told that began before the last one held, so the order of the acts is not
@@ -60,7 +55,7 @@ pub struct Held {
 
 impl<'a> Lookup<'a> for &'a Held {
   fn act(&self, id: &str) -> Option<&'a Act> {
-    self.at.get(id).map(|at| &*self.acts[*at])
+    self.at.get(id).and_then(|at| self.acts.get(*at)).map(|act| &**act)
   }
 }
 
@@ -68,6 +63,14 @@ impl<'a> Works<'a> for &'a Held {
   fn works(&self, chain: &str, at: u64) -> bool {
     works(self.on_chain(chain), at)
   }
+}
+
+/// The window that reads the threads of a chain: its site, and the place up to which it read the
+/// chain, from which its runs of notes count the notes not yet read.
+#[derive(Debug, Clone, Copy)]
+pub struct Reader<'a> {
+  pub site: &'a str,
+  pub read: u64,
 }
 
 impl Held {
@@ -97,8 +100,8 @@ impl Held {
   /// act as it holds it.
   pub fn took(&mut self, act: impl Into<Arc<Act>>) -> Option<Arc<Act>> {
     let mut act = act.into();
-    let (at, before) = if let Some(&at) = self.at.get(&act.id) {
-      let was = &self.acts[at];
+    let known = self.at.get(&*act.id).and_then(|at| Some((*at, self.acts.get_mut(*at)?)));
+    let (at, before) = if let Some((at, was)) = known {
       if was.done() && !act.done() {
         return None;
       }
@@ -110,7 +113,7 @@ impl Held {
         one.began = was.began;
         one.ended = ended;
       }
-      (at, Some(mem::replace(&mut self.acts[at], act)))
+      (at, Some(mem::replace(was, act)))
     } else {
       let at = self.acts.len();
       // A read of now takes the acts in place as the order they began, which a host and a record
@@ -119,18 +122,19 @@ impl Held {
       if self.acts.last().is_some_and(|last| last.began > act.began) {
         self.unordered = true;
       }
-      self.at.insert(act.id.clone(), at);
-      self.made.entry(act.by.clone()).or_default().push(at);
-      self.on.entry(act.chain.clone()).or_default().push(at);
+      self.at.insert(Arc::clone(&act.id), at);
+      placed(&mut self.made, &act.by, at);
+      placed(&mut self.on, &act.chain, at);
       self.acts.push(act);
       (at, None)
     };
-    if lives(&self.acts[at]) {
+    let Some(now) = self.acts.get(at) else { return before };
+    if lives(now) {
       self.live.insert(at);
     } else {
       self.live.remove(&at);
     }
-    if self.acts[at].kind == Kind::Stand && self.acts[at].done() {
+    if now.kind == Kind::Stand && now.done() {
       self.stood = self.stood.max(Some(at));
     }
     before
@@ -152,27 +156,17 @@ impl Held {
 
   /// The act of an id as the last event of it told it.
   pub fn shared(&self, id: &str) -> Option<&Arc<Act>> {
-    self.at.get(id).map(|at| &self.acts[*at])
+    self.at.get(id).and_then(|at| self.acts.get(*at))
   }
 
-  /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
-  /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
-  /// them.
-  pub fn ladder(
-    &self,
-    chain: &str,
-    at: Option<u64>,
-    opened: &[String],
-    owed: &[String],
-    taken: Option<&[String]>,
-    shown: Shown,
-  ) -> Vec<Rung> {
+  /// The ladder of a chain, now or as it stood just after a moment, as a window asks it.
+  pub fn ladder(&self, chain: &str, at: Option<u64>, asked: Asked<'_>) -> Vec<Rung> {
     let Some(at) = at else {
       let index =
         Index { acts: &self.acts, at: &self.at, made: &self.made, on: &self.on, live: &self.live };
-      return folded(&index, chain, opened, owed, taken, shown);
+      return folded(&index, chain, asked);
     };
-    self.past(at).ladder(chain, None, opened, owed, taken, shown)
+    self.past(at).ladder(chain, None, asked)
   }
 
   /// The acts as they stood just after a moment, held in the order they began, so each read of
@@ -215,12 +209,12 @@ impl Held {
   /// each, now or as they stood just after a moment. `read` is the place up to which the window
   /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
-    self.threads_as(OPERATOR, chain, at, read)
+    self.threads_as(chain, at, Reader { site: OPERATOR, read })
   }
 
   /// The acts that an act or a person made, in the order they were first told.
   pub(super) fn made_by<'a>(&'a self, id: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.made.get(id).into_iter().flatten().map(|at| &*self.acts[*at])
+    self.made.get(id).into_iter().flatten().filter_map(|at| self.acts.get(*at)).map(|act| &**act)
   }
 
   /// The text to write back at each path that a list of writes wrote, to revert them: the text
@@ -245,7 +239,8 @@ impl Held {
   /// lines it tells, so its text is what stood there.
   pub(super) fn text_before(&self, path: &str, act: &str) -> Option<&str> {
     let place = *self.at.get(act)?;
-    let mut texts = self.acts[..place].iter().rev().filter_map(|one| self.filed(one));
+    let before = self.acts.get(..place).unwrap_or_default();
+    let mut texts = before.iter().rev().filter_map(|one| self.filed(one));
     texts.find(|(at, _)| *at == path).map(|(_, content)| content)
   }
 
@@ -262,7 +257,7 @@ impl Held {
 
   /// The acts of a chain, in the order they were first told.
   pub(super) fn on_chain<'a>(&'a self, chain: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.on.get(chain).into_iter().flatten().map(|at| &*self.acts[*at])
+    self.on.get(chain).into_iter().flatten().filter_map(|at| self.acts.get(*at)).map(|act| &**act)
   }
 
   /// Each site that said what it saw, and the operator with no login, who saw what the journal
@@ -286,11 +281,12 @@ impl Held {
 
   /// The threads of a chain as the window of a site reads them: the mark of what it has not seen
   /// counts the seen of that site alone.
-  pub fn threads_as(&self, site: &str, chain: &str, at: Option<u64>, read: u64) -> Threads {
+  pub fn threads_as(&self, chain: &str, at: Option<u64>, reader: Reader<'_>) -> Threads {
+    let Reader { site, read } = reader;
     self.then(at, |acts| {
-      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
+      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), *act)).collect();
       let on: Vec<&Act> =
-        acts.iter().copied().filter(|act| act.chain == chain && act.id != chain).collect();
+        acts.iter().copied().filter(|act| *act.chain == *chain && *act.id != *chain).collect();
       let threads = chain_tree(chain, acts, &rows);
       let state =
         rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
@@ -310,11 +306,11 @@ impl Held {
   /// the closed ones first and the open ones last, now or as they stood just after a moment.
   pub fn rail(&self, hidden: &[String], at: Option<u64>) -> Vec<ThreadNode> {
     self.then(at, |acts| {
-      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
+      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_ref(), *act)).collect();
       let mut chains: Vec<&str> = Vec::new();
       let mut on: HashMap<&str, Vec<&Act>> = HashMap::new();
       for act in acts.iter().copied().filter(|act| act.id != act.chain) {
-        let chain = act.chain.as_str();
+        let chain = act.chain.as_ref();
         if hidden.iter().any(|one| one == chain) {
           continue;
         }
@@ -324,42 +320,46 @@ impl Held {
         });
         on.entry(chain).or_default().push(act);
       }
-      let mut list: Vec<_> =
-        chains.iter().flat_map(|chain| chain_threads(&on[chain], &rows)).collect();
-      list.sort_by_key(|one| rows.get(one.prompt.as_str()).map_or(0, |act| act.began));
+      let mut list: Vec<_> = chains
+        .iter()
+        .filter_map(|chain| on.get(chain))
+        .flat_map(|acts| chain_threads(acts, &rows))
+        .collect();
+      list.sort_by_key(|one| rows.get(one.prompt.as_ref()).map_or(0, |act| act.began));
       order_threads(nest_threads(list, &rows), &rows)
     })
   }
 
   /// The open work of the life: each act that is not done and is no chain, that no other open work
   /// made, in the order the acts were first told. A cancel of each ends what each made too.
-  pub fn open_work(&self) -> Vec<String> {
+  pub fn open_work(&self) -> Vec<Name> {
     let open = |act: &Act| !act.done() && act.kind != Kind::Chain;
-    let work = |at: &usize| Some(&*self.acts[*at]).filter(|act| open(act));
+    let work = |at: &usize| self.acts.get(*at).map(|act| &**act).filter(|act| open(act));
     let made_by_work = |act: &Act| self.act(&act.by).is_some_and(open);
     self
       .live
       .iter()
       .filter_map(work)
       .filter(|act| !made_by_work(act))
-      .map(|act| act.id.clone())
+      .map(|act| Arc::clone(&act.id))
       .collect()
   }
 
   /// Each act that is not done, in the order the acts were first told.
   pub(super) fn open(&self) -> impl Iterator<Item = &Act> {
-    self.live.iter().map(|at| &*self.acts[*at]).filter(|act| !act.done())
+    self.live.iter().filter_map(|at| self.acts.get(*at)).map(|act| &**act).filter(|act| !act.done())
   }
 
   /// The id of each command of the life that runs.
   #[must_use]
-  pub fn commands(&self) -> BTreeSet<String> {
-    self.open().filter(|act| act.kind == Kind::Bash).map(|act| act.id.clone()).collect()
+  pub fn commands(&self) -> BTreeSet<Name> {
+    self.open().filter(|act| act.kind == Kind::Bash).map(|act| Arc::clone(&act.id)).collect()
   }
 
   /// Each run of a word that is not done, in the order the acts were first told.
   pub fn running(&self) -> impl Iterator<Item = &Arc<Act>> {
-    self.live.iter().map(|at| &self.acts[*at]).filter(|act| act.kind == Kind::Run && !act.done())
+    let running = |act: &&Arc<Act>| act.kind == Kind::Run && !act.done();
+    self.live.iter().filter_map(|at| self.acts.get(*at)).filter(running)
   }
 
   /// The acts as they stood just after a moment, in the order they began.
@@ -383,8 +383,8 @@ impl Held {
           // A prompt that a word of another chain asked is a link between their tracks, and one
           // that the operator said has no act as its maker.
           let asker = |act: &Act| {
-            let maker = (&self).act(&act.by).map(|maker| maker.chain.clone());
-            maker.filter(|one| *one != chain.id)
+            let maker = (&self).act(&act.by).map(|maker| &maker.chain);
+            maker.filter(|one| **one != chain.id).map(Arc::clone)
           };
           let says = |act: &Act| {
             let text = act.words.get(1).and_then(Value::as_str).unwrap_or_default();
@@ -392,7 +392,7 @@ impl Held {
           };
           let mut threads: Vec<Began> = starts
             .map(|act| Began {
-              prompt: act.id.clone(),
+              prompt: Arc::clone(&act.id),
               at: act.began,
               by: asker(act),
               ended: act.ended,
@@ -401,7 +401,7 @@ impl Held {
             .collect();
           threads.sort_by_key(|one| one.at);
           ChainTrack {
-            chain: chain.id.clone(),
+            chain: Arc::clone(&chain.id),
             label: chain
               .words
               .first()
@@ -409,7 +409,7 @@ impl Held {
               .unwrap_or_default()
               .trim()
               .to_owned(),
-            parent: (&self).act(&chain.by).map(|maker| maker.chain.clone()),
+            parent: (&self).act(&chain.by).map(|maker| Arc::clone(&maker.chain)),
             state: chain.state,
             moments: moments_of(on.iter().copied()),
             threads,
@@ -425,8 +425,17 @@ impl Held {
     match on.and_then(|id| self.act(id)) {
       Some(thread) if thread.kind == Kind::Prompt => self.thread_moments(&thread.id),
       _ => moments_of(
-        self.acts.iter().map(|act| &**act).filter(|act| on.is_none_or(|chain| act.chain == chain)),
+        self
+          .acts
+          .iter()
+          .map(|act| &**act)
+          .filter(|act| on.is_none_or(|chain| *act.chain == *chain)),
       ),
     }
   }
+}
+
+/// A place of an act under a name, which the map shares the first time that it holds it.
+fn placed(map: &mut HashMap<Name, Vec<usize>>, name: &Name, at: usize) {
+  map.entry(Arc::clone(name)).or_default().push(at);
 }

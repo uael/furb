@@ -326,7 +326,8 @@ fn probed() -> Option<f64> {
         // that is slower or shared.
         let table: Vec<u32> =
           (0..TABLE).map(|at| (at.wrapping_mul(5).wrapping_add(1)) % TABLE).collect();
-        (0..PROBE).fold(0_u32, |at, _| hint::black_box(table[at as usize]))
+        (0..PROBE)
+          .fold(0_u32, |at, _| hint::black_box(table.get(at as usize).copied().unwrap_or_default()))
       });
     }
   });

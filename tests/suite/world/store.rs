@@ -51,7 +51,7 @@ fn shown(entries: &[Object]) -> Vec<String> {
 /// A record whose store kept each fact of the suite and let it go.
 fn filled(open: impl Fn(&Path) -> Result<Box<dyn Store>, Fault>, path: &Path) {
   let mut one = open(path).unwrap_or_else(|no| panic!("{no}"));
-  assert!(one.entries().unwrap_or_else(|no| panic!("{no}")).is_empty());
+  assert_eq!(one.entries().unwrap_or_else(|no| panic!("{no}")), Vec::<Object>::new());
   for entry in facts() {
     one.keep(entry.as_ref()).unwrap_or_else(|no| panic!("{no}"));
   }
@@ -75,9 +75,9 @@ macro_rules! conformance {
       #[test]
       fn a_new_record_holds_no_entry() {
         let path = at("new");
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
         assert!(open(&path).unwrap().entries().unwrap().is_empty());
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
       }
 
       #[test]
@@ -119,7 +119,7 @@ macro_rules! conformance {
         one.entries().unwrap();
         one.sync().unwrap();
         one.sync().unwrap();
-        assert!(kept(&path).unwrap().is_empty());
+        assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
       }
 
       #[test]
@@ -186,7 +186,7 @@ macro_rules! conformance {
       fn the_store_of_a_path_whose_name_ends_so_is_this_store() {
         let path = at("named");
         let (record, ear) = store(&path).unwrap();
-        assert!(record.is_empty());
+        assert_eq!(record, Vec::<Object>::new());
         drop(ear);
         filled(open, &path);
         let (record, _ear) = store(&path).unwrap();
@@ -310,7 +310,10 @@ fn a_row_of_the_database_that_holds_no_fact_is_refused_with_its_number() {
   drop(db);
   assert_eq!(
     kept(&path).err().unwrap().to_string(),
-    format!("Refused: Invalid record entry at row 4 in {}.", path.display())
+    format!(
+      "Refused: Invalid record entry at row 4 in {}: its fact is no list of three words whose first is a kind.",
+      path.display()
+    )
   );
 }
 
@@ -465,7 +468,7 @@ fn a_record_on_a_full_disk_tells_the_operator_once_and_takes_each_entry_in_order
   let first = pass(&mut ear, &entries[0]).expect("the first keep that fails tells the operator");
   assert!(first.contains("cannot be written: No space left on device"), "{first}");
   assert_eq!(pass(&mut ear, &entries[1]), None, "the operator knows already");
-  assert!(kept(&path).unwrap().is_empty());
+  assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
   space.full.set(false);
   // The end of a run keeps each entry that waits and syncs them, which ends the fault.
   ear.ran().unwrap();
@@ -571,7 +574,7 @@ fn one_store_at_a_time_holds_a_record_and_a_read_with_no_lease_reads_it_all_the_
   let at = Yard::new(format!("furb-world-lease-{}", process::id()));
   let path = at.join("record.jsonl");
   let (record, ear) = store(&path).unwrap();
-  assert!(record.is_empty());
+  assert_eq!(record, Vec::<Object>::new());
   let refused = store(&path).err().unwrap();
   assert_eq!(refused.to_string(), format!("Refused: Another process owns {}.", path.display()));
   fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\n").unwrap();
@@ -601,17 +604,37 @@ fn the_store_reads_past_a_torn_last_line_and_a_whole_one_that_no_keep_mends_and_
   let at = "[[\"done\",\"x\",\"world\",null]]\n".len();
   assert_eq!(
     refused.to_string(),
-    format!("Refused: Invalid record entry at byte {at} in {}.", path.display())
+    format!("Refused: Invalid record entry at byte {at} in {}: it is no list.", path.display())
   );
   // An entry is one fact, so an entry that holds a fact and an answer is no entry.
   fs::write(&path, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],[[],\"/w\",\"m/low\"]]\n")
     .unwrap();
   assert_eq!(
     store(&path).err().unwrap().to_string(),
-    format!("Refused: Invalid record entry at byte 0 in {}.", path.display())
+    format!(
+      "Refused: Invalid record entry at byte 0 in {}: a word after its fact is not of its kind.",
+      path.display()
+    )
+  );
+  // An entry holds its fact alone, or its fact, its place, whether the life rested and each word
+  // that a minor adds after them, which goes to the engine as it stands, and a line its time after
+  // them: a line of three is no entry.
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null],1,false,2,[3],7]\n").unwrap();
+  let read = kept(&path).unwrap();
+  assert_eq!(
+    read.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>(),
+    ["[['done', 'x', 'world', None], 1, False, 2, [3]]"]
+  );
+  fs::write(&path, "[[\"done\",\"x\",\"world\",null],1,7]\n").unwrap();
+  assert_eq!(
+    store(&path).err().unwrap().to_string(),
+    format!(
+      "Refused: Invalid record entry at byte 0 in {}: it holds 3 words, which no entry holds.",
+      path.display()
+    )
   );
   fs::write(&path, "[\"torn\"").unwrap();
-  assert!(kept(&path).unwrap().is_empty());
+  assert_eq!(kept(&path).unwrap(), Vec::<Object>::new());
   assert_eq!(fs::read_to_string(&path).unwrap(), "[\"torn\"");
 }
 

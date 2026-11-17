@@ -7,13 +7,11 @@ pub(super) mod schema;
 mod sqlite;
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   ffi::OsStr,
   fs::{self, File, OpenOptions, TryLockError, create_dir_all},
   io::{BufRead, BufReader, Read, Seek, SeekFrom},
   path::Path,
-  rc::Rc,
   slice,
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -22,19 +20,19 @@ use std::{
 use futures::stream;
 
 use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
+use serde_json::value::{RawValue, to_raw_value};
 use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
-use self::error::StoreError;
+use self::error::{StoreError, Unread};
 use super::{beside, free};
 use crate::{
   CHECKPOINTER, ENGINE, KERNEL,
-  ear::{Co, Ear, Hooks, Next, With, hearing, say},
+  ear::{Co, Ear, Kept, Next, hearing, say},
   engine::ROOT,
   fact::Fact,
-  value::{Fault, Object, ObjectRef},
+  value::{Fault, Object, ObjectRef, items},
   wire::{built, whole},
 };
 
@@ -169,8 +167,7 @@ pub(crate) fn stored_after(
     return Ok(None);
   }
   let (entries, tail) = lines::after(path, bytes)?;
-  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  if entries.iter().any(|entry| fact(entry).is_some_and(|one| born(one.kind()))) {
+  if entries.iter().any(|entry| Fact::of_entry(entry).is_some_and(|one| born(one.kind()))) {
     return Ok(None);
   }
   if let Some(store) = &mut store {
@@ -286,12 +283,10 @@ pub(crate) enum Taken {
 impl Taken {
   /// The value of the entry, which a fact given as its text is parsed into, as a read of the
   /// record parses it.
-  pub(crate) fn entry(self) -> Option<Object> {
+  pub(crate) fn entry(self) -> Result<Object, Unread> {
     match self {
-      Self::Entry(entry) => Some(entry),
-      Self::Fact(text) => {
-        serde_json::from_str::<&RawValue>(&text).ok().and_then(|fact| entry_of(&[fact]))
-      }
+      Self::Entry(entry) => Ok(entry),
+      Self::Fact(text) => entry_of(&[serde_json::from_str(&text).map_err(|_no| Unread::Fact)?]),
     }
   }
 }
@@ -334,10 +329,9 @@ fn made_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
 /// The standing that an entry gives, when it is the done of a stand of the root: the value of that
 /// done, when it is a list. This is the one place that finds the answer of a stand.
 pub fn stood(entry: &Object) -> Option<Object> {
-  let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+  let fact = Fact::of_entry(entry)?;
   let value = fact.word(0)?;
-  let stood =
-    fact.kind() == "done" && fact::named(fact.about(), "stand") && value.items().is_some();
+  let stood = fact.kind() == "done" && fact::named(fact.about(), "stand") && items(value).is_some();
   stood.then(|| value.to_owned())
 }
 
@@ -376,7 +370,7 @@ fn digest(texts: &[&str]) -> String {
 /// The engine that a record names, and nothing when it names none, as a new record.
 pub fn made(record: &[Object]) -> Option<String> {
   record.iter().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     (fact.kind() == MADE).then(|| fact.word(0)?.as_str().map(str::to_owned)).flatten()
   })
 }
@@ -401,13 +395,7 @@ pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
 /// build. A crossing writes it at the tip of the record, so the life born across that crossing
 /// runs the same texts.
 pub fn running(record: &[Object]) -> Object {
-  let made = |entry: &&Object| {
-    entry
-      .as_ref()
-      .items()
-      .and_then(|held| Fact::of(*held.first()?))
-      .is_some_and(|one| one.kind() == MADE)
-  };
+  let made = |entry: &&Object| Fact::of_entry(entry).is_some_and(|one| one.kind() == MADE);
   match record.iter().rev().find(made) {
     Some(last) if matches!(held(slice::from_ref(last)), Some([Some(_), Some(_), Some(_), _])) => {
       last.clone()
@@ -423,7 +411,7 @@ pub fn running(record: &[Object]) -> Object {
 /// names and holds.
 fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
   record.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
     (fact.kind() == MADE).then(|| [word(0), word(4), word(5), word(6)])
   })
@@ -433,7 +421,7 @@ fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
 /// of a build before the release was in the fact made.
 pub fn release(record: &[Object]) -> Option<String> {
   record.iter().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let fact = Fact::of_entry(entry)?;
     (fact.kind() == MADE).then(|| fact.word(3)?.as_str().map(str::to_owned)).flatten()
   })
 }
@@ -450,8 +438,7 @@ pub fn unopened(path: &Path) -> Option<SchemaError> {
 /// build wrote, and a record that names a schema of another major, or one from before the stable
 /// cut, is refused, as [`Schema::opens`] says.
 pub fn readable(record: &[Object]) -> Result<(), SchemaError> {
-  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  let made = record.iter().filter_map(fact).filter(|one| one.kind() == MADE);
+  let made = record.iter().filter_map(Fact::of_entry).filter(|one| one.kind() == MADE);
   made.into_iter().try_for_each(|fact| RECORD_SCHEMA.opens("record", fact.word(2)))
 }
 
@@ -464,8 +451,8 @@ const WRITING: &str = "writing";
 /// part where the life ran it, and the replay drifts. The entry of such a question is read as the writing that a
 /// provider says now, `("writing", rung, by, part, before)`, which the journal says again where the life said it.
 fn streamed(entry: Object) -> Object {
-  let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  let Some(fact) = fact.filter(|one| one.kind() == WRITING && one.question()) else {
+  let Some(fact) = Fact::of_entry(&entry).filter(|one| one.kind() == WRITING && one.question())
+  else {
     return entry;
   };
   let (Some(rung), Some(part), Some(before)) = (fact.word(1), fact.word(2), fact.word(3)) else {
@@ -541,21 +528,21 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
 
 /// The record and the ear of [`keeping`], for a store whose entries were read. A store that read
 /// none, of a record that names its engine, gives no record.
-fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
-  let store = Held { store, waiting: VecDeque::new(), fault: None };
-  let store = Rc::new(RefCell::new(store));
-  let held = Rc::clone(&store);
+fn kept_by<S: Store + 'static>(store: S, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
+  let held = Held { store, waiting: VecDeque::new(), fault: None };
   let new = read.as_deref().is_some_and(unnamed);
   let entries: Vec<Object> = read.into_iter().flatten().map(streamed).collect();
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
-    let (mut said, mut again, mut cut) = (Told::Room, false, held.borrow().store.cut());
+    let (mut said, mut again, mut cut) = (Told::Room, false, held.store.cut());
+    co.keep(held);
     loop {
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => match a.kind() {
           "keep" => {
-            let Some(entry) = a.word(0) else { continue };
-            held.borrow_mut().waiting.push_back(entry.to_owned());
+            if a.word(0).is_some() {
+              co.kept::<Held<S>>()?.waiting.push_back(a);
+            }
           }
           "chain" if new && a.about() == ROOT => {
             say(&mut co, named());
@@ -570,7 +557,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
       {
         cut = None;
       }
-      let fault = held.borrow_mut().flushed();
+      let fault = co.kept::<Held<S>>()?.flushed();
       match fault {
         Some(fault) => {
           if !again {
@@ -592,7 +579,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
           }
         }
         None => {
-          let low = held.borrow().low(&mut said);
+          let low = co.kept::<Held<S>>()?.low(&mut said);
           if let Some(message) = low
             && told(&mut co, message).await.is_ok()
           {
@@ -602,7 +589,7 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
       }
     }
   });
-  (entries, With::ear(kept, store))
+  (entries, kept)
 }
 
 /// Whether a record names no engine for the build that goes on from it: no fact made stands after
@@ -639,7 +626,8 @@ async fn told(co: &mut Co<()>, message: String) -> Result<(), Fault> {
 /// A store, and the entries that it could not keep yet, in order, with the last fault of the store.
 struct Held<S> {
   store: S,
-  waiting: VecDeque<Object>,
+  /// Each fact `keep` whose entry waits for the store, which holds the entry as its first word.
+  waiting: VecDeque<Fact>,
   /// The fault of the last keep that failed, or of the last sync that failed, until a sync succeeds with no entry
   /// waiting.
   fault: Option<Fault>,
@@ -666,8 +654,8 @@ impl<S: Store> Held<S> {
 
   /// Each entry that waits kept in order, and the fault that stops the record, if one does.
   fn flushed(&mut self) -> Option<Fault> {
-    while let Some(entry) = self.waiting.front() {
-      if let Err(fault) = self.store.keep(entry.as_ref()) {
+    while let Some(entry) = self.waiting.front().and_then(|keep| keep.word(0)) {
+      if let Err(fault) = self.store.keep(entry) {
         self.fault = Some(fault);
         break;
       }
@@ -685,17 +673,22 @@ impl<S: Store> Held<S> {
   }
 }
 
-/// The ear that keeps the record syncs its store at the end of each run.
-impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
+/// The ear that keeps the record keeps its store, which the image of a life holds nothing of, and
+/// syncs it at the end of each run.
+impl<S: Store + 'static> Kept for Held<S> {
+  fn image(&self) -> Option<Box<RawValue>> {
+    to_raw_value(&()).ok()
+  }
+
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
-  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
-    self.borrow_mut().synced();
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.synced();
     Ok(())
   }
 
   /// Each entry that waits for the store, which no keep took yet.
-  fn unkept(&self, _: &dyn Ear) -> usize {
-    self.borrow().waiting.len()
+  fn unkept(&self) -> usize {
+    self.waiting.len()
   }
 }
 
@@ -772,31 +765,35 @@ impl Format {
   }
 }
 
-/// The entry of one fact, from the JSON that the record holds of the fact, of its place and of
-/// whether the life rested as it said the fact, or nothing when it is no entry: a fact is a list of
-/// three words at least, whose first word is its kind, and its place, when the entry has one, is
-/// the count of the facts that the life said before it. The end that a stop gave a run has no
-/// place, which is null.
-fn entry_of(held: &[&RawValue]) -> Option<Object> {
-  let placed = match held {
+/// The entry of one fact, from the JSON that the record holds of the fact, of its place, of whether
+/// the life rested as it said the fact, and of each word after them that a minor of the schema
+/// adds, or why it is no entry: a fact is a list of three words at least, whose first word is its
+/// kind, and its place, when the entry has one, is the count of the facts that the life said before
+/// it. The end that a stop gave a run has no place, which is null. The engine of the segment that
+/// holds the entry reads each word after whether the life rested, as the minor 1 holds the count of
+/// the facts that waited for their ears as the life said the fact, so each word goes to it as it
+/// stands.
+fn entry_of(held: &[&RawValue]) -> Result<Object, Unread> {
+  let fits = match held {
     [_] => true,
-    [_, place, rest] => {
+    [_, place, rest, ..] => {
       serde_json::from_str::<Option<u64>>(place.get()).is_ok()
         && serde_json::from_str::<bool>(rest.get()).is_ok()
     }
-    _ => false,
+    _ => return Err(Unread::Words(held.len())),
   };
-  if !placed {
-    return None;
+  if !fits {
+    return Err(Unread::Word);
   }
   let mut graph = MontyGraph::new();
-  let nodes =
-    held.iter().map(|one| built(&mut graph, one, 1)).collect::<Result<Vec<_>, _>>().ok()?;
-  let root = graph.push(MontyNode::List(nodes));
-  let entry = whole(graph, root).ok()?;
-  let fact = entry.as_ref().items().and_then(|held| held.first().and_then(ObjectRef::items));
-  let holds = fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some());
-  holds.then_some(entry)
+  let nodes = held.iter().map(|one| built(&mut graph, one, 1)).collect::<Result<Vec<_>, _>>();
+  let root = graph.push(MontyNode::List(nodes.map_err(|_no| Unread::Fact)?));
+  let entry = whole(graph, root).map_err(|_no| Unread::Fact)?;
+  let fact = items(entry.as_ref()).and_then(|mut held| items(held.next()?));
+  let holds = fact.is_some_and(|mut fact| {
+    fact.len() >= 3 && fact.next().is_some_and(|one| one.as_str().is_some())
+  });
+  holds.then_some(entry).ok_or(Unread::Fact)
 }
 
 /// The time now, in milliseconds since the start of 1970.

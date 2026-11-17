@@ -484,9 +484,10 @@ fn symlink(target: &Path, path: &Path) -> io::Result<()> {
 /// name no base.
 fn moved(said: &[u8], was: &[u8], now: &[u8]) -> Option<Vec<u8>> {
   let (mut out, mut at, mut hit) = (Vec::new(), 0, false);
-  while let Some(found) = said[at..].windows(was.len()).position(|one| one == was) {
+  let rest = |at: usize| said.get(at..).unwrap_or_default();
+  while let Some(found) = rest(at).windows(was.len()).position(|one| one == was) {
     let end = at + found + was.len();
-    out.extend_from_slice(&said[at..at + found]);
+    out.extend_from_slice(rest(at).get(..found).unwrap_or_default());
     let goes_on = said
       .get(end)
       .is_some_and(|one| one.is_ascii_alphanumeric() || matches!(one, b'_' | b'.' | b'-'));
@@ -494,7 +495,7 @@ fn moved(said: &[u8], was: &[u8], now: &[u8]) -> Option<Vec<u8>> {
     hit |= !goes_on;
     at = end;
   }
-  out.extend_from_slice(&said[at..]);
+  out.extend_from_slice(rest(at));
   hit.then_some(out)
 }
 
@@ -543,5 +544,5 @@ fn quote(path: &Path) -> String {
 
 /// The first characters of a text, at most this many.
 pub(super) fn short(text: &str, most: usize) -> &str {
-  text.char_indices().nth(most).map_or(text, |(at, _)| &text[..at])
+  text.char_indices().nth(most).and_then(|(at, _)| text.get(..at)).unwrap_or(text)
 }

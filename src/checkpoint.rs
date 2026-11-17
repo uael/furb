@@ -9,9 +9,11 @@
 //! `engine`, the engine that the carry leaves; `taken`, the highest number of each kind; `chains`,
 //! each chain that lives with its parent, its label, its source, whether it is paused, its turns,
 //! the definitions of each word, its plain values by name, the names that it lost, and the acts
-//! that the carry cut, each word that ran on it among them, which no later life runs again; and
+//! that the carry cut, each word that ran on it among them, which no later life runs again;
 //! `acts`, each act that a value names, the last stand and the last clock, with its value and its
 //! words, or, for an open prompt, with its shape, its message, its actor and the ear that held it;
+//! `jumped`, each chain that jumped, with the chain that it went on as, which the next life makes
+//! again under its name, so a root that jumped stays the root;
 //! and `lines`, the line of the word that made each act that a word made, which the host adds,
 //! since only the sandbox of the engine that the carry leaves saw those words run.
 //! `gathered` of the checkpointer that the next fact made names gathers it, so each later build
@@ -21,10 +23,11 @@
 //!
 //! A life that keeps its record keeps the carry of its last crossing beside it, as
 //! `<record>.carry`, so each segment before that crossing replays on its engine once, at the first
-//! open that carries across it, and each later open boots on that carry. It is a cache, as the
-//! image is: its key names each entry up to that crossing and the texts of the build, a reader
-//! takes none that does not agree, and the open then replays those segments again, to the same
-//! carry.
+//! open that carries across it, and each later open boots on that carry. A life that crosses
+//! from its own tip, as [`Engine::cross`] moves it, keeps there the carry that it gathers at that
+//! tip, so no segment replays. It is a cache, as the image is: its key names each entry up to that
+//! crossing and the texts of the build, a reader takes none that does not agree, and the open then
+//! replays those segments again, to the same carry.
 
 use std::{fs, path::Path, slice};
 
@@ -34,11 +37,12 @@ use similar::TextDiff;
 
 use crate::{
   Engine,
-  engine::{OPERATOR, ROOT, callable},
+  engine::{Hands, OPERATOR, ROOT},
   fact::Fact,
   minify::minified,
   skill::definitions,
-  value::{Fault, Object, ObjectRef, entry, field},
+  value::{Fault, Object, ObjectRef, field, items, pairs},
+  view::closes,
   wire,
   world::{self, CHECKPOINT_SCHEMA, Systems},
 };
@@ -53,14 +57,16 @@ pub const CHECKPOINT: &str = "checkpoint";
 /// turns end with one paragraph that tells it the change, the lines of the minified engine that
 /// differ.
 pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Fault> {
-  let define = callable(|args: Vec<Object>| {
+  let mut hands = Hands::default();
+  let define = hands.callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
+  engine.hand(hands);
   let floor = engine.taken().clone();
   // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
   let (_, _, by) = world::texts(slice::from_ref(next))?;
-  let data = engine.unbounded(|engine| engine.gathered_for(&by, vec![define, floor]))?;
+  let data = engine.unbounded(|engine| engine.gathered_for(&by, &[define, floor]))?;
   let mut next = Next::of(engine.running(), next)?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
@@ -69,10 +75,10 @@ pub(crate) fn carried(engine: &mut Engine, next: &Object) -> Result<Object, Faul
       Object::string(world::made(slice::from_ref(engine.running())).unwrap_or_default()),
     ),
   ];
-  for (key, one) in data.as_ref().pairs().unwrap_or_default() {
+  for (key, one) in pairs(data.as_ref()).into_iter().flatten() {
     let one = match key.as_str() {
       Some("chains") => {
-        let chains = one.items().unwrap_or_default().into_iter();
+        let chains = items(one).into_iter().flatten();
         Object::list(chains.map(|chain| next.chain(engine, chain)).collect::<Result<Vec<_>, _>>()?)
       }
       _ => one.to_owned(),
@@ -134,23 +140,23 @@ impl Next {
     }
     let Some(diff) = &self.diff else { return Ok(chain.to_owned()) };
     let mut name = format!("{id}_diff");
-    while format!("{diff}\n").contains(&format!("</s:{name}>\n")) {
+    while closes(diff, &name) {
       name.push('_');
     }
     let note =
       Object::list([Object::string(format!("#{id} crossed\n<s:{name}>\n{diff}</s:{name}>"))]);
     let tell = Object::tuple(["tell", &id, "store"].map(Object::string).into_iter().chain([note]));
-    let pairs = chain.pairs().unwrap_or_default().into_iter().map(|(key, one)| {
+    let pairs = pairs(chain).into_iter().flatten().map(|(key, one)| {
       let one = match key.as_str() {
         Some("turns") => {
-          let turns = one.items().unwrap_or_default().into_iter().map(|turn| turn.to_owned());
+          let turns = items(one).into_iter().flatten().map(|turn| turn.to_owned());
           Object::list(turns.chain([tell.clone()]))
         }
         _ => one.to_owned(),
       };
       (key.to_owned(), one)
     });
-    Ok(Object::dict(pairs.collect::<Vec<_>>()))
+    Ok(Object::dict(pairs))
   }
 }
 
@@ -164,27 +170,33 @@ fn system(made: &Object) -> Result<String, Fault> {
 /// `systems` of its data says. With no carry, each chain reads
 /// the engine that the life runs.
 pub(crate) fn systems(record: &[Object]) -> Systems {
-  let data = last(record).and_then(|at| fact(&record[at])?.word(0).map(|one| one.to_owned()));
-  let held = data.as_ref().and_then(|data| field(&data.as_ref(), "systems")?.items());
+  let data =
+    last(record).and_then(|at| Fact::of_entry(record.get(at)?)?.word(0).map(|one| one.to_owned()));
+  let held = data.as_ref().and_then(|data| items(field(&data.as_ref(), "systems")?));
   let read = |one: ObjectRef<'_>| {
-    let [text, chains] = one.items()?[..] else { return None };
-    let chains = chains.items()?.into_iter().filter_map(|one| one.as_str().map(str::to_owned));
+    let mut held = items(one).filter(|held| held.len() == 2)?;
+    let (text, chains) = (held.next()?, held.next()?);
+    let chains = items(chains)?.filter_map(|one| one.as_str().map(str::to_owned));
     Some((text.as_str()?.to_owned(), chains.collect()))
   };
-  Systems(held.unwrap_or_default().into_iter().filter_map(read).collect())
+  Systems(held.into_iter().flatten().filter_map(read).collect())
 }
 
 impl Engine {
   /// The move of a life that opened on the texts of another engine, Kernel or checkpointer to those
   /// of this build, as a step of its own: the fact made of this build, which the ear of its store
   /// keeps, so each later open carries the life across it, as [`crossings`] says. The life ends
-  /// with it. A life that keeps no record is refused.
-  pub fn cross(mut self) -> Result<(), Fault> {
+  /// with it, and gives the carry of its tip to this build, which [`Crossed::keep`] keeps beside
+  /// the record once the record holds that fact. A life that keeps no record is refused.
+  pub fn cross(mut self) -> Result<Crossed, Fault> {
     if !self.hears("store") {
       return Err(Fault::refused("a life that keeps no record does not cross"));
     }
+    let made = world::running(&[]);
+    let carry = carried(&mut self, &made)?;
     // A keep is no fact of the life, so it waits in the log: the feed of no entry hands it on.
-    self.word("say('keep', '', __made), feed(())", vec![("__made", world::running(&[]))]).map(drop)
+    self.word("say('keep', '', __made), feed(())", vec![("__made", made)])?;
+    Ok(Crossed(carry))
   }
 
   /// Whether the life runs the texts of another engine, Kernel or checkpointer than this build, as
@@ -217,6 +229,25 @@ pub(crate) fn crossed(path: &Path, lease: world::Lease, read: &world::Last) -> R
   world::appended(path, lease, read, world::running(&[]).as_ref())
 }
 
+/// The carry of a life at the tip where it crossed, gathered from the life itself. The life stood
+/// at the exact state of that tip, so the open after the crossing boots on it and replays no
+/// segment before it, as an open after a replay of those segments boots on the carry that it kept.
+#[derive(Debug)]
+pub struct Crossed(Object);
+
+impl Crossed {
+  /// Keeps the carry beside the record at a path, as [`keep`] keeps the carry of a replay, once the
+  /// fact made of the crossing ends the record. A record that holds another entry after it keeps
+  /// nothing, and the next open replays.
+  pub fn keep(self, path: &Path) -> Result<(), Fault> {
+    let record = world::kept(path)?;
+    if let Some(at) = crossings(&record).last().filter(|at| **at + 1 == record.len()) {
+      keep(path, &record, *at, self.0);
+    }
+    Ok(())
+  }
+}
+
 /// The meaning of what [`Kept`] holds, which a change of meaning raises.
 const KEPT: u32 = 1;
 
@@ -243,15 +274,14 @@ pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
   let kept: Kept = serde_json::from_slice(&fs::read(world::beside(path, ".carry")).ok()?).ok()?;
   let agrees = kept.version == KEPT
     && kept.engine == world::engine()
-    && kept.at < record.len()
-    && digest(&record[..=kept.at]).is_some_and(|one| one == kept.entries);
+    && record.get(..=kept.at).and_then(digest).is_some_and(|one| one == kept.entries);
   agrees.then_some((kept.at, kept.carry))
 }
 
 /// The carry at the crossing at `at` of the entries of the record at a path, kept beside it. A
 /// cache that does not land costs the next open a replay, and nothing else.
 pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
-  let Some(entries) = digest(&record[..=at]) else { return };
+  let Some(entries) = record.get(..=at).and_then(digest) else { return };
   let kept = Kept { version: KEPT, engine: world::engine(), at, entries, carry };
   if let Ok(bytes) = serde_json::to_vec(&kept) {
     fs::write(world::beside(path, ".carry"), bytes).ok();
@@ -263,7 +293,7 @@ pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
 /// transcripts do not hold each name that the record took, and the carry keeps each of them taken.
 pub(crate) fn taken(record: &[Object]) -> Object {
   let mut most: Vec<(String, i64)> = Vec::new();
-  for a in record.iter().filter_map(fact).filter(Fact::question) {
+  for a in record.iter().filter_map(Fact::of_entry).filter(Fact::question) {
     let Some(n) = a.about().strip_prefix(a.kind()).and_then(|one| one.parse::<i64>().ok()) else {
       continue;
     };
@@ -275,14 +305,9 @@ pub(crate) fn taken(record: &[Object]) -> Object {
   Object::dict(most.into_iter().map(|(kind, n)| (Object::string(kind), Object::int(n))))
 }
 
-/// The fact of an entry.
-fn fact(one: &Object) -> Option<Fact> {
-  entry(&one.as_ref(), 0).and_then(Fact::of)
-}
-
 /// Where the carry of the entries that a life boots on stands, and nothing when they hold none.
 pub(crate) fn last(record: &[Object]) -> Option<usize> {
-  record.iter().rposition(|one| fact(one).is_some_and(|a| a.kind() == CHECKPOINT))
+  record.iter().rposition(|one| Fact::of_entry(one).is_some_and(|a| a.kind() == CHECKPOINT))
 }
 
 /// Whether a fact ends the opening of a life born from a carry: the stand of the root that the
@@ -302,5 +327,5 @@ pub fn stood(record: &[Object]) -> bool {
 /// The entries that the last engine of the entries that a life boots on made: those after the
 /// carry, or all of them when they hold none.
 pub fn segment(record: &[Object]) -> &[Object] {
-  &record[last(record).map_or(0, |at| at + 1)..]
+  last(record).and_then(|at| record.get(at + 1..)).unwrap_or(record)
 }

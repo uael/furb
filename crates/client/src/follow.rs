@@ -13,7 +13,7 @@ impl Client {
   /// The text of the input queued on the open thread, which its life sends once the chain of the
   /// thread rests, or why it does not go: a follow-up is a message of a thread, with no image.
   pub fn queue(&mut self, text: &str) -> Result<(), String> {
-    let Target::Thread(key) = self.target() else {
+    let Target::Thread(key) = self.target().owned() else {
       return Err("A follow-up waits on a thread: open one first.".to_owned());
     };
     if self.draft.python {
@@ -26,8 +26,11 @@ impl Client {
     let text = self.unfolded(text.to_owned());
     self.draft.folds.clear();
     // The client holds the life, so its machine pushes each change of the queue.
-    self.hold((at, life.clone()), self.cwd(at, &life), self.moved);
-    let entry = format!("{}-{}", self.machines[at].login, self.now);
+    self.hold((at, life.clone()), self.cwd(at, &life).map(Into::into), self.moved);
+    let Some(told) = self.machines.get(at) else {
+      return Err("The machine of this thread is not in the list.".to_owned());
+    };
+    let entry = format!("{}-{}", told.login, self.now);
     let message = text.trim().to_owned();
     let on = Some(thread.clone());
     let verb = Verb::Queue { life: life.clone(), entry, shape: "None".to_owned(), message, on };
@@ -89,11 +92,14 @@ impl Client {
     }
   }
 
-  /// The follow-ups that wait on a chain of a life, as its machine pushed them.
-  pub(crate) fn queued(&mut self, at: usize, life: String, event: &Event) {
-    let (Event::Queued { chain, waiting }, Some(told)) = (event, self.machines.get_mut(at)) else {
-      return;
-    };
-    told.queued.entry(life).or_default().insert(chain.clone(), waiting.clone());
+  /// The follow-ups that wait on a chain of a life, as its machine pushed them, and whether the
+  /// frame holds them.
+  pub(crate) fn queued(&mut self, at: usize, frame: &Frame) -> bool {
+    let Frame::Event { life, event, .. } = frame else { return false };
+    let Event::Queued { chain, waiting } = &**event else { return false };
+    if let Some(told) = self.machines.get_mut(at) {
+      told.queued.entry(life.to_string()).or_default().insert(chain.clone(), waiting.clone());
+    }
+    true
   }
 }

@@ -1,9 +1,5 @@
 //! The provider settings of the user and the project, applied to a catalog before a life stands on it.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::HashMap,
   env, fs, io,
@@ -327,7 +323,7 @@ impl Catalog {
   /// false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
   pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
-    super::blocking(self.configure(directory, config))
+    super::blocking(self.configure(directory, config)).map_err(Error::Unread)?
   }
 
   /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
@@ -345,6 +341,10 @@ impl Catalog {
     Ok(self)
   }
 
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "an entry of the providers takes its name and its form, beside the config and the listings that each entry shares"
+  )]
   async fn apply(
     &mut self,
     name: String,

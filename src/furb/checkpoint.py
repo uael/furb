@@ -38,8 +38,11 @@ def seed(names, data):
   for x in [*data["chains"], *data["acts"]]:
     "by" in x and made[home.get(x["id"], data["chains"][0]["id"])].update({x["id"]: x["by"]})
   # Each chain is made before any chain holds its prefix, so a chain with a source takes no turn of its source again.
-  for c in data["chains"]:
+  # A chain that jumped is made too, in the order of the numbers, and goes on as the chain that it jumped to.
+  jumped = data.get("jumped", [])
+  for c in sorted([*data["chains"], *jumped], key=lambda c: int(c["id"][len("chain") :])):
     put("chain", c["id"], operator, c["on"], c["label"], c["source"])
+  entries += [(("jumped", c["id"], "journal", c["to"]),) for c in jumped]
   for c in data["chains"]:
     i = c["id"]
     definitions = [d] if isinstance(d := c["definitions"], str) else d
@@ -77,7 +80,9 @@ def birth(names):
   module, transcript, get = (names[x] for x in ("module", "transcript", "get"))
   notes = {}
   while True:
-    match (yield {"carried", "module", "prefix"}):
+    match (yield {"carried", "module", "prefix", "jumped"}):
+      case ("jumped", about, _, to):
+        names["jumped"][about] = to
       case ("carried", about, _, _, values, definitions, _, lost, cut):
         bind(module(about), about, values, definitions)
         lost = [n for n in lost if n not in module(about)]
@@ -144,7 +149,8 @@ def gathered(names, define, floor):
   def number(called):
     return int(re.sub(r"^\D+", "", called) or 0)
 
-  chains = [x for x in listening() if question(("chain", x))]
+  went = names.get("jumped", {})
+  chains = [x for x in listening() if question(("chain", x)) and x not in went]
   made = {k: v for c in chains for x in transcript(c, "carried") for k, v in (x[6:] or [{}])[0].items()}
 
   def maker(called):
@@ -241,4 +247,9 @@ def gathered(names, define, floor):
         ],
       }
     )
-  return {"taken": taken, "chains": out, "acts": acts}
+  jumped = [
+    {"id": c, "by": maker(c), "on": get(c)[3], "label": get(c)[4], "source": get(c)[5], "to": went[c]}
+    for c in sorted(went, key=number)
+    if get(c)
+  ]
+  return {"taken": taken, "chains": out, "acts": acts, "jumped": jumped}

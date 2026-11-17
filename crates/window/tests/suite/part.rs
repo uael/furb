@@ -1,6 +1,6 @@
 //! The list part over the window: Go to, with the commands, and each key, on a real daemon
 //! whose lives a peer of the test drives.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 #[cfg(unix)]
@@ -48,7 +48,7 @@ fn gone(app: &TestApp, text: &str) -> bool {
 #[test]
 fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_no_thread_of_his() {
   let (app, _daemon, _peer) = machine();
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   let frame = shows(&app, "Search a thread, session, project");
   // The sessions that he used last stand among the places before he searches.
   let parts = ["Working", "Sessions", "Projects"];
@@ -69,7 +69,7 @@ fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_n
   assert!(gone(&app, "Search a thread"), "{}", app.text());
   shows(&app, "┃ Ask in a new thread");
   // A project takes its sessions as the filter, and escape closes the part with no choice.
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   shows(&app, "Projects");
   app.type_text("furb");
   shows(&app, "3 sessions");
@@ -110,7 +110,10 @@ fn a_click_on_the_scope_of_the_list_opens_go_to() {
 #[test]
 fn a_click_on_the_project_of_a_new_session_lists_the_projects_and_one_aims_the_input() {
   let (app, _daemon, _peer) = machine();
-  clicked(&app, "furb-try ▾", 0, 0);
+  // The launcher gives the project less room once the catalog names the model, which a loaded
+  // machine reads before the first frame or after it: the click waits for the whole launcher.
+  shows(&app, "opus  high");
+  clicked(&app, "FT furb-", 0, 0);
   let frame = shows(&app, "Search a project");
   assert!(!frame.contains("Send to"), "{frame}");
   // The project of the daemon is a row of the part, with its count of sessions.
@@ -262,7 +265,7 @@ fn a_slash_that_starts_the_input_offers_the_commands_and_an_escape_hides_them() 
 #[test]
 fn the_bar_of_the_chosen_row_and_the_badge_of_its_project_keep_their_hues_under_the_pointer() {
   let (app, _daemon, _peer) = machine();
-  app.press("ctrl+o");
+  app.press("ctrl+p");
   let frame = shows(&app, "Search a thread, session, project");
   let chosen =
     frame.lines().enumerate().find(|(_, line)| line.contains('▌') && !line.contains("Search"));

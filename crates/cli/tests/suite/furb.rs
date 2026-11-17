@@ -4,7 +4,8 @@
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line
 //! that answers from a script stands in for the models, so no test asks one. The fake answers each
 //! line of input with the next word the test gave it, and it counts what it answered.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![cfg(unix)]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
@@ -507,8 +508,8 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
     "'b'\n",
     "a Literal is answered by one of its values"
   );
-  let said = refused(yard.furb(&pick), "c\n");
-  assert!(said.ends_with("furb: Refused: \"c\" is none of Literal['a', 'b']\n"), "{said}");
+  let output = ran(yard.furb(&pick), "c\n");
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "'c'\n", "a Literal ends with his own words");
   let said = refused(yard.furb(&["prompt", "a set", "--to", "operator", "--shape", "set"]), "");
   assert_eq!(
     said, "furb: Refused: the operator answers no set\n",

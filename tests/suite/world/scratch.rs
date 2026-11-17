@@ -2,8 +2,6 @@
 //! them with the files of the World, the files that a record makes again in it, and the reap of the
 //! directories that no life holds.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   env, ffi, fs, io,
   path::{Path, PathBuf},

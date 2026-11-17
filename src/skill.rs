@@ -25,12 +25,10 @@
 //! extension plays, and the definitions alone of a new word of an extension that the life runs,
 //! which reloads it.
 
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use std::{
   env, fs,
   io::ErrorKind,
+  ops::Range,
   path::{Path, PathBuf},
 };
 
@@ -416,6 +414,10 @@ pub fn official() -> Vec<Skill> {
 
 /// The official extensions, each with the [`copy`] of its word in the config directory of these
 /// places.
+#[expect(
+  clippy::expect_used,
+  reason = "the manifests are files of the build, which `the_crate_holds_each_official_skill` reads whole"
+)]
 fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";
   OFFICIAL
@@ -486,7 +488,8 @@ fn names() -> Vec<(String, bool)> {
 /// same folder, by their paths in it, and the digest covers each of their texts too, in order.
 pub(crate) fn copy(name: &str, files: &[(&str, &str)], places: &Places) -> String {
   let summed = files.iter().fold(Sha256::new(), |sum, (_, text)| sum.chain_update(text));
-  let held = &format!("{:x}", summed.finalize())[..COPY_DIGEST];
+  let digest = format!("{:x}", summed.finalize());
+  let held = digest.get(..COPY_DIGEST).unwrap_or(&digest);
   let folder = places.config.join("words").join(name).join(held);
   let written = |(file, text): &(&str, &str)| {
     let copied = folder.join(file);
@@ -610,7 +613,8 @@ pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Skill>, Vec<St
       None if worded => copied,
       None => {
         let one = official.iter().find(|one| one.name == name).cloned();
-        out.0.push(one.expect("an official extension"));
+        // A name with no folder is an official one, which `official` holds.
+        out.0.extend(one);
         continue;
       }
     };
@@ -655,8 +659,8 @@ pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault
         named.push((name.clone(), None, false));
         named.len() - 1
       });
-      let one = &mut named[at];
       let theirs = at >= official.len();
+      let Some(one) = named.get_mut(at) else { continue };
       match form {
         Value::Bool(true) if theirs && one.1.is_none() => {
           return Err(refused(format!("No config gives the folder of the skill {name}")));
@@ -799,7 +803,7 @@ fn shaped(word: &str, state: bool) -> String {
     _ => false,
   };
   let held = |id: &str, annotation: &str, value: &Expr, whole: &str| {
-    let value = &word[value.range()];
+    let value = word.get(range(value.range())).unwrap_or_default();
     if value.starts_with("globals().setdefault(") {
       whole.to_owned()
     } else {
@@ -811,7 +815,7 @@ fn shaped(word: &str, state: bool) -> String {
     .body
     .iter()
     .filter_map(|one| {
-      let whole = &word[one.range()];
+      let whole = word.get(range(one.range())).unwrap_or_default();
       if defines(one) {
         return Some(whole.to_owned());
       }
@@ -822,7 +826,8 @@ fn shaped(word: &str, state: bool) -> String {
         },
         Stmt::AnnAssign(two) if state => match (&*two.target, &two.value) {
           (Expr::Name(name), Some(value)) => {
-            let annotation = format!(": {}", &word[two.annotation.range()]);
+            let annotation = word.get(range(two.annotation.range())).unwrap_or_default();
+            let annotation = format!(": {annotation}");
             Some(held(name.id.as_str(), &annotation, value, whole))
           }
           _ => None,
@@ -912,218 +917,260 @@ struct Told {
 /// why each extension of `refused` does not play.
 pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
   let heard = ["chain", "stand", "rung", "write", ENABLE, TEACH, config::CONFIGURED];
+  let offered = Offered { given, places };
   hearing(&heard, move |mut co| async move {
-    let kept = co.keeps(Told { refused, ..Told::default() })?;
+    co.keeps(Told { refused, ..Told::default() })?;
     loop {
       let a = hear(&mut co).await;
       // The ear holds what it keeps while it steps, and gives it back before it waits again,
       // where the image of the life reads it, between two runs.
-      let mut held = kept.take();
-      let stepped: Result<(), Fault> = async {
-        let Told { refused, enabled, chains, teach, taught } = &mut held;
-        let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
-        let runs = |one: &Skill| runs_name(&one.name);
-        let new: Vec<Skill> = match a.kind() {
-          // The ear hears a chain at its birth, before the call that made it returns, and the chain
-          // has what its
-          // origin had, which it made again. A chain with no source in a life whose root took its
-          // setup forks that
-          // setup, which holds each extension of every chain, so the ear plays nothing on it.
-          "chain" if a.question() => {
-            let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
-            let had =
-              chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
-            if *taught {
-              let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
-              chains.push((a.about().to_owned(), had.unwrap_or_else(|| every.collect())));
-              return Ok(());
-            }
-            chains.push((a.about().to_owned(), had.unwrap_or_default()));
-            let born = chains.len() - 1;
-            for one in enabled.iter() {
-              play(&mut co, one, &mut chains[born]).await?;
-            }
-            return Ok(());
-          }
-          // The first stand that this life answers sets up the root of a new record when the
-          // standing names a doctrine: the ear says the fact teach, with the count of the enables
-          // that follow it, then each enable, and it plays the setup once it heard them, as the
-          // journal of a later life says them again.
-          "done" if named(a.about(), "stand") => {
-            // A life born on a checkpoint holds the teach and the enables of its root in the
-            // turns that the checkpoint carries, which no journal says again: the ear reads them
-            // there, as a whole replay of the record hears them, and teaches nothing again. It
-            // reads them at a stand that the journal says again too, so a later life plays the
-            // enables of that stand as the life that said them did.
-            if !*taught && teach.is_none() {
-              let (taught_root, enables) =
-                (rooted(&mut co, TEACH).await?, rooted(&mut co, ENABLE).await?);
-              if let Some(was) = reborn(&taught_root, &enables, chains) {
-                *enabled = was;
-                *taught = true;
-              }
-            }
-            if a.by() == JOURNAL {
-              return Ok(());
-            }
-            // An open replays the note that the record holds, and makes no new one.
-            if !told(&mut co, &refused.join("\n")).await? {
-              tell(&mut co, refused);
-            }
-            refused.clear();
-            let new: Vec<Skill> =
-              given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
-            if !*taught
-              && teach.is_none()
-              && let Some((actor, path)) = doctrine(&mut co).await?
-              && bare(&mut co).await?
-            {
-              let count = Object::int(i64::try_from(new.len()).unwrap_or(i64::MAX));
-              say(
-                &mut co,
-                Fact::says(TEACH, ROOT, [Object::string(&actor), Object::string(&path), count]),
-              );
-              for one in &new {
-                say(&mut co, one.enable());
-              }
-              return Ok(());
-            }
-            new
-          }
-          TEACH => {
-            let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-            let count = a.word(2).and_then(|one| one.as_int()).unwrap_or(0);
-            if let (Some(actor), Some(path)) = (text(0), text(1)) {
-              *teach = Some((actor, path, count));
-            }
-            if count > 0 {
-              return Ok(());
-            }
-            Vec::new()
-          }
-          ENABLE if teach.is_some() => {
-            if let Some(one) = Skill::of(&a) {
-              match enabled.iter().position(|two| two.name == one.name) {
-                Some(at) => enabled[at] = one,
-                None => enabled.push(one),
-              }
-            }
-            if let Some(left) = teach.as_mut().map(|one| &mut one.2) {
-              *left -= 1;
-              if *left > 0 {
-                return Ok(());
-              }
-            }
-            Vec::new()
-          }
-          // A write of a config of the project that lands turns on each extension that it gives by
-          // its path and
-          // that the life does not run, as the configs do at the tip.
-          // A write that lands of a config of the project turns on each extension that it gives by
-          // its path and that
-          // the life does not run, as the configs do at the tip. A write in the folder of an
-          // extension that the life
-          // runs and that a config turns on reloads it when its word changed.
-          "done" if named(a.about(), "write") && a.by() != JOURNAL => {
-            let Some(text) = a.word(0).and_then(Text::of) else { return Ok(()) };
-            let home = places.home.as_deref();
-            let Ok(file) = files::placed(Path::new(""), &text.path, home) else { return Ok(()) };
-            let config = projected(Path::new("")).iter().any(|one| file.ends_with(one));
-            if !config && !file.parent().is_some_and(|one| one.join(MANIFEST).is_file()) {
-              return Ok(());
-            }
-            let Some(project) = skills::project(&mut co, home).await? else { return Ok(()) };
-            if projected(&project).contains(&file) {
-              let (found, refused) = turned(&file, &text.content, &places);
-              tell(&mut co, &refused);
-              found.into_iter().filter(|one| !runs(one)).collect()
-            } else {
-              let folders =
-                turned_on(&places, &project).map(|got| got.0).unwrap_or_default().into_iter();
-              let mine =
-                folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
-              let mut found = (Vec::new(), Vec::new());
-              for (name, root) in mine.filter_map(|(name, root)| Some((name, root?))) {
-                loaded(&name, &root, &places, &mut found);
-              }
-              tell(&mut co, &found.1);
-              found.0.into_iter().filter(|one| !enabled.contains(one)).collect()
-            }
-          }
-          // A change of `skills` in the configs through the host plays at once each extension that
-          // it turns on and that the life does not run, as a write of a config of the project does,
-          // and the journal says again the enables that followed it. One that it turns off plays
-          // on until the life ends.
-          config::CONFIGURED if a.by() != JOURNAL => {
-            let key = a.word(0);
-            let part =
-              |at| key.as_ref().and_then(|key| entry(key, at)?.as_str().map(str::to_owned));
-            if part(0).as_deref() != Some(KEY) {
-              return Ok(());
-            }
-            let name = part(1);
-            let home = places.home.as_deref();
-            let Some(project) = skills::project(&mut co, home).await? else { return Ok(()) };
-            let (found, refused) =
-              configured(&places, &project).unwrap_or_else(|no| (Vec::new(), vec![no.message()]));
-            if !told(&mut co, &refused.join("\n")).await? {
-              tell(&mut co, &refused);
-            }
-            let named = |one: &Skill| name.as_ref().is_none_or(|name| *name == one.name);
-            found.into_iter().filter(|one| !runs(one) && named(one)).collect()
-          }
-          ENABLE => Skill::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
-          _ => return Ok(()),
-        };
-        // The root of a new record takes its setup from the engine, which crafts it from the
-        // standing, once the fact
-        // teach and each enable after it were heard: each chain then has what the setup of the root
-        // gives it.
-        if let Some((_, _, 0)) = teach.take() {
-          *taught = true;
-          let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
-          if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
-            root.1 = every;
-          }
-          return Ok(());
-        }
-        // Each enable is said before any rung plays. An enable that the journal says again plays
-        // nothing: the record holds each rung that it played, which the life plays again in its
-        // place, so the ear only takes again what each chain has.
-        if a.kind() != ENABLE {
-          for one in &new {
-            say(&mut co, one.enable());
-          }
-        }
-        let again = a.by() == JOURNAL;
-        for one in new {
-          let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
-            for chain in chains.iter_mut() {
-              let word = worded(&one, chain);
-              if !again {
-                ring(&mut co, &chain.0, &word).await?;
-              }
-            }
-            enabled.push(one);
-            continue;
-          };
-          if enabled[at].word != one.word && !again {
-            let word = reloads(&one.word);
-            for (chain, had) in chains.iter() {
-              if had.contains(&one.name) {
-                ring(&mut co, chain, &word).await?;
-              }
-            }
-          }
-          enabled[at] = one;
-        }
-        Ok(())
-      }
-      .await;
-      kept.replace(held);
+      let mut held: Told = co.held()?;
+      let stepped = offered.step(&mut co, &mut held, &a).await;
+      co.keep(held);
       stepped?;
     }
   })
+}
+
+/// What the host gives the ear of the extensions: the extensions that it turns on, and the places
+/// of the life.
+struct Offered {
+  given: Vec<Skill>,
+  places: Places,
+}
+
+impl Offered {
+  /// One fact that the ear heard: what it changes of what the ear keeps, and each extension that it
+  /// plays.
+  async fn step(&self, co: &mut Co, held: &mut Told, a: &Fact) -> Result<(), Fault> {
+    let Self { given, places } = self;
+    let new = match a.kind() {
+      "chain" if a.question() => return held.born(co, a).await,
+      "done" if named(a.about(), "stand") => held.stood(co, a, given).await?,
+      TEACH => held.taught_by(a),
+      ENABLE if held.teach.is_some() => held.enabled_by(a),
+      "done" if named(a.about(), "write") && a.by() != JOURNAL => {
+        held.written(co, a, places).await?
+      }
+      config::CONFIGURED if a.by() != JOURNAL => held.reconfigured(co, a, places).await?,
+      ENABLE => Some(Skill::of(a).filter(|one| !held.enabled.contains(one)).into_iter().collect()),
+      _ => None,
+    };
+    match new {
+      Some(new) => held.played(co, a, new).await,
+      None => Ok(()),
+    }
+  }
+}
+
+impl Told {
+  /// Whether the life runs the extension of a name.
+  fn runs(&self, name: &str) -> bool {
+    self.enabled.iter().any(|one| one.name == name)
+  }
+
+  /// A chain at its birth, which the ear hears before the call that made it returns. The chain has
+  /// what its origin had, which it made again. A chain with no source in a life whose root took its
+  /// setup forks that setup, which holds each extension of every chain, so the ear plays nothing on
+  /// it.
+  async fn born(&mut self, co: &mut Co, a: &Fact) -> Result<(), Fault> {
+    let Self { enabled, chains, taught, .. } = self;
+    let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
+    let had = chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
+    if *taught {
+      let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
+      chains.push((a.about().to_owned(), had.unwrap_or_else(|| every.collect())));
+      return Ok(());
+    }
+    chains.push((a.about().to_owned(), had.unwrap_or_default()));
+    if let Some(born) = chains.last_mut() {
+      for one in enabled.iter() {
+        play(co, one, born).await?;
+      }
+    }
+    Ok(())
+  }
+
+  /// The first stand that this life answers, which sets up the root of a new record when the
+  /// standing names a doctrine: the ear says the fact teach, with the count of the enables that
+  /// follow it, then each enable, and it plays the setup once it heard them, as the journal of a
+  /// later life says them again. Else it gives each extension of the host that the life does not
+  /// run.
+  async fn stood(
+    &mut self,
+    co: &mut Co,
+    a: &Fact,
+    given: &[Skill],
+  ) -> Result<Option<Vec<Skill>>, Fault> {
+    let Self { refused, enabled, chains, teach, taught } = self;
+    // A life born on a checkpoint holds the teach and the enables of its root in the turns that
+    // the checkpoint carries, which no journal says again: the ear reads them there, as a whole
+    // replay of the record hears them, and teaches nothing again. It reads them at a stand that the
+    // journal says again too, so a later life plays the enables of that stand as the life that
+    // said them did.
+    if !*taught && teach.is_none() {
+      let (taught_root, enables) = (rooted(co, TEACH).await?, rooted(co, ENABLE).await?);
+      if let Some(was) = reborn(&taught_root, &enables, chains) {
+        *enabled = was;
+        *taught = true;
+      }
+    }
+    if a.by() == JOURNAL {
+      return Ok(None);
+    }
+    // An open replays the note that the record holds, and makes no new one.
+    if !told(co, &refused.join("\n")).await? {
+      tell(co, refused);
+    }
+    refused.clear();
+    let new: Vec<Skill> = given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
+    if !*taught
+      && teach.is_none()
+      && let Some((actor, path)) = doctrine(co).await?
+      && bare(co).await?
+    {
+      let count = Object::int(i64::try_from(new.len()).unwrap_or(i64::MAX));
+      say(co, Fact::says(TEACH, ROOT, [Object::string(&actor), Object::string(&path), count]));
+      for one in &new {
+        say(co, one.enable());
+      }
+      return Ok(None);
+    }
+    Ok(Some(new))
+  }
+
+  /// The fact teach, which names the actor and the doctrine of the setup of the root and the count
+  /// of the enables that follow it; with no enable to wait for, the setup plays at once.
+  fn taught_by(&mut self, a: &Fact) -> Option<Vec<Skill>> {
+    let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    let count = a.word(2).and_then(|one| one.as_int()).unwrap_or(0);
+    if let (Some(actor), Some(path)) = (text(0), text(1)) {
+      self.teach = Some((actor, path, count));
+    }
+    (count <= 0).then(Vec::new)
+  }
+
+  /// An enable that the setup of the root waits for; the setup plays once the last one came.
+  fn enabled_by(&mut self, a: &Fact) -> Option<Vec<Skill>> {
+    if let Some(one) = Skill::of(a) {
+      match self.enabled.iter_mut().find(|two| two.name == one.name) {
+        Some(two) => *two = one,
+        None => self.enabled.push(one),
+      }
+    }
+    if let Some(left) = self.teach.as_mut().map(|one| &mut one.2) {
+      *left -= 1;
+      if *left > 0 {
+        return None;
+      }
+    }
+    Some(Vec::new())
+  }
+
+  /// A write that lands of a config of the project, which turns on each extension that it gives by
+  /// its path and that the life does not run, as the configs do at the tip. A write in the folder
+  /// of an extension that the life runs and that a config turns on reloads it when its word
+  /// changed.
+  async fn written(
+    &self,
+    co: &mut Co,
+    a: &Fact,
+    places: &Places,
+  ) -> Result<Option<Vec<Skill>>, Fault> {
+    let Some(text) = a.word(0).and_then(Text::of) else { return Ok(None) };
+    let home = places.home.as_deref();
+    let Ok(file) = files::placed(Path::new(""), &text.path, home) else { return Ok(None) };
+    let config = projected(Path::new("")).iter().any(|one| file.ends_with(one));
+    if !config && !file.parent().is_some_and(|one| one.join(MANIFEST).is_file()) {
+      return Ok(None);
+    }
+    let Some(project) = skills::project(co, home).await? else { return Ok(None) };
+    if projected(&project).contains(&file) {
+      let (found, refused) = turned(&file, &text.content, places);
+      tell(co, &refused);
+      return Ok(Some(found.into_iter().filter(|one| !self.runs(&one.name)).collect()));
+    }
+    let folders = turned_on(places, &project).map(|got| got.0).unwrap_or_default().into_iter();
+    let mine = folders.filter(|(name, root)| root.as_deref() == file.parent() && self.runs(name));
+    let mut found = (Vec::new(), Vec::new());
+    for (name, root) in mine.filter_map(|(name, root)| Some((name, root?))) {
+      loaded(&name, &root, places, &mut found);
+    }
+    tell(co, &found.1);
+    Ok(Some(found.0.into_iter().filter(|one| !self.enabled.contains(one)).collect()))
+  }
+
+  /// A change of `skills` in the configs through the host, which plays at once each extension that
+  /// it turns on and that the life does not run, as a write of a config of the project does, and
+  /// the journal says again the enables that followed it. One that it turns off plays on until the
+  /// life ends.
+  async fn reconfigured(
+    &self,
+    co: &mut Co,
+    a: &Fact,
+    places: &Places,
+  ) -> Result<Option<Vec<Skill>>, Fault> {
+    let key = a.word(0);
+    let part = |at| key.as_ref().and_then(|key| entry(key, at)?.as_str().map(str::to_owned));
+    if part(0).as_deref() != Some(KEY) {
+      return Ok(None);
+    }
+    let name = part(1);
+    let Some(project) = skills::project(co, places.home.as_deref()).await? else { return Ok(None) };
+    let (found, refused) =
+      configured(places, &project).unwrap_or_else(|no| (Vec::new(), vec![no.message()]));
+    if !told(co, &refused.join("\n")).await? {
+      tell(co, &refused);
+    }
+    let named = |one: &Skill| name.as_ref().is_none_or(|name| *name == one.name);
+    Ok(Some(found.into_iter().filter(|one| !self.runs(&one.name) && named(one)).collect()))
+  }
+
+  /// The extensions that a fact turned on, played on each chain that has them. The root of a new
+  /// record takes its setup from the engine, which crafts it from the standing, once the fact teach
+  /// and each enable after it were heard: each chain then has what the setup of the root gives it.
+  /// Each enable is said before any rung plays. An enable that the journal says again plays
+  /// nothing: the record holds each rung that it played, which the life plays again in its place,
+  /// so the ear only takes again what each chain has.
+  async fn played(&mut self, co: &mut Co, a: &Fact, new: Vec<Skill>) -> Result<(), Fault> {
+    let Self { enabled, chains, teach, taught, .. } = self;
+    if let Some((_, _, 0)) = teach.take() {
+      *taught = true;
+      let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
+      if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
+        root.1 = every;
+      }
+      return Ok(());
+    }
+    if a.kind() != ENABLE {
+      for one in &new {
+        say(co, one.enable());
+      }
+    }
+    let again = a.by() == JOURNAL;
+    for one in new {
+      let Some(two) = enabled.iter_mut().find(|two| two.name == one.name) else {
+        for chain in chains.iter_mut() {
+          let word = worded(&one, chain);
+          if !again {
+            ring(co, &chain.0, &word).await?;
+          }
+        }
+        enabled.push(one);
+        continue;
+      };
+      if two.word != one.word && !again {
+        let word = reloads(&one.word);
+        for (chain, had) in chains.iter() {
+          if had.contains(&one.name) {
+            ring(co, chain, &word).await?;
+          }
+        }
+      }
+      *two = one;
+    }
+    Ok(())
+  }
 }
 
 /// Tells the root why each skill of these lines does not play, in one note, when there is one.
@@ -1151,7 +1198,11 @@ fn reborn(
   for (chain, had) in chains.iter_mut() {
     had.clone_from(&every);
     if chain == ROOT {
-      had.extend(root.iter().filter(|one| !had.contains(one)).cloned().collect::<Vec<_>>());
+      for one in &root {
+        if !had.contains(one) {
+          had.push(one.clone());
+        }
+      }
     }
   }
   Some(all)
@@ -1180,6 +1231,11 @@ async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
 /// on a chain that
 /// has the extension already, and nothing on a chain other than the root that lacks an extension of
 /// the root alone.
+/// The bytes of a text that a part of its parse stands on.
+fn range(part: impl Ranged) -> Range<usize> {
+  usize::from(part.start())..usize::from(part.end())
+}
+
 async fn play(co: &mut Co, one: &Skill, chain: &mut (String, Vec<String>)) -> Result<(), Fault> {
   let word = worded(one, chain);
   ring(co, &chain.0, &word).await

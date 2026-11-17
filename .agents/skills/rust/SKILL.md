@@ -8,6 +8,12 @@ description: The bar of the Rust of furb. The rules that each Rust file meets, e
 Rust here is written as an expert writes it: small, typed, and with one owner for each thing. Simple code is short
 code. Do not add a layer, a trait or a type that the code does not need.
 
+The code is indestructible, fast, memory efficient and simple. Code that you write or change does not panic: no
+`unwrap`, `expect`, `panic!`, `unreachable!` or index that can fail, but a value that the caller handles or a type
+that makes the panic impossible. Each allocation counts: borrow, reuse and move before you clone or collect. Where
+many values live and die together and a measure shows the gain, they take an arena on the `Allocator` of the
+standard library, stable since Rust 1.100, which the pin of the toolchain holds.
+
 The lints in `[workspace.lints]` of `Cargo.toml`, with `clippy.toml`, hold each
 rule that a machine can hold. The rules below that no lint holds are for you and for the review.
 
@@ -75,11 +81,11 @@ A module that does not meet the lints yet says so at its top, one line for each 
    enum State { Idle(Repl), Answering(Answer), Ended(Fault) }
    ```
 
-4. No `unwrap`. An `expect` only for an invariant that no type can hold, with the invariant as its message. First
-   try to make a type hold it.
+4. No `unwrap` and no `expect` outside a test. Make a type hold the invariant, or give the caller a value that it
+   handles. A site that truly cannot fail says why in an `#[expect(clippy::expect_used, reason = "...")]`.
 
    ```rust
-   let first = parts.first().expect("split gives at least one part");
+   let Some(first) = parts.first() else { return Err(Error::Empty) };
    ```
 
 5. No error is dropped. No `let _ =` of a `Result`, and no `.ok()` that hides a failure that the caller must see.
@@ -126,14 +132,21 @@ A module that does not meet the lints yet says so at its top, one line for each 
    fn call(request: &Request)
    ```
 
-9. Ownership before sharing. No `Arc<Mutex<_>>` for a state that one thread or one ear owns: a channel or `&mut`
-   does it. `Rc<RefCell<_>>` only where two owners are real.
+9. One owner for each state, and no `RefCell`. A state that two parts seem to share has
+   one owner, and the other part sends it a message, or the value moves between them, or the owner lends `&mut`.
+   No `Rc<Cell<_>>`, no `Mutex` on one thread, and no other cell in its place. A callback of a library that takes no
+   context sends a message to the one owner, as each callback of the window sends an input that its one handler
+   of the app drains. `clippy.toml` refuses `RefCell`. Two places stand apart, each for a reason that its code says:
+   `Shared` of `src/binding.rs`, the one value that code of a host reaches again while the engine runs it, which
+   N-API checks nowhere; and a thread-local `Cell` of a `Copy` setting that one place sets and each reader reads, as
+   the method by which the terminal of the window measures a character.
 
    ```rust
-   // Not this:
-   let seen = Arc::new(Mutex::new(HashMap::new()));
-   // This: the ear owns it.
-   struct Ear { seen: HashMap<String, Fact> }
+   // Not this: the window shared by each callback, which a nested callback borrowed twice.
+   let window = Rc::new(RefCell::new(window));
+   // This: each callback sends, and the one handler of the app owns the window.
+   area.on_change(move |cx, text| hand.send(cx.app(), Input::Edited(text.to_owned())));
+   app.on_message(move |cx, _: &Due| window.drain(cx.app()));
    ```
 
 10. Borrow before clone. Take `&str` and `&T`, look up with a borrowed key, and clone only to give ownership away.

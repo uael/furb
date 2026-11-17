@@ -3,8 +3,8 @@
 //! module and what each definition gives, reads with the reader of a record and no life, and takes
 //! one more turn on a model that answers from a script. `tests/corpus/README.md` says the rule of
 //! the folders.
-
-#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic_in_result_fn, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the act of a rung, as the tests of the crate do"
@@ -13,13 +13,12 @@
 use crate::yard;
 
 use std::{
-  cell::RefCell,
   fs,
   path::{MAIN_SEPARATOR, Path, PathBuf},
-  rc::Rc,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering::Relaxed},
+    mpsc::{self, Sender},
   },
 };
 
@@ -252,9 +251,9 @@ fn spoken(at: &Path) {
 /// it puts no act that the record answers on to the outside, and no ear of the World says that it
 /// started one, as [`spy`] hears.
 fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
-  let put = Rc::new(RefCell::new(Vec::new()));
+  let (puts, put) = mpsc::channel();
   let opening = Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) };
-  let engine = opening.boot([("spy", spy(Rc::clone(&put)))])?.0;
+  let engine = opening.boot([("spy", spy(puts))])?.0;
   let record = fs::read_to_string(at.join("record.jsonl")).unwrap_or_default();
   let answered: Vec<String> = record
     .lines()
@@ -263,7 +262,7 @@ fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
     .filter_map(|entry| entry[0][1].as_str().map(str::to_owned))
     .collect();
   let put: Vec<String> =
-    put.take().into_iter().filter(|one| answered.contains(&one.1)).map(|one| one.0).collect();
+    put.try_iter().filter(|one| answered.contains(&one.1)).map(|one| one.0).collect();
   assert_eq!(put, Vec::<String>::new(), "{}: the replay is inert", at.display());
   Ok(engine)
 }
@@ -271,7 +270,7 @@ fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
 /// An ear of the host that keeps each act that the life puts on to the outside and each start
 /// that an ear of the World says, with the name of its act: a run, which the Kernel takes, and a
 /// writing, which it runs, are no work of the World.
-fn spy(put: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
+fn spy(put: Sender<(String, String)>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -280,7 +279,7 @@ fn spy(put: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
       let world = !["journal", "kernel", ""].contains(&a.by()) && kind_of(a.by()).is_none();
       if worked || a.kind() == "started" && world {
         let said = format!("{} {} by {}", a.kind(), a.about(), a.by());
-        put.borrow_mut().push((said, a.about().to_owned()));
+        put.send((said, a.about().to_owned())).unwrap();
       }
     }
   })

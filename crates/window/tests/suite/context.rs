@@ -20,7 +20,8 @@ fn the_bar_fills_its_row_and_a_part_that_holds_tokens_takes_a_cell() {
   shows(&app, "Engine");
   let bar = "━".repeat(35);
   let (x, y) = at(&app, &bar, LEFT);
-  app.click(x, y);
+  // The tab of the cache at the head of the open box shows its other view.
+  clicked(&app, "Cache", LEFT, 0);
   shows(&app, "Written to the cache   8.4k    1%");
   // The parts read 98k, 8.4k and 17k of 1M: the bar gives each a run of its color, the 8.4k too,
   // which holds less than a cell, and the free room the rest.

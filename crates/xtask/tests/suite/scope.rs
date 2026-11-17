@@ -1,4 +1,5 @@
 //! The task `scope`: the paths of a change say which jobs of the gates run.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{
   io::Write as _,

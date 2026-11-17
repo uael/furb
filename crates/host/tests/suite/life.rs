@@ -1,6 +1,9 @@
 //! A life on its thread, as a client of the host holds it: its commands, its events in order, and
 //! its end.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the tests block on the runtime that tokio starts for them"
@@ -108,12 +111,12 @@ pub(crate) async fn until(
 
 /// Whether an event is the act of a name, done.
 pub(crate) fn done(id: &str) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)))
+  move |event| matches!(event, Event::Act(act) if *act.id == *id && matches!(act.phase, Phase::Done(_)))
 }
 
 /// Whether an event is the act of a name, in a state.
 fn stands(id: String, state: State) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && act.state == state)
+  move |event| matches!(event, Event::Act(act) if *act.id == *id && act.state == state)
 }
 
 /// The act that a command made.
@@ -158,14 +161,14 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_until_the_end() {
   let phases: Vec<&Phase> = got
     .iter()
     .filter_map(|one| match &*one.1 {
-      Event::Act(act) if act.id == id => Some(&act.phase),
+      Event::Act(act) if *act.id == *id => Some(&act.phase),
       _ => None,
     })
     .collect();
   assert_eq!(phases, [&Phase::Asked, &Phase::Started, &Phase::Done(json!("ok"))]);
   let asked =
     got.iter().position(|one| matches!(&*one.1, Event::Fact(fact) if fact[1] == json!(id)));
-  let act = got.iter().position(|one| matches!(&*one.1, Event::Act(act) if act.id == id));
+  let act = got.iter().position(|one| matches!(&*one.1, Event::Act(act) if *act.id == *id));
   assert!(asked.unwrap() < act.unwrap());
   assert!(got.iter().any(|one| *one.1 == Event::Changed("chain1".to_owned())));
   assert_eq!(life.send(Command::End).await.unwrap(), Reply::Done);
@@ -227,6 +230,35 @@ async fn a_fact_said_while_a_reply_at_the_tip_waits_is_in_its_events_and_not_in_
   let rung =
     |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "rung" && fact[1] == json!(id));
   until(&mut events, rung).await;
+}
+
+/// The commands that one rung starts at once, which the life tells as one batch of events.
+const STARTED: usize = 40;
+
+/// A reader that hears a command start finds it among the commands of the life at once, so a
+/// handover that the reader asks then waits for it, also while the life still tells the rest of
+/// the batch in which it heard it.
+#[tokio::test]
+async fn each_command_that_a_reader_hears_start_stands_among_the_commands_of_the_life() {
+  let at = place("commands");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let word = format!("started = [bash('sleep 60') for _ in range({STARTED})]");
+  made(&life, rung(&word)).await;
+  let starts = |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Bash && !matches!(act.phase, Phase::Done(_)));
+  let mut heard = Vec::new();
+  while heard.len() < STARTED {
+    let logged = until(&mut events, starts).await.pop().expect("the start of a command");
+    let Event::Act(act) = &*logged.1 else { unreachable!() };
+    if !heard.contains(&act.id) {
+      assert!(
+        life.commands().contains(&act.id),
+        "{} started and is no command of the life",
+        act.id
+      );
+      heard.push(Arc::clone(&act.id));
+    }
+  }
 }
 
 #[tokio::test]
@@ -362,7 +394,7 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   let mut tip = Box::pin(life.events(Seq::MAX));
   let got = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
   let Event::Ended(Some(fault)) = &*got.last().unwrap().1 else { panic!("the end has a fault") };
-  assert!(!fault.is_empty());
+  assert_ne!(fault, "");
   assert!(events.next().await.is_none());
   let heard = time::timeout(
     Duration::from_secs(10),
@@ -395,7 +427,7 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_s
   assert_eq!(told, facts, "the life tells each fact of the record");
   let threads = life.send(Command::Threads { on: None, at: None, read: None, site: None }).await;
   let Ok(Reply::Threads(threads)) = threads else { panic!("the threads: {threads:?}") };
-  let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_str()).collect();
+  let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_ref()).collect();
   assert_eq!(prompts, ["prompt1", "prompt3"], "a window reads the threads of the record");
   let reach = Reach { before: None, limit: 10 };
   let page = life.send(Command::Thread { thread: "prompt1".to_owned(), reach, at: None }).await;
@@ -444,7 +476,7 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   .await;
   let Some(Event::Act(wait)) = held.last().map(|one| &*one.1) else { panic!("an act") };
   assert_eq!(wait.pause.as_ref().map(|one| one.by.as_str()), Some("operator"));
-  let chain = |one: &&Logged| matches!(&*one.1, Event::Act(act) if act.id == "chain1");
+  let chain = |one: &&Logged| matches!(&*one.1, Event::Act(act) if *act.id == *"chain1");
   let Some(Event::Act(root)) = held.iter().rfind(chain).map(|one| &*one.1) else {
     panic!("an act")
   };
@@ -615,7 +647,7 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
     panic!("the acts then")
   };
   assert!(then.iter().all(|act| act.began <= first), "{then:?}");
-  assert!(!then.iter().any(|act| act.id == asked), "{then:?}");
+  assert!(!then.iter().any(|act| *act.id == *asked), "{then:?}");
   life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
   let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
@@ -905,7 +937,7 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   let why = Some("for lunch".to_owned());
   life.send(Command::Pause { id: "chain1".to_owned(), why }).await.unwrap();
   let paused = |event: &Event| {
-    matches!(event, Event::Act(act) if act.id == "chain1"
+    matches!(event, Event::Act(act) if *act.id == *"chain1"
       && act.pause.as_ref().is_some_and(|one| one.why == Some(json!("for lunch"))))
   };
   until(&mut events, paused).await;
@@ -1102,7 +1134,7 @@ async fn a_life_across_a_crossing_tells_the_acts_of_its_history_each_at_the_plac
     .iter()
     .filter(|act| {
       let at = usize::try_from(act.began).ok().and_then(|one| one.checked_sub(1));
-      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_str())
+      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_ref())
     })
     .map(|act| format!("{} at {}", act.id, act.began))
     .collect();
@@ -1140,7 +1172,7 @@ async fn a_reader_that_attaches_late_reads_each_line_that_a_running_command_prin
     "a reader at 0 reads the whole output so far, in the facts of the log"
   );
   let running = got.iter().any(
-    |(_, e)| matches!(&**e, Event::Act(a) if a.id == id && !matches!(a.phase, Phase::Done(_))),
+    |(_, e)| matches!(&**e, Event::Act(a) if *a.id == *id && !matches!(a.phase, Phase::Done(_))),
   );
   assert!(running, "the command still runs while the reader reads");
 }

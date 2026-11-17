@@ -197,13 +197,17 @@ pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
 pub(super) async fn models_at(program: &Program, now: u64) -> Option<Vec<Found>> {
   let stamp = stamp(program);
   let told = match held(&stamp, now) {
-    Some(told) if told.old(now) => {
-      let (program, was) = (program.clone(), told.clone());
-      runtime().spawn(async move {
-        ask(&program, stamp, was, now).await;
-      });
-      told
-    }
+    Some(told) if told.old(now) => match runtime() {
+      Ok(runtime) => {
+        let (program, was) = (program.clone(), told.clone());
+        runtime.spawn(async move {
+          ask(&program, stamp, was, now).await;
+        });
+        told
+      }
+      // No runtime takes the ask to the background, so this caller waits for it.
+      Err(_) => ask(program, stamp, told, now).await,
+    },
     Some(told) => told,
     None => ask(program, stamp, Told::default(), now).await,
   };

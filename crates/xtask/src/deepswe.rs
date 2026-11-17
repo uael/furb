@@ -91,6 +91,7 @@ macro_rules! say {
     eprintln!("[deepswe] {}", format_args!($($told)*))
   };
 }
+use crate::field;
 use say;
 
 /// The verbs of the rig.
@@ -359,7 +360,7 @@ impl Rig {
     let solution = read(&seeded.task.dir.join("solution").join("solution.patch"))?;
     written(&patch, &solution)?;
     say!("grading the reference solution ({} bytes)", solution.len());
-    if self.graded(&seeded, &patch, &runs.join("reward.json"))?["reward"] == 1 {
+    if field(&self.graded(&seeded, &patch, &runs.join("reward.json"))?, "reward") == 1 {
       say!("the rig grades this task faithfully");
       Ok(ExitCode::SUCCESS)
     } else {
@@ -487,8 +488,7 @@ impl Rig {
     };
     let told: Value = serde_json::from_slice(&read(&said)?).unwrap_or(Value::Null);
     let seconds = (began.elapsed().as_secs_f64() * 10.0).round() / 10.0;
-    let numbers =
-      json!({"usd": told["total_cost_usd"], "wall_seconds": seconds, "value": told["result"]});
+    let numbers = json!({"usd": field(&told, "total_cost_usd"), "wall_seconds": seconds, "value": field(&told, "result")});
     written(&runs.join("numbers.json"), pretty(&numbers)?.as_bytes())?;
     let patch = runs.join("model.patch");
     self.frozen(&app, &seeded.syn, &patch)?;
@@ -514,16 +514,17 @@ impl Rig {
       written(&traces.join(format!("{name}.jsonl")), &read(&runs.join("record.jsonl"))?)?;
     }
     let out_of = |passed: &str, total: &str| {
-      (!reward[total].is_null()).then(|| format!("{}/{}", reward[passed], reward[total]))
+      (!field(&reward, total).is_null())
+        .then(|| format!("{}/{}", field(&reward, passed), field(&reward, total)))
     };
     let result = json!({
-      "task": task, "to": meta["to"], "reward": reward["reward"], "partial": reward["partial"],
+      "task": task, "to": field(meta, "to"), "reward": field(&reward, "reward"), "partial": field(&reward, "partial"),
       "f2p": out_of("f2p_passed", "f2p_total"), "p2p": out_of("p2p_passed", "p2p_total"),
-      "usd": numbers["usd"], "wall_seconds": numbers["wall_seconds"], "answers": numbers["answers"],
-      "commands": numbers["commands"], "value": numbers["value"], "stopped": meta["stopped"],
-      "crash": numbers["crash"],
+      "usd": field(&numbers, "usd"), "wall_seconds": field(&numbers, "wall_seconds"), "answers": field(&numbers, "answers"),
+      "commands": field(&numbers, "commands"), "value": field(&numbers, "value"), "stopped": field(meta, "stopped"),
+      "crash": field(&numbers, "crash"),
       "engine": spoke(self.command("git").arg("-C").arg(&self.root).args(["rev-parse", "HEAD"]))?,
-      "base": meta["base"], "at": stamp,
+      "base": field(meta, "base"), "at": stamp,
     });
     written(&traces.join(format!("{name}.result.json")), pretty(&result)?.as_bytes())?;
     say!("archived into traces/{name}.result.json");
@@ -828,7 +829,9 @@ fn replied(fact: &Value) -> bool {
 fn items(value: &Value) -> Option<Vec<Value>> {
   match value {
     Value::Array(items) => Some(items.clone()),
-    Value::Object(_) if value["is"] == "tuple" => value["args"][0].as_array().cloned(),
+    Value::Object(_) if field(value, "is") == "tuple" => {
+      value.pointer("/args/0")?.as_array().cloned()
+    }
     _ => None,
   }
 }
@@ -837,7 +840,7 @@ fn items(value: &Value) -> Option<Vec<Value>> {
 fn number(value: &Value) -> f64 {
   value
     .as_f64()
-    .or_else(|| value["args"][0].as_str().and_then(|one| one.parse().ok()))
+    .or_else(|| value.pointer("/args/0")?.as_str().and_then(|one| one.parse().ok()))
     .unwrap_or_default()
 }
 
@@ -845,10 +848,10 @@ fn number(value: &Value) -> f64 {
 fn stood(record: &Path) -> Option<String> {
   let text = String::from_utf8_lossy(&read(record).ok()?).into_owned();
   text.lines().rev().filter_map(|line| serde_json::from_str::<Value>(line).ok()).find_map(|entry| {
-    let fact = &entry[0];
-    let stand =
-      fact[0] == "done" && fact[1].as_str().is_some_and(|about| about.starts_with("stand"));
-    stand.then(|| items(&fact[3])?.get(2)?.as_str().map(str::to_owned)).flatten()
+    let fact = entry.get(0)?;
+    let word = |at: usize| fact.get(at).and_then(Value::as_str);
+    let stand = word(0) == Some("done") && word(1).is_some_and(|about| about.starts_with("stand"));
+    stand.then(|| items(fact.get(3)?)?.get(2)?.as_str().map(str::to_owned)).flatten()
   })
 }
 
@@ -867,9 +870,16 @@ fn numbered(life: &Life, mark: &Mark, value: Value, task: &str) -> Result<(), Fa
   );
   let json = |what: &'static str| move |source| Fault::Json { what: what.to_owned(), source };
   let mut kept = serde_json::to_value(&numbers).map_err(json("the numbers of a run"))?;
-  (kept["value"], kept["wall_seconds"], kept["root"]) = (value, json!(seconds), json!(task));
-  if let Some(crash) = &mark.crash {
-    kept["crash"] = serde_json::to_value(crash.kept(&life.runs)?).map_err(json("the kills"))?;
+  let crash = match &mark.crash {
+    Some(crash) => Some(serde_json::to_value(crash.kept(&life.runs)?).map_err(json("the kills"))?),
+    None => None,
+  };
+  if let Some(fields) = kept.as_object_mut() {
+    fields.extend(
+      [("value", value), ("wall_seconds", json!(seconds)), ("root", json!(task))]
+        .map(|(key, one)| (key.to_owned(), one)),
+    );
+    fields.extend(crash.map(|crash| ("crash".to_owned(), crash)));
   }
   written(&life.runs.join("numbers.json"), pretty(&kept)?.as_bytes())
 }
@@ -1004,8 +1014,9 @@ pub(crate) fn furb(root: &Path) -> Result<PathBuf, Fault> {
   )?;
   let metadata: Value = serde_json::from_slice(&told.stdout)
     .map_err(|source| Fault::Json { what: "cargo metadata".to_owned(), source })?;
-  let target =
-    metadata["target_directory"].as_str().map_or_else(|| root.join("target"), PathBuf::from);
+  let target = field(&metadata, "target_directory")
+    .as_str()
+    .map_or_else(|| root.join("target"), PathBuf::from);
   Ok(target.join("debug").join(format!("furb{}", env::consts::EXE_SUFFIX)))
 }
 

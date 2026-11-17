@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-  act::{Act, Maker, Read, fault},
+  act::{Act, Maker, Name, Read, fault, read_name},
   anchor::Anchor,
   card::Card,
   protocol::{Node, Slot},
@@ -150,7 +150,8 @@ pub struct Agent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Exchange {
   pub at: usize,
-  pub message: String,
+  #[serde(deserialize_with = "read_name")]
+  pub message: Name,
   #[serde(default)]
   pub said_at: u64,
   pub by: Maker,
@@ -338,13 +339,15 @@ impl Block {
     let taken: Vec<usize> = self.lines.iter().map(Line::rows).collect();
     let edges =
       |first: usize, end: usize| usize::from(first > 0) + usize::from(end < all || self.more);
-    let (mut first, mut end, mut used) = (at, at + 1, taken[at]);
+    // Each place that the loop reads stands in the lines, as `first > 0` and `end < all` hold.
+    let rows = |at: usize| taken.get(at).copied().unwrap_or_default();
+    let (mut first, mut end, mut used) = (at, at + 1, rows(at));
     loop {
-      if first > 0 && used + taken[first - 1] + edges(first - 1, end) <= ROLLS {
+      if first > 0 && used + rows(first - 1) + edges(first - 1, end) <= ROLLS {
         first -= 1;
-        used += taken[first];
-      } else if end < all && used + taken[end] + edges(first, end + 1) <= ROLLS {
-        used += taken[end];
+        used += rows(first);
+      } else if end < all && used + rows(end) + edges(first, end + 1) <= ROLLS {
+        used += rows(end);
         end += 1;
       } else {
         break first..end;
@@ -391,7 +394,7 @@ impl Thought {
   pub fn first(&self) -> &str {
     let text = self.text.trim_start();
     let line = text.split('\n').next().unwrap_or_default();
-    line.find(". ").map_or(line, |at| &line[..=at]).trim_end()
+    line.find(". ").and_then(|at| line.get(..=at)).unwrap_or(line).trim_end()
   }
 }
 
@@ -399,7 +402,8 @@ impl Thought {
 /// question, or the resolve of its message by a person, with its act and its text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Said {
-  pub act: String,
+  #[serde(deserialize_with = "read_name")]
+  pub act: Name,
   pub kind: Saying,
   pub text: String,
 }

@@ -1,4 +1,5 @@
 //! The image of each frame of a marker that a replay writes, drawn from its cells.
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 
 use std::{fs, io::Cursor};
 

@@ -69,7 +69,7 @@ pub use time::time;
 use crate::{
   ear::{Co, say},
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Object, entry},
 };
 #[cfg(unix)]
 use rustix::fs;
@@ -106,10 +106,7 @@ pub(crate) async fn here<W: 'static>(
   let on = vec![("on", Object::string(on))];
   let cwd = co.call("cwd", vec![], on).await?;
   let standing = co.call("standing", vec![], vec![]).await?;
-  let directory = standing
-    .as_ref()
-    .items()
-    .and_then(|held| held.get(1).and_then(|one| one.as_str().map(str::to_owned)));
+  let directory = entry(&standing.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
   let cwd = cwd.as_ref().as_str().map(str::to_owned).unwrap_or_default();
   let directory = files::placed(Path::new(""), &directory.unwrap_or_default(), home)?;
   files::placed(&directory, &cwd, home)

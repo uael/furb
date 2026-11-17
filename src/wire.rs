@@ -6,7 +6,7 @@
 
 use crate::{
   Fault, Object, ObjectRef, Text,
-  value::{DEEPEST, Given, IS, marked},
+  value::{DEEPEST, Given, IS, items, marked, pairs},
 };
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 use serde_json::{Number, Value, json, value::RawValue};
@@ -178,7 +178,8 @@ impl Reader<'_> {
     while matches!(self.byte(), b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
       self.at += 1;
     }
-    let raw = &self.text[start..self.at];
+    // Each byte of a number is ASCII, so the range ends on a character.
+    let raw = self.text.get(start..self.at).unwrap_or_default();
     if !raw.contains(['.', 'e', 'E']) {
       return Ok(graph.push(MontyNode::Int(safe(raw.parse().ok())?)));
     }
@@ -232,10 +233,10 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, form: Form) -> Value {
   if value.type_name() == "type" {
     return json!(value.py_repr());
   }
-  if let Some(values) = value.items() {
+  if let Some(values) = items(value) {
     return listed(value, values, depth, form);
   }
-  if let Some(values) = value.pairs() {
+  if let Some(values) = pairs(value) {
     return mapped(value, values, depth, form);
   }
   json!(value.py_repr())
@@ -273,9 +274,13 @@ fn plain(value: ObjectRef<'_>, form: Form) -> Option<Value> {
 }
 
 /// A list, a tuple, a set or a namedtuple, as an array.
-fn listed(value: ObjectRef<'_>, items: Vec<ObjectRef<'_>>, depth: usize, form: Form) -> Value {
-  let items = items.into_iter().map(|one| outward_at(one, depth + 1, form));
-  let items = Value::Array(items.collect());
+fn listed<'a>(
+  value: ObjectRef<'a>,
+  items: impl Iterator<Item = ObjectRef<'a>>,
+  depth: usize,
+  form: Form,
+) -> Value {
+  let items = Value::Array(items.map(|one| outward_at(one, depth + 1, form)).collect());
   // The store reads a line as an entry that holds one fact, and boot takes both as the tuples they
   // are, so in the record a tuple keeps its mark only below them.
   if form == Form::Record && depth > 1 && value.type_name() == "tuple" {
@@ -286,14 +291,14 @@ fn listed(value: ObjectRef<'_>, items: Vec<ObjectRef<'_>>, depth: usize, form: F
 }
 
 /// A dict or an instance, as an object, or as a mark when a key is no text.
-fn mapped(
-  value: ObjectRef<'_>,
-  pairs: Vec<(ObjectRef<'_>, ObjectRef<'_>)>,
+fn mapped<'a>(
+  value: ObjectRef<'a>,
+  pairs: impl Iterator<Item = (ObjectRef<'a>, ObjectRef<'a>)> + Clone,
   depth: usize,
   form: Form,
 ) -> Value {
   let dict = value.type_name() == "dict";
-  if pairs.iter().any(|(key, _)| key.as_str().is_none()) {
+  if pairs.clone().any(|(key, _)| key.as_str().is_none()) {
     if !dict {
       return json!(value.py_repr());
     }

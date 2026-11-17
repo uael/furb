@@ -1,9 +1,7 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
 use std::{
-  cell::RefCell,
   collections::{HashMap, HashSet},
-  rc::Rc,
   sync::{Arc, PoisonError, RwLock},
 };
 
@@ -35,7 +33,7 @@ use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Object, entry, items},
 };
 use std::fmt;
 use std::mem;
@@ -64,8 +62,6 @@ pub(super) struct Hearer {
   systems: Systems,
   native: Search,
   replies: Replies,
-  /// What the ear keeps of the stands that it heard, which the image of a life holds.
-  stood: Rc<RefCell<Stood>>,
   /// The stand that the ear answers next with the standing, and whether a word made it.
   stands: Option<(String, bool)>,
 }
@@ -88,7 +84,7 @@ pub(super) struct Stood {
 pub(super) const WOKEN: u32 = 3;
 
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String, stood: Rc<RefCell<Stood>>) -> Self {
+  pub(super) fn new(provider: Provider, life: String) -> Self {
     let native = provider.search();
     let Provider {
       directory,
@@ -135,7 +131,6 @@ impl Hearer {
       systems,
       native,
       replies: Replies::default(),
-      stood,
       stands: None,
     }
   }
@@ -168,7 +163,8 @@ impl Hearer {
       return;
     }
     let word = fact::named(a.by(), "rung");
-    let first = !mem::replace(&mut self.stood.borrow_mut().first, true);
+    // What the ear keeps of the stands that it heard, which the image of a life holds.
+    let first = co.kept::<Stood>().is_ok_and(|stood| !mem::replace(&mut stood.first, true));
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -184,7 +180,8 @@ impl Hearer {
       );
       return;
     }
-    if !self.gone.is_empty() && self.stood.borrow_mut().lacked.insert(a.on().to_owned()) {
+    let lacked = |stood: &mut Stood| stood.lacked.insert(a.on().to_owned());
+    if !self.gone.is_empty() && co.kept::<Stood>().is_ok_and(lacked) {
       told(co, a.on(), &departed(&about, &self.gone));
     }
     self.stands = Some((about, word));
@@ -219,13 +216,20 @@ impl Hearer {
   /// and asks again at once, on the models that stand now.
   pub(super) async fn answer(&mut self, co: &mut Co<Replied>) -> Result<(), Fault> {
     let Some((about, word)) = self.stands.take() else { return Ok(()) };
+    let here;
+    let places = if let Some(one) = &self.places {
+      one
+    } else {
+      here = skill::Places::here();
+      &here
+    };
     let given = standing(
       &self.models.read().unwrap_or_else(PoisonError::into_inner),
       &self.directory,
       &self.actor,
       self.skills.as_deref(),
       &self.members.get(),
-      &self.places.clone().unwrap_or_else(skill::Places::here),
+      places,
     );
     say(co, Fact::says("done", &about, [given]));
     if word {
@@ -302,7 +306,7 @@ impl Hearer {
     loop {
       let last = lineage.last().map(|one| Object::string(one.as_str()));
       let act = co.call("get", last.into_iter().collect(), vec![]).await?;
-      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      let source = entry(&act.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
       match source.filter(|one| !one.is_empty()) {
         Some(source) => lineage.push(source),
         None => break,
@@ -392,7 +396,7 @@ impl Hearer {
     reply.waits = true;
     // The next turn of the chain pays the request of the call that failed.
     let failed = reply.call.bill.take().map_or(0.0, |bill| bill.dollars);
-    *self.replies.owed.entry(reply.chain.clone()).or_default() += failed;
+    owe(&mut self.replies.owed, &reply.chain, failed);
     if let Some(watch) = reply.call.watch.as_mut() {
       watch.forget();
     }
@@ -514,7 +518,7 @@ impl Hearer {
     // chain.
     if a.by() != a.about() || !turned(a) {
       let read = call.bill.map_or(0.0, |bill| bill.dollars);
-      *self.replies.owed.entry(chain.clone()).or_default() += read;
+      owe(&mut self.replies.owed, &chain, read);
     }
     if a.by() == a.about() {
       return;
@@ -566,17 +570,17 @@ impl Hearer {
 /// Whether a fact is a done that ended a reply with a turn of the model.
 fn turned(a: &Fact) -> bool {
   a.kind() == "done"
-    && a
-      .word(0)
-      .and_then(|one| one.items())
-      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"))
+    && a.word(0).is_some_and(|turn| {
+      items(turn).is_some_and(|held| held.len() == 4)
+        && entry(&turn, 0).and_then(|one| one.as_str()) == Some("assistant")
+    })
 }
 
 /// The facts of a chain that a speaker said, in order, from the record.
 async fn said_by(co: &mut Co<Replied>, chain: &str, by: &str) -> Vec<Fact> {
   let of = [chain, by].map(Object::string).to_vec();
   let Ok(got) = co.call("transcript", of, vec![]).await else { return Vec::new() };
-  (0..).map_while(|at| value::entry(&got.as_ref(), at)).filter_map(Fact::of).collect()
+  items(got.as_ref()).into_iter().flatten().filter_map(Fact::of).collect()
 }
 
 /// How many wakes the provider gave a chain since its last turn, while the last pause or wake of
@@ -776,4 +780,13 @@ pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tells
     drop(tells.send(Replied::Wrote(Wrote { id: id.clone(), text, thinking })));
   });
   Tells { told, billed }
+}
+
+/// What a chain owes for the calls of its model, grown by an amount: the map copies the name of a
+/// chain only the first time that it holds it.
+fn owe(owed: &mut HashMap<String, f64>, chain: &str, amount: f64) {
+  match owed.get_mut(chain) {
+    Some(one) => *one += amount,
+    None => drop(owed.insert(chain.to_owned(), amount)),
+  }
 }

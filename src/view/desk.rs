@@ -1,6 +1,8 @@
 //! The desk of the operator: each question that waits for him and each notice that he did not
 //! dismiss, with what the line of his answer is for the shape that each one asks.
 
+use std::sync::Arc;
+
 use crate::{
   value::{Fault, Object},
   wire::outward,
@@ -19,9 +21,9 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
     let word = |at: usize| act.words.get(at).and_then(|one| one.as_str()).unwrap_or_default();
     let shape = if notice { "None" } else { word(0) };
     Ask {
-      id: act.id.clone(),
-      chain: act.chain.clone(),
-      by: act.by.clone(),
+      id: Arc::clone(&act.id),
+      chain: Arc::clone(&act.chain),
+      by: Arc::clone(&act.by),
       shape: shape.to_owned(),
       message: word(1).to_owned(),
       notice,
@@ -33,7 +35,7 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
   };
   let asks = acts.into_iter().flat_map(|act| {
     let question = act.owed().then(|| asked(act, false));
-    question.into_iter().chain(notices.contains(&act.id.as_str()).then(|| asked(act, true)))
+    question.into_iter().chain(notices.contains(&act.id.as_ref()).then(|| asked(act, true)))
   });
   let mut asks: Vec<Ask> = asks.collect();
   // A question stands before a notice of the same moment.
@@ -93,12 +95,12 @@ fn said(form: &Shape) -> String {
     Shape::Choice(values) => {
       format!("one of {}", values.iter().map(json_of).collect::<Vec<_>>().join(", "))
     }
-    Shape::List(of) => {
-      of.as_ref().map_or("a list".to_owned(), |of| format!("a list, each item {}", said(of)))
-    }
-    Shape::Dict(of) => {
-      of.as_ref().map_or("an object".to_owned(), |of| format!("an object, each value {}", said(of)))
-    }
+    Shape::List(of) => of
+      .as_ref()
+      .map_or_else(|| "a list".to_owned(), |of| format!("a list, each item {}", said(of))),
+    Shape::Dict(of) => of
+      .as_ref()
+      .map_or_else(|| "an object".to_owned(), |of| format!("an object, each value {}", said(of))),
     Shape::Tuple(of) => {
       let noun = if of.len() == 1 { "item" } else { "items" };
       let each: Vec<String> = of.iter().map(said).collect();
@@ -117,12 +119,13 @@ fn sample(form: &Shape, n: usize) -> String {
     Shape::Float => two("1.5", "2.5"),
     Shape::Bool => two("true", "false"),
     Shape::None => "null".to_owned(),
-    Shape::Choice(values) => json_of(&values[n % values.len()]),
-    Shape::List(of) => of
-      .as_ref()
-      .map_or("[\"a\", 1]".to_owned(), |of| format!("[{}, {}]", sample(of, 0), sample(of, 1))),
+    Shape::Choice(values) => values.get(n % values.len().max(1)).map_or_else(String::new, json_of),
+    Shape::List(of) => of.as_ref().map_or_else(
+      || "[\"a\", 1]".to_owned(),
+      |of| format!("[{}, {}]", sample(of, 0), sample(of, 1)),
+    ),
     Shape::Dict(of) => {
-      format!("{{\"a\": {}}}", of.as_ref().map_or("1".to_owned(), |of| sample(of, n)))
+      format!("{{\"a\": {}}}", of.as_ref().map_or_else(|| "1".to_owned(), |of| sample(of, n)))
     }
     Shape::Tuple(of) => {
       format!("[{}]", of.iter().map(|one| sample(one, n)).collect::<Vec<_>>().join(", "))
@@ -151,7 +154,10 @@ fn line(form: &Shape) -> String {
       };
       format!("a JSON {noun}{of}, as {}", sample(form, 0))
     }
-    Shape::Tuple(_) => format!("a JSON {}, as {}", &said(form)[2..], sample(form, 0)),
+    Shape::Tuple(_) => {
+      let said = said(form);
+      format!("a JSON {}, as {}", said.get(2..).unwrap_or(&said), sample(form, 0))
+    }
     Shape::Either(of) => {
       let arms: Vec<&Shape> = of.iter().filter(|one| !matches!(one, Shape::None)).collect();
       let words: Vec<String> = arms

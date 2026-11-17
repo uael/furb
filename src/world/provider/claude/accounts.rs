@@ -130,7 +130,7 @@ impl Accounts {
     let mut free = (0..self.count()).filter(|at| Self::free_in(state, *at, now));
     match self.switch {
       Switch::Failover => free.next(),
-      Switch::Spread => free.min_by_key(|at| state.given[*at]),
+      Switch::Spread => free.min_by_key(|at| state.given.get(*at).copied().unwrap_or_default()),
     }
   }
 
@@ -140,7 +140,9 @@ impl Accounts {
     let at = self.choose(&state, now)?;
     state.tick += 1;
     let tick = state.tick;
-    state.given[at] = tick;
+    if let Some(given) = state.given.get_mut(at) {
+      *given = tick;
+    }
     Some(at)
   }
 

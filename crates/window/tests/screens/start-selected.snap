@@ -4,12 +4,11 @@ assertion_line: 34
 ---
   ● furb · Debug stuck TUI after merge           ✗ Failed      All projects ▾       studio offline
   ┃
-  ┃ Debug stuck TUI after merge                               ▐   FU furb                    opus ▌
-  ┃ (the model works on it)                                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-  ┃                                                            Working 2
-                                                opus/high
-    ■  wrote nothing                              stopped         run the…    Working as of 09:12
-                                                                  FC furb-cloud@studio     opus ◌
+  ┃ Debug stuck TUI after merge                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  ┃ (the model works on it)                                    Working 2
+  ┃
+                                                opus/high         run the…    Working as of 09:12
+    ■  wrote nothing                              stopped         FC furb-cloud@studio     opus ◌
 
                                                                 ● which key sends…  ⠋ Working 11h
                                                                   PH photowroom            opus ◌
@@ -32,3 +31,4 @@ assertion_line: 34
   ┃  Message  Python    → Debug… ▾      opus  high   + ⌃N      Context
   ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb  ◆ 1 other thread asks   ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

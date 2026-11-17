@@ -4,16 +4,21 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::act::{Name, read_name};
+
 /// A prompt to the operator that waits for him. A question waits for an answer of its shape. A
 /// notice is a prompt of None, which the console closed as it took it, and which waits only until
 /// the operator dismisses it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Ask {
-  pub id: String,
+  #[serde(deserialize_with = "read_name")]
+  pub id: Name,
   /// The chain that the prompt stands in.
-  pub chain: String,
+  #[serde(deserialize_with = "read_name")]
+  pub chain: Name,
   /// Who made the prompt: a rung, an ear, or the operator.
-  pub by: String,
+  #[serde(deserialize_with = "read_name")]
+  pub by: Name,
   pub shape: String,
   pub message: String,
   pub notice: bool,

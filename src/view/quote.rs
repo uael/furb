@@ -29,6 +29,20 @@ fn opening(line: &str) -> Option<(&str, &str)> {
   Some((name, after.strip_prefix('>')?))
 }
 
+/// Whether a line closes a quote of a name: it ends with the close mark of that name.
+fn closing(line: &str, name: &str) -> bool {
+  line
+    .strip_suffix('>')
+    .and_then(|one| one.strip_suffix(name))
+    .is_some_and(|one| one.ends_with("</s:"))
+}
+
+/// Whether a line of a text closes a quote of a name, so a quote of that name could not hold the
+/// text.
+pub(crate) fn closes(text: &str, name: &str) -> bool {
+  text.split('\n').any(|line| closing(line, name))
+}
+
 /// The quote that opens at a line of a word. A quote with no close mark is none, but in a word that
 /// a model still writes, `open`, where it runs to the end of what came, less the part of its close
 /// mark that came.
@@ -41,14 +55,18 @@ fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
   }
   let end = found.unwrap_or(source.len() - 1);
   // The word binds the text between the marks, less the line break that follows the opening mark.
-  let mut body =
-    iter::once(head).chain(source[index + 1..=end].iter().copied()).collect::<Vec<_>>().join("\n");
+  let mut body = iter::once(head)
+    .chain(source.iter().take(end + 1).skip(index + 1).copied())
+    .collect::<Vec<_>>()
+    .join("\n");
   if body.starts_with('\n') {
     body.remove(0);
   }
   if found.is_some() {
     body.truncate(body.len() - close.len());
-  } else if let Some(size) = (2..close.len()).rev().find(|size| body.ends_with(&close[..*size])) {
+  } else if let Some(size) =
+    (2..close.len()).rev().find(|size| close.get(..*size).is_some_and(|part| body.ends_with(part)))
+  {
     body.truncate(body.len() - size);
   }
   let binding = format!("{name} = {}", repr(&body));
@@ -101,8 +119,10 @@ pub fn writing(text: &str, thinking: &str) -> Writing {
         tail = "";
       }
       index = quote.end;
-    } else if index < source.len() - 1 {
-      rows.push((source[index].to_owned(), index + 1, index + 1));
+    } else if index + 1 < source.len()
+      && let Some(line) = source.get(index)
+    {
+      rows.push(((*line).to_owned(), index + 1, index + 1));
     }
     index += 1;
   }

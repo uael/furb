@@ -32,6 +32,7 @@ mod watch;
 mod word;
 
 use std::{
+  io,
   path::PathBuf,
   sync::{Arc, PoisonError, RwLock},
 };
@@ -39,7 +40,6 @@ use std::{
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::task::JoinError;
 
 use self::search::Searches;
 pub(crate) use self::{
@@ -232,7 +232,7 @@ pub(crate) enum Unrefreshed {
   #[error(transparent)]
   Roster(#[from] catalog::Unknown),
   #[error(transparent)]
-  Lost(#[from] JoinError),
+  Lost(#[from] io::Error),
 }
 
 impl Provider {
@@ -429,8 +429,8 @@ impl Provider {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the
       // life too.
       let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
-      let stood = co.keeps(hearer::Stood::default())?;
-      let mut hearer = Hearer::new(self, life, stood);
+      co.keeps(hearer::Stood::default())?;
+      let mut hearer = Hearer::new(self, life);
       loop {
         hearer.answer(&mut co).await?;
         match co.next().await {

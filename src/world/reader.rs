@@ -24,7 +24,6 @@
 //! A question that the reader says names its maker, as the engine names it, and each other fact
 //! that it says is said by [`READER`].
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -34,7 +33,7 @@ use sha2::{Digest, Sha256};
 use crate::{
   checkpoint::CHECKPOINT,
   fact::{Fact, named},
-  value::{Fault, IS, Object, ObjectRef, entry, field},
+  value::{Fault, IS, Object, ObjectRef, entry, field, items, pairs},
   view::Named,
   wire::{outward, parsed},
 };
@@ -270,7 +269,10 @@ fn surveyed(path: &Path, passed: &mut dyn FnMut(u64)) -> Result<Surveyed, Fault>
     last = Some(Taken::Entry(entry));
   })?;
   let logged = agrees(path, entries, &asked, ends);
-  let last = last.and_then(Taken::entry).as_ref().map(digest);
+  let unread =
+    |why| Fault::refused(format!("the last entry of {} is unread: {why}", path.display()));
+  let last = last.map(Taken::entry).transpose().map_err(unread)?;
+  let last = last.as_ref().map(digest);
   Ok(Surveyed { maker, entries, last, makers, logged })
 }
 
@@ -333,29 +335,19 @@ fn told_body(
 ) -> Result<Named, Fault> {
   let made = |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", body.display()));
   let file = io::BufWriter::new(fs::File::create(body).map_err(made)?);
-  let sink = RefCell::new((file, Named::default(), None));
-  let write = |fact: &serde_json::Value| {
-    let (file, named, broken) = &mut *sink.borrow_mut();
-    named.hear(fact, true);
-    if broken.is_none()
-      && let Err(no) = writeln!(file, "{fact}")
-    {
-      *broken = Some(no);
-    }
-  };
-  let mut out = |fact: Object| write(&outward(fact.as_ref()));
-  let mut life = Reader::new(makers.ended(), &mut out);
+  let sink = Sink { file, named: Named::default(), broken: None };
+  let mut life = Reader::new(makers.ended(), sink);
   let (mut n, mut unread) = (0, None);
   each_but_checkpoints(path, &mut |taken, at| {
     match taken {
-      Taken::Entry(entry) => kept(&entry).into_iter().for_each(|fact| life.hear(fact)),
+      Taken::Entry(entry) => kept(&entry).iter().for_each(|fact| life.hear(fact)),
       // A checkpoint is told as it stands, which the reader hears nothing of. Its text goes to
       // JSON once, in place of a value of the sandbox and its JSON again.
       Taken::Fact(text) => {
         life.flush();
         let fact = serde_json::from_str(&text).map_err(|no| Fault::refused(no.to_string()));
         match fact.and_then(unmarked) {
-          Ok(fact) => write(&fact),
+          Ok(fact) => life.sink.told(&fact),
           Err(no) => _ = unread.get_or_insert(no),
         }
       }
@@ -370,7 +362,7 @@ fn told_body(
       path.display()
     )));
   }
-  let (mut file, named, broken) = sink.into_inner();
+  let Sink { mut file, named, broken } = life.sink;
   broken.map_or(Ok(()), Err).and_then(|()| file.flush()).map_err(made)?;
   Ok(named)
 }
@@ -461,7 +453,7 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
 
 /// The fact of an entry of a record, with its values as the engine gives them.
 fn kept(entry: &Object) -> Option<Fact> {
-  Fact::owned(plain(entry.as_ref().items()?.into_iter().next()?))
+  Fact::owned(plain(items(entry.as_ref())?.next()?))
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -486,22 +478,17 @@ fn question<'a>(
   Object::list([kind, id, maker].into_iter().chain(words).map(Object::string))
 }
 
-/// The items of a value that is a list or a tuple.
-fn items(said: ObjectRef<'_>) -> Vec<ObjectRef<'_>> {
-  said.items().unwrap_or_default()
-}
-
 /// A value that a record kept, as the engine gives it: a tuple and a whole float, which keep a mark in the record so
 /// that a later life reads them again as they were, come back as a tuple and a float, so a host reads the file of what
 /// a record tells as it reads the log of a life.
 pub(crate) fn plain(said: ObjectRef<'_>) -> Object {
   if said.type_name() == "dict"
-    && let Some(pairs) = said.pairs()
+    && let Some(each) = pairs(said)
   {
     let first = field(&said, "args").and_then(|one| entry(&one, 0));
     match (field(&said, IS).and_then(|one| one.as_str()), first) {
-      (Some("tuple"), Some(args)) if args.items().is_some() => {
-        return Object::tuple(items(args).into_iter().map(plain));
+      (Some("tuple"), Some(args)) if let Some(held) = items(args) => {
+        return Object::tuple(held.map(plain));
       }
       (Some("float"), Some(args)) => {
         if let Some(number) = args.as_str().and_then(|one| one.trim().parse::<f64>().ok()) {
@@ -510,11 +497,11 @@ pub(crate) fn plain(said: ObjectRef<'_>) -> Object {
       }
       _ => {}
     }
-    return Object::dict(pairs.into_iter().map(|(key, one)| (plain(key), plain(one))));
+    return Object::dict(each.map(|(key, one)| (plain(key), plain(one))));
   }
-  match (said.type_name(), said.items()) {
-    ("list", Some(held)) => Object::list(held.into_iter().map(plain)),
-    ("tuple", Some(held)) => Object::tuple(held.into_iter().map(plain)),
+  match (said.type_name(), items(said)) {
+    ("list", Some(held)) => Object::list(held.map(plain)),
+    ("tuple", Some(held)) => Object::tuple(held.map(plain)),
     _ => said.to_owned(),
   }
 }
@@ -529,7 +516,7 @@ fn text(fact: &Fact, at: usize) -> String {
 fn titled(message: &str) -> String {
   let line = message.lines().map(str::trim).find(|one| !one.is_empty()).unwrap_or_default();
   match line.char_indices().nth(80) {
-    Some((at, _)) => format!("{}…", line[..at].trim_end()),
+    Some((at, _)) => format!("{}…", line.get(..at).unwrap_or(line).trim_end()),
     None => line.to_owned(),
   }
 }
@@ -584,11 +571,31 @@ impl Makers {
   }
 }
 
-impl<'a> Reader<'a> {
-  /// The reader that tells each fact to out, with what it knows of the chains that the record does not hold.
-  fn new(known: Known, out: &'a mut dyn FnMut(Object)) -> Self {
-    Reader {
-      out,
+/// The file of what the record tells, and the name that it tells, which hears each fact told, and
+/// the first fault of a write: a fault stops the lines of the file but not the read.
+struct Sink {
+  file: io::BufWriter<fs::File>,
+  named: Named,
+  broken: Option<io::Error>,
+}
+
+impl Sink {
+  fn told(&mut self, fact: &serde_json::Value) {
+    self.named.hear(fact, true);
+    if self.broken.is_none()
+      && let Err(no) = writeln!(self.file, "{fact}")
+    {
+      self.broken = Some(no);
+    }
+  }
+}
+
+impl Reader {
+  /// The reader that tells each fact to its sink, with what it knows of the chains that the record
+  /// does not hold.
+  fn new(known: Known, sink: Sink) -> Self {
+    Self {
+      sink,
       stage: Vec::new(),
       makers: known.makers,
       homes: known.homes,
@@ -617,8 +624,8 @@ struct Open {
 }
 
 /// What the reader knows of the facts that it heard, and where it says the facts that it tells.
-struct Reader<'a> {
-  out: &'a mut dyn FnMut(Object),
+struct Reader {
+  sink: Sink,
   /// The facts that the reader said and did not tell yet.
   stage: Vec<Object>,
   /// The chain of each rung that a kept act on a chain names as its maker, which is the chain that the rung ran on.
@@ -649,9 +656,8 @@ struct Reader<'a> {
   asks_kept: bool,
 }
 
-impl Reader<'_> {
-  fn hear(&mut self, owned: Fact) {
-    let fact = &owned;
+impl Reader {
+  fn hear(&mut self, fact: &Fact) {
     let (kind, about, by) = (fact.kind(), fact.about(), fact.by());
     if fact.question() {
       self.asked(fact);
@@ -700,14 +706,14 @@ impl Reader<'_> {
       }
       _ => {}
     }
-    (self.out)(owned.0);
+    self.told(fact.object());
     self.flush();
   }
 
   /// Say that the record kept its entry n there, counted from 1, as the log says it.
   fn kept(&mut self, n: usize) {
     self.flush();
-    (self.out)(Object::list([
+    self.told(&Object::list([
       Object::string(KEEP),
       Object::string(""),
       Object::int(i64::try_from(n).unwrap_or(i64::MAX)),
@@ -717,8 +723,13 @@ impl Reader<'_> {
   /// Tell the facts that the reader said, in order.
   fn flush(&mut self) {
     for one in self.stage.drain(..) {
-      (self.out)(one);
+      self.sink.told(&outward(one.as_ref()));
     }
+  }
+
+  /// Tell one fact, in the form of the file.
+  fn told(&mut self, fact: &Object) {
+    self.sink.told(&outward(fact.as_ref()));
   }
 
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
@@ -727,13 +738,12 @@ impl Reader<'_> {
     if !self.asks_kept {
       self.inferred(kind, by, on);
     }
-    let chain = self.scope(on);
-    let scope = if kind == "chain" { about.to_owned() } else { chain.clone() };
-    self.scopes.insert(about.to_owned(), scope);
+    let scope = if kind == "chain" { about.to_owned() } else { self.scope(on).to_owned() };
     if kind == "prompt" {
-      let operator = text(fact, 3) == "operator";
+      let (operator, chain) = (text(fact, 3) == "operator", scope.clone());
       self.prompts.push(Open { id: about.to_owned(), chain, maker: by.to_owned(), operator });
     }
+    self.scopes.insert(about.to_owned(), scope);
   }
 
   /// In a segment that keeps only what the outside said, the chain and the rung that a question
@@ -748,7 +758,8 @@ impl Reader<'_> {
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     if kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
-      let chain = self.scope(on);
+      // The rung changes what the reader holds, so it takes its chain apart from them.
+      let chain = self.scope(on).to_owned();
       self.rung(by, &chain);
     }
     if named(by, "rung") && kind != "reply" {
@@ -757,8 +768,8 @@ impl Reader<'_> {
   }
 
   /// The chain that a name stands in: itself for a chain, and the chain of the act that it names for a thread.
-  fn scope(&self, on: &str) -> String {
-    self.scopes.get(on).cloned().unwrap_or_else(|| on.to_owned())
+  fn scope<'a>(&'a self, on: &'a str) -> &'a str {
+    self.scopes.get(on).map_or(on, String::as_str)
   }
 
   /// A rung that the record names as the maker of an act and does not hold, on the open prompt of its chain that is
@@ -801,8 +812,7 @@ impl Reader<'_> {
       self.end(&rung, Object::none());
     }
     if let Some(rung) = self.replies.remove(about) {
-      let turn = fact.word(0).map(items).unwrap_or_default();
-      let word = turn.get(1).and_then(|one| one.as_str().map(str::to_owned));
+      let word = fact.word(0).and_then(|turn| entry(&turn, 1)?.as_str().map(str::to_owned));
       if let Some(word) = word {
         self.words.insert(rung, word);
       }
@@ -811,9 +821,9 @@ impl Reader<'_> {
     let Some(rung) = self.gates.remove(about) else { return };
     let found: Vec<String> = fact
       .word(0)
-      .map(items)
-      .unwrap_or_default()
-      .iter()
+      .and_then(items)
+      .into_iter()
+      .flatten()
       .map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned))
       .collect();
     if found.is_empty() {

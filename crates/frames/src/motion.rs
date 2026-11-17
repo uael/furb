@@ -165,13 +165,13 @@ struct Moving {
 /// word names, each cell of them that changes.
 fn moving(screens: &[Shown], only: Option<(usize, usize)>) -> Option<Moving> {
   let mut counts: HashMap<(usize, usize), usize> = HashMap::new();
-  for pair in screens.windows(2) {
-    for (row, cells) in pair[1].cells.iter().enumerate() {
+  for (was, now) in screens.iter().zip(screens.iter().skip(1)) {
+    for (row, cells) in now.cells.iter().enumerate() {
       if only.is_some_and(|(first, last)| row < first || row > last) {
         continue;
       }
       for (col, cell) in cells.iter().enumerate() {
-        if pair[0].cells.get(row).and_then(|cells| cells.get(col)) != Some(cell) {
+        if was.cells.get(row).and_then(|cells| cells.get(col)) != Some(cell) {
           *counts.entry((row, col)).or_default() += 1;
         }
       }
@@ -202,9 +202,10 @@ fn measures(screens: &[Shown], keys: &[Key], span: Span, moving: Option<Moving>)
   );
   // The moments that the moving cells change, so a loader is measured apart from the rest.
   let changes: Vec<Duration> = screens
-    .windows(2)
-    .filter(|pair| inside(&pair[0].cells, moving) != inside(&pair[1].cells, moving))
-    .map(|pair| pair[1].at)
+    .iter()
+    .zip(screens.iter().skip(1))
+    .filter(|(was, now)| inside(&was.cells, moving) != inside(&now.cells, moving))
+    .map(|(_, now)| now.at)
     .collect();
   match moving {
     Some(moving) => writeln!(
@@ -276,8 +277,11 @@ fn rate(changes: &[Duration]) -> String {
     tenths / 10,
     tenths % 10
   );
-  let intervals: Vec<u128> =
-    changes.windows(2).map(|pair| pair[1].saturating_sub(pair[0]).as_millis()).collect();
+  let intervals: Vec<u128> = changes
+    .iter()
+    .zip(changes.iter().skip(1))
+    .map(|(was, now)| now.saturating_sub(*was).as_millis())
+    .collect();
   if let (Some(least), Some(most)) = (intervals.iter().min(), intervals.iter().max()) {
     let many = u128::try_from(intervals.len()).unwrap_or(u128::MAX);
     let mean = intervals.iter().sum::<u128>() / many;
@@ -324,7 +328,7 @@ fn flickers(screens: &[Shown]) -> Vec<Flicker> {
         from,
         until,
         cells: flicked.len(),
-        shown: cells[from..=until].iter().map(|cell| cell.glyph.as_str()).collect(),
+        shown: cells.iter().take(until + 1).skip(from).map(|cell| cell.glyph.as_str()).collect(),
         lasted,
         at: between.at,
       });
@@ -337,15 +341,16 @@ fn flickers(screens: &[Shown]) -> Vec<Flicker> {
 /// under its time from the start of the span, side by side in rows of tiles. A time that shows a
 /// new screen says so with a mark. It gives the sheet and how many tiles it holds.
 fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>) -> (Frame, usize) {
-  let first = &screens[0].frame;
+  let Some(first) = screens.first().map(|one| &one.frame) else { return (Frame::of_cells(&[]), 0) };
+  let (last_row, last_col) = (first.rows.saturating_sub(1), first.cols.saturating_sub(1));
   let (rows, cols) = match moving {
     Some(moving) => {
-      let rows = (moving.rows.0.saturating_sub(1), (moving.rows.1 + 1).min(first.rows - 1));
-      let wide = (moving.cols.1 - moving.cols.0 + 5).max(TILE).min(first.cols);
-      let left = moving.cols.0.saturating_sub(2).min(first.cols - wide);
+      let rows = (moving.rows.0.saturating_sub(1), (moving.rows.1 + 1).min(last_row));
+      let wide = (moving.cols.1.saturating_sub(moving.cols.0) + 5).max(TILE).min(first.cols).max(1);
+      let left = moving.cols.0.saturating_sub(2).min(first.cols.saturating_sub(wide));
       (rows, (left, left + wide - 1))
     }
-    None => ((0, first.rows - 1), (0, first.cols - 1)),
+    None => ((0, last_row), (0, last_col)),
   };
   let width = cols.1 - cols.0 + 1;
   let height = rows.1 - rows.0 + 2;
@@ -360,8 +365,9 @@ fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>)
     let mark = if before.is_some_and(|one| one != shown) { " •" } else { "" };
     let label = format!("{:.3} s{mark}", at.saturating_sub(span.from).as_secs_f64());
     let mut tile = vec![label_row(&label, width, &ground)];
-    let cells = &screens[shown].cells;
-    tile.extend((rows.0..=rows.1).map(|row| cells[row][cols.0..=cols.1].to_vec()));
+    let cells = screens.get(shown).map(|one| &one.cells);
+    let line = |row: usize| cells.and_then(|cells| cells.get(row)?.get(cols.0..=cols.1));
+    tile.extend((rows.0..=rows.1).map(|row| line(row).map(<[Cell]>::to_vec).unwrap_or_default()));
     tiles.push(tile);
     before = Some(shown);
     at += every;
@@ -382,7 +388,7 @@ fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>)
     for line in 0..height {
       let mut row = Vec::new();
       for tile in band {
-        row.extend(tile[line].iter().cloned());
+        row.extend(tile.get(line).into_iter().flatten().cloned());
         row.push(ground(" ", LABEL));
       }
       row.resize(across * (width + 1), ground(" ", LABEL));
@@ -415,7 +421,10 @@ pub(crate) fn hero(cast: &Cast, span: Span, path: &Path) -> Result<(), Error> {
 pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error> {
   let span = Span { from: at, until: at, every: Duration::ZERO, rows: None };
   let screens = shown(cast, span)?.0;
-  put(path, &raster::image(&screens[0].frame, DENSE).0.framed().png()?)
+  let Some(first) = screens.first() else {
+    return Err(Error::Cast("it shows no screen at that moment"));
+  };
+  put(path, &raster::image(&first.frame, DENSE).0.framed().png()?)
 }
 
 /// The least delay of a frame of a GIF, in hundredths of a second: 50 frames a second, the most
@@ -443,10 +452,16 @@ fn animated(
       return (width, height, pixels);
     }
     let Image { width, height, pixels, .. } = image;
-    let opaque = pixels.chunks(3).flat_map(|one| [one[0], one[1], one[2], 255]).collect();
+    let opaque = pixels
+      .as_chunks::<3>()
+      .0
+      .iter()
+      .flat_map(|&[red, green, blue]| [red, green, blue, 255])
+      .collect();
     (width, height, opaque)
   };
-  let (width, height, _) = pixels(&screens[0].frame);
+  let Some(first) = screens.first() else { return Ok(()) };
+  let (width, height, _) = pixels(&first.frame);
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
   let mut encoder = Encoder::new(BufWriter::new(file), size(width), size(height), &[])?;
   encoder.set_repeat(Repeat::Infinite)?;
@@ -462,7 +477,8 @@ fn animated(
   while at < span.until {
     let screen = screens.iter().rposition(|one| one.at <= at).unwrap_or_default();
     if now.as_ref().is_none_or(|(shown, _)| *shown != screen) {
-      now = Some((screen, pixels(&screens[screen].frame).2));
+      let Some(one) = screens.get(screen) else { break };
+      now = Some((screen, pixels(&one.frame).2));
     }
     let Some((_, now)) = &now else { break };
     at += step;
@@ -495,8 +511,9 @@ fn framed_part(shown: &[u8], now: &[u8], width: usize, rect: &Changed) -> gif::F
   let mut part: Vec<u8> = Vec::with_capacity(wide * high * 4);
   for row in top..top + high {
     let span = (row * width + left) * 4..(row * width + left + wide) * 4;
-    for (was, pixel) in shown[span.clone()].chunks(4).zip(now[span].chunks(4)) {
-      part.extend(if was == pixel { [0; 4] } else { [pixel[0], pixel[1], pixel[2], pixel[3]] });
+    let (Some(was), Some(is)) = (shown.get(span.clone()), now.get(span)) else { continue };
+    for (was, pixel) in was.as_chunks::<4>().0.iter().zip(is.as_chunks::<4>().0) {
+      part.extend(if was == pixel { [0; 4] } else { *pixel });
     }
   }
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
@@ -515,8 +532,12 @@ fn draw(shown: &mut [u8], width: usize, rect: &Changed, frame: &gif::Frame<'_>) 
     let (x, y) = (rect.left + at % rect.width, rect.top + at / rect.width);
     let color = usize::from(*index) * 3;
     let pixel = (y * width + x) * 4;
-    shown[pixel..pixel + 3].copy_from_slice(&palette[color..color + 3]);
-    shown[pixel + 3] = 255;
+    let (Some(to), Some(&[red, green, blue])) =
+      (shown.get_mut(pixel..pixel + 4), palette.get(color..color + 3))
+    else {
+      continue;
+    };
+    to.copy_from_slice(&[red, green, blue, 255]);
   }
 }
 
@@ -529,14 +550,14 @@ fn exact(width: u16, height: u16, pixels: &[u8]) -> Option<gif::Frame<'static>> 
   let mut clear = None;
   let mut indices = Vec::with_capacity(pixels.len() / 4);
   let mut seen: HashMap<[u8; 3], u8> = HashMap::new();
-  for pixel in pixels.chunks(4) {
-    let index = if pixel[3] == 0 {
+  for &[red, green, blue, alpha] in pixels.as_chunks::<4>().0 {
+    let index = if alpha == 0 {
       *clear.get_or_insert_with(|| {
         palette.push([0; 3]);
         palette.len() - 1
       })
     } else {
-      let color = [pixel[0], pixel[1], pixel[2]];
+      let color = [red, green, blue];
       let next = palette.len();
       let index = *seen.entry(color).or_insert_with(|| u8::try_from(next).unwrap_or(u8::MAX));
       if usize::from(index) == next {

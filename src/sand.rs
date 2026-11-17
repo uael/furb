@@ -9,17 +9,12 @@
 //! each call with a [`Host`], and while it answers, it may call into the sandbox again through the same [`Sand`], to
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{mem, time::Duration};
 
 use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
-  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
+  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker, unstable,
 };
 
 use crate::value::{Fault, Object};
@@ -72,6 +67,10 @@ const ENTER: &str = "__enter";
 pub(crate) trait Host {
   /// One call of the sandbox, answered: the object of the host it is on, by its id, the method or function it called,
   /// and what it handed over. The host may call into the sandbox with `sand` while it answers.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a call of the sandbox lends it to the host apart, with the object that the call is on, its name and its values"
+  )]
   fn answer(
     &mut self,
     sand: &mut Sand,
@@ -257,6 +256,10 @@ impl Sand {
   }
 
   /// A callable of the sandbox, called with these words while the host answers a call, and what it gave.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the host is lent apart to answer each call back, and a call is its callee, its values and its keyword values"
+  )]
   pub(crate) fn call<H: Host>(
     &mut self,
     host: &mut H,
@@ -289,6 +292,10 @@ impl Sand {
 
   /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
   /// changed.
+  #[expect(
+    clippy::unreachable,
+    reason = "monty sets the bound of a turn on a progress alone, so the call goes in one and comes back out"
+  )]
   fn limited(&mut self, call: ReplFunctionCall) -> ReplFunctionCall {
     let Some(limit) = self.changed() else { return call };
     let mut progress = ReplProgress::FunctionCall(call);
@@ -338,8 +345,12 @@ impl Sand {
           self.made(&call);
           self.limited(call).resume(Object::none(), PrintWriter::Disabled)
         }
-        ReplProgress::FunctionCall(call) => {
-          let args: Vec<Object> = call.args.args().map(|one| one.to_owned()).collect();
+        ReplProgress::FunctionCall(mut call) => {
+          let Some(args) = owned(mem::take(&mut call.args)) else {
+            let fault = Fault::refused("a call of the sandbox names a value that its arena lacks");
+            step = self.limited(call).abort(raised(&fault), PrintWriter::Disabled);
+            continue;
+          };
           let (on, name) = (call.object_id, call.function_name.clone());
           self.state = State::Answering(Box::new(call));
           let answer = host.answer(self, on, &name, args);
@@ -461,6 +472,19 @@ fn fault(error: &MontyException) -> Fault {
 /// What a life is refused for asking something no life asks.
 fn refusal(why: &str) -> MontyException {
   MontyException::new(ExcType::RuntimeError, Some(why.to_owned()))
+}
+
+/// The values of a call of the sandbox, each one its own. A call of one value with no keyword
+/// takes the arena of the call as it stands, as most calls do, and a call of more copies each value
+/// out of it. None when the arena lacks a value that the call names.
+fn owned(args: CallArgs) -> Option<Vec<Object>> {
+  let (graph, ids, kwargs) = unstable::into_call_args_parts(args);
+  match ids[..] {
+    [one] if kwargs.is_empty() => unstable::object_from_graph(graph, one).ok().map(|one| vec![one]),
+    _ => unstable::call_args_from_parts(graph, ids, kwargs)
+      .ok()
+      .map(|args| args.args().map(|one| one.to_owned()).collect()),
+  }
 }
 
 /// A fault of the host, raised where the sandbox called: the builtin exception it names, with its message, or a

@@ -14,6 +14,7 @@ use furb::{
   fact, image,
   life::{Opening, Progress},
   skill::{self, Skill},
+  value::items,
   verbs,
   wire::outward,
   world::Catalog,
@@ -82,8 +83,8 @@ impl Life {
       verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()), at: None };
     Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
       let words =
-        a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
-      (words.len() == 7 && words[2..] == wanted).then(|| a.about().to_owned())
+        items(a.object().as_ref())?.map(|one| one.as_str()).collect::<Option<Vec<_>>>()?;
+      (words.len() == 7 && words.get(2..) == Some(&wanted[..])).then(|| a.about().to_owned())
     }))
   }
 
@@ -118,7 +119,7 @@ impl Life {
 
 /// Whether the engine reads a pause over an act.
 fn paused(engine: &mut Engine, id: &str) -> Result<bool, CliError> {
-  let paused = engine.verb("paused", vec![Object::string(id)], vec![])?;
+  let paused = engine.verb("paused", &[Object::string(id)], vec![])?;
   Ok(outward(paused.as_ref()) == serde_json::Value::Bool(true))
 }
 

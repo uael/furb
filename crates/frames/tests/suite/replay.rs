@@ -1,4 +1,5 @@
 //! The command `replay`: the key frames of a recording, at each marker and at each step of time.
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 
 use std::fs;
 

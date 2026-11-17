@@ -3,12 +3,6 @@
 //! 30 s and 5 s each time, so these tests shorten them. The suite of the world proves the rest
 //! through the catalog of a child.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use crate::testing::{on_reactor, pause};
 use std::{
   io::{BufRead, BufReader, Read, Write},
@@ -56,7 +50,10 @@ fn faked(
         line.to_ascii_lowercase().strip_prefix("content-length: ")?.trim().parse::<usize>().ok()
       });
       let mut body = vec![0; length.unwrap_or_default()];
-      let _ = reader.read_exact(&mut body);
+      // A client that left before its body is read asks nothing.
+      if reader.read_exact(&mut body).is_err() {
+        continue;
+      }
       let request = format!("{head}{}", String::from_utf8_lossy(&body));
       let out = match answer(&request) {
         Some(one) => {
@@ -71,8 +68,10 @@ fn faked(
           "HTTP/1.1 404 Not Found\r\nconnection: close\r\ncontent-length: 0\r\n\r\n".to_owned()
         }
       };
-      let _ = tells.send(request);
-      let _ = reader.into_inner().write_all(out.as_bytes());
+      // A test that reads nothing of what was asked dropped its end, and the server serves on.
+      tells.send(request).ok();
+      // A client that left takes no answer, and the server goes on to the next one.
+      reader.into_inner().write_all(out.as_bytes()).ok();
     }
   });
   told

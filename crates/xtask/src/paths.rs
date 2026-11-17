@@ -54,7 +54,7 @@ pub(crate) fn check(root: &Path) -> Result<ExitCode, Fault> {
     let mut paths = Vec::new();
     for (at, line) in text.lines().enumerate() {
       for one in named.captures_iter(line) {
-        paths.push((at + 1, one?[1].to_owned()));
+        paths.push((at + 1, crate::group(&one?, 1).to_owned()));
       }
     }
     if file.starts_with(".github/workflows/") {
@@ -109,21 +109,21 @@ fn folders(text: &str) -> Result<Vec<(usize, String)>, Fault> {
   let mut found = Vec::new();
   for (at, line) in text.lines().enumerate() {
     for hit in directory.captures_iter(line) {
-      let value = hit?[1].to_owned();
+      let value = crate::group(&hit?, 1).to_owned();
       match read.captures(value.as_str())? {
-        Some(key) => drop(keys.insert(key[1].to_owned())),
+        Some(key) => drop(keys.insert(crate::group(&key, 1).to_owned())),
         None => found.push((at + 1, value)),
       }
     }
     for hit in manifest.captures_iter(line) {
-      found.push((at + 1, hit?[1].to_owned()));
+      found.push((at + 1, crate::group(&hit?, 1).to_owned()));
     }
   }
   for key in keys {
     let entry = Regex::new(&format!(r#"[{{,]\s*{}:\s*["']?([^\s,}}"']+)"#, escape(&key)))?;
     for (at, line) in text.lines().enumerate() {
       for hit in entry.captures_iter(line) {
-        found.push((at + 1, hit?[1].to_owned()));
+        found.push((at + 1, crate::group(&hit?, 1).to_owned()));
       }
     }
   }

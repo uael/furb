@@ -53,7 +53,7 @@ impl Opened {
   pub fn docked(&self) -> (usize, &[Agent]) {
     let agents = &self.thread.agents;
     let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(agents.len());
-    (first, &agents[first..])
+    (first, agents.get(first..).unwrap_or_default())
   }
 
   /// The agents that the line of a block numbered so made, or those of the dock that no line made,
@@ -63,7 +63,7 @@ impl Opened {
     let agents: Vec<&Agent> = self.thread.agents.iter().filter(|one| one.at == at).collect();
     let rested = if at.is_some() { 0 } else { agents.len() };
     let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(rested);
-    (first, agents[first..].to_vec())
+    (first, agents.into_iter().skip(first).collect())
   }
 
   /// The card of the thread of an agent, as the dock of the thread that it came from holds it,
@@ -71,7 +71,7 @@ impl Opened {
   pub fn agent(&self) -> Option<&card::Card> {
     let from = self.from.as_deref()?;
     let agents = from.thread.agents.iter();
-    agents.map(|one| &one.card).find(|one| one.prompt == self.thread.key.2)
+    agents.map(|one| &one.card).find(|one| *one.prompt == *self.thread.key.2)
   }
 
   /// The sub thread that this thread is, as the thread that it is on holds it: a thread about a
@@ -186,10 +186,23 @@ impl Thread {
     let rewound = |at: usize| {
       blocks.clone().any(|block| {
         let found = block.lines.binary_search_by_key(&at, |line| line.number);
-        found.is_ok_and(|found| rewinds(&block.lines[found].text))
+        found.ok().and_then(|found| block.lines.get(found)).is_some_and(|line| rewinds(&line.text))
       })
     };
     self.agents.iter().filter(|one| one.at.is_some_and(rewound)).collect()
+  }
+
+  /// The places of the exchanges that a change of the thread changes, when it changes nothing else
+  /// that an exchange shows: none when it changes the agents, the thread itself as a sub thread,
+  /// the exchanges above or its fault, or when the thread moved in time.
+  pub fn changes(&self, page: &Page) -> Option<Vec<usize>> {
+    let alone = !self.replaces
+      && self.fault.is_none()
+      && self.agents == page.agents
+      && self.sub == page.sub
+      && self.above.is_some_and(|above| above <= page.above);
+    let changed = |one: &&Exchange| self.exchanges.get(&one.at) != Some(*one);
+    alone.then(|| page.exchanges.iter().filter(changed).map(|one| one.at).collect())
   }
 
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
@@ -206,6 +219,8 @@ impl Thread {
     }
     if let Some(time) = self.time.as_mut() {
       time.heard(&page.exchanges);
+      // At now the thread grows, so the bar asks its moments again, one ask at a time.
+      time.stale |= time.at.is_none() && !page.exchanges.is_empty();
     }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
     (self.agents, self.context, self.sub, self.folder, self.views) =
@@ -221,7 +236,7 @@ impl Thread {
 
   /// The messages of the operator that the thread shows now let go.
   pub fn shown(&mut self) {
-    let told = |act: &String| self.exchanges.values().any(|one| one.message == *act);
+    let told = |act: &String| self.exchanges.values().any(|one| *one.message == **act);
     self.pending.retain(|one| !one.act.as_ref().is_some_and(told));
   }
 
@@ -266,20 +281,22 @@ impl Client {
     if thread.above.is_none() || thread.exchanges.is_empty() {
       return None;
     }
-    let key = &thread.key.clone();
+    let key = &thread.key;
     if self.fault_of(key.0, &key.1).is_some() {
       return None;
     }
-    let login = self.machines[key.0].login.clone();
+    let login = &self.machines.get(key.0)?.login;
     // A card that the daemon told before it read the last Seen says unread once more.
     let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
-    if saying || !self.card(key)?.thread.unread(&login) {
+    if saying || !self.card(key)?.thread.unread(login) {
       return None;
     }
     let reader = format!("{OPERATOR}/{login}");
-    let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
+    let key = &key.clone();
+    let told = |card: &Card| card.life == key.1 && *card.thread.prompt == *key.2;
     let settled = self.settled.iter_mut().map(|one| &mut one.2);
-    for card in self.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card)) {
+    let cards = self.machines.get_mut(key.0).into_iter().flat_map(|one| one.cards.iter_mut());
+    for card in cards.chain(settled).filter(|card| told(card)) {
       card.thread.readers.push(reader.clone());
     }
     let (life, about) = (key.1.clone(), key.2.clone());

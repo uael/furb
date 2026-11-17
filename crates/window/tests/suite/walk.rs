@@ -49,7 +49,7 @@ fn list() -> Screen {
 /// A thread whose model asks him to choose, open, with its form.
 fn question() -> Screen {
   let message = format!("where does the list stand\n{CHOOSES}");
-  let (app, daemon, peer, ..) = question::opened(&message, "type another answer");
+  let (app, daemon, peer, ..) = question::opened(&message, "type your own answer");
   app.advance(Duration::from_millis(400));
   (app, daemon, Some(peer))
 }

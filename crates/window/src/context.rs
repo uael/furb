@@ -1,20 +1,38 @@
 //! The box of the context of the open thread, under the list and in line with the input: how full
 //! the window of its chain is at its last answer, a bar in a segment for each part of what that
-//! answer read, and its counts, which stand in the row of the hints. A click opens one row for
-//! each part, with its size and its share, and folds it again. The parts are the kinds of content
-//! that the answer read, or what came from the cache, what it wrote there and what was new: a
-//! click on the bar, or the key of the context, shows the other.
+//! answer read, and its counts, which stand in the row of the hints. A click on the folded box opens
+//! one row for each part, with its size and its share. The open box holds no one button: its head
+//! holds the fold and two tabs, the kinds of content that the answer read, by default, and the
+//! cache, which says what came from the cache, what it wrote there and what was new, and each row
+//! of the kinds is a target of its own, which lights alone under the pointer.
+
+use std::ops::Range;
 
 use furb::view::{Context, Portion, percent, share, tokens};
-use opentui::style::{Color, Style};
+use opentui::style::{Color, Span, Style};
 
 use furb_client::{Content, Fold, Split};
 
+use crate::cells::Cells;
 use crate::{
   line::{Line, run, spread},
   model::Model,
   tokens::Role,
 };
+
+/// The names of the tabs of the open box, and the columns between the fold and them.
+const KINDS: &str = "Kinds";
+const CACHE: &str = "Cache";
+const GAP: usize = 3;
+
+/// What a click on a target of the box does: it folds or opens the box, it shows the kinds or the
+/// cache, or it takes a part of the kinds, by its place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Boxing {
+  Fold,
+  Kinds(bool),
+  Part(usize),
+}
 
 /// A part of what an answer read, or the room that it left: its name, its tokens and its color.
 struct Kind {
@@ -48,7 +66,14 @@ impl Model {
     };
     let open = opened.unfolded.contains(&Fold::Context);
     let fold = if open { " ▾" } else { " ▸" };
-    let head = vec![run("Context", prose), run(fold, muted)];
+    let mut head = vec![run("Context", prose), run(fold, muted)];
+    if open {
+      let kinds = self.client.split == Split::Kinds;
+      let tab =
+        |name: &'static str, on: bool| run(name, if on { prose.underline() } else { muted });
+      let gap = run(" ".repeat(GAP), Style::new());
+      head.extend([gap, tab(KINDS, kinds), run(" · ", muted), tab(CACHE, !kinds)]);
+    }
     let read = &context.read;
     let whole = context.whole();
     let used = context.window.map(|_| share(read.tokens, whole));
@@ -71,6 +96,102 @@ impl Model {
       vec![run(format!("${:.2}", context.dollars), prose)],
     ));
     rows
+  }
+
+  /// The targets of a row of the box, by their columns in the list: the folded box is one target
+  /// that opens it; the open box has its fold and its two tabs on its head, and each row of the
+  /// kinds. A box that no answer told takes no click.
+  pub(crate) fn context_hot(&self, at: usize) -> Vec<(Range<usize>, Boxing)> {
+    let Some(opened) = self.client.thread.as_ref() else { return Vec::new() };
+    let Some(context) = &opened.thread.context else { return Vec::new() };
+    let inner = usize::from(self.list_width()) - 3;
+    if !opened.unfolded.contains(&Fold::Context) {
+      return vec![(1..1 + inner, Boxing::Fold)];
+    }
+    match at {
+      0 => {
+        let fold = 1..1 + "Context ▾".width();
+        let kinds = fold.end + GAP..fold.end + GAP + KINDS.width();
+        let cache = kinds.end + 3..kinds.end + 3 + CACHE.width();
+        vec![(fold, Boxing::Fold), (kinds, Boxing::Kinds(true)), (cache, Boxing::Kinds(false))]
+      }
+      _ if self.parted() => match at.checked_sub(2) {
+        Some(part) if part < self.kinds(context).len() => vec![(1..1 + inner, Boxing::Part(part))],
+        _ => Vec::new(),
+      },
+      _ => Vec::new(),
+    }
+  }
+
+  /// A row of the box as the list draws it: the folded box lights whole under the pointer, as the
+  /// one thing that takes a click, and in the open box only the target under the pointer lights.
+  /// The colored cells keep their colors.
+  pub(crate) fn context_line(&self, line: Line, at: usize, (on_box, here): (bool, bool)) -> Line {
+    let hot = self.context_hot(at);
+    let open = self.client.thread.as_ref().is_some_and(|one| one.unfolded.contains(&Fold::Context));
+    let lit = if open {
+      let column = self.pointer.and_then(|(x, _)| self.list_column(x)).filter(|_| here);
+      column.and_then(|x| hot.into_iter().find(|one| one.0.contains(&x)).map(|one| one.0))
+    } else {
+      (on_box && !hot.is_empty()).then_some(0..usize::MAX)
+    };
+    let Some(lit) = lit else { return line };
+    let mut x = 0;
+    let light = |one: Span<'static>| {
+      let start = x;
+      x += one.content.width();
+      let cells = one.content.starts_with(['━', '■']);
+      if lit.contains(&start) && !cells {
+        run(one.content, one.style.fg(self.tokens.hover))
+      } else {
+        one
+      }
+    };
+    line.into_iter().map(light).collect()
+  }
+
+  /// A click on a row of the box, where the pointer stands.
+  pub(crate) fn context_clicked(&mut self, at: usize) {
+    let Some(column) = self.pointer.and_then(|(x, _)| self.list_column(x)) else { return };
+    let Some(does) = self.context_hot(at).into_iter().find(|one| one.0.contains(&column)) else {
+      return;
+    };
+    match does.1 {
+      Boxing::Fold => self.fold_context(),
+      Boxing::Kinds(kinds) => self.client.split = if kinds { Split::Kinds } else { Split::Cache },
+      Boxing::Part(part) => self.open_part(part),
+    }
+  }
+
+  /// The transcript of the chain of the thread opened on a part of the kinds that he took, that
+  /// part alone; the free room has no turn, so the status row says what it is.
+  fn open_part(&mut self, part: usize) {
+    let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
+    match parts.and_then(|one| one.kinds.get(part)).map(|one| one.0) {
+      Some(content) => self.client.transcript(Some(content)),
+      None => self.client.notice = Some("The free room of the window holds no turn.".to_owned()),
+    }
+  }
+
+  /// The color of a kind of content, in the bar of the box and in the transcript.
+  pub(crate) fn kind_color(&self, content: Content) -> Color {
+    let t = &self.tokens;
+    let [purple, rose, gold] = t.hues;
+    match content {
+      Content::Turns => t.accent,
+      Content::Kits => purple,
+      Content::Skills => gold,
+      Content::Mcp => t.projects[0].letters,
+      Content::Memory => rose,
+      Content::Doctrine => t.text,
+      Content::Engine => t.muted,
+    }
+  }
+
+  /// Whether the open box shows the kinds of content, once the client parted the turns.
+  fn parted(&self) -> bool {
+    let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
+    self.client.split == Split::Kinds && parts.is_some_and(|one| !one.kinds.is_empty())
   }
 
   /// The ring of the context in the launcher, while the list and its box hide: how full the window
@@ -132,22 +253,26 @@ impl Model {
     if let Some(parts) =
       parts.filter(|one| self.client.split == Split::Kinds && !one.kinds.is_empty())
     {
-      let kind = |&(content, tokens): &(Content, u64)| {
-        let color = match content {
-          Content::Turns => t.accent,
-          Content::Kits => purple,
-          Content::Skills => gold,
-          Content::Mcp => t.projects[0].letters,
-          Content::Memory => rose,
-          Content::Doctrine => t.text,
-          Content::Engine => t.muted,
-        };
-        Kind { name: content.name(), tokens, color }
+      let kind = |&(content, tokens): &(Content, u64)| Kind {
+        name: content.name(),
+        tokens,
+        color: self.kind_color(content),
       };
       let mut kinds: Vec<Kind> = parts.kinds.iter().map(kind).collect();
       let free = context.window.map(|window| window.saturating_sub(context.read.tokens));
       kinds.extend(free.map(|tokens| Kind { name: "Free", tokens, color: t.border }));
       return kinds;
+    }
+    // The view of the kinds shows kinds alone: until the machine parts the turns, the read stands
+    // as one part that says so, and never as the parts of the cache under the tab of the kinds.
+    if self.client.split == Split::Kinds {
+      let name = if parts.is_some() { "Turns (not parted)" } else { "Reading the parts…" };
+      let free = context.window.map(|window| window.saturating_sub(context.read.tokens));
+      let read = Kind { name, tokens: context.read.tokens, color: t.muted };
+      return [read]
+        .into_iter()
+        .chain(free.map(|tokens| Kind { name: "Free", tokens, color: t.border }))
+        .collect();
     }
     let kind = |(portion, tokens)| {
       let (name, color) = match portion {

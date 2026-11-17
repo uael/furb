@@ -54,7 +54,7 @@ impl Client {
     self.selected = place.as_ref().map(|one| one.root().thread.key.clone());
     if let Some(opened) = &place {
       let key = &opened.thread.key;
-      self.hold((key.0, key.1.clone()), self.cwd(key.0, &key.1), self.moved);
+      self.hold((key.0, key.1.clone()), self.cwd(key.0, &key.1).map(Into::into), self.moved);
     }
     (self.thread, self.aim) = (place, None);
     true

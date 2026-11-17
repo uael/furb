@@ -102,7 +102,8 @@ fn a_held_space_records_over_the_bar_of_the_time_which_a_tap_plays() {
   typed(&app, "read the engine");
   app.advance(Duration::from_millis(400));
   typed(&app, "read the engine.");
-  let same = |frame: &str| frame.lines().take(3).map(str::to_owned).collect::<Vec<_>>();
+  // The bar of the time, the last row of the window.
+  let same = |frame: &str| frame.lines().last().map(str::to_owned);
   assert_eq!(same(&app.text()), same(&bar));
 }
 
@@ -141,8 +142,8 @@ fn where_the_terminal_tells_each_release_a_hold_never_plays_the_bar_and_a_tap_pl
     app.press("left");
   }
   let bar = app.text();
-  // The head and the bar of the time, under which the list settles once the hand is away.
-  let same = |frame: &str| frame.lines().take(2).map(str::to_owned).collect::<Vec<_>>();
+  // The bar of the time, the last row of the window.
+  let same = |frame: &str| frame.lines().last().map(str::to_owned);
   // A tap plays the bar at its release, and a second tap stops it.
   space(&app, KeyEventKind::Press);
   space(&app, KeyEventKind::Release);

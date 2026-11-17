@@ -20,7 +20,6 @@ assertion_line: 34
 
 
 
-
   ┃
   ┃ ◆ opus/high asks
   ┃ How many rows does the form take?
@@ -32,3 +31,4 @@ assertion_line: 34
   ┃  Message  Python    → how many… ▾   opus  high   + ⌃N      Context
   ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⏎ answer                                      ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

@@ -49,9 +49,12 @@ const LOGIN_LIMIT: Duration = Duration::from_secs(5);
 
 /// Starts the read of the PATH of the login shell as a World makes its commands, so its first
 /// command waits for less of it. The process reads it once: a later life of the process, as each
-/// life of a daemon, finds it read and waits for nothing.
+/// life of a daemon, finds it read and waits for nothing. With no runtime to start it on, the
+/// first command reads it.
 pub(super) fn read_login() {
-  drop(ear::runtime().spawn(login_path()));
+  if let Ok(runtime) = ear::runtime() {
+    drop(runtime.spawn(login_path()));
+  }
 }
 
 /// The PATH that the login shell of the user sets, read once for the process, or none on Windows,

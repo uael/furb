@@ -1,6 +1,7 @@
 //! The task `memwatch` as a process, on a machine whose `ps` and `sysctl` are scripts that list
 //! real processes that sleep.
-
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![cfg(unix)]
 
 use std::{

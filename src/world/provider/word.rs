@@ -37,7 +37,7 @@ pub(super) async fn kept(
 ) -> Option<Result<Object, CompletionError>> {
   let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran) else { return Some(got) };
   let word =
-    got.as_ref().ok().and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
+    got.as_ref().ok().and_then(|turn| Some(entry(&turn.as_ref(), 1)?.as_str()?.to_owned()));
   let why = match &word {
     Some(word) if word.starts_with(ran.trim()) => match unquoted(co, word).await {
       Some(python) => watch::fault(&python).map(unpython).unwrap_or_default(),
@@ -82,7 +82,7 @@ const ENDING: usize = 3;
 pub(super) fn ending(ran: &str) -> String {
   let lines: Vec<(usize, &str)> =
     ran.trim_end().lines().enumerate().filter(|(_, line)| !line.trim().is_empty()).collect();
-  let shown = lines[lines.len().saturating_sub(ENDING)..].iter();
+  let shown = lines.iter().skip(lines.len().saturating_sub(ENDING));
   let ended = shown.copied().try_fold(String::new(), |mut out, (at, line)| {
     writeln!(out, "line {}: {line}", at + 1)?;
     Ok::<_, fmt::Error>(out)

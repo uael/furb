@@ -1,7 +1,7 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
 
-use std::path::Path;
+use std::{path::Path, rc::Rc, time::Duration};
 
 use furb::view::{Part, Standing};
 use furb_host::protocol::Card;
@@ -11,9 +11,10 @@ use crate::{
   input::named,
   keys::Does,
   line::{Line, edged, run, spread},
-  model::{Key, Link, Model},
+  model::{Foot, Key, Link, Model},
   picture,
-  tokens::{CALL, Loader, Role, WORKS, called, mixed},
+  pull::Piece,
+  tokens::{CALL, Loader, Role, WORKS, called, mixed, turn},
 };
 
 /// A row of the list.
@@ -48,8 +49,8 @@ impl Model {
       rows.push(Row::Key(Does::GoTo, "other projects and sessions"));
     }
     for part in [Part::NeedsYou, Part::Working, Part::Resting, Part::Resolved] {
-      let mut cards =
-        (0..self.client.settled.len()).filter(|at| self.client.settled[*at].0 == part).peekable();
+      let settled = self.client.settled.iter().enumerate();
+      let mut cards = settled.filter(|(_, one)| one.0 == part).map(|(at, _)| at).peekable();
       if cards.peek().is_none() {
         continue;
       }
@@ -58,7 +59,7 @@ impl Model {
       // the feed always show the same thread, and its card stands whole, with its session, as the
       // card of each other part: a resolved thread takes one line only while he does not read it.
       if part == Part::Resolved {
-        let open = |at: &usize| self.client.selected.as_ref() == Some(&self.client.settled[*at].1);
+        let open = |at: &usize| self.chosen(*at);
         let shown: Vec<usize> = cards.filter(|at| self.open || open(at)).collect();
         // A whole card brings the rows of its edges, as in each other part.
         rows.extend(shown.first().filter(|at| !open(at)).map(|_| Row::Blank));
@@ -82,14 +83,46 @@ impl Model {
     rows
   }
 
-  /// The runs of each row of the list that shows.
-  pub(crate) fn list(&self) -> Vec<Line> {
-    let on = self.pointer.filter(|(x, _)| self.on_list(*x));
-    let pointed = on.and_then(|(_, y)| self.row(usize::from(y)));
-    self.shown().map(|row| self.line(row, pointed)).collect()
+  /// The runs of each row of the list that shows, which the parts that show them share. The list
+  /// is laid out again only when a change that it can show, the moment while a mark of it moves or
+  /// else the second, its scroll, the size of the window or the row under the pointer changed, so a
+  /// move of the pointer that stays on one row, or a key typed in the input, lays out nothing. The
+  /// pointer on the line of the list where it stood asks no row again, since the row of a line lays
+  /// out the box of the context to find where the box starts.
+  pub(crate) fn list(&mut self) -> Rc<[Line]> {
+    let on = self.pointer.filter(|(x, _)| self.on_list(*x)).map(|(_, y)| y);
+    // A loader, an open or a pulse of a card moves with each moment, and an age with each second.
+    let clock = if self.moves() { self.client.moved } else { Duration::from_secs(self.second()) };
+    let shows = (self.shows, clock, self.scroll, self.size);
+    let kept = self.kept_list.as_ref().filter(|(was, _)| was.0 == shows);
+    if let Some((_, lines)) = kept.filter(|(was, _)| was.1 == on) {
+      return Rc::clone(lines);
+    }
+    let pointed = on.and_then(|y| self.row(usize::from(y)));
+    if let Some((was, lines)) = &mut self.kept_list
+      && (was.0, was.2) == (shows, pointed)
+    {
+      was.1 = on;
+      return Rc::clone(lines);
+    }
+    // The foot of the list, laid out once for its count and its rows.
+    let (changes, context) = (self.changes_rows(), self.context_rows());
+    let foot = Foot { changes: changes.len(), context: context.len() };
+    let mut foot_rows = (changes.into_iter(), context.into_iter());
+    let lines: Rc<[Line]> =
+      self.shown(foot).map(|row| self.line(row, pointed, &mut foot_rows)).collect();
+    self.kept_list = Some(((shows, on, pointed), Rc::clone(&lines)));
+    lines
   }
 
-  fn line(&self, row: Row, pointed: Option<Row>) -> Line {
+  /// The runs of a row of the list, which takes the row of the part of the changes or of the box of
+  /// the context that it shows from the rows of its foot, in their order.
+  fn line(
+    &self,
+    row: Row,
+    pointed: Option<Row>,
+    (changes, context): &mut (impl Iterator<Item = Piece>, impl Iterator<Item = Line>),
+  ) -> Line {
     let t = &self.tokens;
     let at = |row: Option<Row>| match row {
       Some(Row::Card(at, _) | Row::Resolved(at)) => Some(at),
@@ -112,35 +145,32 @@ impl Model {
         if second { then } else { first }
       }
       Row::Resolved(card) => self.resolved(card, self.ground(card, at(pointed))),
-      Row::Changes(at) => self.changes_line(at, pointed == Some(row)),
+      Row::Changes(_) => self.changes_line(changes.next(), pointed == Some(row)),
       Row::Context(at) => {
-        let line = self.context_rows().into_iter().nth(at).unwrap_or_default();
-        // The text of the box goes bright under the pointer, and its colored cells keep their
-        // colors.
-        let lit = |one: Span<'static>| {
-          let cells = one.content.starts_with(['━', '■']);
-          let style = if cells { one.style } else { one.style.fg(t.hover) };
-          run(one.content, style)
-        };
-        // The box takes a click once an answer told the context, which its parts then show.
-        let told = self.client.thread.as_ref().is_some_and(|one| one.thread.context.is_some());
-        if told && matches!(pointed, Some(Row::Context(_))) {
-          line.into_iter().map(lit).collect()
-        } else {
-          line
-        }
+        let line = context.next().unwrap_or_default();
+        self.context_line(
+          line,
+          at,
+          (matches!(pointed, Some(Row::Context(_))), pointed == Some(row)),
+        )
       }
     }
   }
 
   fn chosen(&self, at: usize) -> bool {
-    self.client.selected.as_ref() == Some(&self.client.settled[at].1)
+    self.client.settled.get(at).is_some_and(|one| self.client.selected.as_ref() == Some(&one.1))
+  }
+
+  /// The hue of the thread of the card at a place of the list, or the accent when the list holds
+  /// no card there.
+  fn hue_at(&self, at: usize) -> Color {
+    self.client.settled.get(at).map_or(self.tokens.accent, |one| self.hue(&one.1))
   }
 
   /// The ground of a card: the selected card is lifted, and the text of the card under the
   /// pointer goes bright, with no other change.
   fn ground(&self, at: usize, pointed: Option<usize>) -> Ground {
-    let hue = || self.hue(&self.client.settled[at].1);
+    let hue = || self.hue_at(at);
     let pulse = self.pulse(at).map(|share| mixed(self.tokens.panel, hue(), share / 5));
     let bg = self.chosen(at).then_some(self.tokens.lifted).or(pulse);
     Ground { bg, hover: (pointed == Some(at)).then_some(self.tokens.hover) }
@@ -168,7 +198,7 @@ impl Model {
         format!(
           "{} Dialing {}",
           Loader::Model.frame(self.client.moved),
-          self.client.machines[at].name
+          self.client.machines.get(at).map_or("", |one| one.name.as_str())
         )
       }
       (0, None, 1) => "This computer".to_owned(),
@@ -218,7 +248,7 @@ impl Model {
       _ => return Vec::new(),
     };
     let ground = Style::new().fg(self.tokens.lifted);
-    let hue = self.hue(&self.client.settled[at].1);
+    let hue = self.hue_at(at);
     vec![
       run(bar, Style::new().fg(hue)),
       run(fill.repeat(self.card_width() + 2), ground),
@@ -228,7 +258,7 @@ impl Model {
 
   /// A line of a card between its two edges, with the bar in the hue of its thread.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
-    let hue = self.hue(&self.client.settled[at].1);
+    let hue = self.hue_at(at);
     let bar = match self.pulse(at) {
       Some(share) if !self.chosen(at) => mixed(self.tokens.panel, hue, share),
       _ => hue,
@@ -239,7 +269,7 @@ impl Model {
   /// How far the pulse of a card stands while it runs: a card that began to call its operator
   /// rises in the hue of its thread and settles back, unless he reads it.
   fn pulse(&self, at: usize) -> Option<u16> {
-    let since = self.client.called.get(&self.client.settled[at].1)?;
+    let since = self.client.called.get(&self.client.settled.get(at)?.1)?;
     let after = self.client.moved.saturating_sub(*since);
     // A pulse at its first instant, as on a still clock, shows nothing.
     (after < CALL && !self.chosen(at)).then(|| called(after)).filter(|share| *share > 0)
@@ -248,8 +278,8 @@ impl Model {
   /// The two lines of a card: its title and its state, then where it is and who works on it.
   fn card(&self, at: usize, ground: Ground) -> [Line; 2] {
     let t = &self.tokens;
-    let (_, key, card) = &self.client.settled[at];
-    let told = &self.client.machines[key.0];
+    let Some((_, key, card)) = self.client.settled.get(at) else { return [Vec::new(), Vec::new()] };
+    let Some(told) = self.client.machines.get(key.0) else { return [Vec::new(), Vec::new()] };
     let on = |style: Style| ground.on(style);
     // A session whose life runs has its mark and its title bright; one that rests in its record
     // has neither, so what runs reads at a glance down the list.
@@ -278,8 +308,13 @@ impl Model {
     let initials: Vec<String> =
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
-    let agents = (card.thread.agents > 0)
-      .then(|| format!("{}{}", Loader::Agent.frames()[0], card.thread.agents));
+    let agents = (card.thread.agents > 0).then(|| {
+      format!(
+        "{}{}",
+        Loader::Agent.frames().first().copied().unwrap_or_default(),
+        card.thread.agents
+      )
+    });
     let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
     let files = changes.map(|one| one.files.len()).filter(|count| *count > 0);
     let marks = [files.map(|count| format!("±{count}")), model.map(str::to_owned), agents, alone];
@@ -295,11 +330,11 @@ impl Model {
   /// only reads, in place of its mark and its age, before the operator opens it.
   fn resolved(&self, at: usize, ground: Ground) -> Line {
     let t = &self.tokens;
-    let card = &self.client.settled[at].2;
+    let Some((_, key, card)) = self.client.settled.get(at) else { return Vec::new() };
     let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
     let mark = if card.refused.is_some() { "  " } else { "✓ " };
-    let runs = self.live(&self.client.settled[at].1, card);
+    let runs = self.live(key, card);
     let look = if runs { Style::new().fg(t.live) } else { t.style(Role::Muted) };
     let left = vec![run(mark, on(look)), title];
     let age = match card.refused {
@@ -345,7 +380,9 @@ impl Model {
       Standing::Paused { .. } => ("‖", "Paused".into(), None, age.clone()),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
       // A new answer takes the small dot of an unread mail, apart from the dot of a live session.
-      Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
+      Standing::Resolved
+        if self.client.machines.get(key.0).is_some_and(|one| card.thread.unread(&one.login)) =>
+      {
         ("•", String::new(), Some(t.attention), since())
       }
       // A thread that works took its loader above.
@@ -356,7 +393,8 @@ impl Model {
       | Standing::Resolved => ("", String::new(), None, since()),
     };
     if !confirmed {
-      let heard = format!("as of {}", self.hour(self.client.machines[key.0].heard));
+      let heard = self.client.machines.get(key.0).map_or(0, |one| one.heard);
+      let heard = format!("as of {}", self.hour(heard));
       return vec![run([word, heard].join(" ").trim_start().to_owned(), muted)];
     }
     let style = color.map_or(muted, colored);
@@ -392,7 +430,9 @@ impl Model {
       return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
     }
     let projects = &self.tokens.projects;
-    let one = projects[hash(project) % projects.len()];
+    let Some(one) = turn(projects, hash(&[project])) else {
+      return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
+    };
     run(badge(project), Style::new().fg(one.letters).bg(one.ground).bold())
   }
 
@@ -444,11 +484,11 @@ fn badge(project: &str) -> String {
   format!("{:<2}", letters.to_uppercase())
 }
 
-/// A number from a text, the same in each build, which picks a hue.
-pub(crate) fn hash(text: &str) -> usize {
-  text
-    .bytes()
-    .fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
+/// A number from a text, given in parts that it reads one after the other, the same in each build,
+/// which picks a hue.
+pub(crate) fn hash(parts: &[&str]) -> usize {
+  let bytes = parts.iter().flat_map(|one| one.bytes());
+  bytes.fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
     as usize
 }
 

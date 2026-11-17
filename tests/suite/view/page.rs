@@ -1,9 +1,13 @@
-use furb_wire::anchor::{Anchor, Where};
-use serde_json::{Value, json};
+use furb_wire::{
+  ChainTrack,
+  anchor::{Anchor, Where},
+};
+use serde_json::{Value, from_value, json};
 
 use furb::view::{
-  Answered, Block, Context, Fold, Held, Line, Made, Maker, Mark, Output, Page, Portion, Reach,
-  Read, Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, Written, declined,
+  Answered, Aside, Asked, Block, Card, Context, Desk, Fold, Held, Line, Made, Maker, Mark, Output,
+  Page, Portion, Reach, Read, Reply, Retrying, Rung, SHOWN, Said, Saying, Standing, Streamed,
+  Thought, Threads, Work, Written, declined,
 };
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
@@ -69,8 +73,7 @@ fn a_page_gives_each_message_with_its_block_numbered_through_the_thread_and_what
   assert_eq!(block.maker, opus);
   assert!(!block.more);
   assert_eq!(texts(block), [(1, "x = 1", &Mark::Ran), (2, "close('In the boot.')", &Mark::Ran)]);
-  let said =
-    |act: &str, kind, text: &str| Said { act: act.to_owned(), kind, text: text.to_owned() };
+  let said = |act: &str, kind, text: &str| Said { act: act.into(), kind, text: text.to_owned() };
   assert_eq!(
     first.said,
     [
@@ -189,7 +192,7 @@ fn a_word_that_an_operator_ran_on_a_thread_is_a_message_of_his_as_code_on_that_t
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
   let word = &page.exchanges[2];
   assert_eq!(
-    (word.at, word.message.as_str(), word.python, word.text.as_str(), word.runs),
+    (word.at, word.message.as_ref(), word.python, word.text.as_str(), word.runs),
     (2, "rung3", true, "", false)
   );
   let block = word.block.as_ref().unwrap();
@@ -277,7 +280,7 @@ fn a_question_of_a_model_about_a_line_is_a_sub_thread_that_asks_the_operator() {
     let said = page.exchanges.iter().flat_map(|one| &one.said);
     said
       .filter(|one| matches!(one.kind, Saying::Question { .. }))
-      .map(|one| one.act.clone())
+      .map(|one| one.act.to_string())
       .collect()
   };
   assert!(questions(&page).is_empty(), "{page:?}");
@@ -313,9 +316,9 @@ fn a_prompt_on_a_thread_about_a_line_of_a_file_is_a_sub_thread_that_holds_its_an
   let held = held(facts, &mut streams);
   // The thread holds no message of it, and no card stands for it.
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
-  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_ref()).collect();
   assert_eq!(messages, ["prompt1", "prompt3"]);
-  let cards: Vec<String> = held.cards().into_iter().map(|one| one.prompt).collect();
+  let cards: Vec<String> = held.cards().into_iter().map(|one| one.prompt.to_string()).collect();
   assert_eq!(cards, ["prompt1"]);
   // It stands under the thread with its anchor, and its reply opens it again.
   let [sub, model] = page.agents.as_slice() else { panic!("{page:?}") };
@@ -333,7 +336,7 @@ fn a_prompt_on_a_thread_about_a_line_of_a_file_is_a_sub_thread_that_holds_its_an
   );
   assert!(sub.card.works(), "{sub:?}");
   let own = held.page(&streams, "prompt5", Reach { before: None, limit: 10 });
-  let messages: Vec<&str> = own.exchanges.iter().map(|one| one.message.as_str()).collect();
+  let messages: Vec<&str> = own.exchanges.iter().map(|one| one.message.as_ref()).collect();
   assert_eq!(messages, ["prompt5", "prompt6"]);
   // A resolve of it closes what stands open in it alone.
   let open: Vec<String> = held.open_in("prompt5").into_iter().map(|one| one.0).collect();
@@ -552,7 +555,7 @@ fn each_answer_stands_after_the_message_that_came_before_it_whichever_prompt_its
   let block = second.block.as_ref().unwrap();
   assert_eq!(texts(block), [(2, "b = 2", &Mark::Ran)]);
   let merged =
-    Said { act: "prompt5".to_owned(), kind: Saying::Notice, text: "Yes, it merged.".to_owned() };
+    Said { act: "prompt5".into(), kind: Saying::Notice, text: "Yes, it merged.".to_owned() };
   assert_eq!(second.said, [merged]);
 }
 
@@ -561,7 +564,7 @@ fn a_wake_that_the_engine_says_on_a_thread_is_no_message_of_the_operator() {
   let mut streams = Streamed::default();
   let held = held(conversation(), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
-  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_ref()).collect();
   assert_eq!(messages, ["prompt1", "prompt2"]);
 }
 
@@ -590,7 +593,7 @@ fn a_message_that_the_operator_took_back_is_no_message_of_the_thread() {
   ]);
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
-  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_ref()).collect();
   assert_eq!(messages, ["prompt1"]);
 }
 
@@ -604,7 +607,7 @@ fn a_message_that_a_stop_of_its_thread_cancelled_stays_a_message_of_the_thread()
   ]);
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
-  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_ref()).collect();
   assert_eq!(messages, ["prompt1", "prompt3"]);
 }
 
@@ -624,8 +627,7 @@ fn a_notice_stands_after_the_message_that_came_before_it_though_its_rung_began_b
   let [first, second] = page.exchanges.as_slice() else { panic!("{page:?}") };
   assert_eq!(first.block.as_ref().unwrap().lines.len(), 1);
   assert!(first.said.is_empty(), "{first:?}");
-  let yes =
-    Said { act: "prompt3".to_owned(), kind: Saying::Notice, text: "Yes: stable.".to_owned() };
+  let yes = Said { act: "prompt3".into(), kind: Saying::Notice, text: "Yes: stable.".to_owned() };
   assert_eq!(second.said, [yes]);
 }
 
@@ -859,6 +861,30 @@ fn a_page_gives_the_context_of_its_chain_at_its_last_answer_with_the_window_of_i
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let read = Read { tokens: 124_000, cached: 98_000, written: 8_400 };
   assert_eq!(page.context, Some(Context { read, window: Some(200_000), dollars: 0.75 }));
+}
+
+#[test]
+fn a_page_gives_the_context_of_the_chain_that_its_chain_jumped_to() {
+  let roster = json!([["claude-cli:opus", ["low", "high"], 200_000], ["operator", ["uael"], 0]]);
+  let mut facts = vec![
+    json!(["stand", "stand1", "operator", "chain1"]),
+    json!(["done", "stand1", "journal", [roster, "/tmp", "claude-cli:opus/high"]]),
+  ];
+  facts.extend(thread());
+  facts.extend([
+    json!(["reply", "reply1", "rung2", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "journal", ["assistant", "x", [140_000, 30, 98_000, 8_400, 0.5], []]]),
+    json!(["jump", "jump1", "rung2", "chain1", [], ""]),
+    json!(["chain", "chain2", "chain1", "chain1", "root", "chain1", []]),
+    json!(["done", "jump1", "chain1", "chain2"]),
+    json!(["reply", "reply2", "rung2", "chain2", "claude-cli:opus/high"]),
+    json!(["done", "reply2", "journal", ["assistant", "x", [96_000, 10, 90_000, 1_000, 0.25], []]]),
+  ]);
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let read = Read { tokens: 96_000, cached: 90_000, written: 1_000 };
+  assert_eq!(page.context, Some(Context { read, window: Some(200_000), dollars: 0.25 }));
 }
 
 #[test]
@@ -1124,4 +1150,56 @@ fn a_line_that_wrote_a_file_says_what_it_changed_against_the_text_that_the_life_
     more: 0,
   };
   assert_eq!(writes, [&[][..], &[changed][..], &[added][..]]);
+}
+
+/// The views of a thread that asks the operator and makes an agent on a chain of its own.
+fn views() -> String {
+  let mut facts = thread();
+  facts.extend([
+    json!(["prompt", "prompt4", "rung2", "chain1", "bool", "Keep it?", "operator"]),
+    json!(["started", "prompt4", "console"]),
+    json!(["chain", "chain2", "rung2", "", "helper", ""]),
+    json!(["prompt", "prompt5", "rung2", "chain2", "str", "look", ""]),
+    json!(["prompt", "prompt6", "chain1", "chain2", "None", "wake", ""]),
+  ]);
+  let mut streams = Streamed::default();
+  streams.lined(&threaded());
+  let held = held(facts, &mut streams);
+  let none: Vec<String> = Vec::new();
+  let asked = Asked { opened: &none, owed: &none, taken: None, shown: SHOWN };
+  let reach = Reach { before: None, limit: 10 };
+  json!({
+    "threads": [held.threads("chain1", None, 0), held.threads("chain2", None, 0)],
+    "desk": held.desk(&["prompt2".to_owned()]),
+    "tracks": held.tracks(),
+    "ladder": held.ladder("chain1", None, asked),
+    "cards": held.cards(),
+    "page": held.page(&streams, "prompt1", reach),
+  })
+  .to_string()
+}
+
+/// Each view says the same bytes now that it shares the names of its acts, so no window reads
+/// another view, and each reads back from them.
+#[test]
+fn each_view_says_the_same_bytes() {
+  // The bytes of the views when each held a copy of each name.
+  let held = r#"{"threads":[{"threads":[{"thread":{"prompt":"prompt1","title":"where does the time go","messages":["prompt3"],"asked":["prompt2","prompt4"],"asks":["prompt4"],"state":"asks","over":false,"origin":"operator","yours":true},"agents":[{"thread":{"prompt":"prompt5","title":"look","messages":[],"asked":[],"asks":[],"state":"runs","over":false,"origin":"rung","yours":false},"agents":[],"state":"runs"}],"state":"asks"}],"asides":[],"notes":[],"attention":{"asks":1,"failed":0,"paused":0,"unread":0},"state":"asks"},{"threads":[{"thread":{"prompt":"prompt5","title":"look","messages":[],"asked":[],"asks":[],"state":"runs","over":false,"origin":"rung","yours":false},"agents":[],"state":"runs"}],"asides":[{"prompt":"prompt6","aside":{"aside":"notice"},"messages":[]}],"notes":[{"prompts":["prompt6"],"count":1,"unread":1}],"attention":{"asks":0,"failed":0,"paused":0,"unread":0},"state":"runs"}],"desk":{"asks":[{"id":"prompt2","chain":"chain1","by":"rung1","shape":"None","message":"It is 14 lines.","notice":true,"choices":[],"ticks":[],"hint":"","began":5},{"id":"prompt4","chain":"chain1","by":"rung2","shape":"bool","message":"Keep it?","notice":false,"choices":["yes","no"],"ticks":[],"hint":"","began":13}],"questions":1,"notices":1},"tracks":[{"chain":"chain1","label":"root","state":"asks","moments":[2,3,4,5,6,7,8,9,10,11,12,13],"threads":[{"prompt":"prompt1","at":2,"ended":6,"says":"where does the time go"},{"prompt":"prompt2","at":5,"says":"It is 14 lines."},{"prompt":"prompt4","at":13,"says":"Keep it?"}]},{"chain":"chain2","label":"helper","parent":"chain1","state":"runs","moments":[16,17],"threads":[{"prompt":"prompt5","at":16,"by":"chain1","says":"look"},{"prompt":"prompt6","at":17,"by":"chain1","says":"wake"}]}],"ladder":[{"type":"step","id":"prompt1","depth":0},{"type":"step","id":"rung1","depth":1},{"type":"step","id":"prompt2","depth":2},{"type":"step","id":"prompt3","depth":0},{"type":"step","id":"rung2","depth":1},{"type":"step","id":"prompt4","depth":2}],"cards":[{"prompt":"prompt1","title":"where does the time go","standing":{"is":"asks","of":null},"model":"claude-cli:opus","agents":1,"readers":["operator"]}],"page":{"exchanges":[{"at":0,"message":"prompt1","said_at":2,"by":{"role":"operator"},"text":"where does the time go","python":false,"runs":false,"block":{"maker":{"role":"model","model":"claude-cli:opus","effort":"high"},"lines":[{"number":1,"text":"x = 1","mark":{"is":"ran"}},{"number":2,"text":"close('In the boot.')","mark":{"is":"ran"}}],"more":false,"thought":null},"said":[{"act":"prompt2","kind":"notice","text":"It is 14 lines."},{"act":"prompt1","kind":"answer","text":"In the boot."}]},{"at":1,"message":"prompt3","said_at":9,"by":{"role":"operator"},"text":"and the seed?","python":false,"runs":true,"block":{"maker":{"role":"model","model":"claude-cli:opus","effort":"high"},"lines":[{"number":3,"text":"a = 2","mark":{"is":"ran"}},{"number":4,"text":"b = await bash('ls')","mark":{"is":"ran"},"made":[{"made":"works"}]},{"number":5,"text":"c = 3","mark":{"is":"runs","work":"agent","began":100000},"awaits":["prompt5"]}],"more":true,"thought":null},"said":[{"act":"prompt4","kind":{"question":{"shape":"bool","answered":null}},"text":"Keep it?"}]}],"above":0,"agents":[{"prompt":"prompt5","title":"look","standing":{"is":"runs"},"agents":0,"readers":[],"began":100000,"took":null,"line":null}],"context":null}}"#;
+  let said = views();
+  assert_eq!(said, held);
+  let parts: Value = serde_json::from_str(&said).unwrap();
+  let again = |part: &Value, back: fn(&Value) -> Value| assert_eq!(&back(part), part);
+  let threads: fn(&Value) -> Value = |one| json!(from_value::<Vec<Threads>>(one.clone()).unwrap());
+  again(&parts["threads"], threads);
+  again(&parts["desk"], |one| json!(from_value::<Desk>(one.clone()).unwrap()));
+  again(&parts["tracks"], |one| json!(from_value::<Vec<ChainTrack>>(one.clone()).unwrap()));
+  again(&parts["ladder"], |one| json!(from_value::<Vec<Rung>>(one.clone()).unwrap()));
+  again(&parts["cards"], |one| json!(from_value::<Vec<Card>>(one.clone()).unwrap()));
+  again(&parts["page"], |one| json!(from_value::<Page>(one.clone()).unwrap()));
+  let question = Aside::Question("chain2".into());
+  assert_eq!(serde_json::to_string(&question).unwrap(), r#"{"aside":"question","from":"chain2"}"#);
+  assert_eq!(
+    from_value::<Aside>(json!({"aside": "question", "from": "chain2"})).unwrap(),
+    question
+  );
 }

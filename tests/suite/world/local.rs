@@ -2,8 +2,6 @@
 //! each test runs again as a child of itself, as a user starts a host with that environment, and a
 //! server of the test on a port of this machine answers it and keeps each request that it read.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   fs,
   io::{BufRead, BufReader, Read, Write},
@@ -60,14 +58,19 @@ fn at(request: &str, path: &str) -> bool {
 /// Each model of the local server that the catalog of the child offers: its name, its window and
 /// whether it sees images.
 fn offered() -> Vec<(String, u64, bool)> {
-  let models = Catalog::load(None).offered().into_iter();
+  let models = Catalog::load(None).unwrap().offered().unwrap().into_iter();
   let local = models.filter(|one| one.name().starts_with("local:"));
   local.map(|one| (one.name().to_owned(), one.window(), one.sees())).collect()
 }
 
 /// Why the catalog of the child offers no model of this name.
 fn why(name: &str) -> String {
-  Catalog::load(None).roster(None, Some(name)).err().map(|no| no.to_string()).unwrap_or_default()
+  Catalog::load(None)
+    .unwrap()
+    .roster(None, Some(name))
+    .err()
+    .map(|no| no.to_string())
+    .unwrap_or_default()
 }
 
 /// The environment that names the local server on this port.
@@ -91,7 +94,8 @@ fn the_environment_names_the_address_of_the_server_with_no_user_no_password_and_
       [("local:Qwen/Qwen3-8B".to_owned(), 4096, false)],
       "the environment gives the window"
     );
-    let actor = Catalog::load(None).roster(None, Some("local:Qwen/Qwen3-8B/high")).map(|one| one.1);
+    let actor =
+      Catalog::load(None).unwrap().roster(None, Some("local:Qwen/Qwen3-8B/high")).map(|one| one.1);
     assert_eq!(
       actor.ok(),
       Some(Some("local:Qwen/Qwen3-8B/high".to_owned())),
@@ -137,9 +141,9 @@ fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_
       ],
       "an entry of another shape hides no other, and a model that writes no text is not offered"
     );
-    let catalog = Catalog::load(None);
+    let catalog = Catalog::load(None).unwrap();
     for name in ["local:qwen", "local:llama", "local:odd"] {
-      let model = catalog.find(name).expect("a model of the server");
+      let model = catalog.find(name).unwrap().expect("a model of the server");
       assert_eq!(
         (model.efforts(), model.priced(), model.at(Some("high"))),
         (vec!["off", "low", "medium", "high"], Some([0.0; 4]), format!("{name}/high")),

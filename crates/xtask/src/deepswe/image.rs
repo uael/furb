@@ -166,7 +166,7 @@ impl<'a> Registry<'a> {
         let told: BTreeMap<String, String> = Regex::new(r#"(\w+)="([^"]*)""#)?
           .captures_iter(line)
           .filter_map(Result::ok)
-          .map(|one| (one[1].to_owned(), one[2].to_owned()))
+          .map(|one| (crate::group(&one, 1).to_owned(), crate::group(&one, 2).to_owned()))
           .collect();
         let field = |key: &str| told.get(key).cloned().unwrap_or_default();
         let got = captured(
@@ -257,8 +257,15 @@ fn listed(stdout: ChildStdout) -> io::Result<Layer> {
         dist.name = header(&text, "Name");
         dist.version = header(&text, "Version");
       } else if let Ok(came) = serde_json::from_str::<serde_json::Value>(&text) {
-        came["url"].as_str().unwrap_or_default().clone_into(&mut dist.url);
-        dist.editable = came["dir_info"]["editable"].as_bool().unwrap_or_default();
+        came
+          .get("url")
+          .and_then(serde_json::Value::as_str)
+          .unwrap_or_default()
+          .clone_into(&mut dist.url);
+        dist.editable = came
+          .pointer("/dir_info/editable")
+          .and_then(serde_json::Value::as_bool)
+          .unwrap_or_default();
       }
     }
   }
@@ -270,7 +277,7 @@ fn header(text: &str, key: &str) -> Option<String> {
   let start = format!("{key}:");
   let line =
     text.lines().take_while(|line| !line.is_empty()).find(|line| line.starts_with(&start))?;
-  Some(line[start.len()..].trim().to_owned())
+  Some(line.strip_prefix(&start)?.trim().to_owned())
 }
 
 impl Rig {

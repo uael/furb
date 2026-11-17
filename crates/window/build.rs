@@ -171,15 +171,17 @@ impl Pin {
     }
     let metadata: Value =
       serde_json::from_slice(&asked.stdout).map_err(|no| Fault::Metadata(no.to_string()))?;
-    let packages = metadata["packages"].as_array().into_iter().flatten();
-    let found = packages.filter(|package| package["name"] == "opentui-sys").find_map(|package| {
-      // The manifest stands at `packages/rust/crates/opentui-sys/Cargo.toml` of the checkout.
-      let packages = Path::new(package["manifest_path"].as_str()?).ancestors().nth(4)?;
-      let (_, commit) = package["source"].as_str()?.rsplit_once('#')?;
-      Some((packages.join("native"), commit.to_owned()))
-    });
+    let packages = metadata.get("packages").and_then(Value::as_array).into_iter().flatten();
+    let found = packages
+      .filter(|package| package.get("name").and_then(Value::as_str) == Some("opentui-sys"))
+      .find_map(|package| {
+        // The manifest stands at `packages/rust/crates/opentui-sys/Cargo.toml` of the checkout.
+        let packages = Path::new(package.get("manifest_path")?.as_str()?).ancestors().nth(4)?;
+        let (_, commit) = package.get("source")?.as_str()?.rsplit_once('#')?;
+        Some((packages.join("native"), commit.to_owned()))
+      });
     let (native, commit) = found.ok_or(Fault::Unpinned)?;
-    let target = metadata["target_directory"].as_str().ok_or(Fault::Unpinned)?;
+    let target = metadata.get("target_directory").and_then(Value::as_str).ok_or(Fault::Unpinned)?;
     Ok(Self { native, home: Path::new(target).join("opentui").join(commit) })
   }
 

@@ -172,14 +172,18 @@ def greet(who: str) -> str:
 
 if __name__ == "__main__":
   if len(sys.argv) > 1:
+    # Its stdin is a pipe from the process that served it, whose end comes when that process ends in any way, also
+    # by a kill that runs no teardown: the server then ends too.
+    import threading
+    threading.Thread(target=lambda: (sys.stdin.read(), os._exit(0)), daemon=True).start()
     app.run(sys.argv[1], port=int(sys.argv[2]))
   else:
     try:
       app.run("stdio")
     finally:
-      # A server that outlives the close of its stdin and of its stdout ends only by a signal.
+      # A server that outlives the close of its stdin and of its stdout ends only by a signal, or after a minute.
       if os.environ.get("LINGER"):
-        time.sleep(600)
+        time.sleep(60)
 """
 """SERVER is the server of the tests, a module of the official SDK, which runs over stdio, or over HTTP when it is
 given a transport and a port."""
@@ -231,13 +235,14 @@ class Place:
     return [line.split()[1] for line in starts.read_text().splitlines()] if starts.exists() else []
 
   def served(self, transport: str, **more: str) -> str:
-    """The address of the server of the tests over HTTP, with more variables, which runs until the end of the test."""
+    """The address of the server of the tests over HTTP, with more variables, which runs until the end of the test or
+    of the process of the test."""
     with socket.socket() as one:
       one.bind(("127.0.0.1", 0))
       port = one.getsockname()[1]
     env = {**os.environ, "HEADERS": str(self.at / "headers"), **more}
     command = [sys.executable, str(self.at / "server.py"), transport, str(port)]
-    self.servers.append(subprocess.Popen(command, env=env))  # noqa: S603
+    self.servers.append(subprocess.Popen(command, env=env, stdin=subprocess.PIPE))  # noqa: S603
     for _ in range(200):
       with socket.socket() as one:
         if one.connect_ex(("127.0.0.1", port)) == 0:
@@ -280,6 +285,8 @@ def place(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Place]:
   for server in one.servers:
     server.kill()
     server.wait()
+    if server.stdin:
+      server.stdin.close()
 
 
 async def asked(root: str, kind: str, words: str = "") -> object:
@@ -568,6 +575,59 @@ def alive(pid: int) -> bool:
   except ProcessLookupError:
     return False
   return True
+
+
+SERVES = """
+import sys, time
+from pathlib import Path
+sys.path[:0] = sys.argv[1:3]
+from test_mcp import Place
+place = Place(Path(sys.argv[3]))
+url = place.served("streamable-http")
+print(url, place.servers[0].pid, flush=True)
+time.sleep(120)
+"""
+"""SERVES is a process that serves the server of the tests over HTTP as a test does, prints its address and its pid,
+and waits."""
+
+
+def test_a_server_of_the_tests_ends_when_the_process_that_served_it_ends(tmp_path: Path) -> None:
+  """A server of the tests over HTTP ends when the process that served it ends, also by a kill that runs no
+  teardown."""
+  outside = Path(__file__).parent
+  at = tmp_path / "place"
+  at.mkdir()
+  # The harness makes its folders in the temporary folder, which a kill leaves: here they stand in the folder of the
+  # test.
+  env = {**os.environ, "TMPDIR": str(tmp_path), "TMP": str(tmp_path), "TEMP": str(tmp_path)}
+  command = [sys.executable, "-c", SERVES, str(outside.parent), str(outside), str(at)]
+  serving = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, text=True)  # noqa: S603
+  pid = 0
+  try:
+    assert serving.stdout is not None
+    url, said = serving.stdout.readline().split()
+    port, pid = int(url.rsplit(":", 1)[1]), int(said)
+    assert listens(port), "the server listens while the process that served it runs"
+    serving.kill()
+    serving.wait()
+    deadline = time.monotonic() + 10
+    while alive(pid):
+      assert time.monotonic() < deadline, f"the server {pid} outlived the process that served it"
+      time.sleep(0.05)
+    assert not listens(port)
+  finally:
+    serving.kill()
+    serving.wait()
+    if serving.stdout:
+      serving.stdout.close()
+    if pid and alive(pid):
+      os.kill(pid, signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM)
+
+
+def listens(port: int) -> bool:
+  """Whether a server of the machine listens on a port of the loopback."""
+  with socket.socket() as one:
+    return one.connect_ex(("127.0.0.1", port)) == 0
 
 
 async def test_a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more(place: Place) -> None:

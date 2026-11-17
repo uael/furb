@@ -24,11 +24,11 @@ assertion_line: 34
 
 
 
-
-                                                               Context ▾                       12%
+                                                               Context ▾   Kinds · Cache       12%
   ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ┃ A reply opens this thread again                            ■ From the cache          98k   10%
   ┃                                                            ■ Written to the cache   8.4k    1%
   ┃  Message  Python    → read the… ▾   opus  high   + ⌃N      ■ New                     17k    2%
   ┃                                                            ■ Free                   876k   88%
   This computer · ~/furb                          ⌃P find      124k of 1M · 98k cached       $0.75
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

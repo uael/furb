@@ -1,27 +1,25 @@
 //! The ears that a host hands a life, the functions it hands it, and how the life steps each ear as
 //! a generator of the sandbox and lends itself to the code of the host.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
-  cell::RefCell,
-  collections::{HashMap, HashSet, VecDeque},
-  sync::atomic::{AtomicI64, Ordering},
+  collections::{BTreeMap, HashMap, HashSet, VecDeque},
+  sync::{
+    Arc,
+    atomic::{AtomicI64, Ordering},
+  },
   task::{Context, Poll, Waker},
   time::{Duration, Instant},
 };
 
 use monty_types::{MontyUuid, unstable};
 
-use super::Outside;
+use super::{Outside, crossing::stands};
 use crate::{
   ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
   sand,
   sand::{Answer, Sand},
-  value::{Fault, Given, Object, entry, marked},
+  value::{Fault, Given, Object, entry, items, marked},
 };
 use std::mem;
 
@@ -64,38 +62,51 @@ impl Handed {
   }
 }
 
-thread_local! {
-  /// What a host of this thread handed over and no life took yet. A life takes each the first time
-  /// a value that names it comes into its sandbox, and holds it from then on, so each is the life's
-  /// that was given it.
-  static HANDED: RefCell<Handed> = RefCell::default();
-}
-
 /// How many ears and functions the hosts of this process handed over, which names the next.
 static HANDS: AtomicI64 = AtomicI64::new(1);
 
-/// An ear of the host, handed over as the value a verb is given: the object that stands in for it
-/// in the sandbox, which stands at a yield when the host started the ear before it crossed.
-pub fn handed(ear: Box<dyn Ear>, started: bool) -> Object {
-  let name = format!("{EAR}{}", HANDS.fetch_add(1, Ordering::Relaxed));
-  HANDED.with_borrow_mut(|held| held.ears.insert(name.clone(), ear));
-  marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
-}
+/// The ears and the functions of a host that the values of a call name, which [`Engine::hand`]
+/// gives the life with the call. The life takes each the first time a value that names it comes
+/// into its sandbox, and holds it from then on.
+///
+/// [`Engine::hand`]: crate::Engine::hand
+#[derive(Default)]
+pub struct Hands(pub(super) Handed);
 
-/// A function of the host, handed over as a value a verb may be given: a show, a filter. The
-/// sandbox calls it back, and what it gives is what the call gave.
-pub fn callable(mut call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static) -> Object {
-  lending(move |args, life| (call(args), life))
-}
+impl Hands {
+  /// An ear of the host, as the value a verb is given: the object that stands in for it in the
+  /// sandbox, which stands at a yield when the host started the ear before it crossed.
+  pub fn ear(&mut self, ear: Box<dyn Ear>, started: bool) -> Object {
+    let name = format!("{EAR}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+    self.0.ears.insert(name.clone(), ear);
+    marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
+  }
 
-/// A function of the host that calls verbs of the life, handed over as [`callable`] hands one: the
-/// life is lent to it while it runs, and it gives the life back with what the call gave.
-pub fn lending(
-  call: impl FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life) + 'static,
-) -> Object {
-  let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
-  HANDED.with_borrow_mut(|held| held.calls.insert(name.clone(), Box::new(call)));
-  Object::function(name, None)
+  /// A function of the host, as a value a verb may be given: a show, a filter. The sandbox calls
+  /// it back, and what it gives is what the call gave.
+  pub fn callable(
+    &mut self,
+    mut call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static,
+  ) -> Object {
+    self.lending(move |args, life| (call(args), life))
+  }
+
+  /// A function of the host that calls verbs of the life, as [`Hands::callable`] gives one: the
+  /// life is lent to it while it runs, and it gives the life back with what the call gave.
+  pub fn lending(
+    &mut self,
+    call: impl FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life) + 'static,
+  ) -> Object {
+    let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+    self.0.calls.insert(name.clone(), Box::new(call));
+    Object::function(name, None)
+  }
+
+  /// These hands, with each ear and each function that `other` holds beside them.
+  pub fn join(&mut self, other: Self) {
+    self.0.ears.extend(other.0.ears);
+    self.0.calls.extend(other.0.calls);
+  }
 }
 
 /// The life, lent by value to code of a host while the life hears it, since every frame of the life
@@ -118,6 +129,14 @@ impl Life {
   ) -> Result<Object, Fault> {
     let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
     self.outside.asked(&mut self.sand, Call { verb: verb.to_owned(), args, kwargs })
+  }
+
+  /// The ears and the functions of the host that the values of the next calls name, as
+  /// [`Engine::hand`] takes them.
+  ///
+  /// [`Engine::hand`]: crate::Engine::hand
+  pub fn hand(&mut self, hands: Hands) {
+    self.outside.hosted.given.join(hands);
   }
 }
 
@@ -147,16 +166,19 @@ enum Stepped {
 /// The ears that a host gave a life and where each stands, which the sandbox steps as generators.
 pub(super) struct Hosted {
   pub(super) handed: Handed,
+  /// What the host gave with its calls that no value that came into the sandbox named yet.
+  pub(super) given: Hands,
   /// The waker of whoever drives the engine, which each ear is polled with.
   pub(super) waker: Waker,
-  /// Each ear of the host, by the id of its object in the sandbox: its name and where it stands.
-  pub(super) standing: HashMap<MontyUuid, (String, At)>,
+  /// Each ear of the host, by the id of its object in the sandbox, in the order in which the ears
+  /// are polled: its name and where it stands.
+  pub(super) standing: BTreeMap<MontyUuid, (String, At)>,
   /// What each ear of the host waits for since its last step, by the id of its object in the
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
   /// The fact that an ear of the host heard last, as [`Outside::told`] keeps it: the value that
-  /// the sandbox sent, and the fact that it went out as.
-  pub(super) told: Option<(Object, Fact)>,
+  /// the sandbox sent, when it is not the fact, and the fact that it went out as.
+  pub(super) told: Option<(Option<Object>, Fact)>,
   /// The count of the replay, while the life boots.
   pub(super) replay: Option<Replay>,
 }
@@ -222,14 +244,25 @@ impl Hosted {
       (replay.told)(replay.of, replay.of);
     }
   }
+
+  /// What an ear waits for, kept for a send of nothing, and given back to the sandbox. An ear most
+  /// often waits for what it waited for at its last step, which is kept already.
+  fn waiting(&mut self, on: MontyUuid, wait: Object) -> Object {
+    let held = self.waits.get(&on);
+    if held.is_none_or(|held| unstable::graph_parts(held) != unstable::graph_parts(&wait)) {
+      self.waits.insert(on, wait.clone());
+    }
+    wait
+  }
 }
 
 impl Default for Hosted {
   fn default() -> Self {
     Self {
       handed: Handed::default(),
+      given: Hands::default(),
       waker: Waker::noop().clone(),
-      standing: HashMap::new(),
+      standing: BTreeMap::new(),
       waits: HashMap::new(),
       told: None,
       replay: None,
@@ -268,22 +301,13 @@ impl Outside {
   /// While an ear holds an entry that the record does not hold yet, only such an ear is polled, as
   /// `Engine::pump` says.
   pub(super) fn spoken(&mut self) -> Option<(String, Spoken)> {
-    let ears = &self.hosted.handed.ears;
-    let owed = ears.values().any(|ear| ear.unkept() > 0);
-    let polled = |name: &String| !owed || ears.get(name).is_some_and(|ear| ear.unkept() > 0);
-    let mut standing: Vec<_> = self
-      .hosted
-      .standing
-      .iter()
-      .filter(|(_, (name, at))| matches!(at, At::Waiting) && polled(name))
-      .map(|(id, (name, _))| (*id, name.clone()))
-      .collect();
-    standing.sort_unstable();
-    let mut cx = Context::from_waker(&self.hosted.waker);
-    standing.into_iter().find_map(|(_, name)| {
-      let ear = self.hosted.handed.ears.get_mut(&name)?;
+    let Hosted { handed, waker, standing, .. } = &mut self.hosted;
+    let owed = handed.ears.values().any(|ear| ear.unkept() > 0);
+    let mut cx = Context::from_waker(waker);
+    standing.values().filter(|(_, at)| matches!(at, At::Waiting)).find_map(|(name, _)| {
+      let ear = handed.ears.get_mut(name).filter(|ear| !owed || ear.unkept() > 0)?;
       match ear.poll(&mut cx) {
-        Poll::Ready(spoken) => Some((name, spoken)),
+        Poll::Ready(spoken) => Some((name.clone(), spoken)),
         Poll::Pending => None,
       }
     })
@@ -293,11 +317,11 @@ impl Outside {
   /// from what one ear said first until no ear says more: a saying, or a verb, whose value goes
   /// nowhere. The first that raises ends it.
   pub(super) fn said(&mut self, sand: &mut Sand, first: (String, Spoken)) -> Result<(), Fault> {
-    let (speaks, spoke) = (self.opened.speaks.clone(), self.opened.spoke.clone());
+    let opened = Arc::clone(&self.opened);
     let mut next = Some(first);
     while let Some((by, spoken)) = next {
       self.asking.clear();
-      let token = sand.call(self, &speaks, vec![Object::string(&by)], vec![])?;
+      let token = sand.call(self, &opened.speaks, vec![Object::string(&by)], vec![])?;
       let got = match spoken {
         Spoken::Saying(saying) => self.says(sand, &saying),
         // What the verb came to goes back to the ear, which takes it at its next poll.
@@ -309,7 +333,7 @@ impl Outside {
           Ok(())
         }
       };
-      let reset = sand.call(self, &spoke, vec![token.clone()], vec![]);
+      let reset = sand.call(self, &opened.spoke, vec![token.clone()], vec![]);
       if let Some(handle) = token.as_ref().handle() {
         self.drop_handle(sand, &handle);
       }
@@ -322,9 +346,8 @@ impl Outside {
 
   /// One saying of an ear, said into the life.
   pub(super) fn says(&mut self, sand: &mut Sand, saying: &Fact) -> Result<(), Fault> {
-    let words = self.inward(sand, &saying.0)?;
-    let words =
-      words.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+    let words = self.inward(sand, saying.object())?;
+    let words = items(words.as_ref()).into_iter().flatten().map(|one| one.to_owned()).collect();
     self.named_call(sand, "say", words, vec![]).map(drop)
   }
 
@@ -353,7 +376,7 @@ impl Outside {
   /// It is over, so the object stops, and it raised, so the object raises. A generator that the
   /// host started before it crossed was born there, so its object begins where it waits.
   pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<Object>) -> Answer {
-    let Some((name, at)) = self.hosted.standing.get(&on).cloned() else {
+    let Some(&(_, at)) = self.hosted.standing.get(&on) else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
     let a = a.filter(|one| !one.as_ref().is_none());
@@ -369,7 +392,7 @@ impl Outside {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
       (At::Waiting, Some(_)) if let Some((_, refusal)) = self.ending.take_if(|one| one.0 == on) => {
-        return self.inward(sand, &refusal.0).map_or_else(Answer::Abort, Answer::Value);
+        return self.inward(sand, refusal.object()).map_or_else(Answer::Abort, Answer::Value);
       }
       (At::Waiting, Some(a)) => match self.told(sand, a) {
         Ok(Some(fact)) => Heard::Fact(fact),
@@ -389,23 +412,27 @@ impl Outside {
     {
       return answer;
     }
-    let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
+    let Hosted { standing, handed, .. } = &mut self.hosted;
+    let Some((name, mut ear)) =
+      standing.get(&on).and_then(|(name, _)| handed.ears.remove_entry(name))
+    else {
+      let name = standing.get(&on).map_or("", |(name, _)| name);
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
     let (at, answer) = match self.stepped(sand, &mut *ear, heard) {
       Stepped::Say(saying) => {
-        (At::Waiting, self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value))
+        (At::Waiting, self.inward(sand, saying.object()).map_or_else(Answer::Abort, Answer::Value))
       }
       Stepped::Wait(wait) => {
-        let wait = wait.unwrap_or_else(Object::none);
-        self.hosted.waits.insert(on, wait.clone());
-        (At::Waiting, Answer::Value(wait))
+        (At::Waiting, Answer::Value(self.hosted.waiting(on, wait.unwrap_or_else(Object::none))))
       }
       Stepped::Over => (At::Over, Answer::Fault(Fault::stop_iteration())),
       Stepped::Raised(fault) => (At::Over, self.raising(sand, fault)),
     };
-    self.hosted.handed.ears.insert(name.clone(), ear);
-    self.hosted.standing.insert(on, (name, at));
+    self.hosted.handed.ears.insert(name, ear);
+    if let Some(standing) = self.hosted.standing.get_mut(&on) {
+      standing.1 = at;
+    }
     answer
   }
 
@@ -419,15 +446,18 @@ impl Outside {
   /// handle, and a number that the host forgot drops the fact that named it.
   fn told(&mut self, sand: &mut Sand, a: Object) -> Result<Option<Fact>, Fault> {
     if let Some((came, fact)) = &self.hosted.told
-      && unstable::graph_parts(came) == unstable::graph_parts(&a)
+      && unstable::graph_parts(came.as_ref().unwrap_or(fact.object())) == unstable::graph_parts(&a)
     {
       return Ok(Some(fact.clone()));
     }
-    let fact = Fact::owned(self.outward(sand, &a)?);
+    // A value whose parts stand goes out as it came, or cut as `carried` cuts it, which goes out
+    // as it stands again, so the fact is the key of the next value with no copy of this one.
+    let came = (!stands(&a)).then(|| a.clone());
+    let fact = Fact::owned(self.outward(sand, a)?);
     if let (Some(fact), Some(replay)) = (&fact, &mut self.hosted.replay) {
       replay.heard(fact);
     }
-    self.hosted.told = fact.clone().map(|fact| (a, fact));
+    self.hosted.told = fact.clone().map(|fact| (came, fact));
     Ok(fact)
   }
 
@@ -437,6 +467,10 @@ impl Outside {
   /// once for all the ears that hear it, and the refusal raises in the word. A word that asks again
   /// past that refusal goes on in its loop, so its step ends there, as a second excess of the bound
   /// of monty ends it.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the side of the host and the sandbox are lent apart, since each call of the sandbox lends the host again, and a refusal names the object of the ear, the question that it heard and the bound that it passed"
+  )]
   fn refused(&mut self, sand: &mut Sand, on: MontyUuid, fact: &Fact, bound: Duration) -> Answer {
     let asked = (fact.about().to_owned(), fact.by().to_owned());
     match self.past.replace(asked.clone()) {
@@ -450,7 +484,7 @@ impl Outside {
       _ => {
         let why = format!("the step of the word ran past the bound of a turn of {bound:?}");
         let done = Fact::says("done", &asked.0, [Fault::refused(why).object()]);
-        self.inward(sand, &done.0).map_or_else(Answer::Abort, Answer::Value)
+        self.inward(sand, done.object()).map_or_else(Answer::Abort, Answer::Value)
       }
     }
   }
@@ -472,7 +506,7 @@ impl Outside {
       return None;
     }
     let asker = self.named_call(sand, "get", vec![Object::string(&by)], vec![]).ok()?;
-    let kind = asker.as_ref().items()?.first()?.as_str()?.to_owned();
+    let kind = entry(&asker.as_ref(), 0)?.as_str()?.to_owned();
     let why = format!(
       "{by}, an act of {kind}, asked the World for longer than the bound of a turn of {bound:?} \
        with no step of a word, so the life ends it and refuses its {}",
@@ -487,7 +521,7 @@ impl Outside {
       self.ending = Some((on, question));
       Fact::says("done", &by, [refusal])
     };
-    Some(self.inward(sand, &ends.0).map_or_else(Answer::Abort, Answer::Value))
+    Some(self.inward(sand, ends.object()).map_or_else(Answer::Abort, Answer::Value))
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that
@@ -505,13 +539,12 @@ impl Outside {
 
   /// What the host handed over under this name, which this life holds from now on.
   pub(super) fn take(&mut self, name: &str) {
-    HANDED.with_borrow_mut(|held| {
-      if let Some(ear) = held.ears.remove(name) {
-        self.hosted.handed.ears.insert(name.to_owned(), ear);
-      }
-      if let Some(call) = held.calls.remove(name) {
-        self.hosted.handed.calls.insert(name.to_owned(), call);
-      }
-    });
+    let Hosted { handed, given, .. } = &mut self.hosted;
+    if let Some(ear) = given.0.ears.remove(name) {
+      handed.ears.insert(name.to_owned(), ear);
+    }
+    if let Some(call) = given.0.calls.remove(name) {
+      handed.calls.insert(name.to_owned(), call);
+    }
   }
 }

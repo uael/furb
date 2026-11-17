@@ -3,8 +3,6 @@
 //! a user starts a host whose `FURB_OPENAI_URL` names a host that stands in for `OpenAI`, which a
 //! thread of the parent serves on a port of this machine, keeping each request that it read.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{
   collections::HashMap,
   env,
@@ -177,7 +175,7 @@ fn an_account_offers_its_models_with_their_window_and_efforts_once_a_config_turn
   if let Some(at) = child() {
     let offered = |name: &str| {
       let catalog = opened(&at).catalog().expect("the catalog");
-      catalog.find(name).map(|one| (one.window(), one.efforts().join(" "), one.sees()))
+      catalog.find(name).unwrap().map(|one| (one.window(), one.efforts().join(" "), one.sees()))
     };
     assert_eq!(offered("codex:account-model"), None, "codex is off");
     project(&at, &json!(true));
@@ -198,7 +196,7 @@ fn an_account_offers_its_models_with_their_window_and_efforts_once_a_config_turn
 fn a_list_of_the_models_of_another_account_is_not_offered_and_the_sign_in_reads_disconnected() {
   if let Some(at) = child() {
     let catalog = opened(&at).catalog().expect("the catalog");
-    assert!(catalog.find("codex:account-model").is_none());
+    assert!(catalog.find("codex:account-model").unwrap().is_none());
     assert_eq!(codex::status(Some(&config(&at))), SignIn::Disconnected);
     return;
   }
@@ -420,7 +418,7 @@ fn a_turn_of_codex_streams_with_no_type_of_content_and_a_refusal_of_its_credenti
     assert_eq!(codex::status(Some(&config(&at))), again);
     let catalog = opened(&at).catalog().expect("the catalog");
     assert!(
-      catalog.find("codex:account-model").is_none(),
+      catalog.find("codex:account-model").unwrap().is_none(),
       "an account that must sign in offers none"
     );
     return;

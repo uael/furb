@@ -5,7 +5,7 @@ use std::{iter, path::Path};
 
 use crate::cells::Cells;
 use furb::view::Standing;
-use furb_client::Target;
+use furb_client::Aim;
 use opentui::style::Style;
 
 use crate::{
@@ -54,7 +54,12 @@ impl Model {
     let muted = self.tokens.style(Role::Muted);
     let mut line = vec![run("  ", Style::new())];
     let room = self.wide().saturating_sub(4);
-    line.extend(spread(vec![run(left, style)], vec![run(right, muted)], room, Style::new()));
+    line.extend(spread(
+      vec![run(left.to_owned(), style)],
+      vec![run(right.to_owned(), muted)],
+      room,
+      Style::new(),
+    ));
     line
   }
 
@@ -83,8 +88,8 @@ impl Model {
         rows.extend(alone.iter().map(|(left, right)| self.said(left, muted, right)));
         rows.push(Vec::new());
       }
-    } else if let Some(reads) = self.client.only_reads(0) {
-      rows.extend(wrapped(&format!("{reads}."), prose));
+    } else if let Some(place) = self.client.reads_on(0) {
+      rows.extend(wrapped(&format!("This window only reads on {place}."), prose));
       rows.pop();
       rows.extend(wrapped("It shows each session live once another window starts one.", muted));
     } else if self.known() {
@@ -130,7 +135,8 @@ impl Model {
     let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
     let mut rows = vec![self.said(&says, t.style(Role::Prose), &key)];
     let unread = self.client.settled.iter().filter(|(_, key, card)| {
-      !self.needs(key, card) && card.thread.unread(&self.client.machines[key.0].login)
+      !self.needs(key, card)
+        && self.client.machines.get(key.0).is_some_and(|one| card.thread.unread(&one.login))
     });
     let new = match unread.count() {
       0 => None,
@@ -149,10 +155,11 @@ impl Model {
       None => format!("with {model}"),
     });
     let (project, at) = match self.client.target() {
-      Target::New(at, folder) => (self.folder_named(at, &folder), at),
+      Aim::New(at, folder) => (self.folder_named(at, folder), at),
       _ => (self.project(), 0),
     };
-    let machine = if at == 0 { "this computer" } else { &self.client.machines[at].name };
+    let name = self.client.machines.get(at).map_or("", |one| one.name.as_str());
+    let machine = if at == 0 { "this computer" } else { name };
     let session = if project == NO_PROJECT {
       "a new session with no project".to_owned()
     } else {
@@ -213,8 +220,13 @@ impl Model {
       let works = self.unheld(key.0, card) && card.thread.works() && self.confirmed(key);
       if works && !lives.contains(&card.life.as_str()) {
         lives.push(&card.life);
-        let machine =
-          if key.0 > 0 { format!("@{}", self.client.machines[key.0].name) } else { String::new() };
+        let machine = self
+          .client
+          .machines
+          .get(key.0)
+          .filter(|_| key.0 > 0)
+          .map(|one| format!("@{}", one.name))
+          .unwrap_or_default();
         let left = format!("◌ {name} · {}{machine}", project(card));
         rows.push((left, format!("works since {}", self.hour(card.since))));
       }

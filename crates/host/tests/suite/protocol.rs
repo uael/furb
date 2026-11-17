@@ -1,6 +1,7 @@
 //! The proofs of the protocol: the role of each verb, the bound of a frame, the version of a hello,
 //! and a round trip of each verb on each transport of the system.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![expect(
   clippy::disallowed_methods,
@@ -19,6 +20,7 @@ use std::{
   sync::atomic::{AtomicU32, Ordering},
 };
 
+use furb::view::{Act, Fold};
 use furb_host::{
   Host, Outbox, ProtocolError, fixed,
   protocol::{
@@ -534,6 +536,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "6ca077c5eea911301022f9604b4df3ab91457917332aea215ef51468e6d0e778",
   "bd8bfc97b59275d6b38a8ed022408208f6a6a9c26a37c852c9d56f3ac719ab29",
   "bf8da88a23a0f43494ea24928315317d2846492357662815ebb660f4e8dbd294",
+  "36797221c9fa87972c807a8a082a57626831f387eb1baed26c27b170950e16a1",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -704,7 +707,7 @@ fn the_schema_on_disk_is_the_schema_of_the_protocol() {
     fs::write(&place, &made).unwrap();
   }
   let held = fs::read_to_string(&place).unwrap_or_default();
-  assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
+  assert!(held == made, "{} is stale: run bun run protocol", place.display());
 }
 
 /// A daemon that answers each verb with a page of one exchange, whose one line waits to run.
@@ -721,7 +724,7 @@ impl Host for Paged {
     let block = Block { maker: Maker::Operator, lines: vec![line], more: true, thought: None };
     let exchange = Exchange {
       at: 0,
-      message: "prompt1".to_owned(),
+      message: "prompt1".into(),
       said_at: 0,
       by: Maker::Operator,
       text: "hi".to_owned(),
@@ -857,4 +860,29 @@ fn flat(at: &str, one: &Value, paths: &mut BTreeSet<String>) {
       }
     }
   }
+}
+
+/// A frame of an event says the event that the log holds, in the same bytes as when the frame held
+/// a copy of it, so no window reads another frame.
+#[test]
+fn a_frame_of_an_event_says_the_same_bytes() {
+  let fact =
+    furb_host::Event::Fact(serde_json::json!(["done", "run1", "run1", 7, {"a": [1.5, null]}]));
+  let frame = Frame::Event { life: "/l.jsonl".into(), seq: 3, event: fact.into() };
+  // The bytes of the frame when it held a copy of its event.
+  let held = r#"{"frame":"event","life":"/l.jsonl","seq":3,"event":{"event":"fact","data":["done","run1","run1",7,{"a":[1.5,null]}]}}"#;
+  assert_eq!(serde_json::to_string(&frame).unwrap(), held);
+}
+
+/// An act says the same bytes now that it shares its names, so no window reads another act.
+#[test]
+fn an_act_says_the_same_bytes() {
+  let mut fold = Fold::default();
+  let made =
+    fold.recorded(&serde_json::json!(["prompt", "prompt1", "operator", "chain1", "str", "hi", ""]));
+  // The bytes of the act when it held a copy of each name.
+  let held = r#"[{"kind":"prompt","id":"prompt1","by":"operator","maker":{"role":"operator"},"on":"chain1","chain":"chain1","words":["str","hi",""],"phase":{"phase":"asked"},"operator":false,"pause":null,"run":null,"word":null,"asking":false,"began":1,"ended":null,"spend":null,"state":"runs"}]"#;
+  assert_eq!(serde_json::to_string(&made).unwrap(), held);
+  let read: Vec<Act> = serde_json::from_str(held).unwrap();
+  assert_eq!(read, made, "an act reads back from the same bytes");
 }

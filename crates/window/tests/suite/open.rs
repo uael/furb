@@ -1,7 +1,7 @@
 //! The open of a session at rest from its card, on a real daemon whose model answers from a script.
 //! A test holds an open at the catalog of its models until it makes a file, so the clock of the
 //! window, which the test moves, says how long the open took.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::{
@@ -22,14 +22,13 @@ use crate::{
 
 // What only the tests of a session at rest use, which run on unix alone.
 #[cfg(unix)]
-use {
-  crate::{
-    cards::CLOCK,
-    daemon::aged,
-    thread::{at, clicked},
-  },
-  opentui::style::Color,
+use crate::{
+  cards::CLOCK,
+  daemon::aged,
+  thread::{at, clicked},
 };
+#[cfg(unix)]
+use opentui::style::Color;
 
 /// The columns of the left side of the window, at the left of the list.
 const LEFT: usize = 61;
@@ -77,6 +76,18 @@ pub(crate) fn record(daemon: &Daemon, at: usize) -> PathBuf {
   daemon.file("furb").join(".furb").join("sessions").join(format!("rest{at}.jsonl"))
 }
 
+/// The open of the thread that shows read its record whole, which it does once the catalog holds
+/// it, so neither its row nor its card shows a share. The stage of the read and its end come as two
+/// frames, which a loaded machine tells after a frame with neither.
+#[cfg(unix)]
+fn read_whole(app: &TestApp) {
+  let whole = || {
+    let text = app.text();
+    text.contains("Opening · reads the record") && !text.contains('%')
+  };
+  assert!(app.wait_until(PATIENCE, whole), "{}", app.text());
+}
+
 /// The card of a thread clicked.
 pub(crate) fn card(app: &TestApp, title: &str) {
   app.click(80, row(app, &title[..15]));
@@ -106,6 +117,8 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   // tells it.
   first.advance(AWAY);
   shows(&first, "Resolved 1");
+  // The bar of the time draws its track once its moments came.
+  shows(&first, "▶  ◆");
   let before = left(&first);
   // The daemon ends with the app whose runtime serves it, and its lives with it.
   drop((peer, first));
@@ -119,6 +132,7 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   second.click(80, row(&second, "Resolved 1"));
   card(&second, title);
   shows(&second, "Two stages hold most");
+  shows(&second, "▶  ◆");
   assert_eq!(left(&second), before);
   screen("open-stood", &second);
 }
@@ -184,7 +198,7 @@ fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
     let Some(card) = cards.into_iter().find(|card| card.life == life) else { return false };
     let page = Verb::Thread {
       life: life.clone(),
-      thread: card.thread.prompt,
+      thread: card.thread.prompt.to_string(),
       before: None,
       limit: 5,
       at: None,
@@ -288,6 +302,7 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   card(&app, gate);
   app.advance(Duration::from_secs(1));
   shows(&app, "1.0 s");
+  read_whole(&app);
   app.press("escape");
   let frame = shows(&app, "go to anything");
   assert!(frame.contains("Opening"), "the open goes on:\n{frame}");
@@ -297,10 +312,8 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   let frame = shows(&app, &format!("furb · {}", &time[..20]));
   // The head of the thread, and the card of each open.
   assert_eq!(frame.matches(" Opening").count(), 3, "{frame}");
+  read_whole(&app);
   app.press("escape");
-  // Each record is read whole once the catalog holds its open, so no card shows a share.
-  let read = app.wait_until(PATIENCE, || !app.text().contains('%'));
-  assert!(read, "{}", app.text());
   screen("open-home", &app);
   // The first card again: its open counts from its first ask.
   card(&app, gate);
@@ -435,6 +448,50 @@ fn a_window_gives_its_place_to_a_new_build_of_its_program_where_it_stood() {
   // A send of the draft says what the window before held.
   second.press("enter");
   shows(&second, "┃ and the seed?");
+}
+
+#[test]
+fn a_long_draft_comes_back_whole_in_the_window_of_the_new_build() {
+  let title = "remove the gate from the engine";
+  let (first, host, second) = (app(), app(), app());
+  let mut daemon = Daemon::bound(&host);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  peer.rested(&sessions.join("gate.jsonl"), &message(title), None);
+  let program = daemon.file("furb-window");
+  fs::write(&program, "the build before").unwrap();
+  let watched = Options { program: Some(program.clone()), ..homed(&daemon) };
+  open(&first, vec![daemon.machine("mac")], watched);
+  card(&first, title);
+  shows(&first, "Two stages hold most");
+  // A draft of many lines, each typed, as he writes a long message.
+  for line in 1..=40 {
+    first.type_text(&format!("the line {line} of a long draft that he wrote by hand"));
+    first.press("shift+enter");
+  }
+  first.type_text("the last line of the draft");
+  let stood = daemon.file("reload.json");
+  fs::write(&program, "the new build, which is longer").unwrap();
+  first.advance(Duration::from_secs(1));
+  first.advance(Duration::from_secs(1));
+  assert!(stood.is_file());
+  drop(first);
+  // The new build opens with the whole draft in its input, and the place of the window before
+  // goes only once the draft stands there.
+  open(&second, vec![daemon.machine("mac")], Options { reloaded: true, ..homed(&daemon) });
+  shows(&second, "the last line of the draft");
+  assert!(!stood.exists());
+  second.press("enter");
+  shows(&second, "┃ the last line of the draft");
+  // The message that he sent is the whole draft, from its first line.
+  let record = sessions.join("gate.jsonl");
+  let said = || fs::read_to_string(&record).unwrap_or_default();
+  let whole = second.wait_until(PATIENCE, || {
+    let said = said();
+    said.contains("the line 1 of a long draft") && said.contains("the last line of the draft")
+  });
+  assert!(whole, "{}", said());
 }
 
 #[cfg(unix)]

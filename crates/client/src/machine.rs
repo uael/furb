@@ -2,7 +2,7 @@
 //! order of the cards of every machine in one list.
 
 use furb_wire::{
-  Event, FollowUp, Part, Standing,
+  FollowUp, Name, Part, Standing,
   card::Skill,
   protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Role, Verb},
 };
@@ -105,12 +105,16 @@ impl Client {
       .then(|| format!("{} is away, so nothing went. furb dials it until it answers.", told.name))
   }
 
-  /// What the window may do on a machine where it only reads, as a person reads it: the first
-  /// machine is this computer.
-  pub fn only_reads(&self, at: usize) -> Option<String> {
+  /// Whether the window only reads on a machine.
+  pub fn only_reads(&self, at: usize) -> bool {
+    self.reads_on(at).is_some()
+  }
+
+  /// The place where the window only reads, as a person reads it, when it only reads on a machine:
+  /// the first machine is this computer.
+  pub fn reads_on(&self, at: usize) -> Option<&str> {
     let told = self.machines.get(at).filter(|told| told.role == Some(Role::Read))?;
-    let place = if at == 0 { "this computer" } else { told.name.as_str() };
-    Some(format!("This window only reads on {place}"))
+    Some(if at == 0 { "this computer" } else { told.name.as_str() })
   }
 
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,
@@ -123,12 +127,11 @@ impl Client {
       if self.viewed(at, frame) {
         return Listing::Changed;
       }
-      if let Frame::Event { life, event: event @ Event::Queued { .. }, .. } = frame {
-        self.queued(at, life.clone(), event);
+      if self.queued(at, frame) {
         return Listing::Changed;
       }
     }
-    let told = &mut self.machines[at];
+    let Some(told) = self.machines.get_mut(at) else { return Listing::Same };
     let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));
     if matches!(told.link, Link::Lost(_)) && !welcome {
       return Listing::Same;
@@ -149,11 +152,11 @@ impl Client {
             .iter()
             .find(|one| one.life == life && one.thread.prompt == new.thread.prompt);
           if !was.is_some_and(calls) {
-            self.called.insert((at, life.clone(), new.thread.prompt.clone()), self.moved);
+            self.called.insert((at, life.clone(), new.thread.prompt.to_string()), self.moved);
           }
         }
         let stays = |one: &Card| {
-          let told = |prompt: &String| *prompt == one.thread.prompt;
+          let told = |prompt: &Name| *prompt == one.thread.prompt;
           one.life != life
             || !(gone.iter().any(told) || changed.iter().any(|new| told(&new.thread.prompt)))
         };
@@ -171,8 +174,8 @@ impl Client {
       Ok(_) => return Listing::Same,
     }
     for (_, key, card) in self.settled.iter_mut().filter(|one| one.1.0 == at) {
-      let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
-      if let Some(now) = self.machines[at].cards.iter().rfind(told) {
+      let told = |one: &&Card| one.life == key.1 && *one.thread.prompt == *key.2;
+      if let Some(now) = self.machines.get(at).and_then(|one| one.cards.iter().rfind(told)) {
         card.clone_from(now);
       }
     }
@@ -181,7 +184,7 @@ impl Client {
 
   /// The card of a thread, as its machine last told it.
   pub fn card(&self, key: &Key) -> Option<&Card> {
-    let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
+    let told = |one: &&Card| one.life == key.1 && *one.thread.prompt == *key.2;
     self.machines.get(key.0)?.cards.iter().find(told)
   }
 
@@ -198,13 +201,14 @@ impl Client {
   pub fn settle(&mut self, untold: Option<&(usize, Card)>) {
     let told = self.machines.iter().enumerate();
     let told = told.flat_map(|(at, told)| told.cards.iter().map(move |card| (at, card)));
-    let cards = told
-      .chain(untold.map(|(at, card)| (*at, card)))
-      .map(|(at, card)| (card.place(&self.machines[at].login), &card.thread.title, at, card));
+    let cards = told.chain(untold.map(|(at, card)| (*at, card))).map(|(at, card)| {
+      let login = self.machines.get(at).map_or("", |one| one.login.as_str());
+      (card.place(login), &card.thread.title, at, card)
+    });
     let mut cards: Vec<_> = cards.collect();
     cards.sort_by(|one, other| (&one.0, one.1, one.2).cmp(&(&other.0, other.1, other.2)));
     let keyed = |((part, ..), _, at, card): ((Part, u8, i64), _, usize, &Card)| {
-      (part, (at, card.life.clone(), card.thread.prompt.clone()), card.clone())
+      (part, (at, card.life.clone(), card.thread.prompt.to_string()), card.clone())
     };
     self.settled = cards.into_iter().map(keyed).collect();
   }

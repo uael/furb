@@ -33,9 +33,11 @@ pub(crate) fn audited(record: &Path, sha256: &str, report: Option<&Path>) -> Res
   } else {
     wrong.push(format!("the record hashes as {hashed}, not as {sha256}"));
   }
-  told["agrees"] = json!(wrong.is_empty());
   let count = wrong.len();
-  told["wrong"] = json!(wrong);
+  if let Some(fields) = told.as_object_mut() {
+    fields.insert("agrees".to_owned(), json!(wrong.is_empty()));
+    fields.insert("wrong".to_owned(), json!(wrong));
+  }
   let text = serde_json::to_string_pretty(&told).unwrap_or_default() + "\n";
   if let Some(report) = report {
     fs::write(report, &text)
@@ -104,7 +106,7 @@ fn checked(
   told["crossings"] = json!(crossings.len());
   let tip = crossings.last().copied().unwrap_or(0);
   let (mut answers, mut words) = (Vec::new(), Vec::new());
-  for fact in &facts[tip..] {
+  for fact in facts.iter().skip(tip) {
     let (kind, about, maker) = (word(fact, 0), word(fact, 1), word(fact, 2));
     if kind == "done" && question("reply", &about) {
       let said = entry(fact, 3).map_or_else(String::new, |one| hashed(&wire::outward(one)));
@@ -121,7 +123,7 @@ fn checked(
       }
       if kind == "run" {
         let rung = word(fact, 4);
-        let ran = engine.verb("get", vec![Object::string(&about)], vec![])?;
+        let ran = engine.verb("get", &[Object::string(&about)], vec![])?;
         let ran =
           entry(&ran.as_ref(), 5).and_then(|one| one.as_str().map(|one| hex(one.as_bytes())));
         words.push(json!({"rung": rung, "record": hex(word(fact, 5).as_bytes()), "run": ran}));
@@ -143,9 +145,11 @@ fn hashed_of(
   about: &str,
   depth: usize,
 ) -> Result<String, CliError> {
-  let made = engine.verb(view, vec![Object::string(about)], vec![])?;
+  let made = engine.verb(view, &[Object::string(about)], vec![])?;
   let line = (0..depth).fold(made, |held, _| Object::list(vec![held]));
-  let kept = (0..depth).fold(wire::record(line.as_ref()), |mut held, _| held[0].take());
+  let kept = (0..depth).fold(wire::record(line.as_ref()), |mut held, _| {
+    held.get_mut(0).map(Value::take).unwrap_or_default()
+  });
   Ok(hashed(&kept))
 }
 

@@ -8,7 +8,7 @@
 //! A scripted claude stands in for the models. Each process of it, and each command that holds
 //! the life at a moment, holds the write end of the FIFO `lifeline`, so the test knows that no
 //! process outlived the daemon when the FIFO ends, and waits on no clock.
-
+#![expect(clippy::unreachable, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![cfg(unix)]
 #![expect(
@@ -312,13 +312,13 @@ impl Window {
       .iter()
       .position(|frame| matches!(frame, Frame::Event { event, .. } if wanted(event)));
     if let Some(Frame::Event { event, .. }) = at.map(|at| self.pushed.remove(at)) {
-      return event;
+      return Event::clone(&event);
     }
     loop {
       if let Frame::Event { event, .. } = self.read().await {
-        assert!(!matches!(&event, Event::Ended(Some(fault)) if !fault.is_empty()), "{event:?}");
+        assert!(!matches!(&*event, Event::Ended(Some(fault)) if !fault.is_empty()), "{event:?}");
         if wanted(&event) {
-          return event;
+          return Event::clone(&event);
         }
       }
     }
@@ -351,7 +351,7 @@ impl Window {
   /// What an act came to, once it is done.
   async fn done(&mut self, id: &str) -> Value {
     let ended = |event: &Event| match event {
-      Event::Act(act) => act.id == id && matches!(act.phase, Phase::Done(_)),
+      Event::Act(act) => *act.id == *id && matches!(act.phase, Phase::Done(_)),
       _ => false,
     };
     let Event::Act(act) = self.until(ended).await else { unreachable!() };

@@ -44,6 +44,7 @@ mod settings;
 mod thread;
 mod time;
 pub mod tokens;
+mod transcript;
 mod voice;
 
 use std::{
@@ -187,7 +188,7 @@ pub fn run(reads: bool) -> Result<(), Error> {
   let program = options.program.clone();
   let reloads = hand::opened(&app, machines, options);
   app.run()?;
-  match program.filter(|_| reloads.get()) {
+  match program.filter(|_| reloads.try_recv().is_ok()) {
     Some(program) => Err(Error::Reload { source: started(&program), program }),
     None => Ok(()),
   }

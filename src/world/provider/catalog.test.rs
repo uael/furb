@@ -59,8 +59,10 @@ const LISTED: &str = r#"{
 #[test]
 fn amazon_counts_the_cache_of_a_reply_apart() {
   let catalog = Catalog::of(&parsed(LISTED, None), None, None, |_| None);
-  let model =
-    catalog.find("amazon-bedrock:us.anthropic.claude-sonnet-5").expect("a model of Amazon");
+  let model = catalog
+    .find("amazon-bedrock:us.anthropic.claude-sonnet-5")
+    .unwrap()
+    .expect("a model of Amazon");
   assert!(model.apart);
 }
 

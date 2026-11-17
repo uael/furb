@@ -1,9 +1,4 @@
 //! The call of a model for a reply, and the turn that its answer gives.
-
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::HashSet,
   time::{Duration, SystemTime},
@@ -31,7 +26,7 @@ use super::{
 };
 use crate::value;
 use crate::{
-  value::{Object, ObjectRef, entry},
+  value::{Object, ObjectRef, entry, items},
   wire,
 };
 use std::future;
@@ -119,6 +114,10 @@ pub(super) fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
 /// the settings of its budget, which turn its thought off, so it writes its word at once. The turn
 /// holds that thought, under the id [`CUT`], and the word, and what the model wrote counts each
 /// part of that thought.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the turn takes the streams of the model, the request, the settings of the budget, the thought and the count of its parts that it gives back, and where it tells what it writes, and no type of the provider holds them together"
+)]
 pub(super) async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,
@@ -436,16 +435,18 @@ pub(super) fn cut(word: &str, usage: Object) -> Result<Object, CompletionError> 
 /// of their own.
 pub(super) fn paying(turn: Object, owed: f64) -> Object {
   let said = turn.as_ref();
-  let (Some(items), true) = (said.items(), owed > 0.0) else { return turn };
-  let usage = items.get(2).and_then(ObjectRef::items).map(|usage| {
-    let each = usage.iter().enumerate().map(|(at, one)| match (at, one.as_float()) {
+  if owed <= 0.0 || items(said).is_none() {
+    return turn;
+  }
+  let usage = entry(&said, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_float()) {
       (4, Some(dollars)) => Object::float(dollars + owed),
       _ => one.to_owned(),
     });
     Object::tuple(each)
   });
   let Some(usage) = usage else { return turn };
-  let at = |at: usize| items.get(at).map_or_else(Object::none, ObjectRef::to_owned);
+  let at = |at: usize| entry(&said, at).map_or_else(Object::none, |one| one.to_owned());
   Object::tuple([at(0), at(1), usage, at(3)])
 }
 
@@ -509,7 +510,7 @@ pub(super) fn wrote(model: &Model, response: &CompletionResponse) -> String {
   }
   let last: Vec<char> =
     if text.trim().is_empty() { &thought } else { &text }.trim_end().chars().collect();
-  let end: String = last[last.len().saturating_sub(END)..].iter().collect();
+  let end: String = last.iter().skip(last.len().saturating_sub(END)).collect();
   let (thought, text) = (thought.chars().count(), text.chars().count());
   let tokens = response.usage.output_tokens;
   format!(
@@ -564,7 +565,7 @@ pub(super) fn counted(tokens: u64) -> f64 {
 pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
   let part = |at: usize| entry(&turn, at).map_or_else(Object::none, |one| one.to_owned());
   let (role, python) = (entry(&turn, 0), entry(&turn, 1));
-  let whole = turn.items().is_some_and(|items| items.len() == 4)
+  let whole = items(turn).is_some_and(|held| held.len() == 4)
     && role.and_then(|one| one.as_str()) == Some("assistant")
     && python.is_some_and(|one| one.as_str().is_some());
   if !whole {
@@ -574,8 +575,8 @@ pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
     );
     return Err(CompletionError::ResponseError(why));
   }
-  let usage = entry(&turn, 2).and_then(|one| one.items()).map(|usage| {
-    let each = usage.into_iter().enumerate().map(|(at, one)| match (at, one.as_int()) {
+  let usage = entry(&turn, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_int()) {
       (4, Some(whole)) => Object::float(
         i32::try_from(whole)
           .map_or(if whole < 0 { f64::from(i32::MIN) } else { f64::from(i32::MAX) }, f64::from),
@@ -604,14 +605,8 @@ pub(super) fn uuid_from(
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let digits = value::hex(&bytes);
-  Ok(format!(
-    "{}-{}-{}-{}-{}",
-    &digits[..8],
-    &digits[8..12],
-    &digits[12..16],
-    &digits[16..20],
-    &digits[20..]
-  ))
+  let part = |from: usize, to: usize| digits.get(from..to).unwrap_or_default();
+  Ok(format!("{}-{}-{}-{}-{}", part(0, 8), part(8, 12), part(12, 16), part(16, 20), part(20, 32)))
 }
 
 /// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.

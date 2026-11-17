@@ -3,7 +3,7 @@ use opentui::{
   style::Style,
 };
 
-use super::{Cells, MEASURE};
+use super::{Cells, METHOD};
 use crate::line::{run, spread};
 
 /// Characters whose cells differ between a terminal that joins them and one that adds up their
@@ -14,11 +14,7 @@ const SHOWN: [&str; 7] = ["👍🏽", "🏳️\u{200d}⚧️", "🏳\u{200d}⚧"
 
 /// The measure of the thread set to a method, as the terminal would tell it.
 fn measuring(method: WidthMethod) {
-  MEASURE.with_borrow_mut(|measure| {
-    measure.method = method;
-    measure.known.clear();
-    measure.widths.clear();
-  });
+  METHOD.with(|held| held.set(method));
 }
 
 #[test]

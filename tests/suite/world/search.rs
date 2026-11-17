@@ -4,8 +4,6 @@
 //! offer each provider, and whose model stands in the snapshot with its native search, so no search
 //! goes to the free search of the kit `web`, whose suite is `tests/outside/test_web.py`.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{fs, path::Path, time::Duration};
 
 use serde_json::{Value, json};
@@ -70,13 +68,14 @@ fn searches(at: &Path) {
     serde_json::from_str(&fs::read_to_string(at.join("asks.json")).expect("the actors"))
       .expect("the actors are JSON");
   let actors = given["actors"].as_array().into_iter().flatten().filter_map(Value::as_str);
-  let (catalog, mut said) = (Catalog::load(None), Vec::new());
+  let (catalog, mut said) = (Catalog::load(None).unwrap(), Vec::new());
   for (actor, port) in actors.zip(given["ports"].as_array().into_iter().flatten()) {
     let provider = actor.split(':').next().unwrap_or_default();
     let url = json!({"url": format!("http://127.0.0.1:{port}/v1")});
     let config = json!({"providers": {provider: url}}).to_string();
     fs::write(at.join(".furb/config.local.json"), config).expect("the local config");
-    let model = catalog.find(actor).unwrap_or_else(|| panic!("{actor} stands in the catalog"));
+    let model =
+      catalog.find(actor).unwrap().unwrap_or_else(|| panic!("{actor} stands in the catalog"));
     let native = Provider::new(String::new(), vec![model]).search()(actor);
     assert!(native.is_some(), "{actor} has a native search");
     let opening = Opening { actor: Some(actor.to_owned()), ..opened(at) };

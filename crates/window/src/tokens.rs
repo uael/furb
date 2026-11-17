@@ -226,6 +226,11 @@ impl Tokens {
 }
 
 /// A color mixed toward another by a share of 100.
+/// The member of a palette that a count or a hash takes, each in turn; none when it is empty.
+pub(crate) fn turn<T: Copy>(palette: &[T], at: usize) -> Option<T> {
+  palette.get(at.checked_rem(palette.len())?).copied()
+}
+
 pub(crate) fn mixed(from: Color, to: Color, share: u16) -> Color {
   let channel = |from: u8, to: u8| {
     let (from, to) = (u16::from(from), u16::from(to));
@@ -351,7 +356,7 @@ impl Loader {
     }
     let frames = self.frames();
     let steps = after.as_millis() / self.step().as_millis();
-    frames[usize::try_from(steps).unwrap_or_default() % frames.len()]
+    turn(frames, usize::try_from(steps).unwrap_or_default()).unwrap_or_default()
   }
 
   /// How long one frame stays.
@@ -376,12 +381,16 @@ impl Loader {
         vec![(self.frame(after), mixed(tokens.muted, color, u16::try_from(share).unwrap_or(100)))]
       }
       Self::Light(word) => {
-        let letters = word.char_indices().map(|(at, one)| &word[at..at + one.len_utf8()]);
+        let letters = word.split_inclusive(|_: char| true);
         lit(letters.collect(), after, color)
       }
       Self::Number(number) => {
-        let digits =
-          number.to_string().bytes().map(|one| DIGITS[usize::from(one - b'0')]).collect();
+        let digits = number
+          .to_string()
+          .bytes()
+          .filter_map(|one| DIGITS.get(usize::from(one.wrapping_sub(b'0'))))
+          .copied()
+          .collect();
         lit(digits, after, color)
       }
     }

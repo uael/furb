@@ -1,5 +1,5 @@
 //! A text in the room of a row: cut with a mark where it does not fit, or broken into lines.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 
 use std::fs;

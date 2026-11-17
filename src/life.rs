@@ -8,8 +8,6 @@
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
 
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-
 use std::{
   fs, panic,
   path::{Path, PathBuf},
@@ -30,6 +28,7 @@ use crate::{
   image::{self, Image},
   minify,
   skill::{self, Places},
+  value::{entry, items},
   world::{self, Catalog, Mode, Retries, Scratch, Writes, skills::skills},
 };
 
@@ -410,9 +409,10 @@ impl Opening {
       config: self.config.clone().map_or(here.config, PathBuf::from),
       home: self.home.clone().map(PathBuf::from).or(here.home),
     };
-    let (played, refused) = match self.skills != Some(false) && works {
-      true => skill::configured(&places, self.directory.as_ref())?,
-      false => (Vec::new(), Vec::new()),
+    let (played, refused) = if self.skills != Some(false) && works {
+      skill::configured(&places, self.directory.as_ref())?
+    } else {
+      (Vec::new(), Vec::new())
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
     let advertised = played
@@ -475,14 +475,15 @@ impl Opening {
       Self { inspecting: Some(true), keeps: Some(false), record: None, ..self.clone() };
     let waited = inspects.prepared(&Progress::default(), Taken::Parts, None)?.waited;
     for at in left {
-      let entries: Vec<Object> =
-        carry.into_iter().chain(record[from..at].iter().cloned()).collect();
+      let missing = || Fault::refused(format!("the record holds no crossing at {at}"));
+      let segment = record.get(from..at).ok_or_else(missing)?;
+      let entries: Vec<Object> = carry.into_iter().chain(segment.iter().cloned()).collect();
       let ears = inspects.eared(waited.clone(), Some(&entries), checkpoint::stood(&entries))?;
       let mut engine = Engine::boot(entries, ears)?;
       if let Some(no) = engine.raised() {
         return Err(no.clone());
       }
-      carry = Some(checkpoint::carried(&mut engine, &record[at])?);
+      carry = Some(checkpoint::carried(&mut engine, record.get(at).ok_or_else(missing)?)?);
       from = at;
     }
     if let (Some(path), Some(carry)) = (path, &carry) {
@@ -578,9 +579,17 @@ impl Opening {
   pub fn catalog(&self) -> Result<Catalog, Fault> {
     let claude = self.claude.as_ref().map(PathBuf::from);
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-    Catalog::load(claude.clone())
-      .claude(claude, stall)
-      .configured(Path::new(&self.directory), self.config.as_deref().map(Path::new))
+    let (directory, config) = (Path::new(&self.directory), self.config.as_deref().map(Path::new));
+    let configured = world::catalog::blocking(async {
+      Catalog::loaded(claude.clone())
+        .await
+        .discovered(claude, stall)
+        .await
+        .configure(directory, config)
+        .await
+    });
+    configured
+      .map_err(|no| Fault::refused(no.to_string()))?
       .map_err(|no| Fault::refused(no.to_string()))
   }
 
@@ -607,9 +616,11 @@ impl Opening {
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
       if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
-    let kept = catalog.keep(roster().as_deref(), actor.as_deref());
+    let kept = catalog
+      .keep(roster().as_deref(), actor.as_deref())
+      .map_err(|no| Fault::refused(no.to_string()))?;
     let mut provider = catalog
-      .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
+      .provider(directory.clone(), &kept, answer.clone())
       .map_err(|no| Fault::refused(no.to_string()))?
       .gone(kept.left);
     let preferred = actor;
@@ -625,8 +636,7 @@ impl Opening {
           .configure(Path::new(&directory), config.as_deref())
           .await?;
         let kept = fresh.keeping(names.as_deref(), preferred.as_deref()).await;
-        let (names, actor) = (kept.names.as_deref(), kept.actor.as_deref());
-        let candidate = fresh.provided(directory, names, actor, answer).await?;
+        let candidate = fresh.provided(directory, &kept, answer).await?;
         Ok(candidate.into_settings())
       })
     }));
@@ -847,7 +857,7 @@ impl Opening {
     // Each later life that works stands the root once after the state that it opens at, as a boot
     // does. A life that inspects keeps no fact, so it stands at the tip of the record as it is.
     if self.works() {
-      engine.verb("stand", vec![Object::string(ROOT)], vec![])?;
+      engine.verb("stand", &[Object::string(ROOT)], vec![])?;
       engine.flight()?;
     }
     engine.pump(Waker::noop())?;
@@ -863,12 +873,15 @@ fn size(path: impl AsRef<Path>) -> u64 {
 /// The default actor of a standing and the name of each model of its roster, each but the operator,
 /// who is no model of the catalog, so a later life never tells that the operator left it.
 fn offered(standing: ObjectRef<'_>) -> (Option<String>, Option<Vec<String>>) {
-  let Some(held) = standing.items() else { return (None, None) };
-  let actor =
-    held.get(2).and_then(ObjectRef::as_str).filter(|one| *one != OPERATOR).map(str::to_owned);
-  let roster = held.first().and_then(ObjectRef::items).map(|models| {
-    let names =
-      models.iter().filter_map(|model| Some(model.items()?.first()?.as_str()?.to_owned()));
+  if items(standing).is_none() {
+    return (None, None);
+  }
+  let actor = entry(&standing, 2)
+    .and_then(|one| one.as_str())
+    .filter(|one| *one != OPERATOR)
+    .map(str::to_owned);
+  let roster = entry(&standing, 0).and_then(items).map(|models| {
+    let names = models.filter_map(|model| Some(entry(&model, 0)?.as_str()?.to_owned()));
     names.filter(|name| name != OPERATOR).collect()
   });
   (actor, roster)

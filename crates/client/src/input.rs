@@ -7,7 +7,7 @@
 //! message shows in the thread at once, and a message that the daemon refuses comes back to the
 //! input with the message after it.
 
-use std::{mem, path::Path};
+use std::{borrow::Cow, mem, path::Path};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb_wire::renaming;
@@ -15,7 +15,7 @@ use furb_wire::{PICTURE, anchor::Anchor, protocol::BOUND};
 use jiff::Timestamp;
 use serde_json::Value;
 
-use crate::{Client, Opened, Outgoing, Pending, Target, Thread};
+use crate::{Aim, Client, Opened, Outgoing, Pending, Target, Thread};
 
 /// How many emptied drafts the stash keeps, the oldest going first.
 const STASH: usize = 50;
@@ -102,11 +102,11 @@ const SLUG: usize = 32;
 impl Client {
   /// Where the input sends now: where the operator turned it, else the open thread, else a new
   /// session on the first machine, in the folder of the client.
-  pub fn target(&self) -> Target {
+  pub fn target(&self) -> Aim<'_> {
     match (&self.aim, &self.thread) {
-      (Some(target), _) => target.clone(),
-      (None, Some(opened)) => Target::Thread(opened.thread.key.clone()),
-      (None, None) => Target::New(0, self.folder.clone()),
+      (Some(target), _) => target.aim(),
+      (None, Some(opened)) => Aim::Thread(&opened.thread.key),
+      (None, None) => Aim::New(0, &self.folder),
     }
   }
 
@@ -133,9 +133,9 @@ impl Client {
     if self.submit_fill(&text) {
       return Ok(());
     }
-    let (at, life, thread, cwd) = match self.target() {
-      Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
-      Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
+    let (at, life, thread, cwd) = match self.target().owned() {
+      Target::Thread((at, life, thread)) => (at, life, Some(thread), None),
+      Target::Session(at, life) => (at, life, None, None),
       Target::New(at, folder) => {
         let folder = self.slugged(at, folder, &text);
         (at, self.record(&folder), None, Some(folder))
@@ -144,7 +144,7 @@ impl Client {
     if let Some(away) = self.away(at) {
       return Err(away);
     }
-    if self.only_reads(at).is_some() {
+    if self.only_reads(at) {
       return Err("Nothing went: this window only reads.".to_owned());
     }
     if let Some(why) = self.fault_of(at, &life) {
@@ -155,7 +155,7 @@ impl Client {
       self.outgoing.push_back(Outgoing { at, life, thread, text, python: true, images: vec![] });
       return Ok(());
     }
-    self.hold((at, life.clone()), cwd, self.moved);
+    self.hold((at, life.clone()), cwd.or_else(|| self.cwd(at, &life).map(Into::into)), self.moved);
     let chosen = self.chosen.take_if(|one| one.life.is_none() && one.at == at);
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
       hold.actor = Some(chosen.actor);
@@ -168,7 +168,10 @@ impl Client {
     // A message about a line of a file carries that line, as it stands now. On a thread, it is a
     // sub thread of its own, which opens once its life named it, so the thread does not show it.
     let anchor = self.draft.anchor.take().filter(|_| !python);
-    let text = anchor.as_ref().map_or(text.clone(), |anchor| anchor.said(&text));
+    let text = match &anchor {
+      Some(anchor) => anchor.said(&text),
+      None => text,
+    };
     let images = mem::take(&mut self.draft.images);
     let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();
     self.draft.folds.clear();
@@ -226,7 +229,7 @@ impl Client {
   fn renamed(&self, text: &str) -> Option<Result<String, String>> {
     let rest = text.strip_prefix(RENAME).filter(|rest| rest.is_empty() || rest.starts_with(' '));
     let name = rest.filter(|_| !self.draft.python)?.trim();
-    Some(if matches!(self.target(), Target::New(..)) {
+    Some(if matches!(self.target(), Aim::New(..)) {
       Err("A new session takes its name from its first message: send one first.".to_owned())
     } else {
       Ok(renaming(name))
@@ -248,7 +251,7 @@ impl Client {
     let path = text.strip_prefix(CD).filter(|rest| rest.is_empty() || rest.starts_with(' '))?;
     Some(match path.trim() {
       "" => Err(format!("Name the folder: {CD} <path>.")),
-      _ if matches!(self.target(), Target::New(..)) => {
+      _ if matches!(self.target(), Aim::New(..)) => {
         Err("A new session runs in the folder of the launcher: choose it there.".to_owned())
       }
       path => Ok(format!("cd({})", Value::String(path.to_owned()))),
@@ -333,14 +336,14 @@ impl Client {
   /// the client opened it in, else the folder of the client for a new record, else the project of
   /// its cards, else the folder whose sessions
   /// hold it, as for a session with no project.
-  pub fn cwd(&self, at: usize, life: &str) -> Option<String> {
+  pub fn cwd(&self, at: usize, life: &str) -> Option<Cow<'_, str>> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
-    let held = || checkout(life).map(|one| one.display().to_string());
+    let held = || checkout(life).map(|one| Cow::Owned(one.display().to_string()));
     // A life that the client opened before its machine told its card runs where it was opened.
-    let opened = || self.holds.get(&(at, life.to_owned())).and_then(|hold| hold.cwd.clone());
+    let opened = || self.held(at, life).and_then(|hold| hold.cwd.as_deref());
     match cards.iter().find(|card| card.life == life) {
-      None => opened().or_else(|| Some(self.folder.clone())),
-      Some(card) => card.project.clone().or_else(held),
+      None => Some(Cow::Borrowed(opened().unwrap_or(&self.folder))),
+      Some(card) => card.project.as_deref().map(Cow::Borrowed).or_else(held),
     }
   }
 
@@ -373,7 +376,7 @@ impl Client {
   /// The project of a record: the folder that its life opens in, or none for a session with no
   /// project, as a card of its machine says it once the machine told one.
   pub fn project(&self, at: usize, life: &str) -> Option<String> {
-    self.cwd(at, life).filter(|folder| !self.alone(at, folder))
+    self.cwd(at, life).filter(|folder| !self.alone(at, folder)).map(Cow::into_owned)
   }
 
   /// The folder of a new session with no project on a machine, in the folder of those sessions

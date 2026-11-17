@@ -2,7 +2,7 @@
 //! a fake of the local API of Tailscale gives, the access list, the daemon on the tailnet, and the
 //! door of the windows. Each runs on each system: the fake of Tailscale serves on a port of
 //! loopback, as the app of Tailscale for macOS does.
-
+#![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 #![cfg(test)]
 #![expect(
   clippy::disallowed_methods,

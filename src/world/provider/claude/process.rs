@@ -188,7 +188,7 @@ impl Tail {
     let mut chunk = [0u8; 4096];
     match stderr.read(&mut chunk).await {
       Ok(n) if n > 0 => {
-        self.kept.push_str(&String::from_utf8_lossy(&chunk[..n]));
+        self.kept.push_str(&String::from_utf8_lossy(chunk.get(..n).unwrap_or(&chunk)));
         let cut = self.kept.len() - last(&self.kept).len();
         self.kept.drain(..cut);
       }
@@ -225,7 +225,7 @@ impl Tail {
 /// The last characters of a text that a failure keeps.
 pub(super) fn last(text: &str) -> &str {
   let cut = text.char_indices().rev().nth(TAIL - 1).map_or(0, |(at, _)| at);
-  &text[cut..]
+  text.get(cut..).unwrap_or(text)
 }
 
 /// The failure of a turn that waited its stall with no progress, with the last line it read that

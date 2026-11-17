@@ -64,17 +64,23 @@ impl Model {
   }
 
   /// The column at the left of the diff: a mark on each row of a line that a sub thread of the
-  /// open thread is about, in the accent while it lives and muted once it rests.
+  /// open thread is about, in the accent while it lives and muted once it rests, and a `+` in the
+  /// accent on the row whose numbers the pointer is on, as GitHub shows where a click comments.
   fn review_marks(&self, path: &str, diff: &str, split: bool) -> Vec<Line> {
     let t = &self.tokens;
-    let mark = |sub: Option<&Agent>| match sub {
+    let pointed = self
+      .pointer
+      .filter(|(x, _)| !self.on_side(*x) && self.on_numbers(*x, diff, split))
+      .and_then(|(_, y)| Some(usize::from(y.checked_sub(2)?) + self.review_top));
+    let mark = |(row, sub): (usize, Option<&Agent>)| match sub {
       Some(agent) => {
         let hue = if rests(agent) { t.muted } else { t.accent };
         vec![run("◆", Style::new().fg(hue))]
       }
+      None if pointed == Some(row) => vec![run("+", Style::new().fg(t.accent).bold())],
       None => vec![run(" ", Style::new())],
     };
-    self.subs(path, diff, split).into_iter().map(mark).collect()
+    self.subs(path, diff, split).into_iter().enumerate().map(mark).collect()
   }
 
   /// The sub thread of the open thread that each row of the diff of a file is about, on either
@@ -99,7 +105,7 @@ impl Model {
       };
       opened.thread.agents.iter().find(at)
     };
-    (0..sides[0].len()).map(about).collect()
+    (0..sides.first().map_or(0, Vec::len)).map(about).collect()
   }
 
   /// The sub thread that a row of the diff that the review reads is about, which a click opens.
@@ -107,7 +113,7 @@ impl Model {
     let shown = self.reviewing()?;
     let path = &self.client.reviewed()?.path;
     let subs = self.subs(path, &shown.diff, shown.split);
-    Some(subs.get(row).copied().flatten()?.card.prompt.clone())
+    Some(subs.get(row).copied().flatten()?.card.prompt.to_string())
   }
 
   /// The head of the diff, as the head of a thread: the project and its branch muted, the file
@@ -173,7 +179,7 @@ impl Model {
         }
         Slot::File(at) => at,
       };
-      let one = &files[at];
+      let Some(one) = files.get(at) else { return Vec::new() };
       let ground = (at == chosen).then_some(t.lifted);
       let on = |style: Style| ground.map_or(style, |bg| style.bg(bg));
       let (mark, color) = match one.state {
@@ -206,19 +212,91 @@ impl Model {
     rows
   }
 
-  /// The foot, as the row of hints: the keys of the review.
+  /// The foot, as the row of hints: the keys of the review, each that its room holds, the close
+  /// and the comment first, so a narrow window cuts no hint in its middle.
   fn review_foot(&self) -> Line {
-    let foot = format!(
-      "  {}{} file · {} {} change · {}{} scroll · {} close",
-      self.key(Does::Up),
-      self.key(Does::Down),
-      PREVIOUS,
-      NEXT,
-      self.key(Does::PageUp),
-      self.key(Does::PageDown),
-      self.key(Does::Close),
-    );
-    vec![run(foot, self.tokens.style(Role::Muted))]
+    let all = [
+      format!("{}{} file", self.key(Does::Up), self.key(Does::Down)),
+      format!("{PREVIOUS} {NEXT} change"),
+      format!("{}{} scroll", self.key(Does::PageUp), self.key(Does::PageDown)),
+      format!("{} close", self.key(Does::Close)),
+      "click a number to comment".to_owned(),
+    ];
+    let room = self.diff_width().saturating_sub(2);
+    let mut kept = vec![true; all.len()];
+    // The scroll goes first, then the change, then the file, as each has another way.
+    for drop in [2, 1, 0] {
+      let used: usize =
+        all.iter().zip(&kept).filter(|one| *one.1).map(|one| one.0.width() + 3).sum();
+      if used <= room {
+        break;
+      }
+      if let Some(one) = kept.get_mut(drop) {
+        *one = false;
+      }
+    }
+    let shown: Vec<&str> =
+      all.iter().zip(&kept).filter(|one| *one.1).map(|one| one.0.as_str()).collect();
+    vec![run(format!("  {}", shown.join(" · ")), self.tokens.style(Role::Muted))]
+  }
+
+  /// The comment that he writes on a line of the file that the review reads: the row of the diff
+  /// under which it stands, and its rows, the draft of the input on a band with the bar of the
+  /// input, and the keys that send it and drop it.
+  pub(crate) fn commenting(&self) -> Option<(u16, Vec<Line>)> {
+    let shown = self.reviewing()?;
+    let anchor = self.client.draft.anchor.as_ref()?;
+    let Anchor { path, at: Where::Line { line, before, .. } } = anchor else { return None };
+    if Some(path) != self.client.reviewed().map(|one| &one.path) {
+      return None;
+    }
+    let rows = rows(&shown.diff, shown.split.then_some(!*before));
+    let at = |one: &Diffed| one.as_ref().is_some_and(|one| one.0 == *line && one.1 == *before);
+    let row = rows.iter().position(at)?;
+    let t = &self.tokens;
+    let (raised, width) = (Style::new().bg(t.raised), self.diff_width());
+    let caret = run("▏", Style::new().fg(t.accent).bg(t.raised));
+    let band = |text: Line| {
+      let used = 2 + text.iter().map(|one| one.content.width()).sum::<usize>();
+      let mut band = vec![run("┃ ", Style::new().fg(self.bar()).bg(t.raised))];
+      band.extend(text);
+      band.push(run(" ".repeat(width.saturating_sub(used)), raised));
+      band
+    };
+    let draft = &self.client.draft.text;
+    let mut lines: Vec<Line> = if draft.is_empty() {
+      let says = format!("Comment on {}", shown_at(anchor));
+      vec![band(vec![run(says, t.style(Role::Muted).bg(t.raised)), caret])]
+    } else {
+      let count = draft.split('\n').count();
+      let prose = t.style(Role::Prose).bg(t.raised);
+      let row = |(at, text): (usize, &str)| {
+        let end = (at + 1 == count).then(|| caret.clone());
+        band(iter::once(run(text.to_owned(), prose)).chain(end).collect())
+      };
+      draft.split('\n').enumerate().map(row).collect()
+    };
+    let (send, drop) = (self.key(Does::Send), self.key(Does::Close));
+    let keys = format!("{send} sends it as a thread on this line · {drop} drops it");
+    lines.push(band(vec![run(keys, t.style(Role::Muted).bg(t.raised))]));
+    Some((u16::try_from(row + 1).ok()?, lines))
+  }
+
+  /// Whether a column of the window stands on the numbers of a line of the diff, or on the column
+  /// of the marks before them: the numbers of each side in the split view.
+  pub(crate) fn gutter_at(&self, x: u16) -> bool {
+    self.reviewing().is_some_and(|shown| self.on_numbers(x, &shown.diff, shown.split))
+  }
+
+  /// Whether a column of the window stands on the numbers of a line of a diff, or on the column
+  /// of the marks before them.
+  fn on_numbers(&self, x: u16, diff: &str, split: bool) -> bool {
+    let Some(column) = usize::from(x).checked_sub(1) else { return false };
+    // The numbers stand with one cell before them and the sign after them, as `splits` counts.
+    let numbers = diff.lines().count().to_string().len() + 3;
+    let Some(at) = column.checked_sub(usize::from(MARKS)) else { return true };
+    let half = self.diff_width() / 2;
+    at < numbers || split && (half..half + numbers).contains(&at)
   }
 
   /// The lines that a change adds and removes, each in its color, and none of a count of zero.

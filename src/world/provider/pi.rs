@@ -154,7 +154,7 @@ impl Heard {
       let Some(at) = self.buffer.windows(2).rposition(|two| two == b"\n\n") else { continue };
       let rest = self.buffer.split_off(at + 2);
       let whole = mem::replace(&mut self.buffer, rest);
-      for block in String::from_utf8_lossy(&whole[..at]).split("\n\n") {
+      for block in String::from_utf8_lossy(whole.get(..at).unwrap_or_default()).split("\n\n") {
         let data = block.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim);
         let Some(data) = data.filter(|one| *one != "[DONE]") else { continue };
         match serde_json::from_str(data) {

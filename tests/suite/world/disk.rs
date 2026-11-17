@@ -2,8 +2,6 @@
 //! fails or waits midway stands beside the module, in `src/world/disk.test.rs`, since no door holds
 //! a write open.
 
-#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
-
 use std::{env, fs, io::Write, path::Path, process};
 
 use crate::{drive::block_on, yard::Yard};

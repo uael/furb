@@ -99,8 +99,9 @@ pub(crate) fn own() -> Result<String, TransportError> {
   if unsafe { GetUserNameW(name.as_mut_ptr(), &raw mut size) } == 0 {
     return Err(TransportError::Login(io::Error::last_os_error()));
   }
-  let size = usize::try_from(size).unwrap_or(name.len()).min(name.len());
-  Ok(String::from_utf16_lossy(&name[..size.saturating_sub(1)]))
+  // The size that the call gives counts the null at the end.
+  let size = usize::try_from(size).unwrap_or(name.len()).saturating_sub(1);
+  Ok(String::from_utf16_lossy(name.get(..size).unwrap_or(&name)))
 }
 
 /// The name of the pipe of a folder.
