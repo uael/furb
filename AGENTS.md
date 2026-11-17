@@ -53,7 +53,8 @@ API of its own:
   the next fact made names, and boots the next engine on that carry and the entries of the next segment, up to the
   last segment, which it replays word by word, so it opens at the exact state of its tip. A life that keeps its
   record keeps the carry of its last crossing beside it, `<record>.carry`, a cache as the image is: its key names each
-  entry up to that crossing and the texts of the build, so each later open boots on it while it agrees and replays
+  entry up to that crossing and what a replay takes from the build beside the texts of the record, and not the texts
+  that the build runs, so each later open, of this build or of a later one, boots on it while it agrees and replays
   those segments again when it does not, and each segment before the last crossing replays on its old engine once. A
   life that crosses as `Engine::cross` keeps there the carry that it gathers at its own tip, so the open after it
   replays no segment. A

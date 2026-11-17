@@ -26,8 +26,10 @@
 //! open that carries across it, and each later open boots on that carry. A life that crosses
 //! from its own tip, as [`Engine::cross`] moves it, keeps there the carry that it gathers at that
 //! tip, so no segment replays. It is a cache, as the image is: its key names each entry up to that
-//! crossing and the texts of the build, a reader takes none that does not agree, and the open then
-//! replays those segments again, to the same carry.
+//! crossing and what a replay takes from the build beside the texts that the record names, and not
+//! the texts that the build runs, so a new build replays no segment before that crossing. A reader
+//! takes none that does not agree, and the open then replays those segments again, to the same
+//! carry.
 
 use std::{fs, path::Path, slice};
 
@@ -37,7 +39,7 @@ use similar::TextDiff;
 
 use crate::{
   Engine,
-  engine::{Hands, OPERATOR, ROOT},
+  engine::{self, Hands, OPERATOR, ROOT},
   fact::Fact,
   minify::minified,
   skill::definitions,
@@ -249,15 +251,18 @@ impl Crossed {
 }
 
 /// The meaning of what [`Kept`] holds, which a change of meaning raises.
-const KEPT: u32 = 1;
+const KEPT: u32 = 2;
 
 /// The carry at a crossing of a record, as `<record>.carry` holds it, with its key: the place of
-/// that crossing among the entries, the digest of each entry up to it, and the texts of the build,
-/// which gathers the carry.
+/// that crossing among the entries, the digest of each entry up to it, which names the texts that
+/// each segment replays on, and what the replay takes from the build that gathers the carry, as
+/// [`engine::replays`] says. The texts that the build runs are no part of it: each build of the
+/// major replays a segment to the same carry, so a new build replays no segment before the
+/// crossing.
 #[derive(Serialize, Deserialize)]
 struct Kept {
   version: u32,
-  engine: String,
+  replays: String,
   at: usize,
   entries: String,
   carry: Object,
@@ -273,7 +278,7 @@ fn digest(entries: &[Object]) -> Option<String> {
 pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
   let kept: Kept = serde_json::from_slice(&fs::read(world::beside(path, ".carry")).ok()?).ok()?;
   let agrees = kept.version == KEPT
-    && kept.engine == world::engine()
+    && kept.replays == engine::replays()
     && record.get(..=kept.at).and_then(digest).is_some_and(|one| one == kept.entries);
   agrees.then_some((kept.at, kept.carry))
 }
@@ -282,7 +287,7 @@ pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
 /// cache that does not land costs the next open a replay, and nothing else.
 pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
   let Some(entries) = record.get(..=at).and_then(digest) else { return };
-  let kept = Kept { version: KEPT, engine: world::engine(), at, entries, carry };
+  let kept = Kept { version: KEPT, replays: engine::replays(), at, entries, carry };
   if let Ok(bytes) = serde_json::to_vec(&kept) {
     fs::write(world::beside(path, ".carry"), bytes).ok();
   }

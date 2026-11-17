@@ -40,6 +40,7 @@ use std::{
 
 use monty_types::{ExcType, MontyUuid, NamedValues};
 
+pub(crate) use self::order::replays;
 use self::{
   crossing::Crossing,
   hosted::{At, Handed, Hosted, Replay},

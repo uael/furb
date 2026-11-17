@@ -20,7 +20,8 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::{CHECKPOINTER, value::Fault};
+use super::OPENING;
+use crate::{CHECKPOINTER, RECORD, value::Fault};
 
 /// The dispatch of each engine of the major that says a due answer first, and the dispatch that
 /// says it where the ear of the outside said it.
@@ -150,6 +151,27 @@ const CARRIERS: [&str; 1] = ["95b810d66c359256600ed7da2f884d5d19fdeb6905588731a9
 pub(super) fn carrier(checkpointer: &str) -> &str {
   let digest = format!("{:x}", Sha256::digest(checkpointer.as_bytes()));
   if CARRIERS.contains(&digest.as_str()) { CHECKPOINTER } else { checkpointer }
+}
+
+/// The digest of what a replay of a segment takes from this build beside the texts that the record
+/// names: the opening of the sandbox, the rule of the record, each form of [`FORMS`] with each text
+/// of [`TEXTS`] that takes it, each checkpointer of [`CARRIERS`], and the checkpointer that stands
+/// in for it. Two builds of the same digest replay a segment to the same carry, whatever engine
+/// each runs.
+pub(crate) fn replays() -> String {
+  let mut hash = Sha256::new();
+  let mut part = |one: &str| {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  };
+  [OPENING, RECORD].into_iter().for_each(&mut part);
+  FORMS.iter().flat_map(|(old, new)| [*old, *new]).for_each(&mut part);
+  for (text, form) in TEXTS {
+    part(text);
+    part(&form.to_string());
+  }
+  CARRIERS.into_iter().chain([CHECKPOINTER]).for_each(&mut part);
+  format!("{:x}", hash.finalize())
 }
 
 #[cfg(test)]

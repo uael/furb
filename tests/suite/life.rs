@@ -30,7 +30,7 @@ use futures::channel::mpsc::unbounded;
 use futures::{executor, future, future::select};
 use num_bigint::BigInt;
 use serde::Serialize;
-use serde_json::value::to_raw_value;
+use serde_json::{Value, value::to_raw_value};
 use tokio::runtime;
 
 use crate::yard::Yard;
@@ -721,10 +721,10 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
     .iter()
     .position(|line| line.starts_with(r#"[["cd","cd1","#))
     .expect("the record holds the first cd");
-  let mut entry: serde_json::Value = serde_json::from_str(&lines[moved]).unwrap();
+  let mut entry: Value = serde_json::from_str(&lines[moved]).unwrap();
   let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
   let elsewhere = format!("{place}\\elsewhere");
-  entry[0][4] = serde_json::Value::from(elsewhere.as_str());
+  entry[0][4] = Value::from(elsewhere.as_str());
   lines[moved] = entry.to_string();
   // The last line is whole and not ended, which a store mends only at its first keep.
   fs::write(&record, lines.join("\n")).unwrap();
@@ -1086,8 +1086,8 @@ fn a_life_goes_on_across_a_crossing_with_the_names_the_module_and_the_open_promp
 
 /// Each segment before the last crossing of a record replays on its engine once: the open that
 /// keeps the record and carries across that crossing keeps the carry beside the record, and each
-/// later open boots on it while its key agrees with the record, and replays those segments again
-/// when it does not.
+/// later open, of this build or of a build of other texts, boots on it while its key agrees with
+/// the record, and replays those segments again when it does not.
 #[test]
 fn a_segment_before_the_last_crossing_replays_once_and_a_carry_that_does_not_agree_replays_again() {
   let at = yard("carried-once");
@@ -1108,8 +1108,13 @@ fn a_segment_before_the_last_crossing_replays_once_and_a_carry_that_does_not_agr
     "'kept'",
     "a later open boots on the carry that it kept, and replays no segment before it"
   );
-  fs::write(&carry, kept.replace("replayed", "kept").replace(&world::engine(), "another build"))
-    .unwrap();
+  assert!(
+    !kept.contains(&world::engine()),
+    "the key of the carry names no text that the build runs, so a new build boots on it too"
+  );
+  let mut other: Value = serde_json::from_str(&kept.replace("replayed", "kept")).unwrap();
+  other["entries"] = Value::from("the digest of other entries");
+  fs::write(&carry, other.to_string()).unwrap();
   assert_eq!(
     marked(),
     "'replayed'",
