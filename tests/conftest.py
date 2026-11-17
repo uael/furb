@@ -912,7 +912,10 @@ def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
 @pytest.fixture(autouse=True, scope="session")
 def cached(tmp_path_factory: pytest.TempPathFactory) -> None:
   """The cache that the catalog of each life of the suite reads, of its own, and not the one of the machine, and no
-  local server of the machine."""
+  local server of the machine. uv keeps the cache of the machine, which holds the packages of each kit that runs on it:
+  a cache of its own made each worker take them from the index again, in seconds, past the bound of a test under load."""
+  machine = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+  os.environ.setdefault("UV_CACHE_DIR", str(Path(machine) / "uv"))
   os.environ["XDG_CACHE_HOME"] = str(tmp_path_factory.mktemp("cache"))
   for name in ("FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS", "MAX_THINKING_TOKENS"):
     os.environ.pop(name, None)
