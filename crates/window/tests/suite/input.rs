@@ -391,9 +391,14 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
   shows(&app, "⌃C again takes back “three (the model works");
   screen("input-take-back", &app);
   app.press("ctrl+c");
-  // The question of the message stops, and its text comes back to the input.
-  let frame = shows(&app, "stopped");
-  assert_eq!(frame.matches(&format!("┃ three {WORKS}")).count(), 2, "{frame}");
+  // The question of the message stops, and its text comes back to the input. The text comes back
+  // with the answer to the cancel, and the page that shows the stop comes on its own, in any order.
+  let three = format!("┃ three {WORKS}");
+  let shown = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.contains("stopped") && frame.matches(&three).count() == 2
+  });
+  assert!(shown, "{}", app.text());
 }
 
 #[test]
