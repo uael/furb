@@ -549,8 +549,9 @@ fn kept_by<S: Store + 'static>(store: S, read: Option<Vec<Object>>) -> (Vec<Obje
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => match a.kind() {
           "keep" => {
-            let Some(entry) = a.word(0) else { continue };
-            co.kept::<Held<S>>()?.waiting.push_back(entry.to_owned());
+            if a.word(0).is_some() {
+              co.kept::<Held<S>>()?.waiting.push_back(a);
+            }
           }
           "chain" if new && a.about() == ROOT => {
             say(&mut co, named());
@@ -634,7 +635,8 @@ async fn told(co: &mut Co<()>, message: String) -> Result<(), Fault> {
 /// A store, and the entries that it could not keep yet, in order, with the last fault of the store.
 struct Held<S> {
   store: S,
-  waiting: VecDeque<Object>,
+  /// Each fact `keep` whose entry waits for the store, which holds the entry as its first word.
+  waiting: VecDeque<Fact>,
   /// The fault of the last keep that failed, or of the last sync that failed, until a sync succeeds with no entry
   /// waiting.
   fault: Option<Fault>,
@@ -661,8 +663,8 @@ impl<S: Store> Held<S> {
 
   /// Each entry that waits kept in order, and the fault that stops the record, if one does.
   fn flushed(&mut self) -> Option<Fault> {
-    while let Some(entry) = self.waiting.front() {
-      if let Err(fault) = self.store.keep(entry.as_ref()) {
+    while let Some(entry) = self.waiting.front().and_then(|keep| keep.word(0)) {
+      if let Err(fault) = self.store.keep(entry) {
         self.fault = Some(fault);
         break;
       }
