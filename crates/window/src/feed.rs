@@ -338,13 +338,13 @@ impl<'a> Feed<'a> {
         };
         // The button turns the input to the thread, so it stands only while the input sends
         // elsewhere or runs a word: a button that would change nothing does not show.
-        let replies = self.model.client.target() == Target::Thread(self.opened.thread.key.clone())
+        let replies = matches!(self.model.client.target(), Target::Thread(key) if key == self.opened.thread.key)
           && !self.model.client.draft.python;
         (Some(mark), (!replies).then(|| (run(" Reopen ", button), Does::Resolve)))
       }
       Some(thread)
         if thread.works()
-          && self.model.armed == Some(Armed::Resolve(self.opened.thread.key.clone())) =>
+          && matches!(&self.model.armed, Some(Armed::Resolve(key)) if *key == self.opened.thread.key) =>
       {
         (None, Some((run(" Stop and resolve ", button.fg(t.attention)), Does::Resolve)))
       }

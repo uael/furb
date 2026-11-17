@@ -206,13 +206,14 @@ impl Model {
 
   /// The name of the folder whose files a mention lists.
   fn mentioned_in(&self) -> String {
-    let at = self.client.target().machine();
-    let folder = match self.client.target() {
+    let target = self.client.target();
+    let at = target.machine();
+    let folder = match target {
       Target::Thread(key) => self.client.cwd(at, &key.1),
       Target::Session(_, life) => self.client.cwd(at, &life),
       Target::New(_, folder) => Some(folder),
     };
-    let word = self.client.completion.as_ref().map(|one| one.word.clone()).unwrap_or_default();
+    let word = self.client.completion.as_ref().map_or("", |one| one.word.as_str());
     let query = word.trim_start_matches(['@', '"']);
     match query.rfind('/') {
       Some(end) if query.starts_with(['/', '~', '.']) => {

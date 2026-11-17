@@ -3,9 +3,12 @@
 //! so a walk signs in as a new user does, with no network. The code of the sign-in holds once the
 //! browser of the walk opened its page, as a person who enters the code there.
 
-use std::sync::{
-  Arc,
-  atomic::{AtomicBool, Ordering},
+use std::{
+  borrow::Cow,
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
 };
 
 use tokio::{
@@ -62,25 +65,28 @@ async fn answered(mut stream: TcpStream, entered: Arc<AtomicBool>) {
   let path = line.split(' ').nth(1).unwrap_or_default();
   let path = path.split('?').next().unwrap_or_default();
   let (status, body) = match path {
-    "/api/accounts/deviceauth/usercode" => {
-      (200, format!(r#"{{"device_auth_id":"device","user_code":"{CODE}","interval":"1"}}"#))
-    }
+    "/api/accounts/deviceauth/usercode" => (
+      200,
+      Cow::Owned(format!(r#"{{"device_auth_id":"device","user_code":"{CODE}","interval":"1"}}"#)),
+    ),
     "/codex/device" => {
       entered.store(true, Ordering::SeqCst);
-      (200, "{}".to_owned())
+      (200, Cow::Borrowed("{}"))
     }
     "/api/accounts/deviceauth/token" if entered.load(Ordering::SeqCst) => (
       200,
-      r#"{"authorization_code":"code","code_challenge":"challenge","code_verifier":"verifier"}"#
-        .to_owned(),
+      Cow::Borrowed(
+        r#"{"authorization_code":"code","code_challenge":"challenge","code_verifier":"verifier"}"#,
+      ),
     ),
     // The code waits for the person.
-    "/api/accounts/deviceauth/token" => (403, "{}".to_owned()),
-    "/oauth/token" => {
-      (200, format!(r#"{{"access_token":"{ACCESS}","refresh_token":"r","expires_in":3600}}"#))
-    }
-    "/backend-api/codex/models" => (200, MODELS.to_owned()),
-    _ => (404, "{}".to_owned()),
+    "/api/accounts/deviceauth/token" => (403, Cow::Borrowed("{}")),
+    "/oauth/token" => (
+      200,
+      Cow::Owned(format!(r#"{{"access_token":"{ACCESS}","refresh_token":"r","expires_in":3600}}"#)),
+    ),
+    "/backend-api/codex/models" => (200, Cow::Borrowed(MODELS)),
+    _ => (404, Cow::Borrowed("{}")),
   };
   let reason = match status {
     200 => "OK",
@@ -91,7 +97,8 @@ async fn answered(mut stream: TcpStream, entered: Arc<AtomicBool>) {
     "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
     body.len()
   );
-  stream.write_all(format!("{head}{body}").as_bytes()).await.ok();
+  stream.write_all(head.as_bytes()).await.ok();
+  stream.write_all(body.as_bytes()).await.ok();
 }
 
 /// The first line of a request, once its head and its body came.

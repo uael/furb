@@ -112,18 +112,18 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
   let mut screen = Screen::new(cast)?;
   let mut keys: Vec<Key> = Vec::new();
   let mut tick = every;
-  let mut last: Option<Frame> = None;
+  // The key of the last tick, whose frame the next tick compares.
+  let mut last: Option<usize> = None;
   let mut labels: HashMap<&str, usize> = HashMap::new();
   for event in &cast.events {
     while let (Some(at), Some(step)) = (tick, every) {
       if at > event.at {
         break;
       }
-      let frame = screen.frame().clone();
-      if last.as_ref() != Some(&frame) {
+      if last.and_then(|one| keys.get(one)).map(|one| &one.frame) != Some(screen.frame()) {
         let name = format!("t{:06}", at.as_millis());
-        keys.push(Key { name, at, frame: frame.clone(), marker: false });
-        last = Some(frame);
+        last = Some(keys.len());
+        keys.push(Key { name, at, frame: screen.frame().clone(), marker: false });
       }
       tick = Some(at + step);
     }
