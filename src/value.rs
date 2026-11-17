@@ -13,7 +13,7 @@
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 use serde_json::Value;
-use std::{error, fmt, fmt::Write as _, mem};
+use std::{borrow::Cow, error, fmt, fmt::Write as _, mem};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
@@ -295,9 +295,20 @@ pub fn entry<'a>(said: &ObjectRef<'a>, at: usize) -> Option<ObjectRef<'a>> {
 /// monty makes no instance on a host's behalf. An object of the host, which monty made for the host, and plain
 /// data go in as they are. This is the one rule, applied to everything the crate hands in, so a record a World
 /// kept of one life opens the next.
-pub(crate) fn inward(said: &Object) -> Object {
-  let (graph, root) = unstable::into_graph_parts(said.clone());
-  walk(&graph, root)
+/// A value with no such instance goes in as it stands, with no copy.
+pub(crate) fn inward(said: &Object) -> Cow<'_, Object> {
+  let (graph, root) = unstable::graph_parts(said);
+  let sandboxed = |node: &MontyNode| match node {
+    MontyNode::ClassInstance { class_type, .. } => {
+      matches!(graph.node(*class_type), MontyNode::ClassType(class) if !class.host_defined)
+    }
+    _ => false,
+  };
+  if graph.nodes().iter().any(sandboxed) {
+    Cow::Owned(walk(graph, root))
+  } else {
+    Cow::Borrowed(said)
+  }
 }
 
 /// The most levels of a value that a host is given. Each door walks a value one level at a time on the stack of its

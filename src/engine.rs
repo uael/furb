@@ -246,7 +246,7 @@ impl Host for Outside {
         self.asking.clear();
         Ok(Object::bool(sand.bound(bounded)))
       }
-      None => self.called(sand, name, &args),
+      None => self.called(sand, name, args),
       Some(on) if name == "send" => return self.sent(sand, on, args.into_iter().next()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
     };
@@ -384,7 +384,7 @@ impl Outside {
     let opened = Arc::clone(&self.opened);
     let by = by.map(|text| ("by", Object::string(text))).into_iter().collect();
     let got = sand.call(self, &opened.checkpoint, args, by)?;
-    self.outward(sand, &got)
+    self.outward(sand, got)
   }
 
   /// The words of a call, values of the host, as they come in.
@@ -416,7 +416,7 @@ impl Outside {
   ) -> Result<Object, Fault> {
     let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = self.named_call(sand, name, args, kwargs)?;
-    self.outward(sand, &got)
+    self.outward(sand, got)
   }
 
   /// One callable the engine made, called back by the number it went out under.
@@ -434,7 +434,7 @@ impl Outside {
     let made = self.held(n)?;
     let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = sand.call(self, &made, args, kwargs)?;
-    self.outward(sand, &got)
+    self.outward(sand, got)
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given.
@@ -458,13 +458,14 @@ impl Outside {
     if got.as_ref().type_name() == "ellipsis" {
       return Ok(None);
     }
-    self.outward(sand, &got).map(Some)
+    self.outward(sand, got).map(Some)
   }
 
   /// A function of the host, called back by the sandbox: what it is given goes out as any value goes out, and what
   /// it gives comes in as any value comes in, so a function that gives an ear gives the object that stands in for it.
-  fn called(&mut self, sand: &mut Sand, name: &str, args: &[Object]) -> Result<Object, Fault> {
-    let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
+  fn called(&mut self, sand: &mut Sand, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    let args =
+      args.into_iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
     let missing = || Fault::refused(format!("{name} is no function of the host"));
     let mut call = self.hosted.handed.calls.remove(name).ok_or_else(missing)?;
     let got = self.lent(sand, |life| call(args, life));
@@ -828,7 +829,7 @@ impl Engine {
   pub fn held(&mut self) -> Result<Object, Fault> {
     self.run(|sand, outside| {
       let got = sand.call(outside, &Arc::clone(&outside.opened).held, vec![], vec![])?;
-      outside.outward(sand, &got)
+      outside.outward(sand, got)
     })
   }
 
@@ -949,7 +950,7 @@ impl Engine {
     self.run(|sand, outside| {
       let (opened, names) = (Arc::clone(&outside.opened), outside.inward(sand, &names)?);
       let got = sand.call(outside, &opened.word, vec![Object::string(word), names], vec![])?;
-      outside.outward(sand, &got)
+      outside.outward(sand, got)
     })
   }
 

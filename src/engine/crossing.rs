@@ -88,11 +88,9 @@ impl Outside {
   /// A value as it goes out to the host, as a host is given one, so no walk of a host over it is
   /// deeper or longer than the value bounds. A value with no data form that is not callable is let
   /// go of once the whole value went out, since the value may hold it more than once.
-  pub(super) fn outward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let value = carried(value.clone());
-    // A value whose parts each go out as they stand goes out whole, with no copy of each part: a
-    // fact of the engine is one, and goes out at each ear that hears it.
-    if unstable::graph_parts(&value).0.nodes().iter().all(|node| !changes(&value, node)) {
+  pub(super) fn outward(&mut self, sand: &mut Sand, value: Object) -> Result<Object, Fault> {
+    let value = carried(value);
+    if stands(&value) {
       return Ok(value);
     }
     let (graph, root) = unstable::into_graph_parts(value);
@@ -212,14 +210,15 @@ impl Outside {
     let n = self.number(handle, &class);
     let opened = Arc::clone(&self.opened);
     let base = sand.call(self, &opened.base, vec![class], vec![])?;
-    let base = self.outward(sand, &base)?;
+    let base = self.outward(sand, base)?;
     Ok(marked("class", [("id", Object::int(n)), ("name", Object::string(name)), ("base", base)]))
   }
 
   /// A value of the host as the engine holds it, made in the sandbox from what crossed.
   pub(super) fn inward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let (graph, root) = unstable::into_graph_parts(inward(value));
-    self.comes(sand, &graph, root)
+    let value = inward(value);
+    let (graph, root) = unstable::graph_parts(&value);
+    self.comes(sand, graph, root)
   }
 
   /// One node of a value as it comes in: a map that names what it is under `is` made again as that,
@@ -389,6 +388,12 @@ impl Outside {
 
 /// Whether a part of a value goes out in another form than it stands in, as `goes` says: a map
 /// that names what it is, a handle, or a class of a word or an instance of one.
+/// Whether each part of a value goes out as it stands, so the value goes out whole, with no copy of
+/// each part: a fact of the engine is one, and goes out at each ear that hears it.
+pub(super) fn stands(value: &Object) -> bool {
+  unstable::graph_parts(value).0.nodes().iter().all(|node| !changes(value, node))
+}
+
 fn changes(value: &Object, node: &MontyNode) -> bool {
   let graph = unstable::graph_parts(value).0;
   match node {

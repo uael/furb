@@ -13,7 +13,7 @@ use std::{
 
 use monty_types::{MontyUuid, unstable};
 
-use super::Outside;
+use super::{Outside, crossing::stands};
 use crate::{
   ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
@@ -176,8 +176,8 @@ pub(super) struct Hosted {
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
   /// The fact that an ear of the host heard last, as [`Outside::told`] keeps it: the value that
-  /// the sandbox sent, and the fact that it went out as.
-  pub(super) told: Option<(Object, Fact)>,
+  /// the sandbox sent, when it is not the fact, and the fact that it went out as.
+  pub(super) told: Option<(Option<Object>, Fact)>,
   /// The count of the replay, while the life boots.
   pub(super) replay: Option<Replay>,
 }
@@ -242,6 +242,16 @@ impl Hosted {
     {
       (replay.told)(replay.of, replay.of);
     }
+  }
+
+  /// What an ear waits for, kept for a send of nothing, and given back to the sandbox. An ear most
+  /// often waits for what it waited for at its last step, which is kept already.
+  fn waiting(&mut self, on: MontyUuid, wait: Object) -> Object {
+    let held = self.waits.get(&on);
+    if held.is_none_or(|held| unstable::graph_parts(held) != unstable::graph_parts(&wait)) {
+      self.waits.insert(on, wait.clone());
+    }
+    wait
   }
 }
 
@@ -423,9 +433,7 @@ impl Outside {
         (At::Waiting, self.inward(sand, saying.object()).map_or_else(Answer::Abort, Answer::Value))
       }
       Stepped::Wait(wait) => {
-        let wait = wait.unwrap_or_else(Object::none);
-        self.hosted.waits.insert(on, wait.clone());
-        (At::Waiting, Answer::Value(wait))
+        (At::Waiting, Answer::Value(self.hosted.waiting(on, wait.unwrap_or_else(Object::none))))
       }
       Stepped::Over => (At::Over, Answer::Fault(Fault::stop_iteration())),
       Stepped::Raised(fault) => (At::Over, self.raising(sand, fault)),
@@ -447,15 +455,18 @@ impl Outside {
   /// handle, and a number that the host forgot drops the fact that named it.
   fn told(&mut self, sand: &mut Sand, a: Object) -> Result<Option<Fact>, Fault> {
     if let Some((came, fact)) = &self.hosted.told
-      && unstable::graph_parts(came) == unstable::graph_parts(&a)
+      && unstable::graph_parts(came.as_ref().unwrap_or(fact.object())) == unstable::graph_parts(&a)
     {
       return Ok(Some(fact.clone()));
     }
-    let fact = Fact::owned(self.outward(sand, &a)?);
+    // A value whose parts stand goes out as it came, or cut as `carried` cuts it, which goes out
+    // as it stands again, so the fact is the key of the next value with no copy of this one.
+    let came = (!stands(&a)).then(|| a.clone());
+    let fact = Fact::owned(self.outward(sand, a)?);
     if let (Some(fact), Some(replay)) = (&fact, &mut self.hosted.replay) {
       replay.heard(fact);
     }
-    self.hosted.told = fact.clone().map(|fact| (a, fact));
+    self.hosted.told = fact.clone().map(|fact| (came, fact));
     Ok(fact)
   }
 
