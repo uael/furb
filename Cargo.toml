@@ -106,6 +106,13 @@ dbg_macro = "deny"
 absolute_paths = "warn"
 use_self = "warn"
 
+# Each crate of the workspace depends on furb-hack, which cargo hakari writes, for the features that it turns on alone.
+# A crate that loads it through no other crate of the workspace, as furb-wire, names none of its code, so cargo reports
+# the dependency unused. cargo takes no lint for one dependency, and `cargo hakari publish` removes the dependency, so
+# no line of code can name it.
+[workspace.lints.cargo]
+unused_dependencies = "allow"
+
 [lints]
 workspace = true
 
