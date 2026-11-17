@@ -35,20 +35,23 @@ pytest = 180
 # The most heap, in MiB, that a life of the last size of LARGE in crates/host/tests/suite/memory.rs may hold, when its
 # test runs as `memory::bench -- --ignored`.
 memory_heap_mib = 512
-# The most allocations that each fact and each frame cost, for each system that measured them, in the table of its
+# The most allocations that each fact, each frame and each part cost, for each system that measured them, in the table of its
 # name (std::env::consts::OS). The allocations of the whole process count, std among them, which differ from one
 # system to the next, so each bound is the measure of its own system, and one more allocation for each fact or each
 # frame fails it. A system with no table bounds nothing yet, and its test prints the measure to set here.
 # memory_allocs_per_fact: the growth of a life from one size to the next, over the facts that it said, at the sizes of
 # the suite, which write no image. memory_allocs_per_fact_large: the same at the sizes of the bench, whose life writes
 # its image each 10 000 facts. memory_allocs_per_frame: the daemon and the window, for each frame that a window reads
-# when it attaches at the start of the log of a life, in the test of the slow window.
+# when it attaches at the start of the log of a life, in the test of the slow window. memory_allocs_per_part: the life,
+# for each part of a reply that comes alone, as a model streams each part over the network.
 [bench.macos]
-# Measured on 11-17, macOS 26, dev profile: 1202; 1244, 1206 and 1213; 18.
+# Measured on 11-17, macOS 26, dev profile: 1197; 1238, 1200 and 1207; 18; 10.
 # The count holds each thread of the process, so it moves with how the threads are scheduled: 20 runs one at a time
-# gave 1252.27 to 1252.28 for each fact before the last cut, and 8 runs at once 1251.98 to 1252.29. A load only
-# lowered it, so each bound is the top of the spread of runs at rest (5 runs gave 1202 each, and 2 runs of the bench
-# 1213 each), and one more allocation for each fact passes it.
-memory_allocs_per_fact = 1202
-memory_allocs_per_fact_large = 1213
+# of an earlier build gave 1252.27 to 1252.28 for each fact, and 8 runs at once 1251.98 to 1252.29. A load only
+# lowered it, so each bound is the top of the spread of runs at rest (4 runs gave 1197 each, and 2 runs of the bench
+# 1207 each), and one more allocation for each fact passes it.
+memory_allocs_per_fact = 1197
+memory_allocs_per_fact_large = 1207
 memory_allocs_per_frame = 18
+# A part of a reply that comes alone: 10 in each of 3 runs (42 when each poll listed the names of the ears).
+memory_allocs_per_part = 10

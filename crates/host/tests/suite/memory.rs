@@ -6,8 +6,9 @@
 //! `crates/xtask/budgets.toml`. From each size to the next, both runs bound the allocations that
 //! each fact costs as the life grows, `memory_allocs_per_fact` of the table of the system in the
 //! same file, and `memory_allocs_per_fact_large` for the bench, whose life writes its image as it
-//! goes. The test counts each byte and each allocation of the process, so a child of the suite
-//! runs it alone, as `apart` says.
+//! goes. The suite also bounds the allocations of one part of a reply that comes alone, as a model
+//! streams each part over the network, `memory_allocs_per_part`. The test counts each byte and each
+//! allocation of the process, so a child of the suite runs it alone, as `apart` says.
 #![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
 #![expect(clippy::panic, reason = "a panic is how a test fails")]
 #![expect(
@@ -21,7 +22,10 @@ use crate::{apart, counted::Counted, yard};
 use std::{
   collections::{BTreeMap, HashSet},
   path::Path,
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+  },
   time::{Duration, Instant},
 };
 
@@ -106,6 +110,13 @@ const DRAWS: usize = 500;
 /// each few tokens, so a reply of a thousand words comes in about a thousand parts.
 const PARTS: usize = 1_000;
 
+/// How many parts the model streams alone, each after a pause, after the parts of [`PARTS`]: a
+/// part that comes alone wakes the life alone. The measure of a part sets it for each prompt.
+static ALONE: AtomicUsize = AtomicUsize::new(0);
+
+/// How many parts the measure of a part streams alone in one reply.
+const STREAMED: usize = 200;
+
 /// How many times one word of the operator reads a file, and the size of the file: each read tells
 /// its text to the chain, as a real life reads its sources and the output of its commands.
 const READS: usize = 10;
@@ -125,7 +136,14 @@ fn opening(at: &Path) -> Opening {
       Object::none(),
       Object::none(),
     ]);
-    Box::pin(async move { Ok(turn) })
+    let alone = ALONE.load(Ordering::Relaxed);
+    Box::pin(async move {
+      for _ in 0..alone {
+        told(&part, "");
+        time::sleep(Duration::from_micros(200)).await;
+      }
+      Ok(turn)
+    })
   }));
   Opening {
     claude: Some(at.join("no-claude").display().to_string()),
@@ -227,6 +245,7 @@ fn bench() {
 fn heap_alone() {
   if apart::alone("memory::heap_alone") {
     grown(false);
+    runtime().block_on(a_part_that_comes_alone_costs_a_bounded_count_of_allocations());
   }
 }
 
@@ -322,6 +341,35 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
   }
   life.send(Command::End).await.ok();
   checked(&rows, biggest, budget);
+}
+
+/// The allocations of one part of a reply that comes alone, from two replies of the same life
+/// that differ by [`STREAMED`] such parts.
+async fn a_part_that_comes_alone_costs_a_bounded_count_of_allocations() {
+  let at = yard::Yard::new(format!("furb-host-part-{}", process::id()));
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  let mut replied = async |parts: usize| {
+    ALONE.store(parts, Ordering::Relaxed);
+    let calls = Counted::calls();
+    let prompt = Command::Prompt {
+      shape: "str".to_owned(),
+      message: "Say ok.".to_owned(),
+      to: None,
+      on: None,
+    };
+    let asked = made(&life, prompt).await;
+    until(&mut events, done(asked)).await;
+    Counted::calls() - calls
+  };
+  // The first reply opens what each later reply finds open.
+  replied(0).await;
+  let (none, some) = (replied(0).await, replied(STREAMED).await);
+  ALONE.store(0, Ordering::Relaxed);
+  life.send(Command::End).await.ok();
+  let each = some.saturating_sub(none) / STREAMED;
+  println!("a part of a reply that comes alone: {each} allocations");
+  bounded("memory_allocs_per_part", each, "a part of a reply that comes alone");
 }
 
 /// What each size showed: the allocations of each fact as the life grew to it, what a reader that
