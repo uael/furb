@@ -28,8 +28,6 @@ build-backend = "maturin"
 # The program furb, and no module of python: the wheel puts it among the scripts of the environment, so the package
 # furb, which depends on this one, gives the command furb.
 bindings = "bin"
-# The symbols of debugging are a third of the program, and no user of the wheel reads them.
-strip = true
 
 # The files that the build of the crate reads. When one of them changes, the next sync builds the package again, so a
 # change of the engine reaches the suite with no reinstall.

@@ -115,10 +115,12 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
-        # The extension is built for one interpreter, and the program for none.
+        # The extension is built for one interpreter, and the program for none. The symbols of the program are a third
+        # of it, and no user of the wheel reads them: the wheel of a release alone drops them, so the wheel that uv
+        # builds in a tree is the program that cargo builds there, and no sync puts another at its path.
         crate:
           - { name: furb-monty, path: crates/python, args: --interpreter python3.14 }
-          - { name: furb-cli, path: crates/cli, args: "" }
+          - { name: furb-cli, path: crates/cli, args: --strip }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
