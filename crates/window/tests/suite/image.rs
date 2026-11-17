@@ -75,13 +75,19 @@ fn an_image_that_a_message_names_draws_under_its_text_and_one_that_does_not_draw
   app.paste("shot.png");
   app.paste("broken.png");
   sent(&app, &format!(" {WORKS}"));
-  let frame = shows(&app, "┃ ▣ image-2.png does not show: its bytes are no whole");
+  shows(&app, "┃ ▣ image-2.png does not show: its bytes are no whole");
   // The image of 192 by 108 pixels takes 7 rows of 16 pixels and the columns of its shape, a
-  // blank row under the text.
-  let rows: Vec<&str> = frame.lines().skip_while(|row| !row.contains("(the model works")).collect();
-  let drawn = |row: &&str| row.chars().nth(4).is_some_and(|one| ('▀'..='▟').contains(&one));
-  let image: Vec<&str> = rows.iter().skip(3).copied().take_while(drawn).collect();
-  assert_eq!((image.len(), rows[2].chars().nth(4)), (7, Some(' ')), "{frame}");
+  // blank row under the text, once its bytes came, which a loaded machine reads after the line of
+  // the other image.
+  let boxed = |frame: &str| {
+    let rows: Vec<&str> =
+      frame.lines().skip_while(|row| !row.contains("(the model works")).collect();
+    let drawn = |row: &&str| row.chars().nth(4).is_some_and(|one| ('▀'..='▟').contains(&one));
+    let image = rows.iter().skip(3).copied().take_while(drawn).count();
+    (image, rows.get(2).and_then(|row| row.chars().nth(4)))
+  };
+  let drawn = app.wait_until(PATIENCE, || boxed(&app.text()) == (7, Some(' ')));
+  assert!(drawn, "{}", app.text());
 }
 
 #[test]

@@ -110,7 +110,10 @@ fn a_click_on_the_scope_of_the_list_opens_go_to() {
 #[test]
 fn a_click_on_the_project_of_a_new_session_lists_the_projects_and_one_aims_the_input() {
   let (app, _daemon, _peer) = machine();
-  clicked(&app, "furb-try ▾", 0, 0);
+  // The launcher gives the project less room once the catalog names the model, which a loaded
+  // machine reads before the first frame or after it: the click waits for the whole launcher.
+  shows(&app, "opus  high");
+  clicked(&app, "FT furb-", 0, 0);
   let frame = shows(&app, "Search a project");
   assert!(!frame.contains("Send to"), "{frame}");
   // The project of the daemon is a row of the part, with its count of sessions.

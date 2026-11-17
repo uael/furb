@@ -859,6 +859,9 @@ fn the_bar_of_the_time_stands_at_once_holds_on_a_first_click_and_zooms() {
     mem::replace(&mut before, now.clone()) == now
   });
   assert!(rests, "{}", app.text());
+  // The card of the thread counts the agents at work once its machine tells the end of the third,
+  // which a loaded machine tells after the thread shows it.
+  shows(&app, "opus ↳2");
   screen("time-out", &app);
   // A first click on its track holds it and moves nothing in time.
   let y = u16::try_from(app.text().lines().count() - 1).unwrap_or_default();
