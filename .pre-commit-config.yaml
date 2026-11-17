@@ -121,6 +121,20 @@ repos:
         language: system
         files: ((^|/)Cargo\.toml|^Cargo\.lock|^\.config/hakari\.toml)$
         pass_filenames: false
+      - id: programs
+        name: a build of the programs alone takes furb with the features of a build of the workspace
+        # A daemon and a window take a new program at their path as a new build, so `cargo build -p furb-cli -p
+        # furb-window` and a build of the workspace, as the tests take, make the same program. It needs the dependencies
+        # of cargo, which a run of the tests from an archive does not hold. Windows takes furb with no feature in the
+        # programs, as their manifests say.
+        entry: >-
+          sh -c 'case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) exit 0;; esac;
+          f() { cargo tree --quiet --locked -e normal --prefix none --format "{p} {f}" --invert furb "$@" | head -1; };
+          a=$(f -p furb-cli -p furb-window) && b=$(f --workspace) && [ -n "$a" ] && [ "$a" = "$b" ]
+          || { echo "furb takes [$a] in a build of the programs and [$b] in a build of the workspace"; exit 1; }'
+        language: system
+        files: ((^|/)Cargo\.toml|^Cargo\.lock)$
+        pass_filenames: false
       - id: paths
         name: the paths that the tools and the workflows name
         # It runs whatever the files, since a move of a file in a change that touches no script leaves the old path in

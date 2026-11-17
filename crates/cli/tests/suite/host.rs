@@ -113,31 +113,3 @@ async fn the_daemon_takes_each_change_of_host_json_and_keeps_its_list_when_the_f
     "a file that does not parse keeps the list"
   );
 }
-
-/// The features of furb in a build of these packages alone, as cargo resolves them, with no build.
-#[cfg(not(windows))]
-fn features(packages: &[&str]) -> String {
-  use std::env;
-  let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-  let mut tree = process::Command::new(cargo);
-  tree.args(["tree", "--quiet", "--offline", "--locked", "-e", "normal", "--prefix", "none"]);
-  tree.args(["--format", "{p} {f}", "--invert", "furb"]).args(packages);
-  tree.current_dir(env!("CARGO_MANIFEST_DIR"));
-  let out = tree.output().unwrap_or_else(|no| panic!("cargo tree did not run: {no}"));
-  assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-  let said = String::from_utf8_lossy(&out.stdout).into_owned();
-  said.lines().next().unwrap_or_default().to_owned()
-}
-
-/// A daemon and a window each take a new program at their path as a new build, and give it their
-/// place. So a build of their packages alone, as `cargo build -p furb-cli -p furb-window`, and a
-/// build of the workspace, as the tests take, make the same program from the same sources: the
-/// same features of furb. Windows takes furb with no feature in the programs, as their manifests
-/// say.
-#[cfg(not(windows))]
-#[test]
-fn a_build_of_the_programs_alone_takes_furb_with_the_features_of_a_build_of_the_workspace() {
-  let alone = features(&["--package", "furb-cli", "--package", "furb-window"]);
-  assert!(alone.starts_with("furb v"), "{alone}");
-  assert_eq!(alone, features(&["--workspace"]));
-}
