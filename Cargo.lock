@@ -3057,7 +3057,7 @@ dependencies = [
 [[package]]
 name = "monty"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=72c5534a#72c5534a71e5c3185c20aa43a91be93b8ab232d0"
+source = "git+https://github.com/uael/monty?rev=7ea4fd44#7ea4fd443be6722c43c7fb6a3d2a31832159d258"
 dependencies = [
  "ahash",
  "chrono",
@@ -3098,7 +3098,7 @@ dependencies = [
 [[package]]
 name = "monty-macros"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=72c5534a#72c5534a71e5c3185c20aa43a91be93b8ab232d0"
+source = "git+https://github.com/uael/monty?rev=7ea4fd44#7ea4fd443be6722c43c7fb6a3d2a31832159d258"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3108,7 +3108,7 @@ dependencies = [
 [[package]]
 name = "monty-types"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=72c5534a#72c5534a71e5c3185c20aa43a91be93b8ab232d0"
+source = "git+https://github.com/uael/monty?rev=7ea4fd44#7ea4fd443be6722c43c7fb6a3d2a31832159d258"
 dependencies = [
  "chrono",
  "jiff",

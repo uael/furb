@@ -64,6 +64,20 @@ def refusing(names: Names, why: str) -> BaseException:
   return made
 
 
+def dangling(names: Names, lost: list[str]) -> None:
+  """The refusal of the calls of the async functions that a step of a word lost with their bodies never started, each
+  named once, with both ways to run one."""
+  if lost:
+    raise refusing(
+      names,
+      "; ".join(
+        f"`{x}` is an async function, which runs nothing until it is awaited: write `await {x}(...)`, or run it in the"
+        f" background with `asyncio.create_task({x}(...))`"
+        for x in dict.fromkeys(lost)
+      ),
+    )
+
+
 def unsettled(names: Names, rung: str, got: object) -> BaseException | None:
   """Why a wait for what is awaited cannot end, as the refusal that the awaiter raises where it waited, or nothing: a
   rung awaits an act, or a future of the loop of the words, as the bare yield of asyncio.sleep(0) is the next turn of
@@ -433,12 +447,12 @@ class Running:
             frame.close()
             return self.ended(job, self.cancelled())  # ty: ignore[invalid-argument-type]
           try:
-            got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
-            while (no := unsettled(self.names, rung, got)) is not None:
-              got = frame.throw(no)
+            got = self.stepped(self.stepping, frame, rung, given)
           except StopIteration:
             return self.over(job, None)
           except BaseException as raised:
+            # A word is over where it raises, and a frame that a refusal of its step left suspended closes here.
+            frame.close()
             return self.over(job, raised)
           if not isinstance(got, str):
             self.waits_on(job, got)
@@ -450,6 +464,33 @@ class Running:
           given = self.given(got, peek(got))
     finally:
       self.loop.leave(outer)
+
+  def stepping(self, frame: Coroutine[object, object, object], rung: str, given: object) -> object:
+    """One step of the frame of a word, given what it waited for, up to what it waits for next, which a rung refuses
+    where it waits when it can never settle."""
+    got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
+    while (no := unsettled(self.names, rung, got)) is not None:
+      got = frame.throw(no)
+    return got
+
+  def stepped(self, step: Callable[..., object], *args: object) -> object:
+    """A step of a word, which gives what the step gives, or raises a refusal at its end when it freed the coroutine of
+    a call of an async function with its body never started, since that call ran nothing and nothing awaited it. This
+    interpreter warns of each such coroutine as it frees it, which the step shows no more, and the sandbox of the crate
+    steps by a stepped of its own, which monty tells each such coroutine."""
+    # The sandbox of the crate has neither module, and gives Running a stepped of its own.
+    from types import CoroutineType  # noqa: PLC0415
+    from warnings import catch_warnings, filterwarnings, warn_explicit  # noqa: PLC0415
+
+    heard = []
+    try:
+      with catch_warnings(record=True) as heard:
+        filterwarnings("always", "coroutine .* was never awaited", RuntimeWarning)
+        return step(*args)
+    finally:
+      for x in heard:
+        isinstance(x.source, CoroutineType) or warn_explicit(x.message, x.category, x.filename, x.lineno)
+      dangling(self.names, [x.source.__name__ for x in heard if isinstance(x.source, CoroutineType)])
 
   def waits_on(self, job: str | Task, got: object) -> None:
     """A job that waits on a future of the loop goes on with nothing once it is done, as asyncio steps a task, and
@@ -608,7 +649,7 @@ class Running:
     try:
       with self.site.set(rung), self.hearer.set(rung):
         # The part keeps the line it stands on in the word, so a traceback of it names the line its model wrote.
-        ran = ran_in("\n" * held.count("\n") + part, rung, module)
+        ran = self.stepped(ran_in, "\n" * held.count("\n") + part, rung, module)
     except BaseException as raised:
       return self.ended(run, raised)
     finally:

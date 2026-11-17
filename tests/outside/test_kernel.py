@@ -67,6 +67,61 @@ async def test_a_word_compares_sets_as_python_does_on_both_engines(which: object
     swapped(furb.python)
 
 
+HIRE = "async def hire():\n  return 1"
+UNAWAITED = (
+  "`hire` is an async function, which runs nothing until it is awaited: write `await hire(...)`, or run it in the"
+  " background with `asyncio.create_task(hire(...))`"
+)
+
+
+@pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
+@pytest.mark.parametrize(
+  ("before", "word"),
+  [("", HIRE + "\nhire()"), (HIRE, "hire()"), (HIRE, "async def go():\n  hire()\nawait go()")],
+  ids=["defined-in-the-word", "defined-before", "called-in-an-awaited-function"],
+)
+async def test_a_call_of_an_async_function_that_nothing_awaits_refuses_its_word_on_both_engines(
+  which: object, before: str, word: str
+) -> None:
+  """A call of an async function runs nothing, so a step of a word that drops the coroutine of such a call with its
+  body never started is refused, on both engines, with a refusal that names the function and both ways to run it."""
+  swapped(which)
+  try:
+    root = engine.boot(journaled(), world=worlds(STANDS), **kernel())
+    await engine.rung(before or "pass", on=root)
+    with pytest.raises(Refused) as no:
+      await engine.rung(word, on=root)
+    assert str(no.value) == UNAWAITED
+    assert await engine.rung("close('alive')", on=root) == "alive"
+  finally:
+    swapped(furb.python)
+
+
+@pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
+@pytest.mark.parametrize(
+  "word",
+  [
+    "x = await hire()\ngot = hire()\nclose([x, await got])",
+    "import asyncio\nclose([await asyncio.create_task(hire()), 1])",
+    "def hire():\n  return 1\nhire()\nclose([hire(), 1])",
+    "def go(hire):\n  hire()\ngo(lambda: 1)\nclose([1, 1])",
+  ],
+  ids=["awaited-or-bound", "a-task", "bound-again-to-a-def", "a-parameter"],
+)
+async def test_a_call_that_is_awaited_bound_run_as_a_task_or_of_another_function_is_not_refused(
+  which: object, word: str
+) -> None:
+  """A coroutine that is awaited, bound, or run as a task, and a call of a name that no async function holds, as a
+  def that binds the name again or a parameter, are no refusal."""
+  swapped(which)
+  try:
+    root = engine.boot(journaled(), world=worlds(STANDS), **kernel())
+    await engine.rung(HIRE, on=root)
+    assert await engine.rung(word, on=root) == [1, 1]
+  finally:
+    swapped(furb.python)
+
+
 async def test_a_word_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act, a future of the loop of its word or the next turn of that loop, and nothing else, so
   anything else it awaits is refused where it waited, and a word that catches the refusal carries on."""

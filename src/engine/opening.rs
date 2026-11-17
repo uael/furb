@@ -21,6 +21,12 @@ use crate::value::Object;
 /// checkpoint around them are the engine's own work, which the host runs unbounded. The bound is
 /// the crate's, so the opening sets it, and the Kernel, which python runs too, holds none.
 ///
+/// A step of a word that frees the coroutine of a call of an async function with its body never
+/// started is refused at its end. Python warns of such a coroutine, where monty raises nothing and
+/// tells it by `monty.unawaited`, so the opening gives the Kernel a `stepped` that asks it before
+/// and after each step: a step that runs inside another leaves what was freed before it to that
+/// other step.
+///
 /// A Kernel that raises loses the frame of each word that it stepped, so before a fresh Kernel
 /// takes the next act, each run that is not over ends with a refusal that says its word was
 /// lost, each open wants of it first, so the chain holds no rung as running and takes its next
@@ -50,6 +56,7 @@ use crate::value::Object;
 /// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
 /// the sandbox binds it in its main module alone.
 pub(super) const OPENING: &str = r#"from string.templatelib import Interpolation, Template
+from monty import unawaited as __unawaited
 
 __engine = {"__debug__": True, "__doc__": None, "__package__": "furb", "__spec__": None, "__loader__": None}
 exec(__source, __engine)
@@ -80,6 +87,21 @@ def __bounding(step):
 
 for __step in ("starts", "carry"):
   setattr(__kernel["Running"], __step, __bounding(getattr(__kernel["Running"], __step)))
+__stepping = []
+
+def __stepped(running, step, *args):
+  # Monty tells the coroutines that it freed with their body never started since the last call, so what it freed
+  # before a step is the share of the step that holds this one, or of no step.
+  taken = __unawaited()
+  if __stepping:
+    __stepping[-1] += taken
+  __stepping.append([])
+  try:
+    return step(*args)
+  finally:
+    __kernel["dangling"](running.names, __stepping.pop() + __unawaited())
+
+setattr(__kernel["Running"], "stepped", __stepped)
 __parked = set()
 
 def __parking(ear):
