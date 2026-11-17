@@ -2,7 +2,7 @@
 //! a generator of the sandbox and lends itself to the code of the host.
 
 use std::{
-  collections::{HashMap, HashSet, VecDeque},
+  collections::{BTreeMap, HashMap, HashSet, VecDeque},
   sync::{
     Arc,
     atomic::{AtomicI64, Ordering},
@@ -170,8 +170,9 @@ pub(super) struct Hosted {
   pub(super) given: Hands,
   /// The waker of whoever drives the engine, which each ear is polled with.
   pub(super) waker: Waker,
-  /// Each ear of the host, by the id of its object in the sandbox: its name and where it stands.
-  pub(super) standing: HashMap<MontyUuid, (String, At)>,
+  /// Each ear of the host, by the id of its object in the sandbox, in the order in which the ears
+  /// are polled: its name and where it stands.
+  pub(super) standing: BTreeMap<MontyUuid, (String, At)>,
   /// What each ear of the host waits for since its last step, by the id of its object in the
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
@@ -261,7 +262,7 @@ impl Default for Hosted {
       handed: Handed::default(),
       given: Hands::default(),
       waker: Waker::noop().clone(),
-      standing: HashMap::new(),
+      standing: BTreeMap::new(),
       waits: HashMap::new(),
       told: None,
       replay: None,
@@ -300,22 +301,13 @@ impl Outside {
   /// While an ear holds an entry that the record does not hold yet, only such an ear is polled, as
   /// `Engine::pump` says.
   pub(super) fn spoken(&mut self) -> Option<(String, Spoken)> {
-    let ears = &self.hosted.handed.ears;
-    let owed = ears.values().any(|ear| ear.unkept() > 0);
-    let polled = |name: &String| !owed || ears.get(name).is_some_and(|ear| ear.unkept() > 0);
-    let mut standing: Vec<_> = self
-      .hosted
-      .standing
-      .iter()
-      .filter(|(_, (name, at))| matches!(at, At::Waiting) && polled(name))
-      .map(|(id, (name, _))| (*id, name.clone()))
-      .collect();
-    standing.sort_unstable();
-    let mut cx = Context::from_waker(&self.hosted.waker);
-    standing.into_iter().find_map(|(_, name)| {
-      let ear = self.hosted.handed.ears.get_mut(&name)?;
+    let Hosted { handed, waker, standing, .. } = &mut self.hosted;
+    let owed = handed.ears.values().any(|ear| ear.unkept() > 0);
+    let mut cx = Context::from_waker(waker);
+    standing.values().filter(|(_, at)| matches!(at, At::Waiting)).find_map(|(name, _)| {
+      let ear = handed.ears.get_mut(name).filter(|ear| !owed || ear.unkept() > 0)?;
       match ear.poll(&mut cx) {
-        Poll::Ready(spoken) => Some((name, spoken)),
+        Poll::Ready(spoken) => Some((name.clone(), spoken)),
         Poll::Pending => None,
       }
     })
