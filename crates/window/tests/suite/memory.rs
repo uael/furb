@@ -6,6 +6,7 @@
 
 use std::{
   env::consts::OS,
+  fs::File,
   time::{Duration, Instant},
 };
 
@@ -16,7 +17,8 @@ use opentui::testing::TestApp;
 use crate::{
   cards::{app, options, row, shows},
   counted::Counted,
-  daemon::{ANSWERS, Daemon, PATIENCE},
+  daemon::{ANSWERS, Daemon, MARKDOWN, PATIENCE, STREAMED, STREAMS},
+  here::Here,
 };
 
 /// The most allocations that a gesture makes, on the system that measured it. The count holds each
@@ -140,12 +142,12 @@ fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing
   let blank = [(30, 19), (31, 19), (30, 20), (5, 20)];
   app.hover(5, 19);
   app.render();
-  let calls = Counted::calls();
+  let calls = Here::calls();
   for (x, y) in blank {
     app.hover(x, y);
     assert!(!app.needs_frame(), "a move to {x},{y} asks a frame:\n{}", app.text());
   }
-  let moves = (Counted::calls() - calls) / blank.len();
+  let moves = (Here::calls() - calls) / blank.len();
   println!("a move of the pointer that changes nothing makes {moves} allocations");
   bounded(moves, PER_MOVE, "a move of the pointer");
 }
@@ -179,13 +181,91 @@ fn a_key_typed_in_the_input_lays_out_no_part_of_the_feed_again() {
   // cost of a key alone.
   let keys = "bcdefghijk";
   let typed = keys.chars().map(|key| {
-    let calls = Counted::calls();
+    let calls = Here::calls();
     app.type_text(key.encode_utf8(&mut [0; 4]));
     app.present().expect("a frame");
-    Counted::calls() - calls
+    Here::calls() - calls
   });
   let typed = typed.min().unwrap_or_default();
   println!("a key typed in the input makes {typed} allocations");
   assert!(app.text().contains("abcdefghijk"), "{}", app.text());
   bounded(typed, PER_KEY, "a key typed in the input");
+}
+
+/// How long a window hears no frame once a part of a reply showed, so the daemon told the whole of
+/// the part.
+const QUIET: Duration = Duration::from_millis(100);
+
+/// The most allocations that the window makes for a part of a reply that streams into a thread
+/// under a long answer, with each frame that the part takes: 4,692 on macOS on 11-17, of which
+/// about 3,300 lay out the long answer again, which the part does not change.
+const PER_PART: Bound = on_macos(5200);
+
+#[test]
+fn a_part_of_a_reply_that_streams_into_a_long_thread_stays_in_its_bound() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("streams.jsonl"), false);
+  let first = peer.said(&life, &format!("show each part of markdown {MARKDOWN}"));
+  let message = format!("where does the time go {STREAMS}");
+  peer.ask(Verb::Prompt { life, shape: "None".to_owned(), message, to: None, on: Some(first) });
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "show each part"));
+  shows(&app, "said = '''");
+  settled(&app);
+  let (process, parts): (Vec<usize>, Vec<usize>) = (0..STREAMED)
+    .map(|part| {
+      let calls = (Counted::calls(), Here::calls());
+      File::create(daemon.file(&format!("part{part}"))).expect("a part");
+      assert!(app.wait_until(PATIENCE, || app.needs_frame()), "part {part} shows nothing");
+      app.present().expect("a frame");
+      // The daemon tells a part in more than one frame, each in its own time.
+      while app.wait_until(QUIET, || app.needs_frame()) {
+        app.present().expect("a frame");
+      }
+      (Counted::calls() - calls.0, Here::calls() - calls.1)
+    })
+    .unzip();
+  println!("the parts of a reply make {parts:?} allocations in the window, {process:?} in all");
+  shows(&app, &format!("part {} of", STREAMED - 1));
+  // The first part opens the block of the word.
+  let part = parts.iter().skip(1).copied().min().unwrap_or_default();
+  println!("a part of a reply makes {part} allocations");
+  bounded(part, PER_PART, "a part of a reply");
+}
+
+/// The most allocations that a step of the wheel makes on a long thread, with its frame: 414 on
+/// macOS on 11-17.
+const PER_STEP: Bound = on_macos(460);
+
+#[test]
+fn a_step_of_the_wheel_on_a_long_thread_stays_in_its_bound() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("long.jsonl"), false);
+  peer.said(&life, &format!("show each part of markdown {MARKDOWN}"));
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "show each part of"));
+  shows(&app, "What a step can break");
+  app.advance(AWAY);
+  settled(&app);
+  let steps: Vec<usize> = (0..10)
+    .map(|_| {
+      let calls = Here::calls();
+      app.scroll(30, 10, false);
+      app.present().expect("a frame");
+      Here::calls() - calls
+    })
+    .collect();
+  println!("the steps of the wheel make {steps:?} allocations");
+  assert!(!app.text().contains("What a step can break"), "{}", app.text());
+  let step = steps.iter().copied().min().unwrap_or_default();
+  println!("a step of the wheel makes {step} allocations");
+  bounded(step, PER_STEP, "a step of the wheel");
 }

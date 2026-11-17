@@ -15,6 +15,7 @@ mod context;
 mod copy;
 mod daemon;
 mod extremes;
+mod here;
 mod image;
 mod input;
 mod keys;
@@ -38,7 +39,7 @@ mod views;
 mod voice;
 mod walk;
 
-/// The allocator that counts each byte that the process holds, which the test of the memory of a
-/// window reads.
+/// The allocator that counts each byte that the process holds and the calls of each thread, which
+/// the test of the memory of a window reads.
 #[global_allocator]
-static COUNTED: counted::Counted = counted::Counted;
+static COUNTED: here::Here = here::Here;
