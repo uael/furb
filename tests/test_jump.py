@@ -66,6 +66,16 @@ async def test_after_a_jump_each_act_that_names_the_chain_is_on_the_chain_that_i
   assert await later is None and engine.scope(later) == new
   newer = await engine.jump(on=root)
   assert engine.scope(root) == newer == engine.scope(new)
+  # The operator wakes the chain that the root went on as, and a pause of a thread of the root ends on each chain
+  # that it jumps to after.
+  sand, _, root = born()
+  sand.script.update({"chain2": ["jump()"], "chain3": ["close(7)"]})
+  went = await engine.jump(on=root)
+  asked = engine.prompt(int, "the k", on=root)
+  engine.pause(asked)
+  engine.wake(went)
+  await settle(300)
+  assert (engine.scope(root), engine.peek(asked, ...)) == ("chain3", 7)
 
 
 async def test_each_open_thread_of_the_chain_is_asked_again_on_the_chain_that_it_jumped_to() -> None:

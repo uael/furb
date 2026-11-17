@@ -804,7 +804,7 @@ def covers(a, id):
     if question(("reply", id)):
       id = get(id)[2]
     return on(id) or (question(("rung", id)) and on(get(id)[2]))
-  return any(map(on, lineage(id))) or scope(id) == of
+  return any(map(on, lineage(id))) or question(("chain", of)) and scope(id) == scope(of)
 
 
 def paused(id):
