@@ -39,9 +39,10 @@ const GC_INTERVAL: usize = 10_000_000;
 pub(crate) const DEPTH: usize = 20_000;
 
 /// The stack that a run takes. Monty walks a value one level at a time on the stack of the thread,
-/// under a KiB a level, up to [`DEPTH`] levels, so a run grows a stack of this size on a thread
-/// that holds less, and never ends the process.
-const STACK: usize = DEPTH * 1024;
+/// up to [`DEPTH`] levels: 1,054 bytes a level on Windows and 673 on macOS in a build for
+/// development, so a run grows a stack of half again the most on a thread that holds less, and
+/// never ends the process. The run touches only the part that its walk reaches.
+const STACK: usize = DEPTH * 1600;
 
 /// The longest stretch of a word of a rung between two round trips to the host. Past it, monty
 /// raises a
