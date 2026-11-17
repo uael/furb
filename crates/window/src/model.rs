@@ -31,6 +31,7 @@ use crate::{
   input::{Armed, Word},
   kept,
   keys::{self, Does, System},
+  line::Line,
   link::Heard,
   list::Row,
   names::Names,
@@ -45,6 +46,13 @@ const PINNED: usize = 2;
 /// The rows of the left side, with the count of changes, the clock and the place of the pointer
 /// that they show.
 pub(crate) type Laid = ((u64, Duration, Option<(u16, u16)>), Vec<thread::Row>);
+
+/// What the rows of the list show: the count of changes, the moment or the second, the scroll, the
+/// size of the window and the row under the pointer.
+pub(crate) type Listed = (u64, Duration, usize, (u16, u16), Option<Row>);
+
+/// The layout of a left side and what the pointer touches of it, as `thread::touched` says.
+pub(crate) type Touched = ((u64, Duration, Option<(u16, u16)>), Option<thread::Touch>);
 
 /// What the window keeps of each layout, so the next layout reads again only what changed: the
 /// colors and the names of each text of python, the code of each block by the message of its
@@ -112,6 +120,11 @@ pub(crate) struct Model {
   /// The rows of the left side, with what they show: a layout costs the most of what the window
   /// does, and a step of the loaders or a move of the pointer takes them again.
   pub(crate) laid: Option<Laid>,
+  /// The left side as it stood under the pointer, by the layout that it came from and what the
+  /// pointer touched there: a move that touches the same lays out nothing again.
+  pub(crate) kept_left: Option<(Touched, thread::Left)>,
+  /// The rows of the list as they stood, by what they show, as [`Model::list`] says.
+  pub(crate) kept_list: Option<(Listed, Rc<[Line]>)>,
   /// How many changes of what the parts of the feed show the model heard: each change of the left
   /// side but one that only scrolls the feed, which moves it and changes no part of it.
   pub(crate) shows: u64,
@@ -178,6 +191,8 @@ impl Model {
       kept: Kept::default(),
       changes: 0,
       laid: None,
+      kept_left: None,
+      kept_list: None,
       shows: 0,
       scrolled: false,
       pictured: 0,

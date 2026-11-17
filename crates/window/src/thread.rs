@@ -11,6 +11,7 @@ use std::{
   collections::{BTreeMap, HashMap},
   mem,
   ops::Range,
+  rc::Rc,
   time::Duration,
 };
 
@@ -184,7 +185,9 @@ pub(crate) fn columns(line: &[Span<'_>]) -> Vec<Range<usize>> {
 /// the cell of each loader.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Left {
-  pub(crate) rows: Vec<Line>,
+  /// The rows, which each part that shows them shares, so a layout that the pointer did not change
+  /// costs no copy of them.
+  pub(crate) rows: Rc<[Line]>,
   pub(crate) loaders: Vec<Spot>,
   /// The box of each image, whose rows all show.
   pub(crate) pictures: Vec<Boxed>,
@@ -636,7 +639,7 @@ impl Model {
   /// part is taken. The key that the click does the thing of.
   pub(crate) fn clicked_left(&mut self, x: u16, y: usize) -> Option<Does> {
     let x = usize::from(x);
-    let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
+    let click = self.left_rows().get(y).and_then(|row| row.click(x));
     match click? {
       Click::Pick(at) => self.took(at),
       Click::Key(does) => Some(does),
@@ -707,7 +710,25 @@ impl Model {
   /// what it waits for, and a name under the pointer shows what it holds on the head of its block,
   /// which covers no code.
   pub(crate) fn left(&mut self) -> Left {
-    let mut rows = self.left_rows();
+    self.left_rows();
+    let (stamp, rows) = match &self.laid {
+      Some((stamp, rows)) => (*stamp, rows.as_slice()),
+      None => return Left { rows: Rc::from([]), loaders: Vec::new(), pictures: Vec::new() },
+    };
+    let touched = (stamp, self.pointed().and_then(|at| touched(rows, at)));
+    if let Some((was, left)) = &self.kept_left
+      && *was == touched
+    {
+      return left.clone();
+    }
+    let left = self.lit_left();
+    self.kept_left = Some((touched, left.clone()));
+    left
+  }
+
+  /// The left side as [`Model::left`] gives it, laid out again from the rows of its layout.
+  fn lit_left(&mut self) -> Left {
+    let mut rows = self.left_rows().to_vec();
     let named = self.pointed().and_then(|at| Self::named(&rows, at));
     if let Some((_, y)) = self.pointed()
       && let Some(name) = &named
@@ -772,8 +793,8 @@ impl Model {
 
   /// The name under the pointer, which the machine of the open thread reads, or none.
   pub(crate) fn pointed_name(&mut self) {
-    let rows = self.left_rows();
-    let name = self.pointed().and_then(|at| Self::named(&rows, at));
+    let pointed = self.pointed();
+    let name = pointed.and_then(|at| Self::named(self.left_rows(), at));
     let key = self.client.thread.as_ref().map(|one| one.thread.key.clone());
     let pointed = key.as_ref().zip(name.as_deref());
     self.client.inspect(pointed);
@@ -781,31 +802,32 @@ impl Model {
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
   /// the dock; then the input.
-  pub(crate) fn left_rows(&mut self) -> Vec<Row> {
-    // The bar of the time says what the pointer is on, so its rows show the place of the pointer.
-    let bar = self.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some());
-    let stamp = (self.changes, self.clock(), self.pointed().filter(|_| bar));
-    let hints = self.hints();
-    let below = 1 + self.time_count();
-    if let Some((at, rows)) = &mut self.laid
-      && (at.0, at.1) == (stamp.0, stamp.1)
-    {
+  pub(crate) fn left_rows(&mut self) -> &[Row] {
+    // The row of hints says what the pointer is on while it stands on the bar of the time, so the
+    // rows show the place of the pointer there.
+    let bar = self.pointed().filter(|&(x, y)| self.on_bar(x, y));
+    let stamp = (self.changes, self.clock(), bar);
+    let fresh = self.laid.as_ref().map(|(at, _)| *at);
+    if fresh.is_some_and(|at| (at.0, at.1) == (stamp.0, stamp.1)) {
       // A move of the pointer over the bar changes only what the row of hints says it is on.
-      if at.2 != stamp.2
-        && let Some(row) = rows.len().checked_sub(below).and_then(|one| rows.get_mut(one))
-      {
-        *row = hints;
-        at.2 = stamp.2;
+      if fresh.is_some_and(|at| at.2 != stamp.2) {
+        let (hints, below) = (self.hints(), 1 + self.time_count());
+        if let Some((at, rows)) = &mut self.laid {
+          if let Some(row) = rows.len().checked_sub(below).and_then(|one| rows.get_mut(one)) {
+            *row = hints;
+          }
+          at.2 = stamp.2;
+        }
       }
-      return rows.clone();
+    } else {
+      let rows = self.laying(Self::laid_rows);
+      #[cfg(test)]
+      {
+        self.layouts += 1;
+      }
+      self.laid = Some((stamp, rows));
     }
-    let rows = self.laying(Self::laid_rows);
-    #[cfg(test)]
-    {
-      self.layouts += 1;
-    }
-    self.laid = Some((stamp, rows.clone()));
-    rows
+    self.laid.as_ref().map_or(&[], |(_, rows)| rows.as_slice())
   }
 
   /// The clock that the rows of the left side show: the second of each timer, or the moment
@@ -918,3 +940,30 @@ fn spot(line: &Line, x: usize) -> Option<Style> {
 #[cfg(test)]
 #[path = "thread.test.rs"]
 mod test;
+
+/// What the pointer at a place of the left side changes of its rows: the row, and in it the hot
+/// columns, the run and the name under the pointer. A move to another place that touches the same
+/// is no change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Touch {
+  row: u16,
+  hot: Option<usize>,
+  link: Option<usize>,
+  name: Option<usize>,
+}
+
+/// What the pointer at a place of the left side touches, when a thing there takes the pointer or
+/// the row shows more under it.
+fn touched(rows: &[Row], (x, y): (u16, u16)) -> Option<Touch> {
+  let (row, x) = (rows.get(usize::from(y))?, usize::from(x));
+  let hot = row.hot.iter().position(|hot| hot.0.contains(&x));
+  let mut start = 0;
+  let run = row.line.iter().position(|one| {
+    let end = start + one.content.width();
+    mem::replace(&mut start, end) <= x && x < end
+  });
+  let link = run.filter(|&at| row.line.get(at).is_some_and(|one| one.link.is_some()));
+  let name = row.names.iter().position(|one| one.0.contains(&x));
+  let touches = hot.is_some() || link.is_some() || name.is_some() || row.pointed.is_some();
+  touches.then_some(Touch { row: y, hot, link, name })
+}

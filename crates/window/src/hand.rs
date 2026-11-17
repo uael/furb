@@ -6,6 +6,7 @@ use std::{
   ops::Range,
   path::{Path, PathBuf},
   process,
+  rc::Rc,
   sync::{
     Arc,
     mpsc::{self, Receiver, Sender},
@@ -364,7 +365,7 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   staged(&mut screen, &stage);
   let mut left = Screen::new(sides(&mut screen.model));
   left.held(
-    |sides: &Sides| &sides.rows,
+    |sides: &Sides| -> &Rc<[Line]> { &sides.rows },
     move |lines| {
       home.set_text(written(lines));
     },
@@ -373,12 +374,9 @@ fn drawn(app: &App, model: Model, widgets: &Widgets) -> Screen<Model> {
   loaded(app, &stage, &mut left);
   imaged(app, &stage, &mut left);
   screen.split(sides, left);
-  screen.part(
-    |model| model.list(),
-    move |lines| {
-      list.set_text(written(lines));
-    },
-  );
+  screen.part(Model::list, move |lines| {
+    list.set_text(written(lines));
+  });
   screen.part(|model| model.listed(), {
     let side = side.clone();
     move |listed| {
@@ -423,7 +421,7 @@ fn transcribed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, pages: &S
 /// What the left side shows, read from the model in one build of its rows for each change: the
 /// rows, the frame of each loader, and each image that the client holds.
 struct Sides {
-  rows: Vec<Line>,
+  rows: Rc<[Line]>,
   loaders: Vec<(Spot, Vec<(&'static str, Color)>)>,
   pictures: Vec<Drawn>,
 }
@@ -2348,7 +2346,7 @@ impl Window {
     };
     // The wheel with a modifier zooms the bar of the time, where the pointer stands on its track.
     let zooms = !event.modifiers.is_empty() && {
-      let row = self.screen.model.left_rows().into_iter().nth(usize::from(event.y));
+      let row = self.screen.model.left_rows().get(usize::from(event.y));
       matches!(row.and_then(|one| one.click(usize::from(event.x))), Some(Click::Time(_)))
     };
     (!zooms && !self.screen.model.on_list(event.x)).then_some(by)

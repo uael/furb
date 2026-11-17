@@ -91,3 +91,37 @@ fn a_window_holds_no_more_on_a_life_four_times_as_large() {
     "a window holds {large} bytes on the larger life, {small} on the other"
   );
 }
+
+/// The most allocations that a move of the pointer makes, from one place of a thread at rest to
+/// another that lights nothing: 57 to 66 on macOS on 11-17, where each such move laid out the list
+/// and the left side again, with 900, before.
+const PER_MOVE: usize = 72;
+
+#[test]
+fn a_move_of_the_pointer_that_changes_nothing_asks_no_frame_and_lays_out_nothing() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  let life = peer.opened(&sessions.join("still.jsonl"), false);
+  peer.said(&life, &format!("how long does an open take {ANSWERS}"));
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "how long does an"));
+  shows(&app, "Two stages hold most");
+  app.advance(AWAY);
+  shows(&app, "Resolved 1");
+  settled(&app);
+  // Blank cells of the feed, under its text and over the input.
+  let blank = [(30, 19), (31, 19), (30, 20), (5, 20)];
+  app.hover(5, 19);
+  app.render();
+  let calls = Counted::calls();
+  for (x, y) in blank {
+    app.hover(x, y);
+    assert!(!app.needs_frame(), "a move to {x},{y} asks a frame:\n{}", app.text());
+  }
+  let moves = (Counted::calls() - calls) / blank.len();
+  println!("a move of the pointer that changes nothing makes {moves} allocations");
+  assert!(moves <= PER_MOVE, "a move of the pointer made {moves} allocations, past {PER_MOVE}");
+}

@@ -1,7 +1,7 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
 
-use std::path::Path;
+use std::{path::Path, rc::Rc, time::Duration};
 
 use furb::view::{Part, Standing};
 use furb_host::protocol::Card;
@@ -82,11 +82,24 @@ impl Model {
     rows
   }
 
-  /// The runs of each row of the list that shows.
-  pub(crate) fn list(&self) -> Vec<Line> {
+  /// The runs of each row of the list that shows, which the parts that show them share. The list
+  /// is laid out again only when a change, the moment while a mark of it moves or else the second,
+  /// its scroll, the size of the window or the row under the pointer changed, so a move of the
+  /// pointer that stays on one row lays out nothing.
+  pub(crate) fn list(&mut self) -> Rc<[Line]> {
     let on = self.pointer.filter(|(x, _)| self.on_list(*x));
     let pointed = on.and_then(|(_, y)| self.row(usize::from(y)));
-    self.shown().map(|row| self.line(row, pointed)).collect()
+    // A loader, an open or a pulse of a card moves with each moment, and an age with each second.
+    let clock = if self.moves() { self.client.moved } else { Duration::from_secs(self.second()) };
+    let key = (self.changes, clock, self.scroll, self.size, pointed);
+    if let Some((was, lines)) = &self.kept_list
+      && *was == key
+    {
+      return Rc::clone(lines);
+    }
+    let lines: Rc<[Line]> = self.shown().map(|row| self.line(row, pointed)).collect();
+    self.kept_list = Some((key, Rc::clone(&lines)));
+    lines
   }
 
   fn line(&self, row: Row, pointed: Option<Row>) -> Line {

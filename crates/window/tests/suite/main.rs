@@ -3,10 +3,6 @@
 //! opens each life on a model that answers from a script.
 
 #[path = "../../../host/tests/suite/counted.rs"]
-#[expect(
-  dead_code,
-  reason = "the window reads the heap alone, and the count of the calls serves the host"
-)]
 mod counted;
 #[path = "../../../../tests/common/tailscale.rs"]
 mod tailscale;

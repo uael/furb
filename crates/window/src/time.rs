@@ -386,7 +386,7 @@ impl Model {
   /// under the pointer.
   pub(crate) fn dragged_left(&mut self, x: u16, y: usize) {
     let x = usize::from(x);
-    match self.left_rows().into_iter().nth(y).and_then(|row| row.click(x)) {
+    match self.left_rows().get(y).and_then(|row| row.click(x)) {
       Some(Click::Time(at)) => self.client.reach(at),
       Some(Click::Aim(column, span)) => self.client.aim(column, span),
       _ => {}
@@ -396,7 +396,7 @@ impl Model {
   /// The track zoomed in or out around the moment under the pointer, as the wheel with a modifier
   /// turns over the bar. Whether the pointer stood on the track.
   pub(crate) fn zoomed_left(&mut self, x: u16, y: usize, closer: bool) -> bool {
-    match self.left_rows().into_iter().nth(y).and_then(|row| row.click(usize::from(x))) {
+    match self.left_rows().get(y).and_then(|row| row.click(usize::from(x))) {
       Some(Click::Time(at)) => {
         self.client.zoom(closer, Some(at));
         true
