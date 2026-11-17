@@ -2,10 +2,13 @@
 as an expected failure that names the row of the register of defects and its carrier, so the fix turns it green and
 xfail_strict turns the suite red until the mark goes."""
 
-import time
+from pathlib import Path
+from sys import monitoring
+from types import CodeType
 
 import pytest
 
+import furb
 from conftest import born, life, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR
@@ -28,23 +31,39 @@ async def test_a_message_of_a_model_on_its_own_thread_asks_that_model_no_step_ag
 async def test_a_word_and_its_replay_take_a_time_that_grows_with_their_length_alone() -> None:
   """A long word and the replay of its record take a time that grows with their length alone: a fact costs the same
   whatever count of facts waits in the log, as the facts that a run says while it runs do."""
+  # The work is the count of lines that the package furb runs, which no load of the machine changes, where a time does.
+  package = str(Path(furb.__file__).parent)
+  ran = 0
 
-  async def spent(asks: int) -> tuple[float, float]:
+  def line(code: CodeType, _: int) -> object:
+    nonlocal ran
+    if not code.co_filename.startswith(package):
+      return monitoring.DISABLE
+    ran += 1
+    return None
+
+  async def spent(asks: int) -> tuple[int, int]:
+    nonlocal ran
     sand, _, root = born()
-    start = time.process_time()
+    ran = 0
     await engine.rung(f"for i in range({asks}):\n  chance()", on=root)
-    ran = time.process_time() - start
-    record = list(sand.record)
-    start = time.process_time()
-    life(sown(), record)
-    return ran, time.process_time() - start
+    word = ran
+    ran = 0
+    life(sown(), list(sand.record))
+    return word, ran
 
-  small = [await spent(2000) for _ in range(3)]
-  large = [await spent(8000) for _ in range(3)]
-  # The large word is 4 times longer: linear gives a ratio near 4 and quadratic near 16, as the walks of the log gave.
-  # The bound lies between them with room for a loaded machine.
+  monitoring.use_tool_id(monitoring.PROFILER_ID, "lines of furb")
+  monitoring.register_callback(monitoring.PROFILER_ID, monitoring.events.LINE, line)
+  monitoring.set_events(monitoring.PROFILER_ID, monitoring.events.LINE)
+  try:
+    small, large = await spent(2000), await spent(8000)
+  finally:
+    monitoring.set_events(monitoring.PROFILER_ID, 0)
+    monitoring.free_tool_id(monitoring.PROFILER_ID)
+  # The large word is 4 times longer: a cost that grows with the length alone, plus what each word costs once, makes it
+  # cost at most 4 times more, and each walk of the log of the facts that wait costs more.
   for part in (0, 1):
-    assert min(one[part] for one in large) < 8 * min(one[part] for one in small)
+    assert large[part] <= 4 * small[part], (small, large)
 
 
 async def test_the_reminder_of_a_message_owed_to_the_operator_is_said_once() -> None:
