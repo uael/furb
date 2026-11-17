@@ -634,10 +634,14 @@ impl Suite {
       }
     };
     let crates = if words.is_empty() { &["--workspace".to_owned()][..] } else { words };
+    // A test of a daemon waits on it far more than it computes, so twice as many tests as cores
+    // keep each core busy: on 11-17 a run took 61 to 90 s at 14 tests at once and 53 s at 28, for
+    // the same CPU time.
+    let threads = thread::available_parallelism().map_or(1, |cores| cores.get() * 2).to_string();
     match self {
       Self::Rust => vec![
         with("cargo", &["nextest", "run", "--no-run"], crates),
-        limited("cargo", with("cargo", &["nextest", "run"], crates)),
+        limited("cargo", with("cargo", &["nextest", "run", "--test-threads", &threads], crates)),
       ],
       Self::Python => vec![
         with("uv", &["sync", "--inexact"], &[]),
