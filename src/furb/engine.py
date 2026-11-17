@@ -1078,7 +1078,7 @@ def boot(record=(), **outside):
         busy.add(name)
         try:
           heed[name] = w = lives(g, a)
-          (w is False or name not in lasts and over(name)) and alive.pop(name)
+          (w is False or (name not in lasts and over(name))) and alive.pop(name)
         except (Exception, CancelledError) as fault:
           alive.pop(name)
           stop = isinstance(fault, CancelledError)
