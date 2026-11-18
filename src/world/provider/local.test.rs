@@ -1,13 +1,9 @@
-//! The local server of the catalog, asked on servers of the tests on ports of this machine, so no test asks a real
-//! one.
+//! The times of the local server of the catalog, on servers of the tests on ports of this machine:
+//! the delay before it is asked again and the deadline of its list, which a door would wait whole,
+//! 30 s and 5 s each time, so these tests shorten them. The suite of the world proves the rest
+//! through the catalog of a child.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
+use crate::testing::{on_reactor, pause};
 use std::{
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
@@ -22,7 +18,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{Heard, Server, names};
+use super::{Heard, Server};
 
 /// A local server on a port of this machine, which answers each request with the JSON that a function of the request
 /// gives, and with a 404 when it gives none; and its address, and each request it reads, as it reads it.
@@ -54,7 +50,10 @@ fn faked(
         line.to_ascii_lowercase().strip_prefix("content-length: ")?.trim().parse::<usize>().ok()
       });
       let mut body = vec![0; length.unwrap_or_default()];
-      let _ = reader.read_exact(&mut body);
+      // A client that left before its body is read asks nothing.
+      if reader.read_exact(&mut body).is_err() {
+        continue;
+      }
       let request = format!("{head}{}", String::from_utf8_lossy(&body));
       let out = match answer(&request) {
         Some(one) => {
@@ -69,8 +68,10 @@ fn faked(
           "HTTP/1.1 404 Not Found\r\nconnection: close\r\ncontent-length: 0\r\n\r\n".to_owned()
         }
       };
-      let _ = tells.send(request);
-      let _ = reader.into_inner().write_all(out.as_bytes());
+      // A test that reads nothing of what was asked dropped its end, and the server serves on.
+      tells.send(request).ok();
+      // A client that left takes no answer, and the server goes on to the next one.
+      reader.into_inner().write_all(out.as_bytes()).ok();
     }
   });
   told
@@ -121,197 +122,6 @@ fn at(request: &str, path: &str) -> bool {
   request.lines().next().unwrap_or_default().split(' ').nth(1) == Some(path)
 }
 
-#[test]
-fn the_environment_names_the_address_of_the_server_its_key_and_the_window_and_the_tokens_of_its_models()
- {
-  let named = |pairs: &[(&str, &str)]| {
-    let pairs: Vec<(String, String)> =
-      pairs.iter().map(|(name, value)| ((*name).into(), (*value).into())).collect();
-    Server::named(move |name| {
-      pairs.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
-    })
-  };
-  assert!(named(&[]).is_none());
-  assert!(named(&[("FURB_LOCAL_URL", " ")]).is_none(), "an empty address names no server");
-  let server =
-    named(&[("FURB_LOCAL_URL", "https://user:secret@host:8080/v1")]).expect("the server");
-  assert_eq!(server.root, "https://host:8080", "the address loses its user and its password");
-  let roots = [
-    ("user:secret@host:8080", "http://host:8080"),
-    ("http://host:1/path@at/v1", "http://host:1/path@at"),
-  ];
-  let named_as =
-    [("local:qwen/high", true), ("qwen/high", true), ("local:qwen/x", false), ("local:qwen", true)];
-  assert_eq!(
-    named_as.map(|(name, _)| names(name, "qwen")),
-    named_as.map(|(_, holds)| holds),
-    "a slash names a level"
-  );
-  assert!(names("local:Qwen/Qwen3-8B", "Qwen/Qwen3-8B") && !names("local:Qwen/Qwen3-8B", "Qwen"));
-  for (address, root) in roots {
-    assert_eq!(named(&[("FURB_LOCAL_URL", address)]).expect("the server").root, root);
-  }
-  let server = named(&[
-    ("FURB_LOCAL_URL", "http://host:8080/v1/"),
-    ("FURB_LOCAL_KEY", "k"),
-    ("FURB_LOCAL_WINDOW", "4096"),
-    ("FURB_LOCAL_TOKENS", "0"),
-  ])
-  .expect("the server");
-  assert_eq!(
-    (server.root.as_str(), server.key.as_str(), server.window, server.tokens),
-    ("http://host:8080", "k", Some(4096), None),
-    "the address loses its /v1, and a count of zero says nothing"
-  );
-}
-
-#[test]
-fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_images_that_it_gives()
- {
-  let list = json!({"object": "list", "data": [
-    {"id": "qwen", "meta": {"n_ctx": 262_144}, "architecture": {"input_modalities": ["text", "image"],
-      "output_modalities": ["text"]}},
-    {"id": "llama", "max_model_len": 32768},
-    {"id": "odd", "meta": null, "architecture": null, "max_model_len": 8192},
-    {"id": 5},
-    {"id": "embed", "meta": {"n_ctx": 512}, "architecture": {"input_modalities": ["text"],
-      "output_modalities": ["embeddings"]}},
-  ]});
-  let (address, told) = fake(move |request| at(request, "/v1/models").then(|| list.clone()));
-  let heard =
-    on(&address, &[("FURB_LOCAL_KEY", "k"), ("FURB_LOCAL_TOKENS", "1000")]).heard_now(None);
-  assert_eq!(
-    offered(&heard),
-    [
-      ("local:qwen".to_owned(), 262_144, true, Some(1000)),
-      ("local:llama".to_owned(), 32_768, false, Some(1000)),
-      ("local:odd".to_owned(), 8192, false, Some(1000)),
-    ],
-    "an entry of another shape hides no other, and a model that writes no text is not offered"
-  );
-  assert_eq!(
-    heard.why("local:embed"),
-    Some("the local server says that it is not a model for chat")
-  );
-  let each =
-    heard.models.iter().map(|one| (one.efforts().len(), one.priced(), one.at(Some("high"))));
-  assert_eq!(
-    each.collect::<Vec<_>>(),
-    ["local:qwen", "local:llama", "local:odd"].map(|name| (
-      4,
-      Some([0.0; 4]),
-      format!("{name}/high")
-    )),
-    "a model of a local server takes the efforts off, low, medium and high, and costs nothing"
-  );
-  let requests: Vec<String> = told.try_iter().collect();
-  assert_eq!(
-    requests.len(),
-    1,
-    "a server that gives each window is asked nothing more: {requests:?}"
-  );
-  assert!(requests[0].starts_with("GET /v1/models "), "{requests:?}");
-  assert!(requests[0].to_ascii_lowercase().contains("authorization: bearer k"), "{requests:?}");
-}
-
-#[test]
-fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
-  let (address, _) = fake(|request| {
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "one"}]}))
-    } else {
-      at(request, "/props").then(|| json!({"default_generation_settings": {"n_ctx": 16384}}))
-    }
-  });
-  let quarter = ("local:one".to_owned(), 16_384, false, Some(4096));
-  assert_eq!(
-    offered(&on(&address, &[]).heard_now(None)),
-    [quarter],
-    "llama.cpp gives it at /props"
-  );
-  let (address, _) = fake(|request| {
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}))
-    } else {
-      at(request, "/api/v0/models").then(|| {
-        json!({"data": [{"id": "a", "type": "llm", "loaded_context_length": 8192, "max_context_length": 32768},
-          {"id": "b", "type": "embeddings", "max_context_length": 2048},
-          {"id": "c", "type": "vlm", "loaded_context_length": 4096, "max_context_length": 8192},
-          {"id": "d", "type": "llm", "max_context_length": 65536}]})
-      })
-    }
-  });
-  let heard = on(&address, &[]).heard_now(None);
-  let studio = [
-    ("local:a".to_owned(), 8192, false, Some(2048)),
-    ("local:c".to_owned(), 4096, true, Some(1024)),
-  ];
-  assert_eq!(offered(&heard), studio, "LM Studio gives it at /api/v0/models");
-  assert_eq!(heard.why("local:b"), Some("the local server says that it is not a model for chat"));
-  let reason = heard.why("local:d");
-  assert_eq!(
-    reason,
-    Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"),
-    "LM Studio loads it in its own"
-  );
-}
-
-#[test]
-fn a_server_of_ollama_gives_the_window_that_it_serves_and_one_that_gives_none_waits_for_the_environment()
- {
-  let (address, _) = fake(|request| {
-    let shows =
-      |id: &str| at(request, "/api/show") && request.contains(&format!("{{\"model\":\"{id}\"}}"));
-    if at(request, "/v1/models") {
-      Some(json!({"data": [{"id": "x"}, {"id": "y"}, {"id": "w"}, {"id": "e"}]}))
-    } else if at(request, "/api/ps") {
-      Some(json!({"models": [{"name": "y", "model": "y", "context_length": 8192}]}))
-    } else if shows("x") {
-      let parameters = "num_ctx 32768\ntemperature 1";
-      Some(json!({"capabilities": ["completion"], "parameters": parameters,
-        "model_info": {"qwen3.context_length": 40960}}))
-    } else if shows("y") {
-      Some(
-        json!({"capabilities": ["completion", "vision"], "model_info": {"llama.context_length": 131_072}}),
-      )
-    } else if shows("w") {
-      Some(json!({"capabilities": ["completion"], "model_info": {"llama.context_length": 131_072}}))
-    } else {
-      shows("e")
-        .then(|| json!({"capabilities": ["embedding"], "model_info": {"bert.context_length": 512}}))
-    }
-  });
-  let heard = on(&address, &[]).heard_now(None);
-  let ollama = [
-    ("local:x".to_owned(), 32_768, false, Some(8192)),
-    ("local:y".to_owned(), 8192, true, Some(2048)),
-  ];
-  assert_eq!(
-    offered(&heard),
-    ollama,
-    "Ollama serves a model in its num_ctx, or in the window of /api/ps"
-  );
-  assert_eq!(
-    heard.why("local:w"),
-    Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"),
-    "the context that a model of Ollama was trained on is no window that Ollama serves"
-  );
-  assert_eq!(heard.why("local:e"), Some("the local server says that it is not a model for chat"));
-  let (address, _) =
-    fake(|request| at(request, "/v1/models").then(|| json!({"data": [{"id": "z"}]})));
-  let heard = on(&address, &[]).heard_now(None);
-  assert_eq!(
-    (heard.models.len(), heard.why("local:z")),
-    (0, Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"))
-  );
-  let heard = on(&address, &[("FURB_LOCAL_WINDOW", "2048")]).heard_now(None);
-  assert_eq!(
-    offered(&heard),
-    [("local:z".to_owned(), 2048, false, Some(512))],
-    "the environment gives it"
-  );
-}
-
 /// A server whose first list is an error, then two models, then four.
 fn counting_server() -> (String, mpsc::Receiver<String>) {
   let asked = Arc::new(AtomicUsize::new(0));
@@ -346,7 +156,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
     "a server that listed nothing is not asked again before the delay"
   );
   assert_eq!(lists(&told), 1);
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   let names = |heard: Heard| heard.models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
   let first = ["local:m", "local:Qwen/Qwen3-8B"];
   assert_eq!(names(server.heard_now(None)), first);
@@ -356,7 +166,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
     "a list is not asked again before the delay"
   );
   assert_eq!(lists(&told), 1, "a list that the server gave holds");
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   for wanted in [None, Some("local:Qwen/Qwen3-8B/high"), Some("Qwen/Qwen3-8B"), Some("local:m")] {
     assert_eq!(
       names(server.heard_now(wanted)),
@@ -374,7 +184,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   );
   let why = server.heard_now(Some("local:z/high")).why("local:z/high").map(str::to_owned);
   assert_eq!(why.as_deref(), Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"));
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   server.heard_now(Some("local:z"));
   assert_eq!(
     lists(&told),
@@ -383,7 +193,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   );
   server.heard_now(None);
   assert_eq!(lists(&told), 0, "a list is not asked again before the delay");
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   server.heard_now(None);
   assert_eq!(
     lists(&told),
@@ -421,17 +231,24 @@ fn a_server_that_answers_nothing_at_all_is_given_up_on_at_the_deadline() {
 #[test]
 fn a_server_whose_windows_elsewhere_do_not_come_in_time_offers_the_models_whose_window_its_list_gives()
  {
+  // The first list of a process pays to start its client of HTTP, which a loaded machine stretches
+  // past the deadline: a server that lists at once measures that start, and the list of the
+  // server whose windows come late takes no more than that and the deadline.
+  let (quick, _) = fake(|request| at(request, "/v1/models").then(|| json!({"data": []})));
+  let began = Instant::now();
+  on(&quick, &[]).heard_now(None);
+  let start = began.elapsed();
   let (address, _) = fake(|request| {
     if at(request, "/v1/models") {
       Some(json!({"data": [{"id": "a", "max_model_len": 1000}, {"id": "b"}]}))
     } else {
-      thread::sleep(DEADLINE * 2);
+      pause(DEADLINE * 4);
       None
     }
   });
   let began = Instant::now();
   let heard = on(&address, &[]).heard_now(None);
-  assert!(began.elapsed() < DEADLINE * 2, "{:?}", began.elapsed());
+  assert!(began.elapsed() < start + DEADLINE * 2, "{:?} past {start:?}", began.elapsed());
   assert_eq!(offered(&heard), [("local:a".to_owned(), 1000, false, Some(250))]);
   assert_eq!(
     heard.why("local:b"),
@@ -446,6 +263,6 @@ trait Hears {
 
 impl Hears for Server {
   fn heard_now(&self, wanted: Option<&str>) -> Heard {
-    crate::ear::reactor().block_on(self.heard(wanted))
+    on_reactor(self.heard(wanted))
   }
 }

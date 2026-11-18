@@ -1,0 +1,16 @@
+# The crate furb-hack takes, for each dependency outside the workspace, the union of the features that any crate of the
+# workspace turns on, so each command builds furb and each crate under it once, whatever packages it selects.
+# `cargo hakari generate` writes that crate again after a change of a dependency, and `cargo hakari verify` fails while
+# it stands old. https://docs.rs/cargo-hakari/latest/cargo_hakari/config
+hakari-package = "furb-hack"
+dep-format-version = "4"
+resolver = "2"
+# The systems that furb ships for, and the gnu target of Windows that `cargo xtask targets` lints.
+platforms = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "x86_64-pc-windows-gnu",
+]

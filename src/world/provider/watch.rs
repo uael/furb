@@ -1,27 +1,25 @@
 //! The watch over the word of a reply while its model writes it.
 //!
-//! A word is python, and a statement of it that cannot be python stays so whatever the model writes after it. So the
-//! provider reads the statements that a model finished, each as it finishes, and ends the reply at the first one
-//! that cannot be python, with the word as far as that statement. The gate refuses that word, as it refuses the
-//! whole one, and the model is not made to write the rest of a word that the chain will refuse.
+//! A word is python, and a statement of it that cannot be python stays so whatever the model
+//! writes after it. So the provider reads the statements that a model finished, each as it
+//! finishes, and ends the reply at the first one that cannot be python, with the word as far as
+//! that statement. The run of that word raises there, as the run of the whole one does, and the
+//! model is not made to write the rest of a word that cannot run.
 //!
-//! A statement that is python can still hold a fault that the gate finds, as a name that nothing binds. A later
-//! statement mends no such fault in a statement at the top of the word, which runs before it, unless the statement
-//! holds a part that python runs later or never: a function, a class, a lambda, a comprehension or an annotation. So
-//! the provider asks the gate about the statements that a model finished, and ends the reply after the first
-//! statement with no such part that holds a fault.
+//! Whether the statements that a model wrote so far are whole is the answer of the parser of
+//! monty, the one judge of the grammar: a string, a bracket or a block that stands open makes them
+//! incomplete, whatever line starts at the left edge inside it, as a paragraph of a triple quote
+//! does. A line at the left edge after them only says that no block of theirs goes on.
 //!
-//! The statements that a model finished, and that the gate finds nothing against, run as the model writes the rest:
-//! the provider says each new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
-//! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so the reply ends
-//! there. Once a part ran, the turn of the reply is never a word other than the one that ran: it is the word as far
-//! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
-//! the word of the rung and a statement of it must run there as it ran.
+//! The statements that a model finished run as the model writes the rest: the provider says each
+//! new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
+//! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so
+//! the reply ends there. Once a part ran, the turn of the reply is never a word other than the one
+//! that ran: it is the word as far as the parts that ran, whatever the model wrote after them that
+//! cannot be python, since a later life runs the word of the rung and a statement of it must run
+//! there as it ran.
 
-use ruff_python_ast::{
-  Expr, Stmt,
-  visitor::{self, Visitor},
-};
+use monty::{ReplContinuationMode, detect_repl_continuation_mode};
 use ruff_python_parser::{ParseErrorType, parse_module};
 use ruff_text_size::Ranged;
 
@@ -30,6 +28,17 @@ pub(super) const QUOTE: &str = "<s:";
 
 /// The mark that opens the end of a quote in a word: `</s:name>` at the end of a line.
 const UNQUOTE: &str = "</s:";
+
+/// Whether the text after the end of a line starts a statement at the left edge. The mark of a
+/// fence and the close of a tag of a tool call start none, since [`Bare`] drops them: so the last
+/// statement of a word that a fence or a tool call wraps runs with the whole turn, and a close in
+/// it does not end the reply before its model said what the reply read.
+fn starts(mut rest: impl Iterator<Item = char>) -> bool {
+  match (rest.next(), rest.next()) {
+    (Some(one), next) => !(one.is_whitespace() || one == '`' || (one == '<' && next == Some('/'))),
+    (None, _) => false,
+  }
+}
 
 /// What a reply that is watched has of its word so far.
 #[derive(Default)]
@@ -50,32 +59,36 @@ pub(super) struct Watch {
 }
 
 impl Watch {
-  /// The word grown by a part the model wrote, and where the statements to read end if a new line at the left edge
-  /// started: the start of the last such line. A statement that starts there may not be whole, but every statement
-  /// before it is, unless a string or a bracket stays open, which the faults of [`broken`] leave to a later read. The
-  /// text takes each line once it ends, less the marks that [`Bare`] drops, so a line that the text has not taken
-  /// yet only says whether a line at the left edge starts.
+  /// The word grown by a part the model wrote, and where the statements to read end if a new line
+  /// at the left edge started after statements that monty does not call incomplete: the start of
+  /// the last such line. A statement that starts there may not be whole, but every statement before
+  /// it is, since no string or bracket of theirs stands open, and the line at the left edge goes on
+  /// with no block of theirs. The text takes each line once it ends, less the marks that [`Bare`]
+  /// drops, so a line that the text has not taken yet only says whether a line at the left edge
+  /// starts.
   pub(super) fn wrote(&mut self, part: &str) -> Option<usize> {
     self.tail.push_str(part);
     while let Some(at) = self.tail.find('\n') {
       let line: String = self.tail.drain(..=at).collect();
-      if let Some(kept) = self.bare.line(&line[..at], &self.text) {
+      if let Some(kept) = self.bare.line(line.get(..at).unwrap_or_default(), &self.text) {
         self.text.push_str(&kept);
         self.text.push('\n');
       }
     }
     let (text, tail) = (&self.text, &self.tail);
-    let end =
-      text[self.seen..].match_indices('\n').map(|(at, _)| self.seen + at + 1).rfind(|after| {
-        text[*after..].chars().chain(tail.chars()).next().is_some_and(|one| !one.is_whitespace())
-      })?;
+    let end = text
+      .get(self.seen..)?
+      .match_indices('\n')
+      .map(|(at, _)| self.seen + at + 1)
+      .filter(|after| starts(text.get(*after..).unwrap_or_default().chars().chain(tail.chars())))
+      .rfind(|after| complete(upto(text, *after)) != ReplContinuationMode::IncompleteImplicit)?;
     self.seen = end;
     Some(end)
   }
 
   /// The word up to where the statements to read end.
   pub(super) fn upto(&self, end: usize) -> &str {
-    &self.text[..end]
+    upto(&self.text, end)
   }
 
   /// The word as far as the end of a line of it, counted from 1, or as far as the close mark of a
@@ -83,13 +96,13 @@ impl Watch {
   /// on the line of its open mark, so a statement refused there ends where its quote ends.
   pub(super) fn through(&self, line: usize) -> &str {
     let line = closing(&self.text, line);
-    let end = self.text.match_indices('\n').nth(line - 1).map_or(self.text.len(), |(at, _)| at);
-    &self.text[..end]
+    let end = self.text.match_indices('\n').nth(line.saturating_sub(1));
+    upto(&self.text, end.map_or(self.text.len(), |(at, _)| at))
   }
 
   /// The word forgotten, as when the model is asked again and writes it from its start.
   pub(super) fn forget(&mut self) {
-    *self = Watch::default();
+    *self = Self::default();
   }
 
   /// The part of a word, as python, that is new since the parts given to the Kernel, and how many characters of the
@@ -114,7 +127,7 @@ impl Watch {
   /// Whether the line that starts at this place in the text opens a clause of the statement before it, as `else` does
   /// of an `if`, so that statement is not whole yet though a line at the left edge starts after it.
   pub(super) fn clause(&self, end: usize) -> bool {
-    let rest = if end < self.text.len() { &self.text[end..] } else { self.tail.as_str() };
+    let rest = self.text.get(end..).filter(|rest| !rest.is_empty()).unwrap_or(&self.tail);
     let line = rest.lines().next().unwrap_or_default();
     let word =
       line.split(|one: char| !(one.is_alphanumeric() || one == '_')).next().unwrap_or_default();
@@ -126,12 +139,16 @@ impl Watch {
     if line <= 1 {
       return 0;
     }
-    self.text.match_indices('\n').nth(line - 2).map_or(self.text.len(), |(at, _)| at + 1)
+    self
+      .text
+      .match_indices('\n')
+      .nth(line.saturating_sub(2))
+      .map_or(self.text.len(), |(at, _)| at + 1)
   }
 
   /// The text of the word as far as the parts given to the Kernel, when a part was given.
   pub(super) fn ran(&self) -> Option<&str> {
-    (self.given > 0).then(|| &self.text[..self.given])
+    (self.given > 0).then(|| upto(&self.text, self.given))
   }
 
   /// What the chain is told of the marks that the text dropped, or of the name that it gave a binding of no name.
@@ -236,6 +253,16 @@ fn broke(line: &str) -> bool {
   matches!(line.to_ascii_lowercase().as_str(), "<br>" | "<br/>" | "<br />")
 }
 
+/// A text up to a place, or whole when the place stands past it or inside a character.
+fn upto(text: &str, end: usize) -> &str {
+  text.get(..end).unwrap_or(text)
+}
+
+/// A text from a place, or nothing when the place stands past it or inside a character.
+fn after(text: &str, start: usize) -> &str {
+  text.get(start..).unwrap_or_default()
+}
+
 /// Whether a line, trimmed, is a fence: `` ``` `` alone or with the name of a language.
 fn fence(line: &str) -> bool {
   line
@@ -248,11 +275,11 @@ fn fence(line: &str) -> bool {
 fn tag(line: &str) -> Option<&str> {
   let inside = line.strip_prefix("</").or_else(|| line.strip_prefix('<'))?;
   let name = TAGS.into_iter().find(|name| inside.starts_with(name))?;
-  let after = &inside[name.len()..];
+  let after = inside.get(name.len()..)?;
   if !after.starts_with([' ', '>', '=']) {
     return None;
   }
-  Some(after[after.find('>')? + 1..].trim())
+  Some(after.split_once('>')?.1.trim())
 }
 
 /// A whole text less the marks that [`Bare`] drops, with the name that it gives a binding of no name, and what the
@@ -273,7 +300,7 @@ pub(super) fn bare(text: &str) -> Option<(String, String)> {
 pub(super) fn last(word: &str) -> Option<usize> {
   let parsed = parse_module(word).ok()?;
   let start = parsed.syntax().body.last()?.start().to_usize();
-  Some(word[..start].matches('\n').count() + 1)
+  Some(upto(word, start).matches('\n').count() + 1)
 }
 
 /// Each quote of a word, as the engine reads one: where it starts and, when it ends, where its close mark ends. A
@@ -281,18 +308,18 @@ pub(super) fn last(word: &str) -> Option<usize> {
 /// close mark inside a line of its text ends nothing. The list ends with the first quote that does not end.
 fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
   let (mut from, mut found) = (0, Vec::new());
-  while let Some(start) = word[from..].find(QUOTE).map(|at| from + at) {
+  while let Some(start) = after(word, from).find(QUOTE).map(|at| from + at) {
     from = start + QUOTE.len();
-    let Some((name, _)) = word[from..].split_once('>') else { continue };
+    let Some((name, _)) = after(word, from).split_once('>') else { continue };
     let named = !name.is_empty() && name.chars().all(|one| one.is_alphanumeric() || one == '_');
-    if !named || !(start == 0 || word[..start].ends_with('\n')) {
+    if !named || !(start == 0 || upto(word, start).ends_with('\n')) {
       continue;
     }
     let text = from + name.len() + 1;
     let close = format!("{UNQUOTE}{name}>");
-    let ends = word[text..]
-      .match_indices(&close)
-      .find(|(at, _)| matches!(word[text + at + close.len()..].chars().next(), None | Some('\n')));
+    let ends = after(word, text).match_indices(&close).find(|(at, _)| {
+      matches!(after(word, text + at + close.len()).chars().next(), None | Some('\n'))
+    });
     let Some((at, _)) = ends else {
       found.push((start, name, None));
       break;
@@ -306,7 +333,7 @@ fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
 /// The line, counted from 1, of the close mark of the quote of a word that holds this line from its
 /// open mark to before its close mark, or the line itself when no quote that ends holds it.
 fn closing(word: &str, line: usize) -> usize {
-  let at = |place: usize| word[..place].matches('\n').count() + 1;
+  let at = |place: usize| upto(word, place).matches('\n').count() + 1;
   quotes(word)
     .into_iter()
     .find_map(|(start, _, end)| end.filter(|end| (at(start)..at(*end)).contains(&line)).map(at))
@@ -323,14 +350,21 @@ fn unquoted(word: &str) -> String {
   let (mut made, mut at) = (String::new(), 0);
   for (start, name, end) in quotes(word) {
     let Some(end) = end else { break };
-    made.push_str(&word[at..start]);
+    made.push_str(word.get(at..start).unwrap_or_default());
     made.push_str(name);
     made.push_str(" = 0");
-    made.push_str(&"\n".repeat(word[start..end].matches('\n').count()));
+    made.push_str(&"\n".repeat(word.get(start..end).unwrap_or_default().matches('\n').count()));
     at = end;
   }
-  made.push_str(&word[at..]);
+  made.push_str(after(word, at));
   made
+}
+
+/// What the parser of monty says of a word as python, each quote that ends bound as a name:
+/// complete, incomplete as a string or a bracket that stands open (implicit) or a block with no
+/// body yet, or invalid.
+pub(super) fn complete(word: &str) -> ReplContinuationMode {
+  detect_repl_continuation_mode(&unquoted(word))
 }
 
 /// The line, counted from 1, of the first fault of a word that more text cannot mend, if it has one: a fault at the
@@ -340,65 +374,11 @@ pub(super) fn broken(word: &str) -> Option<usize> {
   let (start, end) = (usize::from(no.location.start()), usize::from(no.location.end()));
   let last = word.trim_end().len();
   let lexical = matches!(no.error, ParseErrorType::Lexical(_));
-  (start < last && !(lexical && end >= last)).then(|| word[..start].matches('\n').count() + 1)
+  (start < last && !(lexical && end >= last)).then(|| upto(word, start).matches('\n').count() + 1)
 }
 
-/// The first and the last line, counted from 1, of each statement at the top of a word whose faults no later
-/// statement can mend, or none when the word is not python.
-pub(super) fn settled(word: &str) -> Vec<(usize, usize)> {
-  let Ok(parsed) = parse_module(word) else { return vec![] };
-  let line = |at: usize| word[..at].matches('\n').count() + 1;
-  let body = &parsed.syntax().body;
-  body
-    .iter()
-    .filter(|stmt| {
-      let mut later = Later(false);
-      later.visit_stmt(stmt);
-      !later.0
-    })
-    .map(|stmt| (line(stmt.start().to_usize()), line(stmt.end().to_usize())))
-    .collect()
+/// The line, counted from 1, of the first fault of a word that is whole, if it is not python.
+pub(super) fn fault(word: &str) -> Option<usize> {
+  let no = parse_module(word).err()?;
+  Some(upto(word, usize::from(no.location.start())).matches('\n').count() + 1)
 }
-
-/// The last line of the first settled statement that holds a finding of the gate, if one does. Each finding starts
-/// with the line of the word that it is found on, as `line 3: ...`.
-pub(super) fn refused(settled: &[(usize, usize)], found: &[String]) -> Option<usize> {
-  let lines: Vec<usize> = found
-    .iter()
-    .filter_map(|one| one.strip_prefix("line ")?.split(':').next()?.parse().ok())
-    .collect();
-  settled
-    .iter()
-    .find(|(first, last)| lines.iter().any(|line| (first..=last).contains(&line)))
-    .map(|(_, last)| *last)
-}
-
-/// Whether a statement holds a part that python runs later or never, which a later statement can change the
-/// meaning of.
-struct Later(bool);
-
-impl<'a> Visitor<'a> for Later {
-  fn visit_stmt(&mut self, stmt: &'a Stmt) {
-    match stmt {
-      Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::AnnAssign(_) => self.0 = true,
-      _ => visitor::walk_stmt(self, stmt),
-    }
-  }
-
-  fn visit_expr(&mut self, expr: &'a Expr) {
-    match expr {
-      Expr::Lambda(_)
-      | Expr::ListComp(_)
-      | Expr::SetComp(_)
-      | Expr::DictComp(_)
-      | Expr::Generator(_) => {
-        self.0 = true;
-      }
-      _ => visitor::walk_expr(self, expr),
-    }
-  }
-}
-
-#[cfg(test)]
-#[path = "watch.test.rs"]
-mod test;

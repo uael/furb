@@ -1,0 +1,1372 @@
+//! The list part: one list over the dimmed window, with a chosen row, which Go to, each key and
+//! the sessions that the input sends to draw alike. Letters filter it, as the pickers
+//! of a terminal match them, the up and down arrows move the chosen row, enter takes it, and escape
+//! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
+//! and a click beside the part closes it.
+
+use std::{borrow::Cow, cmp::Reverse, ops::Range};
+
+use crate::cells::Cells;
+use furb::view::{Part, Sent, Skill, tokens};
+use furb_host::protocol::Card;
+use opentui::{
+  input::{MouseButton, MouseEvent, MouseEventKind},
+  style::{Color, Style},
+};
+
+use furb_client::{Aim, Client, Control, Link, Matched, Target, Told, ranked};
+use furb_host::protocol::Model as Offered;
+
+use crate::{
+  input::named,
+  keys::{self, Bound, Does},
+  line::{Line, balanced, capital, run, spread, wrapped},
+  list::{NO_PROJECT, project},
+  model::{Key, Model},
+  thread::{Click, Row, hued, width},
+  tokens::{APART, BESIDE, OVER, PART, PARTS, Role, turn},
+};
+
+/// What a list part lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pick {
+  /// Everything that the operator goes to or runs: what needs him, the sessions that work, the
+  /// sessions that he used last, the projects and each command, and once he searches, each thread,
+  /// each session of each machine, and the files and the skills of the target of the input.
+  GoTo,
+  /// Each key of the table of the keys.
+  Keys,
+  /// The sessions that the input can send to.
+  Sessions,
+  /// The machines that a new session runs on.
+  Machines,
+  /// The projects of the machine of the input, where a new session runs.
+  Projects,
+  /// The models of the machine of the input, each provider once.
+  Models,
+  /// The efforts of the model of the input.
+  Efforts,
+  /// What he sent where the input sends, the newest first.
+  History,
+  /// What the operator does to one session that runs.
+  Session,
+  /// What a leave does to the sessions that the window holds and that work.
+  Leave,
+  /// The settings of the session that the input sends to.
+  Settings,
+  /// The value of a setting, by its place among the settings, which he writes in the filter.
+  Value(usize),
+  /// The skills of the session that the input sends to, with how each plays.
+  Skills,
+  /// One skill, by its place among the skills: what it is, how it plays, and what he does to it.
+  Skill(usize),
+}
+
+/// The list part, while it is open: what it lists, the text that filters it, the place of the
+/// chosen row among those that pass the filter, in the list of the models the effort that the
+/// arrows chose for a model, by its name, which the model takes with its row, and in the settings
+/// the group whose keys show while no text filters them, empty for the first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Picker {
+  pub(crate) of: Pick,
+  pub(crate) filter: String,
+  pub(crate) at: usize,
+  pub(crate) effort: Option<(String, String)>,
+  pub(crate) tab: String,
+}
+
+/// What a row of a list part takes.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) enum Choice {
+  /// The thread of a card, which opens.
+  Thread(Key),
+  /// A session that the input sends to a new thread of.
+  Session(Target),
+  /// A session that the operator returns to, by its machine and its record: its last thread
+  /// opens, else the input sends to a new thread of it.
+  Visit(usize, String),
+  /// A text that the draft adds at its end: the mention of a file, or a skill.
+  Added(String),
+  /// A project, whose sessions the list then shows.
+  Project(String),
+  /// An actor of a model, which the target of the input takes.
+  Actor(String),
+  /// A text that he sent, which the input takes.
+  Sent(Sent),
+  /// What a key does.
+  Key(Does),
+  /// A session that runs, by its machine and its record, whose choices the list then shows.
+  Running(usize, String),
+  /// What the operator does to the session that the list part acts on.
+  Control(Control),
+  /// What a leave does to each session that works, or none to stay.
+  Leave(Option<Control>),
+  /// A setting, by its place among the settings, which takes one step, or the value that he writes.
+  Setting(usize),
+  /// The value that he wrote for a setting, by its place among the settings.
+  Value(usize),
+  /// A skill, by its place among the skills of the session: one with code turns on or off, and the
+  /// draft adds the mention of one with none.
+  Skill(usize),
+  /// An extension, by its place among the skills, turned on or off in its view.
+  Turn(usize),
+  /// The sign-in of Codex on the machine that the input sends to, in the browser of this computer
+  /// or from any device with a code.
+  SignIn(bool),
+  /// The sign-in of Codex that runs, canceled.
+  CancelSignIn,
+  /// An address, which opens in the browser.
+  Link(String),
+  /// Nothing: a key that only a form or a list hears.
+  #[default]
+  None,
+}
+
+/// A row of a list part: the part of the list that it stands in, the project that it stands in,
+/// whose badge leads it as it leads a card, its text, the places of the letters of its text that
+/// the filter matched, what follows its text in the column after it, what its right says and its
+/// color when it says a state as a card says it, the hue of its bar while it is chosen, and what it
+/// takes.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct Entry {
+  pub(crate) part: Cow<'static, str>,
+  pub(crate) project: Option<String>,
+  pub(crate) left: String,
+  pub(crate) lit: Vec<usize>,
+  pub(crate) says: String,
+  pub(crate) right: String,
+  pub(crate) tone: Option<Color>,
+  pub(crate) hue: Option<usize>,
+  pub(crate) choice: Choice,
+}
+
+impl Entry {
+  /// The columns that the entry takes on one row: its bar, the slot of a badge when the list has
+  /// badges, its text, what it says, and its right after a gap, with the column after it.
+  fn width(&self, badged: bool) -> usize {
+    let badge = if badged { 3 } else { 0 };
+    1 + badge + self.left.width() + self.says.width() + 2 + self.right.width() + 1
+  }
+}
+
+/// Whether a row of the entries stands in a project, so each row keeps the slot of a badge.
+fn badged(entries: &[Entry]) -> bool {
+  entries.iter().any(|one| one.project.is_some())
+}
+
+/// The list part as the window draws it over the dimmed window: its column, its row, its columns,
+/// and its rows, each row of an entry with the click that takes it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct Over {
+  pub(crate) x: u16,
+  pub(crate) y: u16,
+  pub(crate) width: u16,
+  pub(crate) rows: Vec<Row>,
+}
+
+/// How many sessions that he used last Go to shows before he searches.
+const RECENT: usize = 5;
+
+/// The rows of a list part that are no entry: the blank row above its title, its title, its filter,
+/// the blank row under it, the blank row above its foot, its foot and the blank row under it.
+const FRAME: usize = 7;
+
+/// What the row of the model that the input speaks to says at its end.
+const USED: &str = " · in use";
+
+impl Pick {
+  /// The list part that a key opens, if it opens one.
+  pub(crate) const fn of(does: Does) -> Option<Self> {
+    Some(match does {
+      Does::Sessions => Self::Sessions,
+      Does::GoTo => Self::GoTo,
+      Does::Machines => Self::Machines,
+      Does::Projects => Self::Projects,
+      Does::History => Self::History,
+      Does::Model => Self::Models,
+      Does::Effort => Self::Efforts,
+      Does::Settings => Self::Settings,
+      Does::Skills => Self::Skills,
+      Does::Keys => Self::Keys,
+      _ => return None,
+    })
+  }
+
+  /// Whether each entry of the list is a thing that says what it does, as a setting or an
+  /// extension, so what it says stands whole under its name, as a page of settings shows it.
+  fn describes(self) -> bool {
+    matches!(self, Self::Settings | Self::Value(_) | Self::Skills)
+  }
+
+  fn title(self) -> &'static str {
+    match self {
+      Self::GoTo => "Go to",
+      Self::Keys => "Each key",
+      Self::Sessions => "Send to",
+      Self::Machines => "Machines",
+      Self::Projects => "Projects",
+      Self::Models => "Models",
+      Self::Efforts => "Effort",
+      Self::History => "History",
+      Self::Session => "The session",
+      Self::Leave => "Leave the window",
+      Self::Settings | Self::Value(_) => "Settings",
+      Self::Skills => "Extensions",
+      Self::Skill(_) => "Extension",
+    }
+  }
+
+  fn placeholder(self) -> &'static str {
+    match self {
+      Self::GoTo => "Search a thread, session, project, file, skill or command",
+      Self::Keys => "Search a key",
+      Self::Sessions => "Search a session",
+      Self::Machines => "Search a machine",
+      Self::Projects => "Search a project",
+      Self::Models => "Search a model",
+      Self::Efforts => "Search an effort",
+      Self::History => "Search what you sent here",
+      Self::Session | Self::Leave => "Search a choice",
+      Self::Settings => "Search a setting",
+      Self::Value(_) => "Write the value",
+      Self::Skills => "Search a skill or an extension",
+      Self::Skill(_) => "Search what to do",
+    }
+  }
+
+  /// What enter does on a row, as the foot of the part says it.
+  fn takes(self) -> &'static str {
+    match self {
+      Self::GoTo => "open",
+      Self::Keys => "run",
+      Self::Sessions | Self::Machines | Self::Projects => "send there",
+      Self::Models | Self::Efforts => "take it",
+      Self::History => "write it",
+      Self::Session | Self::Leave | Self::Skill(_) => "do it",
+      Self::Settings => "change it",
+      Self::Value(_) => "set it",
+      Self::Skills => "open it",
+    }
+  }
+}
+
+impl Model {
+  /// A list part opened, or closed when the part that is open lists the same. The sessions open on
+  /// the one that the input sends to.
+  pub(crate) fn pick(&mut self, of: Pick) {
+    if self.picker.as_ref().is_some_and(|one| one.of == of) {
+      self.picker = None;
+      return;
+    }
+    // The history opens on what he wrote, as the search of a shell does, and asks what he sent
+    // again.
+    let filter = if of == Pick::History { self.client.draft.text.clone() } else { String::new() };
+    if of == Pick::History {
+      self.client.ask_history();
+    }
+    if of == Pick::Efforts && self.efforts().is_empty() {
+      self.client.notice = Some("This model takes no effort.".to_owned());
+      return;
+    }
+    if matches!(of, Pick::Settings | Pick::Skills)
+      && let Err(why) = self.client.read_settings(of == Pick::Skills)
+    {
+      self.client.notice = Some(why);
+      return;
+    }
+    self.picker = Some(Picker { of, filter, at: 0, effort: None, tab: String::new() });
+    self.chose(0);
+    // The sessions open on the one that the input sends to, and the models on the one in use.
+    let now = match self.client.target() {
+      Aim::Thread(key) => Aim::Session(key.0, &key.1),
+      other => other,
+    }
+    .owned();
+    let entries = self.entries();
+    let at = entries.iter().position(|one| match of {
+      Pick::Sessions => one.choice == Choice::Session(now.clone()),
+      Pick::Models | Pick::Efforts => one.says.ends_with(USED),
+      _ => false,
+    });
+    if let (Some(at), Some(picker)) = (at, self.picker.as_mut()) {
+      picker.at = at;
+    }
+  }
+
+  /// The rows of the open list part that pass its filter: all of them in their order while no text
+  /// filters it, else those that match the text, the best match first, with the rows of each part
+  /// together under its head, the part of the best match first.
+  pub(crate) fn entries(&self) -> Vec<Entry> {
+    let Some(picker) = &self.picker else { return Vec::new() };
+    let all = match picker.of {
+      // The filter is the value that he writes, so it hides no row.
+      Pick::Value(place) => return self.value(place),
+      Pick::Settings if picker.filter.is_empty() => {
+        let tab = self.tab();
+        self.settings().into_iter().filter(|one| one.part == tab).collect()
+      }
+      of => self.unfiltered(of, !picker.filter.is_empty()),
+    };
+    // The filter matches the text of a row and its right, and lights the letters of its text.
+    let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
+    let mut all: Vec<Option<Entry>> = all.into_iter().map(Some).collect();
+    let taken = |one: Matched| {
+      let mut entry = all.get_mut(one.at)?.take()?;
+      let letters = entry.left.chars().count();
+      entry.lit = one.lit.into_iter().filter(|at| *at < letters).collect();
+      Some(entry)
+    };
+    let mut found: Vec<Entry> = ranked(&picker.filter, texts.iter().map(String::as_str))
+      .into_iter()
+      .filter_map(taken)
+      .collect();
+    let mut parts: Vec<Cow<'static, str>> = Vec::new();
+    for one in &found {
+      if !parts.contains(&one.part) {
+        parts.push(one.part.clone());
+      }
+    }
+    found.sort_by_key(|one| parts.iter().position(|part| *part == one.part));
+    found
+  }
+
+  /// The rows of a list part before a filter takes some: with a search, the rows that only a search
+  /// shows too, and each group of the settings.
+  fn unfiltered(&self, of: Pick, searches: bool) -> Vec<Entry> {
+    match of {
+      Pick::GoTo => self.places(searches),
+      Pick::Keys => self.each_key(),
+      Pick::Sessions => self.sessions(),
+      Pick::Machines => self.machines(),
+      Pick::Projects => self.projects(),
+      Pick::Models => self.models(),
+      Pick::Efforts => self.efforts(),
+      Pick::History => self.sent(),
+      Pick::Session => self.session_choices(),
+      Pick::Leave => self.leave_choices(),
+      Pick::Settings => self.settings(),
+      Pick::Skills => self.played(),
+      Pick::Skill(place) => self.skill(place),
+      // The part that writes a value stands in the columns of the settings that it came from.
+      Pick::Value(place) => self.settings().into_iter().chain(self.value(place)).collect(),
+    }
+  }
+
+  /// The places of Go to: each thread that needs the operator, each thread that works, each
+  /// session that runs, the sessions that he used last, each project, then each command; and while
+  /// he searches, each other thread, each session of each machine, a session that holds no thread
+  /// of his too, and the files and the skills of the target of the input. A thread row opens its
+  /// thread, a session row its last thread, a file or a skill row adds it to the draft, and a
+  /// command row runs it.
+  fn places(&self, searches: bool) -> Vec<Entry> {
+    let thread = |part: &'static str, (_, key, card): &(Part, Key, Card)| Entry {
+      part: part.into(),
+      project: Some(project(card)),
+      left: card.thread.title.clone(),
+      right: place(card),
+      hue: Some(hued(&key.1, &card.thread.title)),
+      choice: Choice::Thread(key.clone()),
+      ..Entry::default()
+    };
+    let needs = |one: &&(Part, Key, Card)| self.needs(&one.1, &one.2);
+    let works =
+      |one: &&(Part, Key, Card)| !needs(one) && one.2.thread.works() && self.confirmed(&one.1);
+    let mut all: Vec<Entry> =
+      self.client.settled.iter().filter(needs).map(|one| thread("Needs you", one)).collect();
+    all.extend(self.client.settled.iter().filter(works).map(|one| thread("Working", one)));
+    all.extend(self.running_places());
+    let sessions = self.known_sessions();
+    let session = |one: &Session| Entry {
+      part: "Sessions".into(),
+      project: Some(one.project.clone()),
+      left: one.name.clone(),
+      right: one.project.clone(),
+      choice: Choice::Visit(one.at, one.life.clone()),
+      ..Entry::default()
+    };
+    if searches {
+      let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
+      all.extend(self.client.settled.iter().filter(rest).map(|one| thread("Threads", one)));
+    }
+    // A session named after a thread of it that the list holds would be the same row twice.
+    let twice = |one: &&Session| {
+      all.iter().any(|entry| {
+        let of =
+          matches!(&entry.choice, Choice::Thread(key) if key.0 == one.at && key.1 == one.life);
+        of && entry.left == one.name
+      })
+    };
+    let kept: Vec<Entry> = sessions.iter().filter(|one| !twice(one)).map(session).collect();
+    if searches {
+      all.extend(kept);
+      all.extend(self.lists());
+    } else {
+      // The sessions past those that he used last say how many wait for his search.
+      let more = kept.len().saturating_sub(RECENT);
+      all.extend(kept.into_iter().take(RECENT));
+      all.extend((more > 0).then(|| Entry {
+        part: "Sessions".into(),
+        left: format!("Type to find {more} more"),
+        ..Entry::default()
+      }));
+    }
+    all.extend(projects(&sessions));
+    // A project that holds no session yet takes a new thread there, as the launcher picks it.
+    let held = |name: &str| sessions.iter().any(|one| one.project == name);
+    let fresh = self
+      .projects()
+      .into_iter()
+      .filter(|one| one.project.as_deref().is_some_and(|name| !held(name)));
+    all.extend(fresh.map(|one| Entry { part: "Projects".into(), ..one }));
+    all.extend(self.commands());
+    all
+  }
+
+  /// The files and the skills of the target of the input that the client holds: a row adds the
+  /// mention of a file, or a skill, to the draft.
+  fn lists(&self) -> Vec<Entry> {
+    let (files, skills) = self.client.files_and_skills();
+    let file = |path: &String| Entry {
+      part: "Files".into(),
+      left: path.clone(),
+      choice: Choice::Added(Client::mention(path)),
+      ..Entry::default()
+    };
+    let skill = |one: &Skill| Entry {
+      part: "Skills".into(),
+      left: one.name.clone(),
+      says: one.description.clone(),
+      choice: Choice::Added(format!("/{}", one.name)),
+      ..Entry::default()
+    };
+    files.iter().map(file).chain(skills.iter().map(skill)).collect()
+  }
+
+  /// Each session of each machine once: those of its cards, then each record that it listed with
+  /// no card, by its name, else its file.
+  fn known_sessions(&self) -> Vec<Session> {
+    let mut sessions: Vec<Session> = Vec::new();
+    for (at, told) in self.client.machines.iter().enumerate() {
+      let used = |life: &str| told.lives.iter().find(|one| one.life == life)?.used;
+      for card in &told.cards {
+        if !sessions.iter().any(|one| one.at == at && one.life == card.life) {
+          let named = card.session.clone().filter(|name| !name.is_empty());
+          let name = named.unwrap_or_else(|| card.thread.title.clone());
+          let life = card.life.clone();
+          let used = used(&life);
+          sessions.push(Session { at, life, name, project: project(card), used });
+        }
+      }
+      for listed in &told.lives {
+        if !sessions.iter().any(|one| one.at == at && one.life == listed.life) {
+          let name = listed.name.clone().filter(|name| !name.is_empty());
+          let name = name.unwrap_or_else(|| stem(&listed.life));
+          let project = listed.project.as_deref().map_or("", |one| tail(one)).to_owned();
+          let life = listed.life.clone();
+          sessions.push(Session { at, life, name, project, used: listed.used });
+        }
+      }
+    }
+    // A session that lasts is a place that he comes back to: the one that he used last first.
+    sessions.sort_by_key(|one| Reverse(one.used));
+    sessions
+  }
+
+  /// Each command of the table of the keys, with its key, by the group of its key, but Go to,
+  /// which lists them.
+  fn commands(&self) -> Vec<Entry> {
+    let commands = keys::each(self.system, self.supers())
+      .filter(|one| one.1.command.is_some() && one.1.does != Does::GoTo);
+    let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| Entry {
+      part: group.into(),
+      left: capital(key.says),
+      right: forms.first().cloned().unwrap_or_default(),
+      hue: None,
+      choice: Choice::Key(key.does),
+      ..Entry::default()
+    };
+    commands.map(entry).collect()
+  }
+
+  /// Each key of the table of the keys, with each of its forms, by its group: the forms in the
+  /// column of the keys, then what it does, as the home names a key. A command runs from it.
+  fn each_key(&self) -> Vec<Entry> {
+    // The column of the keys is as wide as the widest of them on this system, where a key in words
+    // takes far more columns than its signs, and two columns part it from what the key does. A key
+    // shows its first two forms: a third, as a key of the old window, works as well.
+    let joined = |forms: Vec<String>| forms.into_iter().take(2).collect::<Vec<_>>().join(" or ");
+    let column =
+      keys::each(self.system, self.supers()).map(|(_, _, forms)| joined(forms).width()).max();
+    let column = column.unwrap_or_default() + 2;
+    let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| {
+      let forms = joined(forms);
+      Entry {
+        part: group.into(),
+        left: format!("{forms}{}", " ".repeat(column.saturating_sub(forms.width()))),
+        says: key.says.to_owned(),
+        choice: if key.command.is_some() { Choice::Key(key.does) } else { Choice::None },
+        ..Entry::default()
+      }
+    };
+    keys::each(self.system, self.supers()).map(entry).collect()
+  }
+
+  /// The sessions that the input can send to: a new session on this machine, then each session
+  /// of the cards once, by its machine and its record, with its name and its project.
+  fn sessions(&self) -> Vec<Entry> {
+    let new = Choice::Session(Target::New(0, self.client.folder.clone()));
+    let left = "+ new session".to_owned();
+    let here = self.project();
+    let mut all = vec![Entry {
+      project: Some(here.clone()),
+      left,
+      right: here,
+      choice: new,
+      ..Entry::default()
+    }];
+    for (_, key, card) in &self.client.settled {
+      let choice = Choice::Session(Target::Session(key.0, key.1.clone()));
+      if all.iter().any(|one| one.choice == choice) {
+        continue;
+      }
+      let named = card.session.clone().filter(|name| !name.is_empty());
+      let left = named.unwrap_or_else(|| card.thread.title.clone());
+      all.push(Entry {
+        part: "".into(),
+        project: Some(project(card)),
+        left,
+        right: project(card),
+        hue: None,
+        choice,
+        ..Entry::default()
+      });
+    }
+    all
+  }
+
+  /// The machines that a new session runs on: this computer first, each with its state, and a new
+  /// session on each runs in the project that it used last, or in the folder of the window here.
+  fn machines(&self) -> Vec<Entry> {
+    let here = self.client.folder.clone();
+    let entry = |(at, told): (usize, &Told)| {
+      let name = if at == 0 { "This computer".to_owned() } else { told.name.clone() };
+      let folder = told.projects.iter().find(|one| !one.detached).map(|one| one.folder.clone());
+      let folder = if at == 0 { Some(here.clone()) } else { folder };
+      let state = match (&told.link, &folder) {
+        (Link::Lost(_), _) => "offline".to_owned(),
+        (Link::Dialing, _) => "dialing".to_owned(),
+        (Link::Listed, Some(folder)) => self.folder_named(at, folder),
+        (Link::Listed, None) => "no project yet".to_owned(),
+      };
+      let choice = folder.map_or(Choice::None, |folder| Choice::Session(Target::New(at, folder)));
+      Entry { left: name, right: state, choice, ..Entry::default() }
+    };
+    self.client.machines.iter().enumerate().map(entry).collect()
+  }
+
+  /// The projects of the machine of the input, where a new session runs: the project of the
+  /// folder of the window first on this computer, then each that the machine gave, the one used
+  /// last first, with its count of sessions, and last no project, whose new session runs in a new
+  /// folder of its own.
+  fn projects(&self) -> Vec<Entry> {
+    let at = self.client.target().machine();
+    let Some(told) = self.client.machines.get(at) else { return Vec::new() };
+    let here = self.client.folder.clone();
+    let first = (at == 0 && !told.projects.iter().any(|one| one.folder == here)).then_some(&here);
+    let counted = told.projects.iter().map(|one| (&one.folder, Some(one.sessions), one.detached));
+    let all = first.map(|one| (one, None, false)).into_iter().chain(counted);
+    let entry = |(folder, sessions, alone): (&String, Option<usize>, bool)| {
+      let count = match sessions {
+        None | Some(0) => "no session yet".to_owned(),
+        Some(1) => "1 session".to_owned(),
+        Some(many) => format!("{many} sessions"),
+      };
+      let (name, new) = if alone {
+        (NO_PROJECT.to_owned(), self.client.detached(at).unwrap_or_else(|| folder.clone()))
+      } else {
+        (named(folder), folder.clone())
+      };
+      Entry {
+        project: Some(name.clone()),
+        left: name,
+        says: format!("  {}", self.homed(folder)),
+        right: count,
+        choice: Choice::Session(Target::New(at, new)),
+        ..Entry::default()
+      }
+    };
+    all.map(entry).collect()
+  }
+
+  /// What he sent where the input sends, the newest first: a text of many lines on one row, and a
+  /// word of python marked so.
+  fn sent(&self) -> Vec<Entry> {
+    let entry = |sent: &Sent| Entry {
+      left: sent.text.replace('\n', "↵"),
+      right: if sent.python { "python".to_owned() } else { String::new() },
+      choice: Choice::Sent(sent.clone()),
+      ..Entry::default()
+    };
+    self.client.sent().iter().map(entry).collect()
+  }
+
+  /// The models of the machine of the input, under each provider once, each with what it holds, its
+  /// context window and whether it sees images, and its effort, the one that it takes when the
+  /// operator names none. A model takes the effort that the input speaks at when it offers it. The
+  /// model that the input speaks to says so, in the accent, and an effort of it that he chose but
+  /// did not take yet stands after the one in use, as a change that waits.
+  fn models(&self) -> Vec<Entry> {
+    let at = self.client.target().machine();
+    let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
+    let (using, effort) = self.actor().unzip();
+    let effort = effort.flatten();
+    let leaned = self.picker.as_ref().and_then(|one| one.effort.as_ref());
+    // What each model holds stands in one column, past the longest name.
+    let named =
+      |model: &Offered| model.name.split_once(':').map_or(&*model.name, |one| one.1).width();
+    let wide = offered.into_iter().flatten().map(named).max().unwrap_or_default();
+    let entry = |model: &Offered| {
+      let (provider, name) = model.name.split_once(':').unwrap_or(("", &model.name));
+      let leaned = leaned.filter(|(name, _)| *name == model.name).map(|(_, one)| one);
+      let spoken = effort.as_ref().filter(|one| model.efforts.contains(one));
+      let taken = leaned.or(spoken).or(model.effort.as_ref());
+      let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
+      let used = using.as_deref() == Some(model.name.as_str());
+      let right = match (taken, spoken) {
+        (Some(new), Some(now)) if used && new != now => format!("{now} → {new}"),
+        _ => taken.cloned().unwrap_or_default(),
+      };
+      let images = if model.images { " · images" } else { "" };
+      let held = format!("  {} context{images}", tokens(model.window));
+      Entry {
+        part: provider_named(provider).into(),
+        left: format!("{name:<wide$}"),
+        says: if used { format!("{held}{USED}") } else { held },
+        right,
+        tone: used.then_some(self.tokens.accent),
+        choice: Choice::Actor(actor),
+        ..Entry::default()
+      }
+    };
+    let mut entries: Vec<Entry> = offered.into_iter().flatten().map(entry).collect();
+    if !entries.iter().any(|one| one.part == "Codex") {
+      entries.extend(self.sign_in_rows());
+    }
+    entries
+  }
+
+  /// The efforts that the catalog of its machine gives the model of the input, in its order: the
+  /// one in use in the accent, and the one that the model takes when the operator names none
+  /// marked so.
+  fn efforts(&self) -> Vec<Entry> {
+    let Some((model, effort)) = self.actor() else { return Vec::new() };
+    let offered = self.client.machines.get(self.client.target().machine());
+    let mut offered = offered.and_then(|told| told.models.as_ref()).into_iter().flatten();
+    let Some(one) = offered.find(|one| one.name == model) else { return Vec::new() };
+    let wide = one.efforts.iter().map(|name| name.width()).max().unwrap_or_default();
+    let entry = |name: &String| {
+      let used = effort.as_ref() == Some(name);
+      let default = if one.effort.as_ref() == Some(name) { "  default" } else { "" };
+      Entry {
+        left: format!("{name:<wide$}"),
+        says: if used { format!("{default}{USED}") } else { default.to_owned() },
+        tone: used.then_some(self.tokens.accent),
+        choice: Choice::Actor(format!("{model}/{name}")),
+        ..Entry::default()
+      }
+    };
+    one.efforts.iter().map(entry).collect()
+  }
+
+  /// The chosen model of the list of the models at a lower or a higher effort, among those that the
+  /// catalog of its machine gives, which its row then shows and takes. Whether the list took the
+  /// key: a row of another list leaves it to the input.
+  pub(crate) fn leaned(&mut self, by: isize) -> bool {
+    if self.picker.as_ref().is_some_and(|one| one.of == Pick::Settings && one.filter.is_empty()) {
+      let tabs = self.tabs();
+      let now = tabs.iter().position(|one| *one == self.tab()).unwrap_or_default();
+      let next = now.saturating_add_signed(by).min(tabs.len().saturating_sub(1));
+      self.tabbed(tabs.get(next).cloned().unwrap_or_default());
+      return true;
+    }
+    let Some(at) = self.picker.as_ref().filter(|one| one.of == Pick::Models).map(|one| one.at)
+    else {
+      return false;
+    };
+    let Some(entry) = self.entries().into_iter().nth(at) else { return true };
+    let Choice::Actor(actor) = &entry.choice else { return true };
+    let offered = self.client.machines.get(self.client.target().machine());
+    let offered = offered.and_then(|told| told.models.as_ref()).into_iter().flatten();
+    let named = |model: &&Offered| {
+      let effort = actor.strip_prefix(model.name.as_str()).map(|rest| rest.strip_prefix('/'));
+      effort.is_some_and(|effort| effort.is_none_or(|one| model.efforts.iter().any(|e| e == one)))
+    };
+    let Some(model) = offered.into_iter().find(named) else { return true };
+    let Some(last) = model.efforts.len().checked_sub(1) else { return true };
+    let taken = actor.strip_prefix(model.name.as_str()).and_then(|rest| rest.strip_prefix('/'));
+    let now = model.efforts.iter().position(|one| Some(one.as_str()) == taken).unwrap_or_default();
+    let Some(next) = model.efforts.get(now.saturating_add_signed(by).min(last)).cloned() else {
+      return true;
+    };
+    if let Some(picker) = self.picker.as_mut() {
+      picker.effort = Some((model.name.clone(), next));
+    }
+    true
+  }
+
+  /// The groups of the settings, as tabs, in the order of their keys: furb, each kit, then the
+  /// keys that no schema names.
+  fn tabs(&self) -> Vec<String> {
+    let mut tabs: Vec<String> = Vec::new();
+    for one in self.settings() {
+      if !one.part.is_empty() && !tabs.iter().any(|tab| *tab == one.part) {
+        tabs.push(one.part.into_owned());
+      }
+    }
+    tabs
+  }
+
+  /// The group of the settings that shows: the one that he chose, else the first.
+  fn tab(&self) -> String {
+    let chosen = self.picker.as_ref().map(|one| one.tab.clone()).filter(|one| !one.is_empty());
+    chosen.or_else(|| self.tabs().into_iter().next()).unwrap_or_default()
+  }
+
+  /// The settings on a group, on its first key.
+  pub(crate) fn tabbed(&mut self, tab: String) {
+    if let Some(picker) = self.picker.as_mut() {
+      (picker.tab, picker.at) = (tab, 0);
+    }
+  }
+
+  /// The settings again after he wrote the value of a key, on its group and on its row.
+  fn set_back(&mut self, place: usize) {
+    let tab = self.settings().into_iter().find(|one| one.choice == Choice::Setting(place));
+    let tab = tab.map(|one| one.part.into_owned()).unwrap_or_default();
+    self.picker =
+      Some(Picker { of: Pick::Settings, filter: String::new(), at: 0, effort: None, tab });
+    let at = self.entries().iter().position(|one| one.choice == Choice::Setting(place));
+    if let Some(picker) = self.picker.as_mut() {
+      picker.at = at.unwrap_or_default();
+    }
+  }
+
+  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in in the
+  /// browser of this computer and the one from any device with a code, then while one runs its
+  /// page, the code to enter there in the hue of the choices when the machine gave one, and its
+  /// cancel. The page of a sign-in in the browser calls back the machine that runs it, so another
+  /// machine offers only the code.
+  fn sign_in_rows(&self) -> Vec<Entry> {
+    let row = |left: &str, says: &str, choice| Entry {
+      part: "Codex".into(),
+      left: left.to_owned(),
+      says: if says.is_empty() { String::new() } else { format!("  {says}") },
+      choice,
+      ..Entry::default()
+    };
+    let Some(signing) = self.client.signing.as_ref() else {
+      // What each sign-in says stands in one column, as what each model holds.
+      let code = row("Sign in with a code ", "from any device", Choice::SignIn(true));
+      if self.client.target().machine() != 0 {
+        return vec![code];
+      }
+      let browser = row("Sign in with ChatGPT", "your ChatGPT plan, no key", Choice::SignIn(false));
+      return vec![browser, code];
+    };
+    let mut rows = match (&signing.url, &signing.code, signing.state.as_deref()) {
+      (Some(url), Some(code), _) => {
+        let page = url.split_once("://").map_or(url.as_str(), |(_, page)| page);
+        let entered = Entry {
+          right: code.clone(),
+          tone: Some(self.tokens.accent),
+          ..row("Enter the code there", "", Choice::None)
+        };
+        vec![row(&format!("Open {page}"), "", Choice::Link(url.clone())), entered]
+      }
+      (Some(url), None, _) => {
+        vec![row("Open the sign-in page again", "sign in there", Choice::Link(url.clone()))]
+      }
+      (None, _, Some("connecting")) => vec![row("Connecting to ChatGPT", "", Choice::None)],
+      (None, ..) => vec![row("Starting the sign-in", "", Choice::None)],
+    };
+    rows.push(row("Cancel the sign-in", "keep the models as they are", Choice::CancelSignIn));
+    rows
+  }
+
+  /// The chosen row moved by a count of rows on the screen, within the rows that pass the filter.
+  /// The history rises from the input, so a row up there is an older one.
+  /// A row that says something and takes nothing is passed over, and none stands chosen while a
+  /// row that takes something stands in that way.
+  pub(crate) fn chose(&mut self, by: isize) {
+    let entries = self.entries();
+    if let Some(picker) = self.picker.as_mut() {
+      let by = if picker.of == Pick::History { -by } else { by };
+      let step = if by < 0 { -1 } else { 1 };
+      let takes = |at: usize| entries.get(at).is_some_and(|one| one.choice != Choice::None);
+      let wanted = picker.at.saturating_add_signed(by).min(entries.len().saturating_sub(1));
+      let mut at = Some(wanted);
+      while let Some(one) = at.filter(|one| !takes(*one)) {
+        at = one.checked_add_signed(step).filter(|next| *next < entries.len());
+      }
+      picker.at = at.unwrap_or(picker.at);
+    }
+  }
+
+  /// The text that filters the open list part changed: the first row that passes it is chosen.
+  pub(crate) fn filtered(&mut self, change: impl FnOnce(&mut String)) {
+    if let Some(picker) = self.picker.as_mut() {
+      change(&mut picker.filter);
+      picker.at = 0;
+    }
+    self.chose(0);
+  }
+
+  /// The row at a place taken, and the part closed, or kept with a filter for a project. A key
+  /// that a row names is done by the hand, which this gives.
+  pub(crate) fn took(&mut self, at: usize) -> Option<Does> {
+    let entry = self.entries().into_iter().nth(at)?;
+    let (of, filter, tab) = self.picker.take().map(|one| (one.of, one.filter, one.tab))?;
+    match entry.choice {
+      Choice::Thread(key) => self.went(key),
+      Choice::Session(target) => self.aimed(target),
+      Choice::Visit(at, life) => self.visited(at, life),
+      Choice::Added(text) => self.client.added(&text),
+      Choice::Project(name) => {
+        self.picker = Some(Picker { of, filter: name, at: 0, effort: None, tab: String::new() });
+      }
+      Choice::Actor(actor) => self.took_actor(actor),
+      Choice::Sent(sent) => self.client.recall(&sent),
+      Choice::Key(does) => return Some(does),
+      Choice::Running(at, life) => self.act_on(at, life),
+      Choice::Control(control) => self.controlled(control),
+      Choice::Leave(control) => self.left_with(control),
+      Choice::Setting(place) => {
+        self.picker = Some(if self.client.step_setting(place) {
+          Picker { of, filter, at, effort: None, tab }
+        } else {
+          Picker {
+            of: Pick::Value(place),
+            filter: self.client.setting_text(place),
+            at: 0,
+            effort: None,
+            tab: String::new(),
+          }
+        });
+      }
+      Choice::Value(place) => {
+        self.client.write_setting(place, &filter);
+        self.set_back(place);
+      }
+      Choice::Skill(place) => self.took_skill(place),
+      Choice::Turn(place) => {
+        self.client.turn_skill(place);
+        self.opened_skill(place);
+      }
+      Choice::SignIn(device) => {
+        self.client.sign_in(device);
+        self.sign_in_shown(of);
+      }
+      Choice::CancelSignIn => {
+        self.client.cancel_sign_in();
+        self.sign_in_shown(of);
+      }
+      Choice::Link(address) => {
+        if let Err(no) = (self.browse)(&address) {
+          self.client.notice = Some(format!("The browser did not open {address}: {no}"));
+        }
+        self.sign_in_shown(of);
+      }
+      Choice::None => {
+        self.picker = Some(Picker { of, filter: String::new(), at, effort: None, tab });
+      }
+    }
+    None
+  }
+
+  /// A skill taken from the extensions: the view of an extension opens, and the mention of a skill
+  /// with no code goes to the draft.
+  fn took_skill(&mut self, place: usize) {
+    match self.client.skill_at(place) {
+      Some(one) if one.turned_by.is_null() => {
+        let mention = format!("/{}", one.name);
+        self.client.added(&mention);
+      }
+      Some(_) => self.opened_skill(place),
+      None => {}
+    }
+  }
+
+  /// The view of an extension open, on its first action.
+  fn opened_skill(&mut self, place: usize) {
+    let of = Pick::Skill(place);
+    self.picker =
+      Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
+    self.chose(0);
+  }
+
+  /// The list part closed, or, from the view of an extension, back to the extensions on its row.
+  pub(crate) fn closed_part(&mut self) {
+    let Some(Pick::Skill(place)) = self.picker.as_ref().map(|one| one.of) else {
+      self.picker = None;
+      return;
+    };
+    self.picker = Some(Picker {
+      of: Pick::Skills,
+      filter: String::new(),
+      at: 0,
+      effort: None,
+      tab: String::new(),
+    });
+    let at = self.entries().iter().position(|one| one.choice == Choice::Skill(place));
+    if let Some(picker) = self.picker.as_mut() {
+      picker.at = at.unwrap_or_default();
+    }
+  }
+
+  /// The part open again on the rows of the sign-in of Codex, which change as it goes, so no
+  /// filter hides them, with its first row chosen: the page of the sign-in once the machine gives
+  /// it, and never its cancel, which an enter would take.
+  /// The models, at the sign-in of Codex, as the command login opens them.
+  pub(crate) fn login(&mut self) {
+    self.sign_in_shown(Pick::Models);
+  }
+
+  fn sign_in_shown(&mut self, of: Pick) {
+    self.picker =
+      Some(Picker { of, filter: String::new(), at: 0, effort: None, tab: String::new() });
+    let at = self.entries().iter().position(|one| one.part == "Codex").unwrap_or_default();
+    self.picker = Some(Picker { of, filter: String::new(), at, effort: None, tab: String::new() });
+  }
+
+  /// The thread of a card opened in the window.
+  fn went(&mut self, key: Key) {
+    self.client.selected = Some(key);
+    self.open_thread();
+  }
+
+  /// A session returned to: its last thread opens, else the input turns to it.
+  fn visited(&mut self, at: usize, life: String) {
+    let last = self.client.settled.iter().find(|one| one.1.0 == at && one.1.1 == life);
+    match last.map(|one| one.1.clone()) {
+      Some(key) => self.went(key),
+      None => self.aimed(Target::Session(at, life)),
+    }
+  }
+
+  /// The input turned to a target: none for the thread that is open, or for a new session when no
+  /// thread is.
+  fn aimed(&mut self, target: Target) {
+    let open = self.client.thread.as_ref().map(|one| (one.thread.key.0, one.thread.key.1.clone()));
+    self.client.aim = match target {
+      Target::Session(at, life) if open == Some((at, life.clone())) => None,
+      Target::New(0, ref folder)
+        if self.client.thread.is_none() && *folder == self.client.folder =>
+      {
+        None
+      }
+      other => Some(other),
+    };
+  }
+
+  /// The columns where a list part stands at its middle: those of the home while the list stands
+  /// beside it, so the part covers no card, else the whole window. The columns of the part, which
+  /// leave two on each side at least, or those of the box of the input for the history, which
+  /// grows from it. A part grows past its least width as far as its widest row asks, up to its
+  /// most, so each row stands whole on one row while the window has the room. The rows that it
+  /// measures are those before a filter or a group takes some, so the part keeps its columns while
+  /// he types or changes the group, as a palette does.
+  fn spans(&self) -> (u16, u16) {
+    let entries =
+      &self.picker.as_ref().map(|one| self.unfiltered(one.of, false)).unwrap_or_default();
+    let beside = self.listed() && self.size.0 >= BESIDE;
+    let columns = if beside { self.size.0.saturating_sub(self.panel_width()) } else { self.size.0 };
+    let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
+    let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
+    let asked = entries.iter().map(|one| one.width(badged(entries)) + 4).max().unwrap_or_default();
+    // The row of the filter holds its hint whole beside the widest count, `12 / 12`, and the column
+    // after the count.
+    let hint = self.picker.as_ref().map(|one| one.of.placeholder().width());
+    let count = 2 * entries.len().to_string().len() + 4;
+    let asked = asked.max(hint.map_or(0, |hint| 1 + hint + 2 + count + 4));
+    let asked = u16::try_from(asked).unwrap_or(PARTS).clamp(PART, PARTS);
+    (columns, if rises { input } else { asked.min(columns.saturating_sub(4)) })
+  }
+
+  /// The open list part as the window draws it, at the middle of the columns of the home and under
+  /// the rows that stay above it, with as many of its rows as the window holds, the chosen one
+  /// among them. The history of the input stands over the input instead, where he typed: its text
+  /// at the foot, as the input, and the newest of what he sent just above it.
+  pub(crate) fn over(&self) -> Option<Over> {
+    let picker = self.picker.as_ref()?;
+    let t = &self.tokens;
+    let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
+    let entries = self.entries();
+    let (columns, width) = self.spans();
+    let room = usize::from(width).saturating_sub(4);
+    let padded = |line: Line| {
+      let mut row = vec![run("  ", Style::new())];
+      row.extend(line);
+      row.push(run("  ", Style::new()));
+      row
+    };
+    let rises = picker.of == Pick::History;
+    let mut rows = vec![Row::default()];
+    // The foot names the key that closes the part, so its title stands alone.
+    let title = vec![run(picker.of.title(), t.style(Role::Title))];
+    rows.push(Row::of(padded(spread(title, Vec::new(), room, Style::new()))));
+    let filter = if picker.filter.is_empty() {
+      run(picker.of.placeholder(), muted)
+    } else {
+      run(picker.filter.clone(), prose)
+    };
+    // The count counts the rows that take something, and the place of the chosen one among them.
+    // The filter of a value is the value that he writes, which no count follows.
+    let takes = entries.iter().enumerate().filter(|(_, one)| one.choice != Choice::None);
+    let takes: Vec<usize> = takes.map(|(at, _)| at).collect();
+    let count = match takes.len() {
+      _ if matches!(picker.of, Pick::Value(_)) => String::new(),
+      0 => "nothing".to_owned(),
+      many => format!("{} / {many}", takes.partition_point(|at| *at < picker.at) + 1),
+    };
+    let filter = vec![run("▌", Style::new().fg(t.accent)), filter];
+    // The count ends in the column of what each entry says at its right, one inside its ground.
+    let count = vec![run(count, muted), run(" ", Style::new())];
+    let filter = Row::of(padded(spread(filter, count, room, Style::new())));
+    if !rises {
+      rows.extend([filter.clone(), Row::default()]);
+    }
+    if picker.of == Pick::Settings && picker.filter.is_empty() {
+      rows.extend([self.tab_row(room), Row::default()]);
+    }
+    let fits = usize::from(self.size.1).saturating_sub(2 * usize::from(OVER) + FRAME).max(1);
+    let mut shown = self.shown_entries(&entries, picker, (room, fits));
+    if rises {
+      rows.push(Row::default());
+      shown.reverse();
+    }
+    rows.extend(self.entry_rows(&entries, shown, room));
+    rows.push(Row::default());
+    if rises {
+      rows.extend([filter, Row::default()]);
+    }
+    let chosen = entries.get(picker.at);
+    rows.push(Row::of(padded(vec![run(self.foot(picker, chosen, room), muted)])));
+    rows.push(Row::default());
+    if rises {
+      // Its foot stands on the last row of the input, over the row of hints.
+      let y = self.size.1.saturating_sub(1).saturating_sub(u16::try_from(rows.len()).ok()?);
+      return Some(Over { x: 0, y, width, rows });
+    }
+    let x = columns.saturating_sub(width) / 2;
+    Some(Over { x, y: OVER, width, rows })
+  }
+
+  /// The tabs of the groups of the settings on one row, the one that shows in the accent, each of
+  /// which a click shows.
+  fn tab_row(&self, room: usize) -> Row {
+    let t = &self.tokens;
+    let now = self.tab();
+    let (mut line, mut hot) = (vec![run("  ", Style::new())], Vec::new());
+    for (at, tab) in self.tabs().into_iter().enumerate() {
+      if at > 0 {
+        line.push(run(" ".repeat(APART), Style::new()));
+      }
+      let look = if tab == now { t.style(Role::Title).fg(t.accent) } else { t.style(Role::Muted) };
+      let start = width(&line);
+      line.push(run(tab.clone(), look));
+      hot.push((start..width(&line), Some(Click::Tab(tab))));
+    }
+    let line = spread(line, Vec::new(), room + 2, Style::new());
+    Row { hot, ..Row::of(line) }
+  }
+
+  /// The rows of the entries that show, each between two columns on each side, each that takes
+  /// something with its click. The thumb of the rows that show stands in the column at the right
+  /// of the entries while rows wait above or below them.
+  fn entry_rows(
+    &self,
+    entries: &[Entry],
+    shown: Vec<(Option<usize>, Line)>,
+    room: usize,
+  ) -> Vec<Row> {
+    let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
+    let thumb = thumb(&shown, entries.len(), rises);
+    let bar = run("┃", Style::new().fg(self.tokens.border));
+    let row = |(place, (at, line)): (usize, (Option<usize>, Line))| {
+      let mut row = vec![run("  ", Style::new())];
+      row.extend(spread(line, Vec::new(), room, Style::new()));
+      row.extend([
+        run(" ", Style::new()),
+        if thumb.contains(&place) { bar.clone() } else { run(" ", Style::new()) },
+      ]);
+      // A row that takes nothing takes no click, and the pointer does not light it.
+      let clicked = at
+        .filter(|at| entries.get(*at).is_some_and(|one| one.choice != Choice::None))
+        .map(|at| (2..2 + room, Some(Click::Pick(at))));
+      // The bar of the chosen row and the badge of a project keep their hues under the pointer.
+      let badge = at.and_then(|at| entries.get(at)).is_some_and(|one| one.project.is_some());
+      let keeps = Some(2..if badge { 5 } else { 3 });
+      Row { hot: clicked.into_iter().collect(), keeps, ..Row::of(row) }
+    };
+    shown.into_iter().enumerate().map(row).collect()
+  }
+
+  /// The keys that the foot of a list part names, in its room: to move, to change the effort of a
+  /// chosen model that takes one, to change the group of the settings, to take the chosen row, to
+  /// close. A model is taken for what the
+  /// input sends to: its session, or the new session. The key to move, which each list shares,
+  /// gives way first.
+  fn foot(&self, picker: &Picker, chosen: Option<&Entry>, room: usize) -> String {
+    let model = chosen.is_some_and(|one| matches!(one.choice, Choice::Actor(_)));
+    let link = chosen.is_some_and(|one| matches!(one.choice, Choice::Link(_)));
+    let scope = match self.client.target() {
+      _ if !model => "",
+      Aim::New(..) => " for the new session",
+      _ => " for this session",
+    };
+    let moves = format!("{} move", [Does::Up, Does::Down].map(|one| self.key(one)).join(""));
+    let effort = chosen.filter(|one| model && !one.right.is_empty());
+    let effort = effort.map(|_| format!("{} effort", keys::drawn_each(Does::Lean, self.system)));
+    let tabbed = picker.of == Pick::Settings && picker.filter.is_empty();
+    let groups = tabbed.then(|| format!("{} group", keys::drawn_each(Does::Lean, self.system)));
+    let takes = if link { "open the page" } else { picker.of.takes() };
+    let takes = format!("{} {takes}{scope}", self.key(Does::Send));
+    let close = format!("{} close", self.key(Does::Close));
+    let rest =
+      effort.into_iter().chain(groups).chain([takes, close]).collect::<Vec<_>>().join(" · ");
+    // The editor of a value holds one row, which no move leaves.
+    let whole = format!("{moves} · {rest}");
+    let one = matches!(picker.of, Pick::Value(_));
+    if !one && whole.width() <= room { whole } else { rest }
+  }
+
+  /// The rows of the entries that the part shows: a head before the first entry of each part of the
+  /// list, and each entry, the chosen one on the lifted ground with a bar
+  /// in the hue of its thread, as the selected card of the list. In a list of things that say what
+  /// they do, what the chosen one says stands whole under its name, and what each other says on one
+  /// row, so the list reads as a list and the one that he reads tells all. A row of an entry
+  /// carries its place. The rows start at the one that keeps the chosen entry in view.
+  fn shown_entries(
+    &self,
+    entries: &[Entry],
+    picker: &Picker,
+    (room, fits): (usize, usize),
+  ) -> Vec<(Option<usize>, Line)> {
+    let t = &self.tokens;
+    let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
+    let mut all: Vec<(Option<usize>, Line)> = Vec::new();
+    let mut part: &str = "";
+    // A part whose rows stand in projects keeps the slot of the badge in each of its rows, so each
+    // text of the part starts in one column, and a part with no project keeps none.
+    let badged = |part: &str| entries.iter().any(|one| one.part == part && one.project.is_some());
+    let under = picker.of.describes();
+    for (at, entry) in entries.iter().enumerate() {
+      // The settings name their group in their tabs.
+      let tabbed = picker.of == Pick::Settings;
+      if !tabbed && entry.part != part && !entry.part.is_empty() {
+        if !all.is_empty() {
+          all.push((None, Vec::new()));
+        }
+        all.push((None, vec![run(entry.part.clone(), muted)]));
+        part = &entry.part;
+      }
+      let chosen = at == picker.at;
+      let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style };
+      let hue = entry.hue.and_then(|hue| turn(&t.hues, hue)).unwrap_or(t.accent);
+      let bar =
+        if chosen { run("▌", ground(Style::new().fg(hue))) } else { run(" ", Style::new()) };
+      let badge = match &entry.project {
+        Some(project) => {
+          vec![self.badge(project), run(" ", ground(Style::new()))]
+        }
+        None if badged(&entry.part) => vec![run("   ", ground(Style::new()))],
+        None => Vec::new(),
+      };
+      let indent = 1 + badge.iter().map(|one| one.content.width()).sum::<usize>();
+      let mut left = vec![bar.clone()];
+      left.extend(badge);
+      // A row that takes nothing reads muted, as a line of information.
+      let plain = if entry.choice == Choice::None { muted } else { prose };
+      left.extend(lit(&entry.left, &entry.lit, ground(plain), ground(prose.fg(t.accent))));
+      let says = entry.says.trim();
+      // The last run of the left is the one that a narrow row cuts, so an empty one goes.
+      if !under && !entry.says.is_empty() {
+        left.push(run(entry.says.clone(), ground(muted)));
+      }
+      let tone = entry.tone.map_or(muted, |tone| Style::new().fg(tone));
+      let right = vec![run(entry.right.clone(), ground(tone)), run(" ", ground(Style::new()))];
+      all.push((Some(at), spread(left, right, room, ground(Style::new()))));
+      let lines = if under { described(says, room - indent - 1, chosen) } else { Vec::new() };
+      for line in lines {
+        let line = vec![
+          bar.clone(),
+          run(" ".repeat(indent - 1), ground(Style::new())),
+          run(line, ground(muted)),
+        ];
+        all.push((Some(at), spread(line, Vec::new(), room, ground(Style::new()))));
+      }
+    }
+    let chosen = all.iter().rposition(|one| one.0 == Some(picker.at)).unwrap_or_default();
+    let top = (chosen + 1).saturating_sub(fits);
+    let mut shown: Vec<(Option<usize>, Line)> = all.into_iter().skip(top).take(fits).collect();
+    // A head or a blank row that the room cuts from the entries under it does not show.
+    while shown.last().is_some_and(|one| one.0.is_none()) {
+      shown.pop();
+    }
+    shown
+  }
+
+  /// The open list part as the window draws it: its column, its row and its columns, and its
+  /// lines, the text of the row under the pointer bright.
+  pub(crate) fn drawn_over(&self) -> Option<(u16, u16, u16, Vec<Line>)> {
+    let over = self.over()?;
+    let lit = |(y, row): (usize, Row)| match self.pointer {
+      Some((x, at)) if usize::from(at) == usize::from(over.y) + y && x >= over.x => {
+        row.lit(usize::from(x - over.x), self.tokens.hover).line
+      }
+      _ => row.line,
+    };
+    let lines = over.rows.into_iter().enumerate().map(lit).collect();
+    Some((over.x, over.y, over.width, lines))
+  }
+
+  /// The pointer while a list part is open: a click on a row of the part takes its entry, and a
+  /// click beside the part closes it; the wheel moves the chosen row one row at a time, as in fzf,
+  /// so the mouse reaches each row of a list that holds more than the window shows. The key that
+  /// the taken row names.
+  pub(crate) fn pointed_over(&mut self, event: MouseEvent) -> Option<Does> {
+    match event.kind {
+      MouseEventKind::Down(MouseButton::Left) => self.clicked_over(event.x, event.y),
+      MouseEventKind::ScrollUp => {
+        self.chose(-1);
+        None
+      }
+      MouseEventKind::ScrollDown => {
+        self.chose(1);
+        None
+      }
+      _ => None,
+    }
+  }
+
+  fn clicked_over(&mut self, x: u16, y: u16) -> Option<Does> {
+    let over = self.over()?;
+    let inside = (over.x..over.x + over.width).contains(&x) && y >= over.y;
+    let row = inside.then(|| over.rows.get(usize::from(y - over.y))).flatten();
+    if let Some(row) = row {
+      return match row.click(usize::from(x - over.x)) {
+        Some(Click::Pick(at)) => self.took(at),
+        Some(Click::Tab(tab)) => {
+          self.tabbed(tab);
+          None
+        }
+        _ => None,
+      };
+    }
+    self.picker = None;
+    None
+  }
+}
+
+/// A session of a machine: the machine, the record, its name and its project.
+struct Session {
+  at: usize,
+  life: String,
+  name: String,
+  project: String,
+  used: Option<u64>,
+}
+
+/// A text with the letters at some places in the bright style, and the rest in the plain one.
+pub(crate) fn lit(text: &str, places: &[usize], plain: Style, bright: Style) -> Line {
+  let mut line: Line = Vec::new();
+  let mut chars = text.chars().enumerate().peekable();
+  while let Some((at, first)) = chars.next() {
+    let on = places.contains(&at);
+    let mut content = first.to_string();
+    while let Some((_, next)) = chars.next_if(|(at, _)| places.contains(at) == on) {
+      content.push(next);
+    }
+    line.push(run(content, if on { bright } else { plain }));
+  }
+  line
+}
+
+/// Where a card stands: its project, and its session when it has a name.
+fn place(card: &Card) -> String {
+  let named = card.session.as_ref().filter(|name| !name.is_empty() && **name != card.thread.title);
+  named.map_or_else(|| project(card), |name| format!("{} · {name}", project(card)))
+}
+
+/// The name of a provider as a head of the models says it.
+fn provider_named(provider: &str) -> &'static str {
+  match provider {
+    "claude-cli" => "Claude",
+    "codex" => "Codex",
+    "anthropic" => "Anthropic",
+    "openai" => "OpenAI",
+    "local" => "Local",
+    _ => "Other",
+  }
+}
+
+/// The name of a record with no name: its file, with no extension.
+fn stem(life: &str) -> String {
+  let name = life.rsplit(['/', '\\']).next().unwrap_or(life);
+  name.strip_suffix(".jsonl").unwrap_or(name).to_owned()
+}
+
+/// The last part of a path of a folder.
+fn tail(path: &str) -> &str {
+  path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// The rows of the shown rows of a list part that its thumb covers: the share of the entries that
+/// show, at the place of those that wait above them, and none while each entry shows. The history
+/// stands newest at its foot, so what waits above it is what comes after.
+fn thumb(shown: &[(Option<usize>, Line)], count: usize, rises: bool) -> Range<usize> {
+  let at = shown.iter().filter_map(|one| one.0);
+  let (Some(first), Some(last)) = (at.clone().min(), at.max()) else { return 0..0 };
+  if first == 0 && last + 1 >= count {
+    return 0..0;
+  }
+  let (above, below) = (first, count - 1 - last);
+  let (above, below) = if rises { (below, above) } else { (above, below) };
+  let rows = shown.len();
+  let start = (rows * above / count).min(rows - 1);
+  start..(rows - rows * below / count).max(start + 1)
+}
+
+/// The rows of the projects of Go to: each project of a session, with its count of sessions.
+fn projects(sessions: &[Session]) -> Vec<Entry> {
+  let mut projects: Vec<(&str, usize)> = Vec::new();
+  for one in sessions.iter().filter(|one| !one.project.is_empty()) {
+    if let Some(project) = projects.iter_mut().find(|project| project.0 == one.project) {
+      project.1 += 1;
+    } else {
+      projects.push((&one.project, 1));
+    }
+  }
+  let row = |(name, count): (&str, usize)| Entry {
+    part: "Projects".into(),
+    project: Some(name.to_owned()),
+    left: name.to_owned(),
+    right: format!("{count} session{}", if count == 1 { "" } else { "s" }),
+    choice: Choice::Project(name.to_owned()),
+    ..Entry::default()
+  };
+  projects.into_iter().map(row).collect()
+}
+
+/// The rows of what an entry says under its name in a room: all of it, or its first row with a
+/// mark of the rest when it holds more.
+fn described(says: &str, room: usize, whole: bool) -> Vec<String> {
+  if says.is_empty() {
+    Vec::new()
+  } else if whole || says.width() <= room {
+    balanced(says, room)
+  } else {
+    let first = wrapped(says, room.saturating_sub(1)).swap_remove(0);
+    vec![format!("{first}…")]
+  }
+}

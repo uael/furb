@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · edit the notes of the day           ✓ Resolved      All projects ▾        This computer
+  ┃ (the model edits a file)
+  ┃                                                            Resting 1
+                                                opus/high     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+    1  write(Text('notes.md', 'a\nb\nc\n'))                   ▐ ● edit the notes of the day   now ▌
+       └ notes.md  wrote 3 lines                              ▐   FU furb                    opus ▌
+         + a                                                  ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+         + b
+         + c
+    2  m = read('notes.md')
+    3  write(m.replace('b\n', 'B\nb2\n'))
+       └ notes.md  +2 −1
+           a
+         - b
+         + B
+         + b2
+           c
+    4  close('notes.md has 4 lines.')
+
+  ↶ Revert notes.md  ⌃X D
+
+  notes.md has 4 lines.
+
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → edit the… ▾   opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb                          ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

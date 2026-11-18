@@ -2,40 +2,90 @@
 
 # furb
 
-**An AI agent that answers in Python, on a record that you can read, replay and audit.**
+**An AI agent that writes Python instead of calling tools, in sessions that last for months.**
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-<img src="https://raw.githubusercontent.com/uael/furb/main/docs/furb.gif" alt="The furb TUI: a message, the Python that the model writes, a Python word of the operator, the three views, the command palette, the rewind tree, and a change of theme" width="880">
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.gif" alt="The window of furb: one reply of Python starts an agent for each changed file, all at once, under the line that made them, fixes the tests until they pass, and closes with what each agent found" width="880">
 
 </div>
 
-furb runs a model as a programmer, not as a caller of tools. You give the model a task. It answers with a short
-Python program, which furb calls a word. furb checks the word, runs it, and shows the model what happened. The model
-writes its next word, and so on, until it gives you its answer.
+Most agents make the model choose one tool call at a time. furb lets the model write Python instead.
 
-Each step goes into a record: each word, each answer of a model, and each result of a command. Stop furb at any
-time, open the record again, and the work goes on from where it stopped.
+In one reply, the model reads files, starts ten commands at once, asks other models, loops until the tests pass, and
+keeps a function for the next time it needs it. furb runs each line as soon as the model writes it, and shows the
+model what happened. The model decides only what code cannot. Loops, retries and fan-out are plain Python.
 
-## Why it matters
+A session of furb is also made to last. Each step goes into a record. Close the window and come back next month: the
+session opens where you left it, and a new version of furb opens it too, as
+[the promise](https://github.com/uael/furb/blob/main/docs/promise.md) says. Keep one session that reviews your pull
+requests, one that does your taxes each year, one that runs your week. The functions that its models wrote, its notes
+and its kits stay, so each task starts from what the tasks before it built. That is compounding.
 
-- **One answer does a lot of work.** Most agents call one tool for each turn of the model. In furb, one word reads
-  files, runs commands, asks other models, waits for them, and joins the results with loops and conditions.
-- **Nothing is hidden from you.** The whole system prompt is one Python file,
-  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7200 tokens
-  of `o200k_base`, the tokenizer of OpenAI. The transcript is the exact text that the model reads.
-- **A word is checked before it runs.** A type checker reads each word first. A word that it refuses never runs, and
-  the model reads why.
-- **The record is the truth.** A life that a crash stopped goes on from its record. A later run replays it exactly,
-  and [an audit](https://github.com/uael/furb/blob/main/docs/audit.md) checks it with no model and no network.
-- **Work runs side by side.** A word can start many commands and questions, then wait for all of them. Chains,
-  which are separate conversations, work in parallel, each with its own state.
-- **You stay in control.** The model can ask you a question and wait for your answer. You can pause any work, set a
-  dollar ceiling, rewind a chain to an earlier point, or change the plan of a model while it works.
-- **Extensions are Python too.** An extension is a word that each chain runs, so the model reads it as it reads its
-  own work. furb comes with [eight extensions](https://github.com/uael/furb/blob/main/docs/extensions.md): what
-  changed on the machine since the last run, the memory of a project, its skills, compaction, the name of a session, a guide to
-  extend furb, the web, and the servers of MCP.
+## Try it in a minute
+
+You need Python 3.14 and a model: the `claude` command line, an API key such as `ANTHROPIC_API_KEY`, or a local
+server that `FURB_LOCAL_URL` names. Two prompts on one record are two visits to one session, and the second one knows
+what the first one read.
+
+```sh
+pip install furb
+furb prompt --record repo.jsonl "Read this repository and tell me what it does."
+furb prompt --record repo.jsonl "Now list its three riskiest parts."
+```
+
+## Why furb
+
+**One reply can replace a dozen turns.** A harness of tool calls needs a new turn of the model each time it must
+choose what to do with a result. In furb, the model writes the choice. Here is one reply that reviews a diff and fixes
+the tests, from start to end with no turn in between:
+
+```python
+changed = (await bash('git diff --name-only main')).stdout.content.split()
+reviews = [prompt(str, f'Find the bugs in {path}.', on=chain(path)) for path in changed]
+found = []
+for review in reviews:
+  found.append(await review)
+fixer = chain('fix')
+tests = await bash('python3 tests/test_report.py', ok=True)
+while tests.code:
+  await prompt(None, f'Fix this failure:\n{tests.stdout.content}', on=fixer)
+  tests = await bash('python3 tests/test_report.py', ok=True)
+close('\n\n'.join(found))
+```
+
+It asks one model for each changed file, all at the same time, on chains of their own. Then it fixes the tests until
+they pass, and gives its report. A chain is a conversation with its own state. A prompt is a call like any other, so
+a model can ask a model as easily as it runs a command. The window at the top of this page runs this very reply.
+
+**Sessions that last.** A session is a record that only grows. furb replays it exactly, so a crash or a reboot loses
+nothing. A large session opens quickly from an image of its last state. The functions that a model wrote
+stay bound, so the next task starts where the last one stopped.
+
+**Nothing is hidden.** The system prompt is the source code of the engine: one Python file,
+[`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), of about 8000 tokens. The
+model reads how its own runtime works, line by line, and so can you. The transcript is the exact text that the model
+reads, and [an audit](https://github.com/uael/furb/blob/main/docs/audit.md) checks a record with no model and no
+network.
+
+**Any model.** Use the Claude subscription of your `claude` command line, a ChatGPT subscription, an API key of any
+provider that [models.dev](https://models.dev) lists, or a model on your own machine.
+[The page of models](https://github.com/uael/furb/blob/main/docs/models.md) says how.
+
+**Make it yours.** A skill or a script becomes Python that furb runs: a kit. A kit can run a process of its own, in
+Python or TypeScript, and add its own parts to the window, live, while you work.
+[Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) says how they work.
+
+**Many things at once.** Each thread of each session of the machine stands in one list, with what works now and what
+waits for you first. You can pause, cancel or steer any work while it runs, and a chain that waits for you does not
+stop the others.
+
+> [!WARNING]
+> **furb asks for no permission, on purpose.** Each command that a model writes runs with the rights of your user,
+> with no step where you approve it. Most people already run their agent this way, and a question that comes fifty
+> times a day protects nobody. Real safety is a boundary: for work that you do not trust, run furb in a container or a
+> virtual machine that holds only what the work needs. If you want finer permissions, as Claude Code has them, write
+> them as a kit.
 
 ## Install
 
@@ -54,18 +104,28 @@ furb asks the models of each provider whose key stands in the environment, such 
 `OPENAI_API_KEY`, and the models of a local server that `FURB_LOCAL_URL` names.
 [The page of models](https://github.com/uael/furb/blob/main/docs/models.md) says how to choose one.
 
-## A first life
+## The window
 
-The TUI runs from a clone of this repository, with no Python. It needs Git, [Bun](https://bun.sh) 1.4.2 or later and
-the Rust toolchain, and [the TUI](https://github.com/uael/furb/blob/main/tui/README.md#start-it) says how to install
-them on macOS, Linux and Windows. The first build takes some minutes:
+The window is not packaged yet. To try it today, build it from a clone, with Git, the Rust toolchain and
+[Zig](https://ziglang.org/download/) 0.17.1. Its first build takes some minutes:
 
 ```sh
 git clone https://github.com/uael/furb && cd furb
-bun install && bun run build         # The TypeScript package that the TUI runs on.
-bun run demo                         # Watch a life that plays by itself. It asks no model and costs nothing.
-bun run tui                          # Start a real life on your models.
+cargo build -p furb-cli -p furb-window  # furb and its window, side by side in target/debug.
+target/debug/furb                       # The window, on the daemon of this machine, which it starts when none runs.
 ```
+
+On Windows the window also needs the library of OpenTUI beside it, as
+[the window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window) says.
+
+Type a message and press Enter: it starts a new session in the project of the folder, and its thread shows each word
+that the model writes and runs. ⌃X P chooses another project, or no project for work with no code: that session runs
+in a folder of its own that furb makes. The list at the right holds each thread of the machine, and what waits for
+you first. `furb` with no command starts the same window.
+
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window-cards.png" alt="The list of the threads of the machine, which says the thread that waits for an input, the one that failed, those that work and those that rest" width="880">
+
+## In your own program
 
 In a program, a life is a few lines. This one asks for a plan, and keeps its record in `release.jsonl`:
 
@@ -101,13 +161,14 @@ same program in TypeScript and in Rust, and four more.
 
 | To | Read |
 | --- | --- |
-| Use the TUI | [The TUI](https://github.com/uael/furb/blob/main/tui/README.md), and [a picture of each screen](https://github.com/uael/furb/blob/main/docs/tui.md) |
+| Use the window | [The window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window): its keys, and how to build it |
 | Choose a model, or use a local one | [Models](https://github.com/uael/furb/blob/main/docs/models.md) |
-| Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/bind/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/bind/typescript/README.md) |
-| Use the command line | [The command line](https://github.com/uael/furb/blob/main/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
-| Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) |
+| Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/crates/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/crates/typescript/README.md) |
+| Use the command line | [The command line](https://github.com/uael/furb/blob/main/crates/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
+| Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) |
 | See what may come | [Ideas for later](https://github.com/uael/furb/blob/main/docs/ideas.md) |
 | Check a record that someone gave you | [The audit](https://github.com/uael/furb/blob/main/docs/audit.md) |
+| Know what a release keeps | [The promise](https://github.com/uael/furb/blob/main/docs/promise.md): within a major, each life opens and resumes with no drift, from 1.0.0 |
 | Change furb | [Contributing](https://github.com/uael/furb/blob/main/CONTRIBUTING.md), and [the contract](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), every law of the engine |
 
 ## License

@@ -11,9 +11,8 @@
 //! process that is gone leaves its conversation on the disk under its id, so a later turn resumes
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
-
 use std::{
-  env,
+  env, io,
   path::{Path, PathBuf},
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -41,14 +40,17 @@ mod locate;
 mod process;
 mod protocol;
 use accounts::Accounts;
-pub use accounts::{Account, Source, Switch};
+pub use accounts::{Account, Source, Switch, Token};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
+use futures::{future, stream};
 use keeper::Kept;
 use locate::PROGRAM;
 pub(super) use locate::located;
 use process::Spend;
+use std::path;
+use std::process as std_process;
 
 /// The name of the command line as a provider: each response of it says this name, and each of its
 /// models is named by it and the alias of its family.
@@ -62,9 +64,9 @@ pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 /// end once its stdout closed.
 const STALL: Duration = Duration::from_mins(15);
 
-/// How long a process waits for its program when the program is missing or does not run, unless
-/// `FURB_CLAUDE_GONE` gives other seconds: the command line that updates itself replaces its
-/// program, and its link points at nothing for a moment.
+/// How long a process waits for its program when the program is missing or does not run: the
+/// command line that updates itself replaces its program, and its link points at nothing for a
+/// moment.
 const GONE: Duration = Duration::from_secs(60);
 
 /// What the command line says when it holds no conversation under the id that a process resumes, as
@@ -93,6 +95,13 @@ pub(super) enum Error {
   /// asks again.
   #[error("{0}")]
   SignedOut(String),
+  /// An account with no token to give the command line, which a token or another account ends,
+  /// as it ends a failed sign in.
+  #[error(transparent)]
+  NoToken(#[from] Token),
+  /// Every account signed out.
+  #[error("Every account of the claude command line is signed out. Sign one in, then run /reload.")]
+  Exhausted,
   /// The program was missing or did not run, as while an update of claude replaces it, which
   /// passes.
   #[error("No program to run: {0}")]
@@ -166,32 +175,33 @@ pub struct Claude {
   program: Program,
   stall: Duration,
   gone: Duration,
-  keeper: mpsc::UnboundedSender<Kept>,
+  /// The keeper of the conversations, or why the system gave it no runtime, which each turn
+  /// then gives.
+  keeper: Result<mpsc::UnboundedSender<Kept>, Arc<io::Error>>,
 }
 
 impl Claude {
   /// The command line of [`Claude::with`] and no program, when `FURB_CLAUDE_BIN` names one or this
   /// machine holds one.
-  pub fn found() -> Option<Claude> {
-    located().map(|bin| Claude::with(Some(bin), None))
+  pub fn found() -> Option<Self> {
+    located().map(|bin| Self::with(Some(bin), None))
   }
 
   /// The command line at this program, and how long a turn may go with no progress. With no
   /// program, it is the one that `FURB_CLAUDE_BIN` names, or the one found on this machine; with no
-  /// stall, `FURB_CLAUDE_STALL` gives it in seconds, or it is 900 seconds. A process waits for a
-  /// program that is missing or does not run for the seconds that `FURB_CLAUDE_GONE` gives, or for
-  /// 60 seconds.
-  pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
+  /// stall, `FURB_CLAUDE_STALL` gives it in seconds, or it is 900 seconds. A process waits 60
+  /// seconds for a program that is missing or does not run.
+  pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
-    Claude::with_command(bin, Vec::new(), stall)
+    Self::with_command(bin, Vec::new(), stall)
   }
 
   /// The command line that this program starts with these words before every flag that furb gives
   /// it, as `cswap run 3` holds the program `cswap` and the words `run` and `3`. No shell reads the
   /// words: each reaches the program as it stands, with its spaces, once, for a turn and for a
   /// search alike. The stall is the one of [`Claude::with`].
-  pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Claude {
-    Claude::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
+  pub(super) fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Self {
+    Self::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
   }
 
   /// The command line that runs as these accounts, in the order of the list. The program and the
@@ -200,13 +210,17 @@ impl Claude {
   /// account and ends as a failure that passes, so the turn that asks again runs as another
   /// account: a limit parks an account until its reset, and a failed sign in until a new command
   /// line stands, as after a reload. With one account or none, nothing is parked.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the command line takes its program, its words, its accounts, the policy that switches them and its stall, each that a config gives apart"
+  )]
   pub fn with_accounts(
     bin: Option<PathBuf>,
     args: Vec<String>,
     accounts: Vec<Account>,
     switch: Switch,
     stall: Option<Duration>,
-  ) -> Claude {
+  ) -> Self {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
@@ -214,8 +228,13 @@ impl Claude {
     });
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
-    Claude { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
+    let keeper = runtime()
+      .map(|runtime| {
+        drop(runtime.spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade())));
+        keeper
+      })
+      .map_err(Arc::new);
+    Self { program: Program::with(bin, args, accounts), stall, gone: GONE, keeper }
   }
 
   /// Whether the command line is signed in, as `claude auth status` says. It counts as signed in
@@ -235,8 +254,8 @@ impl Claude {
   /// The same command line, whose process waits this long for a program that is missing or does not
   /// run.
   #[cfg(all(test, unix))]
-  pub(crate) fn waiting(self, gone: Duration) -> Claude {
-    Claude { gone, ..self }
+  pub(crate) fn waiting(self, gone: Duration) -> Self {
+    Self { gone, ..self }
   }
 
   /// One model of the command line, by its name, as a completion model of rig.
@@ -250,10 +269,12 @@ impl Claude {
   /// thought of a turn under the setting `max_thinking_tokens`. The command line counts what it
   /// read of the cache apart from the rest of what it read.
   ///
-  /// The command line says its models itself, with no model prompt, once for each version of its
-  /// program: a process of its own asks it, and furb keeps the answer in its cache until the
-  /// program changes or [`refresh`] is called. A command line that does not answer, as an older one
-  /// does not, gives the fixed table of furb, within 20 seconds.
+  /// The command line says its models itself, with no model prompt: a process of its own asks it,
+  /// and furb keeps the answer in its cache. The models are what the cache holds, with no wait, and
+  /// an answer that is an hour old is asked again behind them, for the next models. They wait for
+  /// the command line, for 20 seconds at most, only while the cache holds nothing of its program:
+  /// before its first answer, after the program changes, and after [`refresh`]. A command line that
+  /// does not answer, as an older one does not, gives the fixed table of furb.
   pub async fn models(&self) -> Vec<Model> {
     self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }
@@ -302,22 +323,22 @@ pub(super) struct Program {
 
 impl Program {
   #[cfg(all(test, unix))]
-  pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Program {
-    Program::with(bin, args, Arc::new(Accounts::new(Vec::new(), Switch::default())))
+  pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Self {
+    Self::with(bin, args, Arc::new(Accounts::new(Vec::new(), Switch::default())))
   }
 
-  fn with(bin: PathBuf, args: Vec<String>, accounts: Arc<Accounts>) -> Program {
-    Program { bin: bin.into(), args: args.into(), accounts, pin: None }
+  fn with(bin: PathBuf, args: Vec<String>, accounts: Arc<Accounts>) -> Self {
+    Self { bin: bin.into(), args: args.into(), accounts, pin: None }
   }
 
   /// The same program, whose commands all run as this account.
-  fn under(&self, at: usize) -> Program {
-    Program { pin: Some(at), ..self.clone() }
+  fn under(&self, at: usize) -> Self {
+    Self { pin: Some(at), ..self.clone() }
   }
 
   /// A command that holds the program and its words, and the credential of its account. It fails
-  /// with the reason when the token of the account cannot be read.
-  fn command(&self) -> Result<Command, String> {
+  /// when the token of the account cannot be read.
+  fn command(&self) -> Result<Command, Token> {
     let mut command = Command::new(&*self.bin);
     command.args(&*self.args);
     let at = self.pin.unwrap_or_else(|| self.accounts.first_free(SystemTime::now()));
@@ -327,15 +348,18 @@ impl Program {
 
   /// A command that holds the program and its words, then these flags, then the flags and the
   /// environment that furb gives the command line for a turn, a probe and a search alike: no source
-  /// of settings, no server of another, no command of its own, no bundled skill and no traffic of
-  /// no use. Each adds its own flags after them. It fails with the reason when the token of the
-  /// account cannot be read.
-  pub(super) fn base_command(&self, first: &[&str]) -> Result<Command, String> {
+  /// of settings, no server of another, no command of its own and no bundled skill, and no traffic
+  /// of no use when `quiet`. The probe of the models is not quiet, since the command line lists
+  /// fewer models with its traffic off. Each adds its own flags after them. It fails when the
+  /// token of the account cannot be read.
+  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, Token> {
     let mut command = self.command()?;
     command.args(first);
     command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-    command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    if quiet {
+      command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    }
     Ok(command)
   }
 
@@ -344,21 +368,21 @@ impl Program {
     let Ok(mut command) = self.command() else { return false };
     command
       .args(["auth", "status"])
-      .stdin(std::process::Stdio::null())
-      .stdout(std::process::Stdio::piped())
-      .stderr(std::process::Stdio::piped());
+      .stdin(std_process::Stdio::null())
+      .stdout(std_process::Stdio::piped())
+      .stderr(std_process::Stdio::piped());
     let Some(out) = child::output(&mut command, Duration::from_secs(10)).await else {
       return true;
     };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
-      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
+      serde_json::from_str::<Value>(&said).ok().and_then(|one| one.get("loggedIn")?.as_bool());
     let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
     logged.unwrap_or(!words.contains("not logged in"))
   }
 
   /// The file of the program, as a failure to start it names it.
-  pub(super) fn name(&self) -> std::path::Display<'_> {
+  pub(super) fn name(&self) -> path::Display<'_> {
     self.bin.display()
   }
 }
@@ -385,11 +409,10 @@ impl CompletionModel for Completion {
     self.claude.turn(&self.name, request, None).await
   }
 
-  #[expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
-  async fn stream(
+  fn stream(
     &self,
     request: CompletionRequest,
-  ) -> Result<StreamingCompletionResponse, CompletionError> {
+  ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> + Send {
     let (claude, name) = (self.claude.clone(), self.name.clone());
     let (deltas, mut heard) = mpsc::unbounded_channel();
     let turn = async move {
@@ -397,7 +420,12 @@ impl CompletionModel for Completion {
       // Rig makes the choice of a stream of the parts it streamed, so the raw record of its end
       // holds the blocks the command line settled whole, which stand over those parts.
       let got = got.map(|mut response| {
-        response.raw["settled"] = serde_json::to_value(&response.choice).unwrap_or_default();
+        if let Some(raw) = response.raw.as_object_mut() {
+          raw.insert(
+            "settled".to_owned(),
+            serde_json::to_value(&response.choice).unwrap_or_default(),
+          );
+        }
         RawStreamingChoice::FinalResponse(ended(CLAUDE, response))
       });
       drop(deltas.send(got));
@@ -405,10 +433,9 @@ impl CompletionModel for Completion {
     };
     // The turn goes with the stream: it runs as the stream is read, and a stream that is dropped
     // ends it.
-    let told = futures::stream::poll_fn(move |cx| heard.poll_recv(cx));
-    let stream =
-      futures::stream::select(told, futures::stream::once(turn).filter_map(async |one| one));
-    Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
+    let told = stream::poll_fn(move |cx| heard.poll_recv(cx));
+    let stream = stream::select(told, stream::once(turn).filter_map(async |one| one));
+    future::ready(Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream))))
   }
 }
 
@@ -468,7 +495,17 @@ impl Claude {
     let program = self.program.under(at);
     let run = Run { program: &program, stall: self.stall, gone: self.gone, deltas };
     let got = held.turn(&messages, spend, &run).await;
-    got.map_err(|no| self.switched(at, no))
+    let name = accounts.name(at).to_owned();
+    got
+      .map(|mut response| {
+        if !name.is_empty()
+          && let Some(raw) = response.raw.as_object_mut()
+        {
+          raw.insert("account".to_owned(), json!(name));
+        }
+        response
+      })
+      .map_err(|no| self.switched(at, no))
   }
 
   /// The failure of a turn that finds every account parked: the wait for the first reset of a
@@ -476,10 +513,7 @@ impl Claude {
   fn exhausted(&self, now: SystemTime) -> CompletionError {
     refused(match self.program.accounts.earliest(now) {
       Some(end) => Error::Limit { until: Some(end) },
-      None => Error::SignedOut(
-        "Every account of the claude command line is signed out. Sign one in, then run /reload."
-          .to_owned(),
-      ),
+      None => Error::Exhausted,
     })
   }
 
@@ -497,7 +531,9 @@ impl Claude {
       Some(Error::Limit { until }) => {
         (Some(until.unwrap_or(now + super::LIMIT_POLL)), "its usage limit")
       }
-      Some(Error::SignedOut(_)) => (None, "its sign in failed"),
+      Some(Error::SignedOut(_) | Error::NoToken(_) | Error::Exhausted) => {
+        (None, "its sign in failed")
+      }
       _ => return no,
     };
     accounts.park(at, until);
@@ -516,13 +552,6 @@ impl Claude {
 /// A failure of the command line, in its own words.
 fn failed(why: impl Into<String>) -> CompletionError {
   CompletionError::ProviderError(why.into())
-}
-
-/// How long a process waits for its program: the seconds that `FURB_CLAUDE_GONE` gives, or
-/// [`GONE`].
-fn patience() -> Duration {
-  let seconds = env::var("FURB_CLAUDE_GONE").ok().and_then(|one| one.parse::<f64>().ok());
-  seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(GONE)
 }
 
 #[cfg(all(test, unix))]

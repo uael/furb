@@ -18,37 +18,39 @@ large change, open an issue first, so we can agree on its shape before you do th
 | Python 3.14 or later | The engine and the suite. |
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
-| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. |
+| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings. |
+| [cargo-nextest](https://nexte.st) 0.9.131 or later, as `cargo binstall cargo-nextest` installs it | The runner of the Rust tests, each in a process of its own, as `.config/nextest.toml` sets it. |
+| [cargo-hakari](https://docs.rs/cargo-hakari) 0.9.39, as `cargo install --locked cargo-hakari` installs it, which `cargo xtask tree new` runs | The crate `crates/hack`, which takes the features of each dependency over the workspace, so a command builds `furb` once whatever packages it selects. After a change of a dependency, run `cargo hakari generate && cargo hakari manage-deps --yes`; a hook fails while it stands old. |
+| [Zig](https://ziglang.org/download/) 0.17.1, as `zig` on PATH | The native library of OpenTUI, which the build of the window makes once, in about two minutes, and keeps in `target/opentui`. Each cargo command over the workspace builds the window; `uv sync` and `bun run build` do not. The build refuses another version of Zig. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
-| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
+| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as the window, `furb prompt` or `cargo xtask smoke`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
 ## Set up a clone
 
 ```sh
 git clone https://github.com/uael/furb && cd furb
 uv sync                              # The Python environment, which builds the crate and the command line.
-git config core.hooksPath script/hooks # The hooks: the gates at each commit, with output for failures only.
-bun install && bun run build         # The TypeScript workspace, and the N-API package that the TUI uses.
-bun run demo                         # The TUI on a scripted life. It asks no model.
+git config core.hooksPath script/hooks # The hooks: the form of the files of each commit, in about 2 seconds.
+bun install && bun run build         # The TypeScript workspace, and the N-API package.
+cargo build -p furb-cli -p furb-window # furb and its window, side by side in target/debug.
 ```
 
 The first `uv sync` builds the crate, and it takes some minutes. After that, `uv run` builds again only what a change
 touches.
 
-To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`, which
+To work on a second branch beside this clone, make its worktree with `cargo xtask tree new <path> <branch>`, which
 [`AGENTS.md`](AGENTS.md#commands) says. It takes an existing branch too, and its first build is warm.
 
 ## How a word runs
 
 1. A prompt asks a model for a response of a shape, such as `str`.
 2. The model answers with Python. That answer is a word, and a rung runs it.
-3. The gate reads the word first: a type checker reads it, and a sandbox runs each of its imports. A word that it
-   refuses does not run, and the model reads the reason in its next turn.
-4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
-   makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear of the World,
-   which reaches the disk, the machine, the models, the operator, or the record. The owner answers the act: now, or
-   later.
-5. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
+3. The Kernel runs the word in the module of its chain. A statement that is not Python, or that names what nothing
+   binds, raises where it runs, and the model reads the raise in its next turn. Each call such as `read`, `bash`,
+   `prompt`, or `wait` makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear
+   of the World, which reaches the disk, the machine, the models, the operator, or the record. The owner answers the
+   act: now, or later.
+4. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
    Python that the model reads next.
 
 ## The files of each part
@@ -69,13 +71,14 @@ contract needs a request of the owner.
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
 
-### The Kernel and the gate
+### The Kernel
 
 | File | What it holds |
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
-| `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
-| `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
+| `src/furb/checkpoint.py` | The checkpointer, which gathers the data of the carry of a crossing and seeds the next engine from it, on the names of the engine. Both engines load it, and `src/furb/checkpoint.pyi` is its contract. |
+| `src/furb/record.py` | What stands, in the record that boot is given, for a value that no later life makes again as it was. Both engines load it. |
+| `src/furb/awaits.py` | The await of an act from outside a run, on the engine of this interpreter: the `Act` that the package binds in that engine, which the operator awaits on the loop of the life. The door of monty holds its own. |
 
 ### The World and the life
 
@@ -85,17 +88,18 @@ contract needs a request of the owner.
 | `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`, and a read of an image, which a model sees. |
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs`, `src/world/bash/` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. `shell.rs` holds the sh and its PATH, `group.rs` the processes that a command ends together, and `kept.rs` the head and the tail that a stream keeps. |
-| `src/world/fetch.rs` | The fetch: a page over HTTP as a text, as Markdown when it is HTML, which the question `fetch` asks. |
-| `src/world/mcp.rs`, `src/world/mcp/` | The client of the MCP servers: the ear `mcp`, which answers the acts `mcp_*` and says the fact `mcp_changed`, and the servers, their config, their sign-in and their tools. |
+| `src/world/kits.rs`, `src/world/kits/uv.rs` | The host of the kits: the process of each kit that a life plays, started at the first act of a kind that its manifest names, a module of Python with a header of PEP 723 on uv, spoken to on its stdin and its stdout, and ended with the life, after a grace in which it ends its own work. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
-| `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on: the fact, the store and the boot, while `gathered` of the engine gives its data. |
+| `src/checkpoint.rs` | The carry of a life across builds: the places where a record crosses, the entry that an open makes in memory at each and boots the next engine on, and the fact made that a crossing writes, while `gathered` of the checkpointer gives its data. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
-| `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `host/tests/view.rs` proves it. |
+| `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `crates/host/tests/suite/view.rs` proves it. |
+| `crates/wire/` | The crate `furb-wire`: the plain shapes of the meaning of a life, an act with its state, the words in which a person reads a time, a size and a count, and the protocol of the daemon with its events. A client links it with no engine and no daemon; `furb::view` and `furb-host` give each of its names again. |
+| `crates/client/` | The crate `furb-client`: the client of furb with no drawing, which each window maps: what each machine told, from each frame of its daemon, the order of the cards of all of them, each life that the client holds with how far its open stands, the thread that the operator reads, page by page, the input with its target, the history of what he sent and the completion of the word at its caret, and the queue of what it sends with each verb that is due. |
 | `src/furb/world.py` | The World of Python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
 
 ### The provider
@@ -108,70 +112,122 @@ no network.
 | `src/world/provider.rs` | The provider: the models that it offers, the default actor, its refresh, and what the host is told while a model writes. |
 | `src/world/provider/hearer.rs` | The ear: one method for each event that it hears, the replies that it took, and the notes that it tells a chain. |
 | `src/world/provider/model.rs` | A model: its class, its settings, the standing that a chain reads, and the request of a reply. |
-| `src/world/provider/word.rs` | The word of a reply as its model writes it: what the gate finds against it, and each part of it that runs. |
+| `src/world/provider/word.rs` | The word of a reply as its model writes it: each part of it that runs, and what its chain is told when a statement of it cannot be python. |
 | `src/world/provider/messages.rs` | The turns of a chain as the messages that a model reads. |
 | `src/world/provider/answer.rs` | The call of a model for a reply: the stream, the retries, and the turn that its answer gives, with its usage. |
 | `src/world/provider/retry.rs` | The failures of a call that pass, and the wait before the provider asks the model again. |
 | `src/world/provider/thinking.rs` | The most tokens of thought of a model in one turn, and how a model takes them. |
 | `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, the default actor, and the roster. |
 | `src/world/provider/local.rs` | The local server: its address, its key, the models it lists, and the window of each. |
-| `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
+| `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `cargo xtask catalog` makes again. |
 | `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude/` | The provider `claude-cli`: the claude command line as a model of rig, its accounts and its models. |
 | `src/world/provider/codex/` | The provider `codex`: the Responses API on a ChatGPT sign-in that furb keeps. |
-| `src/world/provider/search.rs` | The search of the web, which the provider answers: the native search of each provider that has one, else the free search. |
+| `src/world/provider/search.rs` | The search of the web, which the provider answers: the native search of each provider that has one. The kit `web` answers the rest. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
-| `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python, or that the gate refuses for a fault that no later statement can mend. |
+| `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python. |
 
 ### The doors
 
 | File | What it holds |
 | --- | --- |
 | `src/binding.rs` | The host API that both doors give, each function once, and the doors, each behind the feature that names it. |
-| `src/binding/py.rs` | The door to Python, which `bind/python` makes into the package `furb-monty`. |
-| `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
-| `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
+| `src/binding/py.rs` | The door to Python, which `crates/python` makes into the package `furb-monty`. |
+| `crates/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
+| `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `crates/typescript`. |
+| `crates/typescript/Cargo.toml` | The addon of N-API, the one cdylib, which links the crate with its door to TypeScript. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
-| `bind/typescript/src/life/` | The model of a life, which every host reads, with no native code. |
-| `src/furb/life.py`, `bind/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
+| `crates/typescript/src/life/` | The model of a life, which every host reads, with no native code. |
+| `src/furb/life.py`, `crates/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
 | `docs/examples/` | Five examples for each door, which a test of that door runs. Change an example with its door. |
 
 ### The extensions
 
-An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
-`src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
-extensions](docs/extensions.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
-and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `bind/python/pyproject.toml`
-and `cli/pyproject.toml` say.
+An official extension is a word, a contract and a suite in `.agents/skills/<name>/`, and an ear of the World in
+`src/world/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
+extensions](docs/skills.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
+and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of
+`crates/python/pyproject.toml` and `crates/cli/pyproject.toml` say.
 
 ### The command line
 
-`furb` is the program of the package `furb-cli` in `cli/`.
+`furb` is the program of the package `furb-cli` in `crates/cli/`.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `extensions`. |
-| `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
-| `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
-| `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
-| `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
+| `crates/cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `catalog` and `skills`. |
+| `crates/cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
+| `crates/cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
+| `crates/cli/src/window.rs` | How furb finds the window and hands the terminal to it. |
+| `crates/xtask/src/main.rs` | `cargo xtask`, the tasks of a developer: the checks of a change, the suites, the frames, the watch of a branch (`watch.rs`), and each script of `crates/xtask/python/` and of `script/`. |
+| `crates/cli/tests/suite/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
-### The TUI
+### The window
+
+`furb-window` is the program of the package `furb-window` in `crates/window/`: the window of furb, in Rust on the Rust
+package of [OpenTUI](https://github.com/anomalyco/opentui), which grows screen by screen. Today it holds the list of
+the cards of the machine, one card for each thread, beside a home that says what waits for the operator. A card opens
+its thread at once, and opens its session when it rests: the head of the thread names each stage of the open and
+counts its seconds, while the operator reads, writes and goes elsewhere. Its input sends a message to the open
+thread, to a new thread of a session, or to a new session in the project of its folder, as the line of the launcher
+under it says. It does not yet choose a model, show the chains of a life or reach another
+machine. `cargo build -p furb-cli -p furb-window` builds furb and the window side by side, and `target/debug/furb`
+with no command starts the window. The window reaches the daemon of this machine, and starts it with the `furb`
+beside itself, else the one on PATH, when none listens. The packages of PyPI and npm do not carry the window yet.
+
+Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then A opens the
+next thread that waits for the operator, and Ctrl+X then L shows or hides the list. Enter sends, Shift+Enter breaks
+the line, Ctrl+N turns the input to a new thread and back, Ctrl+X then O picks the session, Ctrl+X then Y turns the
+input to a word of Python, Esc goes back from a thread whose session opens or failed to open, Esc twice stops the
+work of the open thread, Ctrl+C empties the input, and Ctrl+D on an empty input leaves the window.
+
+![The list of the threads of the machine beside an open thread](docs/window-cards.png)
+
+`target/debug/furb-frames hero`, after `cargo build -p furb-cli -p furb-window -p furb-frames`, makes the images of
+the README again, `docs/window.gif`, `docs/window.png` and `docs/window-cards.png`, from two scripted walks of the
+window: the scenario `28-readme`, which shows the word of the README at work, and the cards of a machine. Its models
+take the time of real ones, so the GIF plays at the speed of the window. Run it when a change shows on them.
 
 | File | What it holds |
 | --- | --- |
-| `tui/src/app.ts` | The screen: the top line, the feed, the sidebar, the composer, the footer, and the dialogs. |
-| `tui/src/session.ts` | The state of one session: its chains, its views, its drafts, its queue, and its record of the UI. |
-| `tui/src/client.ts` | The client of the daemon `furb host`: the socket, its verbs, and a life that a window holds there. |
-| `tui/src/bridge.ts` | The life of a session as the window holds it: in the daemon, or a record open to read. |
-| `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
-| `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the keymap, the footer, the help and the docs read. |
-| `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
+| `crates/window/Cargo.toml`, `crates/window/build.rs` | The commit of OpenTUI that the window stands on, and its native library, which the build makes with Zig from that commit into `target/opentui`, once for each commit. `.cargo/config.toml` turns off the build script of `opentui-sys`, which only links a library that stands already. |
+| `crates/window/src/machine.rs`, `crates/window/src/link.rs` | The client of the daemon, on the protocol and the transport of `furb-host`: a machine, how the window reaches its daemon, here on the local transport, which it starts, or on the tailnet by TCP, which it finds through the local API of Tailscale, and the task that holds the connection. |
+| `crates/window/src/screen.rs` | The rule from what the window knows to the widgets: a part of a screen draws only when the value that it shows changes. |
+| `crates/window/src/tokens.rs` | The tokens of the design, which each screen reads: each color, each role of a text, and each loader. |
+| `crates/window/src/model.rs`, `crates/window/src/kept.rs` | What the window knows: the cards that each machine told, where the hand of the operator is, and the order of the list as it last settled. A card shows its state at once and changes its place only while the hand is away. The window keeps the cards in a file of the cache of furb, `crates/window/cards.json`, for its next first frame. |
+| `crates/window/src/list.rs`, `crates/window/src/home.rs`, `crates/window/src/line.rs` | The rows of the list of cards and of the home, each a function of the model, and how a row fills its columns. |
+| `crates/window/src/opens.rs` | The lives that the window holds: it opens the life of each thread that it reads and of each session that it writes in, and shows how far each open stands, from one table of the stages of an open. |
+| `crates/window/src/input.rs`, `crates/window/src/history.rs`, `crates/window/src/complete.rs` | The input as the window draws it, on the input of `furb-client`: its rows, the rest of a text that he sent shown in grey, the panel of the completion of a slash and of a mention on the top of its box, the line of the launcher under it, and the picker of the sessions. |
+| `crates/window/src/kit.rs` | The views that the kits of the life of the open thread serve, under its dock: each tree in the closed set of nodes of the protocol, a button that takes a press, and an input that the input of the window fills. `furb-client` mounts each view and sends what he does to its skill. |
+| `crates/window/src/hand.rs` | The widgets, and what each key, each move of the pointer, each timer and each frame of a machine changes in the model. |
+| `crates/window/src/voice.rs`, `crates/window/listen.swift` | The voice of the operator in the input: while he holds the space bar, which a terminal tells by its repeats, a program of the speech writes what he says at the caret as he says it, and its release gives the final text. On macOS the build makes that program from `listen.swift`, on the on-device speech of macOS 26, and the window writes it into its cache folder and starts it with its first frame, so it waits ready with no microphone. A tap of the bar goes to the input or to a part, as the bar of the time plays on it; a hold records over any part and puts the part back as it stood. Another system has no speech yet, and the window says so. |
+| `crates/window/src/reload.rs` | The window gives its place to a new build of itself: it watches its program, and once a build replaced it, it writes where it stands beside its cards and starts the new program in its place, which opens on the same thread, at the same place of the feed, with the same draft. So `cargo build -p furb-window` reaches a window that runs at once. |
+| `crates/window/tests/suite/`, `crates/window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon whose model answers from a script, and each capture of a frame as text, a snapshot of insta. `INSTA_UPDATE=always cargo test -p furb-window` draws each capture again, and `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with their colors. |
 
-A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
-capture. Do not commit the captures: after a push to `main`, `.github/workflows/gallery.yml` draws them again. The entry
-`bun run screenshots` of [`AGENTS.md`](AGENTS.md#commands) gives each variable that the gallery reads.
+On Linux and on macOS the program holds the library. On Windows it loads `opentui.dll`: `cargo run` and `cargo test`
+find it in `target/opentui`, and a program that you start by hand needs a copy of it beside itself.
+
+A screen must read clearly at first sight. After a change that a screen shows, run
+`INSTA_UPDATE=always cargo test -p furb-window`, which writes each capture of a frame as text in
+`crates/window/tests/screens`, and read each capture that changed. A run with no setting writes a frame that differs
+beside its capture as a `.snap.new` file, which git ignores.
+
+`cargo build -p furb-cli -p furb-window -p furb-frames`, then `target/debug/furb-frames capture`, captures the real
+window in tmux at three sizes and writes the recording, the key frames, the probes and the compare of each scenario
+in `target/frames`; `target/debug/furb-frames capture 16` does one scenario and prints its compare. The window of a
+capture stands on a still clock, `FURB_STILL_CLOCK`, so no mark moves and no time passes in it, and two captures of
+one commit write the same frame at each step. Its daemon asks a host of the capture in place of OpenAI,
+`FURB_OPENAI_URL` (`crates/frames/src/openai.rs`), so a walk signs in to Codex with a code and no network.
+
+| File | What it holds |
+| --- | --- |
+| `crates/frames/src/scenario.rs` | The 27 scenarios on which the window and the other programs are judged: each walk of the window, with the words of its model and its steps, and the gap of each scenario that the window has not. |
+| `crates/frames/src/capture.rs` | The walk of the real window in tmux, on a daemon of its own, recorded with the time of each part and a marker at each step. |
+| `crates/frames/src/openai.rs` | The host that stands in for OpenAI in a capture: the sign-in of Codex with a code, and the models of its account. |
+| `crates/frames/src/cast.rs`, `crates/frames/src/replay.rs`, `crates/frames/src/frame.rs` | A recording of asciinema, its replay into key frames, and a frame as its text and its cells. |
+| `crates/frames/src/raster.rs`, `crates/frames/fonts/` | The image of a frame, drawn with JetBrains Mono under its license. |
+| `crates/frames/src/probe.rs`, `crates/frames/src/compare.rs` | The probes of a frame against the tokens of the window, and the compare with the winners of the other programs. |
 
 ### The suite
 
@@ -180,26 +236,28 @@ sentence.
 
 | File | What it holds |
 | --- | --- |
-| `test/conftest.py` | The harness: the World in memory, the Kernel of this interpreter, and each helper that several files of `test/` need. |
-| `test/test_<name>.py` | The tests of one definition of the contract, one test for each sentence. |
-| `test/test_hygiene.py` | The hygiene laws. |
-| `test/outside/` | The tests of the World, the Kernel, the door, and the switch, which stand outside the hygiene laws. |
-| `extensions/conftest.py` | The hooks of the harness for the suite of each extension, and the helpers that only those suites need. |
+| `tests/conftest.py` | The harness: the World in memory, the Kernel of this interpreter, and each helper that several files of `tests/` need. |
+| `tests/test_<name>.py` | The tests of one definition of the contract, one test for each sentence. |
+| `tests/test_hygiene.py` | The hygiene laws. |
+| `tests/outside/` | The tests of the World, the Kernel, the door, and the switch, which stand outside the hygiene laws. |
+| `.agents/skills/conftest.py` | The hooks of the harness for the suite of each extension, and the helpers that only those suites need. |
 
 ## The gates
 
-Run the gates that your change touches before you push. The hooks run most of them at each commit.
+Run the gates that your change touches before you push. A commit runs only the hooks that read its files alone and end
+at once: the checks of the files, and the format and the lint of Python. A push runs none. So no commit and no push
+runs a test or a type check: the two commands at the top of this table run them when you ask.
 
 | Command | What it checks |
 | --- | --- |
-| `uv run pre-commit run --all-files` | Every hook: the format and the lint, the type check, the suite, and the gates of the crate. |
+| `sh script/hooks/pre-commit run --all-files` | Every check that needs no build, in seconds to a minute: the format and the lint, the type check, the links, the paths, the unused names and the workflows. |
+| `sh script/hooks/pre-commit run --all-files --hook-stage manual` | Every gate, in minutes: the checks above, the suite, the gates of the crate, and the lint of TypeScript. |
 | `uv run pytest -q` | The suite on both engines, with a coverage that must be whole. |
-| `uv run pytest -q test/test_hygiene.py` | The hygiene laws alone, after a change of the engine, a contract or a suite. |
-| `uv run ruff format src test script extensions` and `uv run ruff check src test script extensions` | The format and the lint of Python: two spaces of indentation, 120 columns. |
+| `uv run pytest -q tests/test_hygiene.py` | The hygiene laws alone, after a change of the engine, a contract or a suite. |
+| `uv run ruff format src tests script .agents/skills` and `uv run ruff check src tests script .agents/skills` | The format and the lint of Python: two spaces of indentation, 120 columns. |
 | `uv run ty check --error-on-warning` | The type check. |
-| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` | The gates of the crate and of the command line. |
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo nextest run --workspace` | The gates of the crate and of the command line. |
 | `bun run check`, `bun run lint` and `bun run test` | The type check, the lint and the tests of the TypeScript side. |
-| `bun run bench` | The speed of the TUI against its budget, after a change of the TUI. |
 
 Each pull request runs the gates of `.github/workflows/gates.yml` on Linux, on macOS and on Windows.
 
@@ -224,6 +282,6 @@ Write all prose in Simplified Technical English, with no em dash and no en dash,
 
 - [`AGENTS.md`](AGENTS.md): every rule and every command of the repository.
 - [`src/furb/AGENTS.md`](src/furb/AGENTS.md): the technical names of the engine.
-- [`tui/README.md`](tui/README.md) and [`docs/tui.md`](docs/tui.md): what the TUI does, and a picture of each screen.
-- [`bind/typescript/README.md`](bind/typescript/README.md): the TypeScript API.
-- [`docs/extensions.md`](docs/extensions.md): how an extension works.
+- [The window](#the-window): what the window does today, and its keys.
+- [`crates/typescript/README.md`](crates/typescript/README.md): the TypeScript API.
+- [`docs/skills.md`](docs/skills.md): how an extension works.

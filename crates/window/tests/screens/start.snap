@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  furb                                                         All projects ▾       studio offline
+
+                                                               Needs you 2
+
+                                                                ● TUI scope for the new…  ◆ Input
+                                                                  FU furb                    opus
+
+                                                                ● Debug stuck TUI…       ✗ Failed
+                                                                  FU furb                    opus
+
+  2 threads need you.                        ⌥A goes to one    Working 2
+  1 answer is new.
+  ● 3 sessions run, 1 with no window.                             run the…    Working as of 09:12
+                                                                  FC furb-cloud@studio     opus ◌
+  While no window was open
+  ◌ which key sends the queue…            works since 22:10     ● which key sends…  ⠋ Working 11h
+  ‖ Ground the branch on the carrier        paused at 22:10       PH photowroom            opus ◌
+
+  studio is offline: the daemon closed the connection. The     Resting 3
+  window dials it again.
+                                                                  remove the gate from the…  • 5h
+  ⌃P          go to anything, or run a command                    FU furb                    opus
+  ⌃X ?        each key
+                                                                  where does the time go      11h
+  ┃                                                               FU furb                    opus
+  ┃ Ask for a change, a review or an answer
+  ┃                                                               Ground the…        ‖ Paused 11h
+  ┃  Message  Python    This… ▾   FT furb-… ▾  opus  high         FU furb                    opus
+  ┃
+  ~/furb-try                                      ⌃P find      Resolved 1 ▸

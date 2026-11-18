@@ -8,27 +8,28 @@
 //! work.
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
+  env,
   future::{IntoFuture, poll_fn},
   marker::PhantomData,
-  rc::Rc,
+  sync::mpsc::{self, Receiver, Sender},
   task::Poll,
 };
 
 use futures::future::{FutureExt, LocalBoxFuture};
 
-use super::Opening;
+use super::{Opening, Progress};
 use crate::{
   Act, Engine, Fact, Fault, Object,
   ear::{ear, hear, say},
   engine::Plain,
+  skill::granted,
   value::entry,
   verbs, world,
 };
 
 /// The kinds of the acts that a program makes, which a later run of it finds again in the record.
-const MADE: [&str; 4] = ["chain", "prompt", "grant", "rung"];
+const MADE: [&str; 3] = ["chain", "prompt", "rung"];
 
 /// A shape that a prompt wants, by the name that the prompt carries.
 pub trait Shape: Plain + Unpin {
@@ -69,7 +70,7 @@ pub struct Thread<T> {
 
 impl<T> Clone for Thread<T> {
   fn clone(&self) -> Self {
-    Thread { id: self.id.clone(), chain: self.chain.clone(), shape: PhantomData }
+    Self { id: self.id.clone(), chain: self.chain.clone(), shape: PhantomData }
   }
 }
 
@@ -94,21 +95,6 @@ impl Question {
   }
 }
 
-/// One act of a chain, with named fields.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LifeAct {
-  /// The kind of the act, as prompt.
-  pub kind: String,
-  /// The name of the act, as prompt1.
-  pub id: String,
-  /// Who made the act.
-  pub by: String,
-  /// The chain of the act.
-  pub on: String,
-  /// Whether the act has what it came to.
-  pub done: bool,
-}
-
 /// What [`Life::open`] opens a life with, which it opens when it is awaited on a runtime of tokio, as
 /// [`Opening::open`] opens it.
 pub struct Open(Opening);
@@ -124,14 +110,7 @@ impl Open {
   /// The models that the life offers beside that one.
   #[must_use]
   pub fn roster<S: Into<String>>(mut self, models: impl IntoIterator<Item = S>) -> Self {
-    self.0.roster = Some(models.into_iter().map(Into::into).collect());
-    self
-  }
-
-  /// The directory that the life stands on; the directory of the process when unsaid.
-  #[must_use]
-  pub fn directory(mut self, directory: impl Into<String>) -> Self {
-    self.0.directory = directory.into();
+    self.0.roster = Some(models.into_iter().map(Into::into).collect::<Vec<_>>().into());
     self
   }
 
@@ -144,19 +123,22 @@ impl Open {
 
   /// Whether the life enables the extensions that the configs turn on; true when unsaid.
   #[must_use]
-  pub fn extensions(mut self, enables: bool) -> Self {
-    self.0.extensions = Some(enables);
+  pub fn skills(mut self, enables: bool) -> Self {
+    self.0.skills = Some(enables);
     self
   }
 
   async fn opened(self) -> Result<Life, Fault> {
     let mut opening = self.0;
     if opening.directory.is_empty() {
-      let here = std::env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
+      let here = env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
       opening.directory = here.display().to_string();
     }
-    let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let (engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
+    let (ask, asked) = mpsc::channel();
+    let ears = [("console", console(ask))];
+    // The life finds the acts that its program made in the entries of its record, so it stands
+    // on no image.
+    let (engine, record) = opening.open(ears, Progress::default(), &mut |_| false, None).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
@@ -177,7 +159,7 @@ impl IntoFuture for Open {
 }
 
 /// The ear that takes each prompt to the operator as a question.
-fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
+fn console(ask: Sender<Question>) -> Box<dyn crate::Ear> {
   ear(move |mut co| async move {
     loop {
       let fact = hear(&mut co).await;
@@ -191,8 +173,10 @@ fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
           shape: word(1),
           message: word(2),
         };
-        asked.borrow_mut().push_back(question);
-        say(&mut co, Fact::says("started", fact.about(), []));
+        // The life that reads the questions holds this ear, so it stands while the ear does.
+        if ask.send(question).is_ok() {
+          say(&mut co, Fact::says("started", fact.about(), []));
+        }
       }
     }
   })
@@ -202,7 +186,7 @@ fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
 pub struct Life {
   engine: Engine,
   made: VecDeque<Fact>,
-  asked: Rc<RefCell<VecDeque<Question>>>,
+  asked: Receiver<Question>,
 }
 
 impl Life {
@@ -268,7 +252,7 @@ impl Life {
   }
 
   /// A new chain on a chain.
-  pub fn chain_on(&mut self, on: &Chain, label: &str) -> Result<Chain, Fault> {
+  fn chain_on(&mut self, on: &Chain, label: &str) -> Result<Chain, Fault> {
     let words = [Object::string(label), Object::string("")];
     let id = if let Some(id) = self.again("chain", on, &words) {
       id
@@ -298,18 +282,19 @@ impl Life {
 
   /// A ceiling in dollars on a chain, which pauses the chain when it reaches it.
   pub fn grant(&mut self, chain: &Chain, usd: f64) -> Result<(), Fault> {
-    if self.again("grant", chain, &[Object::float(usd), Object::none()]).is_none() {
-      drop(self.engine.grant(verbs::Grant {
-        usd: Some(usd),
-        on: Some(chain.0.clone()),
-        ..Default::default()
-      })?);
+    let word = granted(Some(usd), None);
+    if self
+      .again("rung", chain, &[Object::string(&word), Object::string(""), Object::string("")])
+      .is_none()
+    {
+      let with = verbs::Rung { word: Some(word), on: Some(chain.0.clone()), ..Default::default() };
+      drop(self.engine.rung(with)?);
     }
     Ok(())
   }
 
   /// Whether a pause holds a chain.
-  pub fn is_paused(&mut self, chain: &Chain) -> Result<bool, Fault> {
+  fn is_paused(&mut self, chain: &Chain) -> Result<bool, Fault> {
     Ok(self.view("paused(id)", vec![("id", Object::string(&chain.0))])?.py_repr() == "True")
   }
 
@@ -348,7 +333,8 @@ impl Life {
     let mut found = Vec::new();
     let mut open = vec![self.root()];
     while let Some(on) = open.pop() {
-      let facts = self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()), of: None })?;
+      let facts =
+        self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()), of: None, at: None })?;
       let children =
         facts.iter().filter(|one| one.kind() == "chain" && one.question() && one.on() == on.0);
       open.extend(
@@ -359,19 +345,6 @@ impl Life {
       }
     }
     Ok(found)
-  }
-
-  /// Every act on a chain, in order, with named fields.
-  pub fn acts(&mut self, chain: &Chain) -> Result<Vec<LifeAct>, Fault> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(chain.0.clone()), of: None })?;
-    let mut acts = Vec::new();
-    for one in facts.iter().filter(|one| one.question() && one.on() == chain.0) {
-      let done = self.engine.outcome(one.about())?.is_some();
-      let (kind, id, by, on) = (one.kind(), one.about(), one.by(), one.on());
-      acts.push(LifeAct { kind: kind.into(), id: id.into(), by: by.into(), on: on.into(), done });
-    }
-    Ok(acts)
   }
 
   /// What a thread comes to, once a model answers it.
@@ -386,15 +359,23 @@ impl Life {
 
   /// The next question to the operator, or none once the thread named is done.
   pub async fn question<T>(&mut self, until: &Thread<T>) -> Result<Option<Question>, Fault> {
-    let asked = Rc::clone(&self.asked);
-    self.until(|life| Ok(!asked.borrow().is_empty() || life.done(until)?)).await?;
-    Ok(asked.borrow_mut().pop_front())
+    let mut next = None;
+    self
+      .until(|life| {
+        next = next.take().or_else(|| life.asked.try_recv().ok());
+        Ok(next.is_some() || life.done(until)?)
+      })
+      .await?;
+    Ok(next)
   }
 
   /// The words of the rungs of a thread, as python, in order.
   pub fn plan<T>(&mut self, thread: &Thread<T>) -> Result<String, Fault> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(thread.chain.0.clone()), of: None })?;
+    let facts = self.engine.transcript(verbs::Transcript {
+      on: Some(thread.chain.0.clone()),
+      of: None,
+      at: None,
+    })?;
     let mut words: Vec<(String, String)> = Vec::new();
     for one in &facts {
       let word =
@@ -413,11 +394,8 @@ impl Life {
     }
     let mut plan = Vec::new();
     for (whose, word) in words {
-      let under = self.engine.verb(
-        "under",
-        vec![Object::string(&whose), Object::string(&thread.id)],
-        vec![],
-      )?;
+      let under =
+        self.engine.verb("under", &[Object::string(&whose), Object::string(&thread.id)], vec![])?;
       if under.py_repr() == "True" {
         plan.push(word);
       }
@@ -441,7 +419,7 @@ impl Life {
   /// Wait until a condition of the life holds, which the life checks again each time that the engine moves.
   async fn until(
     &mut self,
-    mut holds: impl FnMut(&mut Life) -> Result<bool, Fault>,
+    mut holds: impl FnMut(&mut Self) -> Result<bool, Fault>,
   ) -> Result<(), Fault> {
     poll_fn(|cx| {
       if let Err(fault) = self.engine.pump(cx.waker()) {

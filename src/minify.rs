@@ -6,14 +6,15 @@ use ruff_python_ast::{
 };
 use ruff_python_parser::parse_module;
 use ruff_text_size::Ranged;
+use std::mem;
 
 /// One logical line of the engine: how deep it stands, and its parts, each the text of one token as
 /// the engine writes it and the kind of that token. A string that holds expressions is one part,
 /// whole.
 #[derive(Clone)]
-struct Line<'a> {
-  depth: usize,
-  parts: Vec<(TokenKind, &'a str)>,
+pub(crate) struct Line<'a> {
+  pub(crate) depth: usize,
+  pub(crate) parts: Vec<(TokenKind, &'a str)>,
 }
 
 impl Line<'_> {
@@ -62,7 +63,7 @@ impl Line<'_> {
   /// The line as the prompt writes it: the parts with a space only where two would run together,
   /// and a pattern of a case without the parentheses around it, which change nothing when a colon
   /// or a guard follows them.
-  fn text(&self) -> String {
+  pub(crate) fn text(&self) -> String {
     let mut parts: Vec<_> = self.parts.iter().collect();
     if let [(TokenKind::Case, _), (TokenKind::Lpar, _), ..] = parts[..] {
       let mut open = 0;
@@ -104,21 +105,21 @@ impl Line<'_> {
 /// every string that holds expressions as the one part it is in the source, so what stands between
 /// its quotes stays as it is. A comma that the formatter adds to break a long line goes with the
 /// line break: one that a line break and a closing bracket follow.
-fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
+pub(crate) fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
   let (mut lines, mut depth, mut parts) = (Vec::new(), 0, Vec::new());
   let mut at = 0;
-  while at < tokens.len() {
-    let token = tokens[at];
+  while let Some(&token) = tokens.get(at) {
     at += 1;
     let broken = tokens.get(at).map(Token::kind) == Some(TokenKind::NonLogicalNewline);
     match token.kind() {
       TokenKind::Newline if !parts.is_empty() => {
-        lines.push(Line { depth, parts: std::mem::take(&mut parts) });
+        lines.push(Line { depth, parts: mem::take(&mut parts) });
       }
       TokenKind::Comma
         if broken
-          && tokens[at..]
+          && tokens
             .iter()
+            .skip(at)
             .map(Token::kind)
             .find(|kind| !matches!(kind, TokenKind::NonLogicalNewline | TokenKind::Comment))
             .is_some_and(|kind| {
@@ -134,7 +135,7 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
         let mut open = 1;
         let mut end = token.end();
         while open > 0 {
-          let inner = tokens[at];
+          let Some(&inner) = tokens.get(at) else { break };
           at += 1;
           open += match inner.kind() {
             TokenKind::FStringStart | TokenKind::TStringStart => 1,
@@ -143,9 +144,13 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
           };
           end = inner.end();
         }
-        parts.push((TokenKind::String, &source[usize::from(token.start())..usize::from(end)]));
+        let string = source.get(usize::from(token.start())..usize::from(end));
+        parts.push((TokenKind::String, string.unwrap_or_default()));
       }
-      kind => parts.push((kind, &source[token.range()])),
+      kind => {
+        let text = source.get(usize::from(token.start())..usize::from(token.end()));
+        parts.push((kind, text.unwrap_or_default()));
+      }
     }
   }
   lines
@@ -168,10 +173,10 @@ pub(crate) fn minified(source: &str) -> Option<String> {
     let program = ComparableModModule::from(alone.syntax());
     let mut open = 0;
     while open < line.parts.len() {
-      if line.parts[open].0 == TokenKind::Lpar {
+      if line.parts.get(open).is_some_and(|(kind, _)| *kind == TokenKind::Lpar) {
         let mut depth = 0;
         let close = open
-          + line.parts[open..].iter().position(|(kind, _)| {
+          + line.parts.iter().skip(open).position(|(kind, _)| {
             depth += match kind {
               TokenKind::Lpar => 1,
               TokenKind::Rpar => -1,
@@ -205,10 +210,10 @@ fn laid(lines: &[Line]) -> Vec<String> {
   // join it.
   let mut out: Vec<(String, usize, bool)> = Vec::new();
   let mut at = 0;
-  while at < lines.len() {
-    let line = &lines[at];
-    let suite = lines[at + 1..].iter().take_while(|one| one.depth > line.depth).count();
-    let body = &lines[at + 1..at + 1 + suite];
+  while let Some(line) = lines.get(at) {
+    let after = lines.get(at + 1..).unwrap_or_default();
+    let suite = after.iter().take_while(|one| one.depth > line.depth).count();
+    let body = after.get(..suite).unwrap_or_default();
     let indent = " ".repeat(line.depth);
     if suite > 0 && body.iter().all(|one| one.depth == line.depth + 1 && one.simple()) {
       let joined = body.iter().map(Line::text).collect::<Vec<_>>().join(";");

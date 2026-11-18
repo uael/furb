@@ -1,0 +1,330 @@
+name: system
+
+# The gates of one system: three builds, one for each artifact, then the jobs that run what a build made and compile
+# nothing. The test programs, the engine of TypeScript and the wheel of python each hold the crate furb with features of
+# their own, so each is a compile of furb, and each build makes one on a runner of its own. In one target the tests
+# compile furb again after the engine of TypeScript, since napi gives the build script of furb an environment that
+# cargo test does not. Each job after a build waits for that build alone. The gates call this workflow once for each
+# system that a change needs.
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: The runner of the system.
+        type: string
+        required: true
+      suite:
+        description: Whether the suite runs on the system.
+        type: boolean
+        default: false
+      crate:
+        description: Whether the tests of the crate run on the system.
+        type: boolean
+        default: false
+      typescript:
+        description: Whether the bindings of TypeScript run on the system.
+        type: boolean
+        default: false
+      head:
+        description: The commit that the run proves, when it is not the commit of its ref.
+        type: string
+        default: ""
+
+env:
+  UV_VERSION: "0.12.17"
+
+jobs:
+  build:
+    # The test programs of each crate and the clippy of the workspace. Its cache of rust holds each dependency of the
+    # three builds, since the tests select the whole workspace with the feature typescript, and the two other builds
+    # restore it. The archive of the tests goes to the job of the crate as an artifact of a day, never the target,
+    # which is ten times as large. A build that fails ends each job after it on its system, which reports
+    # skipped and gives no test result there, as the last step of this job says, and no job of another system.
+    name: the build of the tests on ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    # A change of the lock, of this file or of the script of the build makes every system build each crate from
+    # nothing, which took 59 minutes on Windows in run 43806453852, and a job saves the cache only when it passes. A
+    # limit shorter than that build fails every later run too, since none finds a cache.
+    timeout-minutes: 90
+    # One shell on every system. On Windows it is the bash of Git for Windows.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      # The native library of OpenTUI, which the build of the window makes with Zig in minutes and keeps in
+      # target/opentui, under the commit that crates/window/Cargo.toml pins. The cache of rust keeps no file of a
+      # package of the workspace, so the folder has a cache of its own, restored after that one, and named by that
+      # commit and the build script alone: a key of the whole manifest missed at each new dependency of the window, and
+      # the build of Zig then took 10 to 13 minutes of each build. A build that finds the library runs no Zig, so only a
+      # miss installs it: the Zig that the build.zig.zon of that commit names, and no other.
+      - id: pin
+        run: |
+          commit=$(sed -n 's/^opentui = .*rev = "\([0-9a-f]*\)".*/\1/p' crates/window/Cargo.toml)
+          test -n "$commit" || { echo "::error::crates/window/Cargo.toml pins no commit of opentui"; exit 1; }
+          echo "opentui=$commit" >> "$GITHUB_OUTPUT"
+      - id: opentui
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/opentui
+          key: opentui-${{ inputs.os }}-${{ steps.pin.outputs.opentui }}-${{ hashFiles('crates/window/build.rs') }}
+      - if: steps.opentui.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.1
+          use-cache: false
+      # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the three
+      # builds share every dependency in one cache.
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      # The runner of the tests of the crate, as in each tree: each test runs in a process of its own, under the
+      # bounds of time of .config/nextest.toml. A test that measures its process, as the heap of a window, read the
+      # other tests of its program when they all ran in one process.
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      # The archive of the tests: each test program, each program and example that a test runs, and the libraries
+      # that they link, as the DLL of OpenTUI on Windows, which the crate runs on another runner. The report of
+      # --timings says how long each crate took to build, which the build keeps as an artifact.
+      - run: |
+          mkdir -p "$RUNNER_TEMP/copy"
+          cargo nextest archive --locked --workspace --features furb/typescript --timings \
+            --archive-file "$RUNNER_TEMP/copy/tests.tar.zst"
+      - run: cargo clippy --locked --workspace --all-targets --features furb/typescript -- -D warnings
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-${{ inputs.os }}
+          path: ${{ runner.temp }}/copy
+          retention-days: 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: timings-${{ inputs.os }}
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 7
+      - uses: ./.github/actions/clear
+      - if: failure()
+        run: >-
+          echo "::error title=No test of the crate ran on ${{ inputs.os }}::The build of the tests on ${{ inputs.os }}
+          failed, so the crate on ${{ inputs.os }} reports skipped and gave no test result: a skipped job there is no
+          pass."
+
+  addon:
+    # The engine of TypeScript, as `bun run build` makes it for the package: napi compiles the crate furb with the
+    # feature typescript and the environment in which its macros write the declarations of the package. It restores the
+    # cache of the build of the tests and saves none, since that cache holds each dependency that it compiles.
+    name: the build of the addon on ${{ inputs.os }}
+    if: inputs.typescript
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          shared: build
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      # The bun:ffi of bun 1.3 builds its native callbacks with TinyCC in pages of the heap of Windows, which lose
+      # their right to run code while the process lives, and a call into OpenTUI then crashes. From bun 1.4 on, the
+      # engine builds them.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: |
+          copy="$RUNNER_TEMP/copy/crates/typescript"
+          mkdir -p "$copy"
+          cp crates/typescript/furb.*.node crates/typescript/index.cjs crates/typescript/index.d.cts "$copy/"
+          cp -R crates/typescript/dist "$copy/dist"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: addon-${{ inputs.os }}
+          path: ${{ runner.temp }}/copy
+          retention-days: 1
+
+  wheel:
+    # The wheel of furb-monty, which holds the crate furb with the feature python, for the suite. It restores the cache
+    # of the build of the tests and saves none: of what it compiles, only pyo3 and the crates of the workspace are not
+    # in that cache, and pyo3 builds again on each run, since its build reads the interpreter.
+    name: the build of the wheel on ${{ inputs.os }}
+    if: inputs.suite
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: tools
+          shared: build
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      # In the dev profile, as uv sync builds it for the suite: a wheel of the release profile took 10 to 17 minutes.
+      - run: uv build --wheel --package furb-monty --out-dir "$RUNNER_TEMP/copy/wheels" -C build-args=--profile=dev
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheel-${{ inputs.os }}
+          path: ${{ runner.temp }}/copy
+          retention-days: 1
+
+  suite:
+    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on each,
+    # and on both engines, the one of the interpreter and the one in the sandbox of monty, which the wheel of the build
+    # of its system holds.
+    name: the suite on ${{ inputs.os }}
+    needs: wheel
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    # On Windows the commands of the tests run in the sh of Git for Windows, which the bash of Git puts on PATH.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: tools
+          rust: none
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wheel-${{ inputs.os }}
+          path: ${{ runner.temp }}/build
+      # Each package that the suite imports, furb-monty from the wheel that its build made, so nothing compiles here.
+      - run: |
+          uv sync --locked --no-install-package furb-cli --no-install-package furb-monty
+          uv pip install --no-deps "$RUNNER_TEMP"/build/wheels/furb_monty-*.whl
+      # The test of the walls counts tokens with a vocabulary that tiktoken downloads at its first use. A download that
+      # stalls past the 30 seconds of a test ends the worker of the suite, which reports a crash and no cause, so the
+      # vocabulary comes here, where a stall is bounded, and the suite reads it from disk.
+      - run: echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tiktoken
+          key: tiktoken-o200k_base
+      - run: |
+          for _ in 1 2 3; do
+            uv run python -c "import socket, tiktoken; socket.setdefaulttimeout(60); tiktoken.get_encoding('o200k_base')" && exit 0
+          done
+          exit 1
+        timeout-minutes: 5
+        env:
+          UV_NO_SYNC: "1"
+      # The run syncs nothing, so it does not build the program furb, and no package of the workspace again.
+      - run: cargo xtask budget pytest -- uv run pytest -q --durations=25
+        env:
+          UV_NO_SYNC: "1"
+          FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      # What the walls of the engine and of the doctrine leave, as the script of the tokens says it, kept as an artifact.
+      - if: always() && runner.os == 'Linux'
+        env:
+          UV_NO_SYNC: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          uv run python crates/xtask/python/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+      - if: always() && runner.os == 'Linux'
+        uses: ./.github/actions/measures
+        with:
+          name: tokens
+
+  crate:
+    # The tests of the workspace, which the build of each system compiled and archived, run by cargo-nextest as in a
+    # tree: a test that fails leaves the others to run, so the log names each red test. The clippy of the crate ran
+    # in the build. On macOS the job runs the tests of the crate, the tests of the
+    # window, which draws with a native library of each system, and the kill matrix of the daemon alone, which ends it
+    # with the signals of Unix, as it did when it built them there.
+    name: the crate on ${{ inputs.os }}
+    needs: build
+    if: inputs.crate
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          # The task clean-caches of xtask prunes a cache of uv in its test.
+          python: uv
+          rust: none
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-${{ inputs.os }}
+          path: .
+      # The task promise of xtask runs pytest in the environment of the repository, and so does its test: the tools of
+      # the group dev, with no package of the workspace, which the job builds none of.
+      - run: uv sync --locked --only-group dev
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      # The tests of the archive, in this checkout, with no cargo and no rust. The archive goes into the target of the
+      # checkout, which stands at the path of the build on each runner of a system: a test runs a program by the path
+      # that the build compiled into it, as env!("CARGO_BIN_EXE_furb") says. On macOS the tests of the crate and of
+      # the window run, and the kills of the command line alone. A package that the filter names and the workspace
+      # lacks, or a filter that selects no test, fails the job, so a move or a rename hides no suite. insta finds the
+      # snapshots of the window under the root of the workspace, which it asks of cargo when no variable names it: with
+      # no cargo it falls back to the folder of the package, finds no snapshot and fails each test.
+      - env:
+          INSTA_WORKSPACE_ROOT: ${{ github.workspace }}
+          ONLY: ${{ runner.os == 'macOS' && 'package(furb) | package(furb-window) | (package(furb-cli) & test(/^kills::/))' || 'all()' }}
+        run: >-
+          cargo-nextest nextest run --archive-file tests.tar.zst --workspace-remap "$GITHUB_WORKSPACE"
+          --extract-to "$GITHUB_WORKSPACE" --extract-overwrite --profile ci --no-tests fail -E "$ONLY"
+
+  typescript:
+    name: the bindings on ${{ inputs.os }}
+    needs: addon
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    # One shell on every system. On Windows it is the bash of Git for Windows, which puts on PATH the sh and the tools
+    # that the commands of the tests run.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          rust: none
+      # The engine, its loader, its types and the built package, as the build of the addon made them.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: addon-${{ inputs.os }}
+          path: ${{ runner.temp }}/build
+      - run: cp -R "$RUNNER_TEMP/build/crates/typescript/." crates/typescript/
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: git diff --exit-code -- crates/typescript/index.d.cts
+      - run: bun run check
+      - run: bun run lint
+      - run: bun run test

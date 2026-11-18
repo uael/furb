@@ -19,9 +19,14 @@ use std::{
 use tokio::process::Child;
 
 use crate::{
+  ear,
   value::Fault,
   world::child::{self, Group, Unborn},
 };
+use std::process;
+use tokio::process as tokio_process;
+use tokio::sync;
+use tokio::time;
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh
 /// of Git for Windows, which [`git_sh`] finds, or `sh` when it finds none, which a command then
@@ -42,12 +47,22 @@ pub fn shell() -> &'static Path {
 /// How long the login shell of the user may take to say its PATH, which a slow profile needs.
 const LOGIN_LIMIT: Duration = Duration::from_secs(5);
 
+/// Starts the read of the PATH of the login shell as a World makes its commands, so its first
+/// command waits for less of it. The process reads it once: a later life of the process, as each
+/// life of a daemon, finds it read and waits for nothing. With no runtime to start it on, the
+/// first command reads it.
+pub(super) fn read_login() {
+  if let Ok(runtime) = ear::runtime() {
+    drop(runtime.spawn(login_path()));
+  }
+}
+
 /// The PATH that the login shell of the user sets, read once for the process, or none on Windows,
 /// with no `SHELL`, or when that shell fails to give one. A life started from a desktop or a
 /// service has the short PATH of its parent, which lacks the folders that the profile of the user
-/// adds, as `/opt/homebrew/bin`.
+/// adds, as `/opt/homebrew/bin`. A call while the read runs waits for that read.
 async fn login_path() -> Option<&'static OsString> {
-  static FOUND: tokio::sync::OnceCell<Option<OsString>> = tokio::sync::OnceCell::const_new();
+  static FOUND: sync::OnceCell<Option<OsString>> = sync::OnceCell::const_new();
   let found = async {
     if cfg!(windows) {
       None
@@ -65,14 +80,16 @@ async fn login_path() -> Option<&'static OsString> {
 /// background, or that another thread forks while the pipe is made, holds it past the shell.
 async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
   static MADE: AtomicUsize = AtomicUsize::new(0);
-  let file = env::temp_dir().join(format!(
-    "furb-login-path-{}-{}",
-    std::process::id(),
-    MADE.fetch_add(1, Ordering::Relaxed)
-  ));
-  let stdout = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
+  // A process of an earlier life with the same id may have left its file, so the name moves on
+  // until a new file opens.
+  let (file, stdout) = (0..TRIES).find_map(|_| {
+    let at = MADE.fetch_add(1, Ordering::Relaxed);
+    let file = env::temp_dir().join(format!("furb-login-path-{}-{at}", process::id()));
+    let opened = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
+    Some((Written(file), opened))
+  })?;
   let ran = async {
-    let mut command = tokio::process::Command::new(shell);
+    let mut command = tokio_process::Command::new(shell);
     command.args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""]);
     command.stdin(Stdio::null()).stdout(stdout).stderr(Stdio::null());
     let (mut child, mut group) = child::spawn(&mut command).ok()?;
@@ -81,12 +98,26 @@ async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
     group.free();
     status
   };
-  let status = tokio::time::timeout(limit, ran).await.ok().flatten();
-  let said = fs::read(&file);
-  drop(fs::remove_file(&file));
+  let status = time::timeout(limit, ran).await.ok().flatten();
+  let said = fs::read(&file.0);
   let said = String::from_utf8_lossy(&said.ok()?).into_owned();
   let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
   (status?.success() && !path.is_empty()).then(|| OsString::from(path))
+}
+
+/// How many names the read of the login path tries before it gives no path.
+const TRIES: usize = 64;
+
+/// The file that the login shell writes its path to, which goes when it is dropped, also when the
+/// read ends before the shell, as a life that ends in the first seconds of its first command.
+struct Written(PathBuf);
+
+impl Drop for Written {
+  fn drop(&mut self) {
+    // A file that is gone already needs nothing more, and any other failure leaves one empty file
+    // in the temporary folder, whose name no later read takes.
+    drop(fs::remove_file(&self.0));
+  }
 }
 
 /// The folders of `login` in order, then those of `current` that it lacks.
@@ -142,7 +173,7 @@ pub(super) async fn spawned(
   shown: &str,
   dir: &Path,
 ) -> Result<(Child, Group), Fault> {
-  let mut command = tokio::process::Command::from(command);
+  let mut command = tokio_process::Command::from(command);
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }

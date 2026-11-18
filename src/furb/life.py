@@ -24,7 +24,7 @@ OPERATOR = "operator"
 """OPERATOR is the actor of a prompt that the operator answers, and the site of every act of the program."""
 ENDED = "The life ended."
 """ENDED is what a wait of a program on a life raises once the life ended."""
-MADE = ("chain", "prompt", "grant", "rung")
+MADE = ("chain", "prompt", "rung")
 """MADE are the kinds of the acts that a program makes, which a later run of it finds again in the record."""
 
 
@@ -103,7 +103,9 @@ class Chain:
 
   def grant(self, *, usd: float | None = None, share: float | None = None) -> None:
     """A ceiling on this chain, in dollars or in a share of the window, which pauses the chain when it reaches it."""
-    self.life.again("grant", self.id, (usd, share)) or engine.grant(usd=usd, share=share, on=self.id)
+    # The extension defines grant in a rung that it plays after this word, so the grant runs in a later rung.
+    word = f"await skill('grant')\nrung('grant(usd={usd!r}, share={share!r})')"
+    self.life.again("rung", self.id, (word, "", "")) or engine.rung(word, on=self.id)
 
   def is_paused(self) -> bool:
     """Whether a pause holds this chain."""
@@ -195,7 +197,7 @@ class Life(Chain):
     self.ears, self.asked, self.waiting = ears, list[Question](), list[asyncio.Future[None]]()
     self.ended = False
     self.loop = asyncio.get_running_loop()
-    self.made = [one for (one,) in record if one[2] == OPERATOR and one[0] in MADE and question(one[0], one[1])]
+    self.made = [one for (one, *_) in record if one[2] == OPERATOR and one[0] in MADE and question(one[0], one[1])]
     self.made = [one for one in self.made if one[1] != "chain1"]
     root = engine.boot(record, console=self.console(), **ears)
     super().__init__(self, str(root))
@@ -259,7 +261,7 @@ async def open(
   directory: str | Path = ".",
   roster: list[str] | None = None,
   claude: str | None = None,
-  extensions: bool = True,
+  skills: bool = True,
 ) -> Life:
   """A life on its record, or a new one when the record holds nothing, whose prompts go to the model named, or to the
   default actor of the crate."""
@@ -269,8 +271,8 @@ async def open(
     actor=model,
     roster=roster,
     claude=claude,
-    extensions=extensions,
+    skills=skills,
   )
-  life = Life(dict(ears), [(tuple(one),) for (one,) in stored])
+  life = Life(dict(ears), [(tuple(one), *at) for (one, *at) in stored])
   atexit.register(life.end)
   return life

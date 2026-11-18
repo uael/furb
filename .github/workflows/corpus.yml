@@ -4,11 +4,13 @@ name: corpus
 # the build of each pull request, and no file of a folder that a tag holds changes. The title of the pull request says
 # whether the change breaks, so the job runs again when the title is edited. A pull request that changes a line of
 # Cargo.toml that names monty runs the corpus on Linux, macOS and Windows, since monty runs the definitions of a record
-# and a move of its pin may change what they give. Any other pull request runs it on Linux alone.
+# and a move of its pin may change what they give. Any other pull request runs it on Linux alone. A run by hand on a
+# branch runs it on the three systems, from the merge base of the branch and main, with no title.
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, edited, reopened]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,13 +18,6 @@ concurrency:
 
 permissions:
   contents: read
-  # The step clear deletes the old cache of rust of the job, on main.
-  actions: write
-
-env:
-  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_DEV_INCREMENTAL: "false"
 
 jobs:
   pin:
@@ -40,7 +35,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff "$BASE"...HEAD -U0 -- Cargo.toml | grep -E '^[+-].*monty'; then
+          if [ -z "$BASE" ] || git diff "$BASE"...HEAD -U0 -- Cargo.toml | grep -E '^[+-].*monty'; then
             echo 'systems=["ubuntu-latest","macos-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
           else
             echo 'systems=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
@@ -65,9 +60,16 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           TITLE: ${{ github.event.pull_request.title }}
-        run: python3 script/hooks/corpus.py --base "$BASE" --title "$TITLE"
+        run: python3 script/hooks/corpus.py --base "${BASE:-$(git merge-base HEAD origin/main)}" --title "$TITLE"
+      # The proof restores the cache of the build of the gates on its system, and saves none: it builds a part of what
+      # that build holds, for the same target and with the same feature, and a set of its own on each system took 1.9
+      # GB of the 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
-      - run: cargo test -p furb --test promise
-      - uses: ./.github/actions/clear
+          shared: build
+      # In bash on each system: the shell of a step on Windows is PowerShell, where "$GITHUB_ENV" is an empty string.
+      - shell: bash
+        run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - run: "cargo test -p furb --features typescript --test suite promise::"

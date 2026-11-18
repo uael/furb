@@ -1,0 +1,53 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+description = "The tasks of a developer of furb, as `cargo xtask`."
+license = "AGPL-3.0-only"
+publish = false
+# The program of the tasks, which `cargo xtask` runs, beside the stand-in of the tests.
+default-run = "xtask"
+
+# A program that stands in for curl or gh in the tests of the tasks, so they run with no network.
+[[bin]]
+name = "stand-in"
+path = "tests/bin/stand_in.rs"
+test = false
+doc = false
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { version = "4.6", features = ["derive", "env", "string"] }
+fancy-regex = "0.20"
+notify = "8"
+# The task deepswe: the manifests of the registry of an image and the files of a task, the tar of
+# each layer of an image, gzipped or not, and the toml of a task.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+flate2 = "1"
+tar = "0.4"
+toml = "1"
+# The draw of the points of the kills of the rig.
+fastrand = "2"
+# The bound of each step of the rig, which waits on its child with no poll.
+wait-timeout = "0.2"
+thiserror = "2"
+# The task links: the links of a README, as markdown reads them.
+pulldown-cmark = { version = "0.13", default-features = false }
+# The task comment-width: the lexer of rustc, which tells a comment from a string.
+ra-ap-rustc_lexer = "0.185.0"
+# The task tree: the real path of a tree, which Windows gives with no verbatim prefix that git and
+# a person cannot read.
+dunce = "1"
+furb-hack = { version = "0.1", path = "../hack" }
+
+# The task budget: the CPU time of the waited children of a run.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["resource"] }
+
+# The lowest priority of each task, which each program that it starts inherits, and for the task
+# tree, the copy on write of a whole folder in one call, clonefile of macOS.
+rustix = { version = "1", features = ["fs", "process"] }

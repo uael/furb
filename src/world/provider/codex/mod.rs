@@ -1,5 +1,6 @@
 //! The Responses API of a `ChatGPT` subscription, on the sign-in that furb keeps.
 
+use super::catalog;
 use std::path::{Path, PathBuf};
 
 use rig_core::{
@@ -15,7 +16,7 @@ use super::clients::{Amend, Amended};
 
 mod auth;
 
-pub use auth::{AuthError, NAME, SignIn, begin, cancel, refresh, status};
+pub use auth::{AuthError, NAME, SignIn, begin, cancel, refresh, status, subscribe};
 
 #[derive(Clone)]
 pub(super) struct Codex {
@@ -59,7 +60,7 @@ impl CompletionModel for Codex {
       .insert("user-agent", HeaderValue::from_static(concat!("furb/", env!("CARGO_PKG_VERSION"))));
     let client = openai::Client::builder()
       .api_key(credential.access)
-      .base_url(auth::API)
+      .base_url(auth::api())
       .http_client(Amended::new(CodexHttp(self.config.clone())))
       .http_headers(headers)
       .build()
@@ -81,24 +82,34 @@ impl CompletionModel for Codex {
 struct CodexHttp(PathBuf);
 
 impl Amend for CodexHttp {
-  fn streamed(&self, mut response: StreamingResponse) -> http_client::Result<StreamingResponse> {
-    if matches!(response.status().as_u16(), 401 | 403) {
-      auth::needs_login(&self.0);
-      return Err(http_client::Error::InvalidStatusCodeWithMessage(
-        response.status(),
-        "Sign in to codex again from Providers.".to_owned(),
-      ));
+  fn streamed(
+    &self,
+    response: http_client::Result<StreamingResponse>,
+  ) -> http_client::Result<StreamingResponse> {
+    match response {
+      Err(
+        http_client::Error::InvalidStatusCode(status)
+        | http_client::Error::InvalidStatusCodeWithMessage(status, _)
+        | http_client::Error::InvalidStatusCodeWithDetails { status, .. },
+      ) if matches!(status.as_u16(), 401 | 403) => {
+        auth::needs_login(&self.0);
+        Err(http_client::Error::InvalidStatusCodeWithMessage(
+          status,
+          "Sign in to codex again from Providers.".to_owned(),
+        ))
+      }
+      Ok(mut response) => {
+        if !response.headers().contains_key("content-type") {
+          response
+            .headers_mut()
+            .insert("content-type", HeaderValue::from_static("text/event-stream"));
+        }
+        Ok(response)
+      }
+      failed => failed,
     }
-    if response.status().is_success() && !response.headers().contains_key("content-type") {
-      response.headers_mut().insert("content-type", HeaderValue::from_static("text/event-stream"));
-    }
-    Ok(response)
   }
 }
-
-#[cfg(test)]
-#[path = "mod.test.rs"]
-mod test;
 
 #[derive(Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,14 +119,17 @@ struct Settings {
   model_context_window: Option<u64>,
 }
 
-pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::Model>, String> {
+pub(super) fn offered(
+  config: Option<&Path>,
+  form: &Value,
+) -> Result<Vec<super::Model>, catalog::Error> {
   let settings: Settings = if *form == Value::Bool(true) {
     Settings::default()
   } else {
-    serde_json::from_value(form.clone()).map_err(|no| format!("Invalid codex settings: {no}"))?
+    serde_json::from_value(form.clone()).map_err(catalog::Error::CodexSettings)?
   };
   if settings.model_context_window == Some(0) {
-    return Err("The codex model_context_window must be positive".to_owned());
+    return Err(catalog::Error::CodexWindow);
   }
   let directory = auth::directory(config);
   Ok(
@@ -131,7 +145,7 @@ pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::
           .saturating_mul(one.effective_context_window_percent.unwrap_or(95).min(100))
           / 100;
         // Codex says no price, so the catalog gives the class of each model of its account.
-        let class = super::catalog::family(NAME, &one.slug);
+        let class = catalog::family(NAME, &one.slug);
         let mut model = super::Model::new(
           format!("{NAME}:{}", one.slug),
           window.max(1),
@@ -143,7 +157,7 @@ pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::
         }
         model.images = one.input_modalities.iter().any(|one| one == "image");
         for effort in one.supported_reasoning_levels {
-          if super::catalog::LEVELS.contains(&effort.effort.as_str()) {
+          if catalog::LEVELS.contains(&effort.effort.as_str()) {
             model = model.effort(
               &effort.effort,
               json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),

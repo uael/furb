@@ -1,0 +1,77 @@
+//! Who may reach the daemon over the network, and with which role (#983, Q5): the file
+//! `host.json` in the config folder of furb, which turns on the daemon on the tailnet and gives
+//! each operator its role. The daemon refuses an operator that the file does not name.
+
+use std::{
+  collections::HashMap,
+  fs, io,
+  path::{Path, PathBuf},
+};
+
+use serde::Deserialize;
+
+use crate::{error::AccessError, protocol::Role};
+
+/// The settings of the daemon that the operator writes in `host.json`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+  /// The ports of the daemon on the address of the machine on the tailnet. With none, the daemon
+  /// listens on the machine alone.
+  #[serde(default)]
+  pub tailnet: Option<Ports>,
+  #[serde(default)]
+  pub roles: Access,
+  /// The seconds that a life that holds an open act says no fact before the daemon tells that it
+  /// stalled, [`crate::STALL`] when none is given.
+  #[serde(default)]
+  pub stall: Option<u64>,
+}
+
+/// The port of each transport of the network that the daemon listens on, if it does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ports {
+  pub tcp: Option<u16>,
+  pub websocket: Option<u16>,
+}
+
+/// The role of each operator of the network, by the login that Tailscale gives.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(transparent)]
+pub struct Access(HashMap<String, Role>);
+
+impl Config {
+  /// The settings in a file, or the settings that turn nothing on when no file stands there.
+  pub fn load(path: &Path) -> Result<Self, AccessError> {
+    let shown = || PathBuf::from(path);
+    match fs::read_to_string(path) {
+      Err(no) if no.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
+      Err(source) => Err(AccessError::Read { path: shown(), source }),
+      Ok(text) => {
+        serde_json::from_str(&text).map_err(|source| AccessError::Parse { path: shown(), source })
+      }
+    }
+  }
+}
+
+impl Access {
+  /// Each operator that the list names, in the order of their names.
+  pub fn operators(&self) -> Vec<String> {
+    let mut all: Vec<String> = self.0.keys().cloned().collect();
+    all.sort_unstable();
+    all
+  }
+
+  /// The role of an operator, or its refusal when the list does not name it.
+  pub fn role(&self, operator: &str) -> Result<Role, AccessError> {
+    let unlisted = || AccessError::Unlisted { operator: operator.to_owned() };
+    self.0.get(operator).copied().ok_or_else(unlisted)
+  }
+}
+
+impl FromIterator<(String, Role)> for Access {
+  fn from_iter<I: IntoIterator<Item = (String, Role)>>(roles: I) -> Self {
+    Self(roles.into_iter().collect())
+  }
+}

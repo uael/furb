@@ -1,0 +1,115 @@
+import type { Act, Pause, RunState } from "../protocol.js";
+
+/** The model of a life: the views that a host derives from the acts of a life, which make nothing and keep nothing.
+ * It holds no native code and no module of node, so that a terminal and a window of the web read the same views. */
+
+/** The kinds of act that are work which ends later, and the table counts each one that is done. */
+export const WORK = ["prompt", "rung", "bash", "wait"];
+
+/** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
+ * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
+ * since each says which file it read or changed. An older record holds each writing of a model as such a question,
+ * where a newer one holds it as a fact, and it holds the questions of the kind gate. The act setup, which the World
+ * makes on the root at the end of the setup that every chain shares, marks a place and does nothing that a person
+ * follows. */
+const STEPS = new Set([
+  "setup",
+  "stand",
+  "clock",
+  "chance",
+  "gate",
+  "cd",
+  "merged",
+  "run",
+  "writing",
+  "wants",
+  "reply",
+]);
+/** Whether a person follows an act of a kind, as the daemon reads it: each kind but the steps of the engine. */
+export const followed = (kind: string): boolean => !STEPS.has(kind);
+/** Whether a fact of a kind takes a place in the time of a life, as the crate reads it. A fact keep says that the
+ * record kept an entry, which a whole replay of the record never says again, so it takes none, and a moment is the
+ * same place by each way to open a record. */
+export const timed = (kind: string): boolean => kind !== "keep";
+
+/** Whether a site is the operator or a member of the operator: the site operator, or a site of the form operator/id,
+ * as operated of the engine reads it. */
+export const operated = (site: string): boolean => site.split("/")[0] === "operator";
+
+/** Whether the operator, or a member who answers as him, made an act, as the crate says in its maker. */
+export const byOperator = (act: { maker?: Act["maker"] }): boolean =>
+  act.maker?.role === "operator" || act.maker?.role === "member";
+
+export type { Act, Pause, Phase, RunState, Spend } from "../protocol.js";
+/** What a pause carries, as the fact pause holds it: who said it, and the cause that it gave. */
+export type PauseCause = Pause;
+
+/** Whether an act is done. */
+export const isDone = (act?: Pick<Act, "phase">): boolean => act?.phase.phase === "done";
+/** What an act came to once it is done, and null while it is not. */
+export const outcomeOf = (act?: Pick<Act, "phase">): unknown =>
+  act?.phase.phase === "done" ? act.phase.value : null;
+/** Whether a pause holds an act that is not done. */
+export const isPaused = (act?: Pick<Act, "phase" | "pause">): boolean => Boolean(act?.pause) && !isDone(act);
+/** The chain that a fact compacts, or nothing: a jump, after which the chain goes on as a chain that keeps less; a cut,
+ * which is how an engine from before the jump compacted a chain, but the cut of a birth, which keeps the fact carried
+ * of its checkpoint; and a prefix that another said on a chain, which is how an engine from before the cut compacted
+ * it, where a chain says its own prefix at its birth. */
+export const compacts = ([kind, id, by, kept]: readonly unknown[]): string | undefined =>
+  kind === "jump"
+    ? String(kept)
+    : (kind === "cut" &&
+          !(Array.isArray(kept) && kept.some((one) => Array.isArray(one) && one[0] === "carried"))) ||
+        (kind === "prefix" && by !== id)
+      ? String(id)
+      : undefined;
+/** A compaction of a chain: a jump or a cut that a word said on the chain, after which its model reads only what it kept
+ * and what came after it. It gives the chain, the act that said it, and its place in time, as the place of an act. */
+export interface Compaction {
+  chain: string;
+  by: string;
+  at: number;
+}
+/** What a command came to: its code, and what it printed on each stream. */
+export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
+/** What a command came to once it is done, or what it printed so far while it runs, which a window holds beside the
+ * act as the lines that the command prints come, and nothing for an act that is no command. */
+export const exitOf = (act?: Act & { printed?: Exit }): Exit | undefined =>
+  act?.kind !== "bash"
+    ? undefined
+    : isDone(act)
+      ? ((outcomeOf(act) as Exit | null) ?? undefined)
+      : act.printed;
+/** The measure of a chain whose models answered or that a grant holds: the dollars of its answers, the dollars since
+ * the grant that stands on it and the dollars of its ceiling, the share of the window that its last answer read, and
+ * how many answers it had. */
+export interface Measure {
+  dollars: number;
+  spent: number;
+  ceiling?: number;
+  share?: number;
+  answers: number;
+  /** The actor of its last answer. */
+  actor?: string;
+}
+
+/** What a person reads of how the word of a rung ran: why a fault or a cancel ended it, and nothing else. */
+export const reasonOf = (run: RunState | null | undefined): string =>
+  run && "reason" in run ? run.reason : "";
+
+/** Whether an act failed: a rung whose run raised, or an act done with an exception other than a cancel. */
+export function failed(act: Pick<Act, "run" | "phase">): boolean {
+  if (act.run) return act.run.run === "failed";
+  const value = outcomeOf(act);
+  return Boolean(
+    value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
+  );
+}
+
+/** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
+ * the operator asked for, so it is no failure. */
+export function cancelled(act: Pick<Act, "run" | "phase">): boolean {
+  if (act.run) return act.run.run === "cancelled";
+  const value = outcomeOf(act);
+  return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
+}

@@ -11,14 +11,14 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 #![expect(
   clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
+  reason = "a function of the API serves both doors, and N-API gives each argument owned"
 )]
-#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
 
 #[cfg(feature = "python")]
 pub mod py;
@@ -29,7 +29,7 @@ use indexmap::IndexMap;
 use std::{
   any::Any,
   cell::RefCell,
-  mem::ManuallyDrop,
+  mem,
   ops::{Deref, DerefMut},
   rc::{Rc, Weak},
   sync::{Arc, Mutex, PoisonError},
@@ -42,16 +42,45 @@ use napi_derive::napi;
 #[cfg(feature = "python")]
 use pyo3::pyfunction;
 
+use serde::Serialize;
+
 use crate::{
-  Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
-  extension::{self, Extension, Part},
+  Ear, Fact, Fault, Hands, Heard, Life, Object, Spoken, Step,
   life::Opening,
+  skill::{self, Skill},
+  view::{
+    Act as ViewAct, Asked, Fold, Held, Name, Pause, SHOWN, Shown, quotes as quotes_of, restate,
+    writing as writing_of,
+  },
   wire,
   world::{self, images},
 };
+use std::{env, path};
 
-/// A value of the engine, as a host language holds it, both ways.
-pub struct Value(pub Object);
+/// A value of the engine, as a host language holds it, both ways. A value that comes in from a host
+/// holds the ears and the functions of the host that it names, which go to the life with it.
+pub struct Value {
+  object: Object,
+  hands: Hands,
+}
+
+impl Value {
+  /// A value of the engine that names nothing of a host.
+  pub(crate) fn of(object: Object) -> Self {
+    Self { object, hands: Hands::default() }
+  }
+
+  /// The value, read where it stands.
+  pub(crate) const fn object(&self) -> &Object {
+    &self.object
+  }
+
+  /// The value, as it goes to the engine, with what it names of the host joined to `hands`.
+  pub(crate) fn handed(self, hands: &mut Hands) -> Object {
+    hands.join(self.hands);
+    self.object
+  }
+}
 
 /// A value as the record keeps it, which a later life reads the same: in TypeScript a whole float keeps its mark.
 pub struct Record(pub Object);
@@ -78,7 +107,44 @@ pub struct NativeEar {
 }
 
 /// The ear that a [`Lent`] lends, which is gone once the ear is given back.
-type Loan = RefCell<Option<Box<dyn Ear>>>;
+type Loan = Shared<Option<Box<dyn Ear>>>;
+
+/// A value that an object of a host and the engine that it was handed to both reach: a native ear
+/// that the host lets go while the engine holds it, and the engine of JavaScript, which code of
+/// JavaScript that it runs calls again. Python holds such a value in its object, which pyo3 checks,
+/// and N-API checks nothing, so this is the one value of the doors that is checked at each reach:
+/// a reach that comes back into a reach that runs is refused, and no type of rust can rule it out,
+/// since the code of the host decides it.
+#[expect(
+  clippy::disallowed_types,
+  reason = "code of a host reaches the value again while the engine runs it, which only a check at each reach \
+            refuses"
+)]
+pub(crate) struct Shared<T>(RefCell<T>);
+
+#[expect(
+  clippy::disallowed_types,
+  reason = "the check of a reach is the borrow of a RefCell, as the type says"
+)]
+impl<T> Shared<T> {
+  pub(crate) fn new(value: T) -> Self {
+    Self(RefCell::new(value))
+  }
+
+  /// What a change of the value gives, or nothing while another reach of it runs.
+  pub(crate) fn reach<R>(&self, change: impl FnOnce(&mut T) -> R) -> Option<R> {
+    self.lend((), |held, ()| change(held)).ok()
+  }
+
+  /// What a change of the value with what it is given gives, or what it was given back while
+  /// another reach of the value runs.
+  pub(crate) fn lend<A, R>(&self, given: A, change: impl FnOnce(&mut T, A) -> R) -> Result<R, A> {
+    match self.0.try_borrow_mut() {
+      Ok(mut held) => Ok(change(&mut held, given)),
+      Err(_) => Err(given),
+    }
+  }
+}
 /// The ear, and what the engine of python steps it with once it is born there.
 struct Hearing {
   ear: Option<Box<dyn Ear>>,
@@ -92,12 +158,20 @@ struct Hearing {
 /// another thread drops goes to [`ORPHANS`], and its home thread drops it when it makes its next homed value.
 pub(crate) struct Homed<T: 'static> {
   home: ThreadId,
-  held: ManuallyDrop<T>,
+  held: Option<T>,
 }
 
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Send, and only a check at run time keeps it on its thread"
+)]
 // SAFETY: the value is reached on its home thread alone, which each deref checks. Another thread only moves it, whole
 // and untouched, into ORPHANS, and the home thread alone drops it there.
 unsafe impl<T> Send for Homed<T> {}
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Sync, and only a check at run time keeps it on its thread"
+)]
 // SAFETY: as for Send, since no thread but the home thread reaches the value.
 unsafe impl<T> Sync for Homed<T> {}
 
@@ -107,6 +181,10 @@ struct Orphan {
   _held: Box<dyn Any>,
 }
 
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Send, and only its home thread drops it, which no type says"
+)]
 // SAFETY: an orphan is moved between threads whole, and only its home thread drops it, in `Homed::new`.
 unsafe impl Send for Orphan {}
 
@@ -117,7 +195,7 @@ static ORPHANS: Mutex<Vec<Orphan>> = Mutex::new(Vec::new());
 impl<T: 'static> Homed<T> {
   /// A value of this thread, made after this thread drops each of its values that another thread dropped. They are
   /// dropped outside the lock, since a drop may make a homed value.
-  pub(crate) fn new(held: T) -> Homed<T> {
+  pub(crate) fn new(held: T) -> Self {
     let home = thread::current().id();
     let mine: Vec<Orphan> = {
       let mut orphans = ORPHANS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -126,7 +204,7 @@ impl<T: 'static> Homed<T> {
       mine
     };
     drop(mine);
-    Homed { home, held: ManuallyDrop::new(held) }
+    Self { home, held: Some(held) }
   }
 
   fn home(&self) {
@@ -137,42 +215,48 @@ impl<T: 'static> Homed<T> {
 impl<T> Deref for Homed<T> {
   type Target = T;
 
+  #[expect(
+    clippy::expect_used,
+    reason = "only the drop takes the value, and nothing reads it after"
+  )]
   fn deref(&self) -> &T {
     self.home();
-    &self.held
+    self.held.as_ref().expect("a homed value holds its value until its drop")
   }
 }
 
 impl<T> DerefMut for Homed<T> {
+  #[expect(
+    clippy::expect_used,
+    reason = "only the drop takes the value, and nothing reads it after"
+  )]
   fn deref_mut(&mut self) -> &mut T {
     self.home();
-    &mut self.held
+    self.held.as_mut().expect("a homed value holds its value until its drop")
   }
 }
 
 impl<T> Drop for Homed<T> {
   fn drop(&mut self) {
-    if thread::current().id() == self.home {
-      // SAFETY: the value is dropped once, here, and never reached after.
-      unsafe { ManuallyDrop::drop(&mut self.held) };
-    } else {
-      // SAFETY: the value is taken once, here, and never reached after.
-      let held = Box::new(unsafe { ManuallyDrop::take(&mut self.held) });
-      let orphan = Orphan { home: self.home, _held: held };
-      ORPHANS.lock().unwrap_or_else(PoisonError::into_inner).push(orphan);
+    match self.held.take() {
+      Some(held) if thread::current().id() != self.home => {
+        let orphan = Orphan { home: self.home, _held: Box::new(held) };
+        ORPHANS.lock().unwrap_or_else(PoisonError::into_inner).push(orphan);
+      }
+      held => drop(held),
     }
   }
 }
 
 impl NativeEar {
-  fn of(ear: Box<dyn Ear>) -> NativeEar {
+  fn of(ear: Box<dyn Ear>) -> Self {
     let hearing = Hearing {
       ear: Some(ear),
       lent: None,
       #[cfg(feature = "python")]
       stepped: None,
     };
-    NativeEar { hearing: Homed::new(hearing) }
+    Self { hearing: Homed::new(hearing) }
   }
 
   /// The ear, lent out, since an ear hears in one engine. The engine holds it, and this ear holds the way to it, so a
@@ -186,7 +270,7 @@ impl NativeEar {
     let ear = hearing.ear.take().ok_or_else(|| {
       Fault::refused("an ear of the crate hears in one engine, and this one hears")
     })?;
-    let shared = Rc::new(RefCell::new(Some(ear)));
+    let shared = Rc::new(Shared::new(Some(ear)));
     hearing.lent = Some(Rc::downgrade(&shared));
     Ok(Box::new(Lent(shared)))
   }
@@ -195,36 +279,35 @@ impl NativeEar {
 /// An ear of the crate as an engine holds it, which its [`NativeEar`] lets go at a dispose: from then on it is over.
 struct Lent(Rc<Loan>);
 
+/// Each reach of a lent ear comes from the engine that holds it, one at a time, and a dispose that
+/// came while one ran is refused, so a reach that is refused finds an ear that is gone.
 impl Ear for Lent {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    match self.0.borrow_mut().as_mut() {
-      Some(ear) => ear.resume(heard, cx),
-      None => Step::Over,
-    }
+    self
+      .0
+      .reach(|ear| ear.as_mut().map(|ear| ear.resume(heard, cx)))
+      .flatten()
+      .unwrap_or(Step::Over)
   }
 
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    match self.0.borrow_mut().as_mut() {
-      Some(ear) => ear.poll(cx),
-      None => Poll::Pending,
-    }
+    self.0.reach(|ear| ear.as_mut().map(|ear| ear.poll(cx))).flatten().unwrap_or(Poll::Pending)
   }
 
   fn answered(&mut self, got: Result<Object, Fault>) {
-    if let Some(ear) = self.0.borrow_mut().as_mut() {
-      ear.answered(got);
-    }
+    self.0.reach(|ear| ear.as_mut().map(|ear| ear.answered(got)));
   }
 
   fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    match self.0.borrow_mut().as_mut() {
+    let lent = self.0.lend(life, |ear, life| match ear {
       Some(ear) => ear.lent(heard, cx, life),
       None => (Step::Over, life),
-    }
+    });
+    lent.unwrap_or_else(|life| (Step::Over, life))
   }
 
   fn ran(&mut self) -> Result<(), Fault> {
-    self.0.borrow_mut().as_mut().map_or(Ok(()), |ear| ear.ran())
+    self.0.reach(|ear| ear.as_mut().map_or(Ok(()), |ear| ear.ran())).unwrap_or(Ok(()))
   }
 }
 
@@ -239,9 +322,8 @@ impl NativeEar {
     hearing.ear.take();
     if let Some(shared) = hearing.lent.take().and_then(|one| one.upgrade()) {
       let ear = shared
-        .try_borrow_mut()
-        .map_err(|_| Fault::refused("the ear hears, and cannot be let go now"))?
-        .take();
+        .reach(Option::take)
+        .ok_or_else(|| Fault::refused("the ear hears, and cannot be let go now"))?;
       drop(ear);
     }
     Ok(())
@@ -261,8 +343,8 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-  fn of(model: &world::Model) -> ModelInfo {
-    ModelInfo {
+  fn of(model: &world::Model) -> Self {
+    Self {
       name: model.name().to_owned(),
       efforts: model.efforts().into_iter().map(str::to_owned).collect(),
       window: i64::try_from(model.window()).unwrap_or(i64::MAX),
@@ -299,12 +381,12 @@ pub struct ImagePath {
   pub digest: String,
 }
 
-/// The type of an image: its media type and its extension.
+/// The type of an image: its media type and the suffix of the name of its file.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct ImageType {
   pub mime_type: String,
-  pub extension: String,
+  pub suffix: String,
 }
 
 /// What an act came to, and whether it is done: nothing while it lives.
@@ -316,8 +398,10 @@ pub struct Outcome {
   pub value: Value,
 }
 
-/// One name of a chain, read without calling it: the name, the name of its type, its representation in the sandbox,
-/// and its value, which crosses as every value does.
+/// One name of a chain, read without calling it: the name, the name of its type, its representation
+/// in the sandbox, and its value, which crosses as every value does. The read runs no code of the
+/// life, so a value whose own representation is code of the life shows by its fields, as a debugger
+/// shows it.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Inspection {
@@ -335,8 +419,8 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
-  let config = config.map_or_else(|| extension::Places::here().config, Into::into);
-  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
+  let places = config.map_or_else(skill::Places::here, |one| skill::Places::under(one.into()));
+  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, places, None)))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the
@@ -345,7 +429,7 @@ pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn bash(scratch: String) -> Result<NativeEar, Fault> {
-  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?)))
+  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?, skill::Places::here().home)))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
@@ -394,7 +478,7 @@ pub fn log(path: String) -> Result<NativeEar, Fault> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown[] | null"))]
 pub fn logged(path: String) -> Result<Option<Value>, Fault> {
-  Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
+  Ok(world::logged(&path)?.map(|facts| Value::of(Object::list(facts))))
 }
 
 /// What the record at a path tells, read with no life, so no word runs again and a record of any
@@ -403,16 +487,24 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
 /// facts, one on each line, in order. The facts are those of the log when it agrees with the
 /// record, and else those that the record kept, with the chains, the rungs, the runs and the dones
 /// that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
-/// holds no fact.
+/// holds no fact. The name of the session is the one that the operator said last on the root,
+/// which wins, else the one that the extension naming gave, and `said` is the one that the
+/// operator said alone; an empty name takes the default name again.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(
   feature = "typescript",
-  napi(ts_return_type = "{ made: string | null; engine: string; logged: boolean; file: string }")
+  napi(
+    ts_return_type = "{ made: string | null; engine: string; logged: boolean; file: string; name: string | null; said: string | null }"
+  )
 )]
 pub fn retold(path: String) -> Result<Value, Fault> {
-  let world::Retold { made, logged, file, .. } = world::retold(&path)?;
-  Ok(Value(Object::dict([
+  let told = world::retold(&path)?;
+  let name = told.name().map_or_else(Object::none, Object::string);
+  let world::Retold { made, logged, file, said, .. } = told;
+  Ok(Value::of(Object::dict([
     (Object::string("made"), made.map_or_else(Object::none, Object::string)),
+    (Object::string("name"), name),
+    (Object::string("said"), said.map_or_else(Object::none, Object::string)),
     (Object::string("engine"), Object::string(world::engine())),
     (Object::string("logged"), Object::bool(logged)),
     (Object::string("file"), Object::string(file.display().to_string())),
@@ -441,66 +533,45 @@ pub fn opened(opening: Option<Opening>) -> Result<(Record, Vec<(String, NativeEa
   Ok((Record(Object::list(record)), ears))
 }
 
-/// The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
-/// The checker is the one every engine of this thread gates with, so a word is judged once and the same.
+/// The official skills, in the order a life runs them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
-  let found = crate::gate::checked(&sheet)?;
-  Ok(
-    found
-      .into_iter()
-      .map(|one| (i64::try_from(one.line).unwrap_or(i64::MAX), one.to_string()))
-      .collect(),
-  )
+pub fn official() -> Vec<Skill> {
+  skill::official()
 }
 
-/// The official extensions, in the order a life runs them.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn official() -> Vec<Extension> {
-  extension::official()
-}
-
-/// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
+/// The skills that a life runs, in the order it enabled them, as the facts of its root say them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
-pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
+pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   let words = root.into_iter().filter_map(|one| one.0);
-  let facts: Vec<Fact> =
-    words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
-  extension::enabled(&facts)
+  let facts: Vec<Fact> = words
+    .filter_map(|words| Fact::owned(Object::tuple(words.iter().map(Object::string))))
+    .collect();
+  skill::enabled(&facts)
 }
 
-/// The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+/// The ear that plays each skill that the life runs: it enables each at the tip of the life,
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn extensions(given: Vec<Extension>) -> NativeEar {
-  NativeEar::of(extension::extensions(given, extension::Places::here()))
-}
-
-/// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
-/// one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
-  extension::parts(&extension::Places::here(), std::path::Path::new(&project))
+pub fn played(given: Vec<Skill>) -> NativeEar {
+  NativeEar::of(skill::played(given, skill::Places::here()))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn skills(config: String) -> NativeEar {
-  NativeEar::of(extension::skills::skills(config.into()))
+  NativeEar::of(world::skills::skills(skill::Places::under(config.into())))
 }
 
-/// The config directory of the user for this process, where the configs, the extensions of the user and the
-/// preferences of the TUI stand.
+/// The config directory of the user for this process, where the configs and the extensions of the
+/// user stand.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn config_directory() -> String {
-  extension::Places::here().config.display().to_string()
+  skill::Places::here().config.display().to_string()
 }
 
 /// The POSIX shell that runs a command of this machine, which a host runs its own commands in too.
@@ -544,7 +615,8 @@ pub fn models(
   config: Option<String>,
 ) -> Result<Vec<ModelInfo>, Fault> {
   let catalog = configured_catalog(claude, directory, config)?;
-  Ok(catalog.offered().iter().map(ModelInfo::of).collect())
+  let offered = catalog.offered().map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(offered.iter().map(ModelInfo::of).collect())
 }
 
 fn configured_catalog(
@@ -552,14 +624,9 @@ fn configured_catalog(
   directory: Option<String>,
   config: Option<String>,
 ) -> Result<world::Catalog, Fault> {
-  let directory = directory
-    .map(std::path::PathBuf::from)
-    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-  let config = config.map(std::path::PathBuf::from);
-  world::Catalog::load()
-    .claude(claude.map(Into::into), None)
-    .configured(&directory, config.as_deref())
-    .map_err(|no| Fault::refused(no.to_string()))
+  let directory =
+    directory.unwrap_or_else(|| env::current_dir().unwrap_or_default().display().to_string());
+  Opening { directory, config, claude, ..Opening::default() }.catalog()
 }
 
 /// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and
@@ -607,7 +674,9 @@ pub fn setup(
   config: Option<String>,
 ) -> Result<SetupInfo, Fault> {
   let count = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
-  let found = configured_catalog(claude, directory, config)?.setup();
+  let found = configured_catalog(claude, directory, config)?
+    .setup()
+    .map_err(|no| Fault::refused(no.to_string()))?;
   Ok(SetupInfo {
     claude: found.claude,
     signed: found.signed,
@@ -638,10 +707,12 @@ pub fn model(
   directory: Option<String>,
   config: Option<String>,
 ) -> Result<Option<ModelInfo>, Fault> {
-  Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
+  let found = configured_catalog(None, directory, config)?.find(&name);
+  Ok(found.map_err(|no| Fault::refused(no.to_string()))?.as_ref().map(ModelInfo::of))
 }
 
-/// A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token.
+/// A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
+/// fails. It holds no token.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct CodexAuthInfo {
@@ -650,16 +721,17 @@ pub struct CodexAuthInfo {
   pub message: Option<String>,
 }
 
-/// Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
-/// The config directory is the user config directory when unsaid. A start returns before the browser completes.
+/// Read, start, refresh or cancel `ChatGPT` sign-in for codex. The default action reads its state.
+/// The config directory is the user config directory when unsaid. A start returns before the
+/// browser completes.
 #[cfg_attr(feature = "python", pyfunction, pyo3(signature = (action = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<CodexAuthInfo, Fault> {
   use crate::world::codex as auth;
-  let path = config.map(std::path::PathBuf::from);
+  let path = config.map(path::PathBuf::from);
   let status = match action.as_deref().unwrap_or("status") {
     "status" => auth::status(path.as_deref()),
-    "start" => auth::begin(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
+    "start" => auth::begin(path.as_deref(), false).map_err(|no| Fault::refused(no.to_string()))?,
     "refresh" => auth::refresh(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
     "cancel" => {
       auth::cancel(path.as_deref());
@@ -683,7 +755,9 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
 pub fn config_set(directory: String, change: String, config: Option<String>) -> Result<(), Fault> {
   let change = serde_json::from_str(&change).map_err(|no| Fault::refused(no.to_string()))?;
   let layers = world::config::Layers::new(directory, config.map(Into::into));
-  world::catalog::blocking(layers.set(change)).map_err(|no| Fault::refused(no.to_string()))
+  let set =
+    world::catalog::blocking(layers.set(change)).map_err(|no| Fault::refused(no.to_string()))?;
+  set.map_err(|no| Fault::refused(no.to_string()))
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.
@@ -691,6 +765,18 @@ pub fn config_set(directory: String, change: String, config: Option<String>) -> 
 #[cfg_attr(feature = "typescript", napi)]
 pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
+}
+
+/// The model and the effort that an actor names, as the crate reads an actor: the model whole
+/// when `models` holds its whole name, else the model and the level after its last slash when
+/// that word is one of the levels. The effort is `off` when the actor names none.
+#[cfg_attr(feature = "typescript", napi)]
+pub fn leveled(actor: String, models: Option<Vec<String>>) -> Vec<String> {
+  if models.unwrap_or_default().contains(&actor) {
+    return vec![actor, "off".to_owned()];
+  }
+  let (model, level) = world::catalog::leveled(&actor);
+  vec![model.to_owned(), level.unwrap_or("off").to_owned()]
 }
 
 /// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
@@ -736,21 +822,237 @@ pub fn image_references(message: String) -> Vec<images::Named> {
   images::references(&message)
 }
 
-/// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
+/// The type of an image by its first bytes: its media type and the suffix of the name of its
+/// file, for a PNG, a JPEG, a GIF or a WebP.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
-  let (media, extension) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
-  Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
+  let (media, suffix) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(ImageType { mime_type: media.to_owned(), suffix: suffix.to_owned() })
 }
 
-/// The words of a call that a host gave, by position and by name, as the engine takes them.
-fn words(
+/// The words of a call that a host gave, by position and by name, as the engine takes them, with
+/// what they name of the host joined to `hands`.
+fn words<'a>(
   args: Option<Vec<Value>>,
-  kwargs: &Option<IndexMap<String, Value>>,
-) -> (Vec<Object>, Vec<(&str, Object)>) {
-  let args = args.unwrap_or_default().into_iter().map(|one| one.0).collect();
-  (args, kwargs.iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
+  kwargs: Option<&'a mut IndexMap<String, Value>>,
+  hands: &mut Hands,
+) -> (Vec<Object>, Vec<(&'a str, Object)>) {
+  let args = args.unwrap_or_default().into_iter().map(|one| one.handed(hands)).collect();
+  let kwargs = kwargs
+    .into_iter()
+    .flatten()
+    .map(|(key, one)| (key.as_str(), mem::replace(one, Value::of(Object::none())).handed(hands)));
+  (args, kwargs.collect())
+}
+
+/// The meaning of a life that each window draws, folded in the crate from the facts of the life in
+/// the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+/// as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+/// here, so it draws the meaning that a daemon serves.
+#[cfg_attr(feature = "typescript", napi)]
+#[derive(Default)]
+pub struct Meaning {
+  fold: Fold,
+  held: Held,
+}
+
+#[cfg_attr(feature = "typescript", napi)]
+impl Meaning {
+  /// A meaning that heard no fact yet.
+  #[cfg_attr(feature = "typescript", napi(constructor))]
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  /// The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+  /// `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+  /// as the engine finds them. A reader with no engine gives neither, and the fold finds both
+  /// itself, as the engine does, so a record folds as its life did.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "fact: unknown[], covered?: string[], born?: unknown[] | null",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+    )
+  )]
+  pub fn hear(
+    &mut self,
+    fact: Value,
+    covered: Option<Vec<String>>,
+    born: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let fact = wire::outward(fact.object().as_ref());
+    let acts = match (covered, born) {
+      (None, None) => self.fold.recorded(&fact),
+      (covered, born) => {
+        let born = born.and_then(|one| Pause::of(&wire::outward(one.object().as_ref())));
+        let covered: Vec<Name> =
+          covered.iter().flatten().map(|one| Name::from(one.as_str())).collect();
+        self.fold.hear(&fact, &covered, born)
+      }
+    };
+    for act in &acts {
+      self.held.heard(act);
+    }
+    self.held.noted(&fact, self.fold.clock());
+    meant(&acts)
+  }
+
+  /// A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+  /// does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+  /// asks the meaning later for what it draws, so no act crosses the door again for each fact.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn told(&mut self, line: String) -> Result<(), Fault> {
+    // A line of a record is plain JSON, which serde reads as the sandbox would give it out, but for
+    // the last digit of a float, so the fact takes no pass through the values of the sandbox.
+    let fact: serde_json::Value = serde_json::from_str(&line)
+      .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
+    for act in self.fold.recorded(&fact) {
+      self.held.took(act);
+    }
+    self.held.noted(&fact, self.fold.clock());
+    Ok(())
+  }
+
+  /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+  /// that one holds.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn open(&self, pausing: bool) -> Vec<String> {
+    self.fold.open(pausing).iter().map(ToString::to_string).collect()
+  }
+
+  /// What waits for the operator, with each notice that the window still shows.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "import(\"./dist/protocol.js\").Desk"))]
+  pub fn desk(&self, notices: Option<Vec<String>>) -> Result<Value, Fault> {
+    meant(&self.held.desk(&notices.unwrap_or_default()))
+  }
+
+  /// The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+  /// which the window read the chain, from which its runs of notes count the notes not yet read.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "import(\"./dist/protocol.js\").Threads")
+  )]
+  pub fn threads(&self, chain: String, at: Option<i64>, read: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let read = read.map(moment).transpose()?.unwrap_or_default();
+    meant(&self.held.threads(&chain, at, read))
+  }
+
+  /// The threads of every chain of the life but those that `hidden` names, as one tree in the order
+  /// of the list of the threads, now or as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").ThreadNode>")
+  )]
+  pub fn rail(&self, hidden: Option<Vec<String>>, at: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    meant(&self.held.rail(&hidden.unwrap_or_default(), at))
+  }
+
+  /// The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
+  /// folds that the window opened, the prompts that the operator owes, the only acts at its top
+  /// when `taken` names them, and how many last prompts and rungs show.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
+    )
+  )]
+  pub fn ladder(
+    &self,
+    chain: String,
+    at: Option<i64>,
+    opened: Option<Vec<String>>,
+    owed: Option<Vec<String>>,
+    taken: Option<Vec<String>>,
+    shown: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
+    let asked =
+      Asked { opened: &opened, owed: &owed, taken: taken.as_deref(), shown: counted(shown)? };
+    meant(&self.held.ladder(&chain, at, asked))
+  }
+
+  /// The acts as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").Act>")
+  )]
+  pub fn as_of(&self, at: i64) -> Result<Value, Fault> {
+    meant(&self.held.as_of(moment(at)?))
+  }
+
+  /// Each moment at which an act began or ended, in order, of the life or of the acts of one chain.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
+  pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
+    meant(&self.held.moments(on.as_deref()))
+  }
+}
+
+/// Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+/// still writes, `open`, the last one too while its close mark has not come. Each window reads the
+/// quotes of a word here, as the fold reads them.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_return_type = "Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>"
+  )
+)]
+pub fn quotes(text: String, open: Option<bool>) -> Result<Value, Fault> {
+  meant(&quotes_of(&text, open.unwrap_or(false)))
+}
+
+/// What a model writes while its word has not come yet, from the text of its word that came and
+/// the text that it thinks: the lines of the word that it finished, the line that it still writes,
+/// the line of the word where each line starts, and the count of the lines of the word.
+#[cfg_attr(
+  feature = "typescript",
+  napi(ts_return_type = "{ lines: string; tail: string; numbers: number[]; count: number }")
+)]
+pub fn writing(text: String, thinking: String) -> Result<Value, Fault> {
+  meant(&writing_of(&text, &thinking))
+}
+
+/// Acts each in the state that the crate gives it, and each chain in the state that the acts that
+/// stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+/// does, reads in place of a state of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+  )
+)]
+pub fn restated(acts: Value) -> Result<Value, Fault> {
+  let json = wire::outward(acts.object().as_ref());
+  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  restate(&mut acts);
+  meant(&acts)
+}
+
+/// How many last steps of each level a ladder shows: the count given, or [`SHOWN`].
+fn counted(shown: Option<Value>) -> Result<Shown, Fault> {
+  shown.map_or(Ok(SHOWN), |shown| {
+    serde_json::from_value(wire::outward(shown.object().as_ref()))
+      .map_err(|no| Fault::refused(format!("this is no count of steps: {no}")))
+  })
+}
+
+/// A meaning as a value of the engine, which crosses each door as JSON would.
+fn meant(meaning: &impl Serialize) -> Result<Value, Fault> {
+  let json = serde_json::to_value(meaning)
+    .map_err(|no| Fault::refused(format!("the meaning is no JSON: {no}")))?;
+  wire::inward(&json).map(Value::of)
+}
+
+/// A moment of a life, which counts the facts that the meaning heard before it.
+fn moment(at: i64) -> Result<u64, Fault> {
+  u64::try_from(at).map_err(|no| Fault::refused(format!("{at} is no moment: {no}")))
 }
 
 /// Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -775,16 +1077,7 @@ pub fn on_console_end(callback: Told) -> Result<(), Fault> {
 
 #[cfg(windows)]
 mod console {
-  #![expect(
-    clippy::let_underscore_must_use,
-    reason = "debt: a let _ drops a value that must be used"
-  )]
-  #![expect(
-    clippy::let_underscore_untyped,
-    reason = "debt: a let _ hides the type of what it drops"
-  )]
-
-  use std::sync::OnceLock;
+  use std::{io, sync::OnceLock, thread};
 
   use windows_sys::{
     Win32::System::Console::{
@@ -806,45 +1099,54 @@ mod console {
     Event(&'static str, oneshot::Sender<bool>),
   }
 
-  /// The keeper of the callback of the host that hears the end of the console, which it owns alone.
-  fn ending() -> &'static mpsc::UnboundedSender<Ending> {
+  /// The keeper of the callback of the host that hears the end of the console, which it owns alone,
+  /// or why the system gave it no reactor.
+  fn ending() -> io::Result<&'static mpsc::UnboundedSender<Ending>> {
     static ENDING: OnceLock<mpsc::UnboundedSender<Ending>> = OnceLock::new();
-    ENDING.get_or_init(|| {
+    let reactor = ear::reactor()?;
+    Ok(ENDING.get_or_init(|| {
       let (tells, mut told) = mpsc::unbounded_channel();
-      ear::reactor().spawn(async move {
+      reactor.spawn(async move {
         let mut callback: Option<Told> = None;
         while let Some(one) = told.recv().await {
           match one {
             Ending::Callback(one) => callback = Some(one),
             Ending::Event(name, answer) => {
-              let _ = answer.send(callback.as_ref().is_some_and(|one| (one.0)(name)));
+              // A handler that stopped waiting has returned already, so its answer is lost.
+              answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))).unwrap_or_default();
             }
           }
         }
       });
       tells
-    })
+    }))
   }
 
   /// The callback, kept, and the handler of this module, added to the handlers of the process, once.
+  #[expect(
+    unsafe_code,
+    reason = "the handler of the console is a call of Windows that no safe crate of the lock makes"
+  )]
   pub(super) fn listen(callback: Told) -> Result<(), Fault> {
     static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
+      .map_err(|no| Fault::refused(format!("the console callback has no keeper: {no}")))?
       .send(Ending::Callback(callback))
-      .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
+      .map_err(|no| Fault::refused(format!("the keeper of the console callback is gone: {no}")))?;
     // The system calls the handlers from the last added to the first, so this one comes before
     // those of the runtime, which end the process at once. SAFETY: `heard` is a handler routine
     // with the signature that the system calls, and it stays valid as long as the process.
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {
-      let why = std::io::Error::last_os_error();
+      let why = io::Error::last_os_error();
       Err(Fault::refused(format!("The console handler was not added: {why}")))
     }
   }
 
   /// The system calls this on a thread of its own. It gives the event to the host and keeps the thread, since the
   /// system ends the process once a handler returns. An event with no callback, and Ctrl+C, go on to the next handler.
+  #[expect(unsafe_code, reason = "Windows calls the handler through a pointer of this unsafe type")]
   unsafe extern "system" fn heard(event: u32) -> BOOL {
     let name = match event {
       CTRL_BREAK_EVENT => "break",
@@ -854,11 +1156,12 @@ mod console {
       _ => return 0,
     };
     let (answer, told) = oneshot::channel();
-    if ending().send(Ending::Event(name, answer)).is_err() || told.blocking_recv() != Ok(true) {
+    let sent = ending().is_ok_and(|one| one.send(Ending::Event(name, answer)).is_ok());
+    if !sent || told.blocking_recv() != Ok(true) {
       return 0;
     }
     loop {
-      std::thread::park();
+      thread::park();
     }
   }
 }

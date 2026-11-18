@@ -1,0 +1,41 @@
+[package]
+name = "furb-frames"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The frames of the window of furb: its captures in a real terminal, the replay of a recording, the probes and the compare."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[[bin]]
+name = "furb-frames"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The scale of the window, which the probes hold each frame to.
+furb-window = { path = "../window" }
+# The opening of the life of a render, which only inspects its record.
+furb = { path = "../.." }
+# Another window of the operator, which a walk dials to say a message to the daemon of the window.
+furb-host = { path = "../host" }
+# The terminal of Ghostty that OpenTUI embeds, which replays each recording, of furb or of another
+# program, into its cells, each of which holds a whole character as a terminal joins it.
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72" }
+# The glyphs and the image of a frame.
+fontdue = "0.9"
+png = "0.18"
+# The moving image of a span of a recording, which a person plays to judge a motion.
+gif = "0.13"
+clap = { version = "4.6", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# The characters of a text, as a terminal joins them.
+unicode-segmentation = "1.13"
+# The walk of a scenario waits on the terminal, on its own clock.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "fs", "sync", "net", "io-util"] }
+furb-hack = { version = "0.1", path = "../hack" }

@@ -5,10 +5,15 @@
 //! [`JsAct`], a name that JavaScript awaits. The ears of an engine are generators of JavaScript and the ears the
 //! crate writes, each a [`NativeEar`], in the order the engine offers them a question.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 mod host;
 
+use futures::channel::oneshot::Canceled;
 use indexmap::IndexMap;
-use std::{rc::Rc, sync::Arc};
+use std::{future, rc::Rc, sync::Arc};
 
 use napi::{
   Env, JsValue, Status,
@@ -25,20 +30,21 @@ use serde_json::Value as Json;
 use host::{Held, Word};
 
 use super::{Given, Inspection, NativeEar, Outcome, Record, Said, Told, Value, words};
+use crate::world;
 use crate::{
-  Engine, Fault, Object,
+  Engine, Fault, Hands, Object,
   life::{Answer, Log, Opening, Retrying, Stream},
   wire,
 };
 
 impl From<Fault> for napi::Error {
-  fn from(fault: Fault) -> napi::Error {
-    napi::Error::from_reason(fault.to_string())
+  fn from(fault: Fault) -> Self {
+    Self::from_reason(fault.to_string())
   }
 }
 
 impl From<Fault> for napi::JsError {
-  fn from(fault: Fault) -> napi::JsError {
+  fn from(fault: Fault) -> Self {
     napi::Error::from(fault).into()
   }
 }
@@ -60,21 +66,26 @@ impl TypeName for Value {
 
 impl ValidateNapiValue for Value {}
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Value {
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
     let value = unsafe { Unknown::from_raw_unchecked(env, value) };
-    Ok(Value(host::inward(&Env::from_raw(env), value, Word::Plain, 0)?))
+    let mut hands = Hands::default();
+    let object = host::inward(Env::from_raw(env), value, Word::Plain, &mut hands)?;
+    Ok(Self { object, hands })
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl ToNapiValue for Value {
   unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
     // SAFETY: the env is the one napi gives the value to.
-    unsafe { Json::to_napi_value(env, wire::outward(value.0.as_ref())) }
+    unsafe { Json::to_napi_value(env, wire::outward(value.object().as_ref())) }
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl ToNapiValue for Record {
   unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
     // SAFETY: the env is the one napi gives the value to.
@@ -82,6 +93,7 @@ impl ToNapiValue for Record {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Given {
   /// An ear of the crate as itself, and a generator of JavaScript heard as an ear.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -89,31 +101,34 @@ impl FromNapiValue for Given {
     // SAFETY: napi gives the value in its env, where it is read at once.
     let object = unsafe { Unknown::from_raw_unchecked(env.raw(), value) }.coerce_to_object()?;
     match native(&env, &object)? {
-      Some(ear) => Ok(Given(ear)),
-      None => Ok(Given(host::ear(env, &object)?)),
+      Some(ear) => Ok(Self(ear)),
+      None => Ok(Self(host::ear(env, &object)?)),
     }
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Said {
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
-    Ok(Said(unsafe { Vec::<String>::from_napi_value(env, value) }.ok()))
+    Ok(Self(unsafe { Vec::<String>::from_napi_value(env, value) }.ok()))
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Told {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
     let told = unsafe { Function::<String, ()>::from_napi_value(env, value) }?;
     let told = told.build_threadsafe_function().callee_handled::<false>().weak::<true>().build()?;
-    Ok(Told(Arc::new(move |event| {
+    Ok(Self(Arc::new(move |event| {
       told.call(event.to_owned(), ThreadsafeFunctionCallMode::NonBlocking) == Status::Ok
     })))
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Stream {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -123,13 +138,32 @@ impl FromNapiValue for Stream {
       .build_threadsafe_function::<(String, String, String, String)>()
       .weak::<true>()
       .build_callback(|call| Ok(FnArgs::from(call.value)))?;
-    Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
+    Ok(Self(Arc::new(move |rung, chain, text, thinking| {
       let said = (rung.to_owned(), chain.to_owned(), text.to_owned(), thinking.to_owned());
       told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
     })))
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
+impl FromNapiValue for world::Members {
+  /// An array of operators of JavaScript, as a home that the life alone changes.
+  unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
+    // SAFETY: napi gives the value in its env, where it is read at once.
+    Ok(Self::new(unsafe { Vec::<String>::from_napi_value(env, value) }?))
+  }
+}
+
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
+impl FromNapiValue for world::Roster {
+  /// An array of names of models of JavaScript, as a home that the life alone changes.
+  unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
+    // SAFETY: napi gives the value in its env, where it is read at once.
+    Ok(unsafe { Vec::<String>::from_napi_value(env, value) }?.into())
+  }
+}
+
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Retrying {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -139,7 +173,7 @@ impl FromNapiValue for Retrying {
       .build_threadsafe_function::<(String, String, u32, u32, f64, String)>()
       .weak::<true>()
       .build_callback(|call| Ok(FnArgs::from(call.value)))?;
-    Ok(Retrying(Arc::new(move |rung, chain, retry| {
+    Ok(Self(Arc::new(move |rung, chain, retry| {
       let said = (
         rung.to_owned(),
         chain.to_owned(),
@@ -153,24 +187,26 @@ impl FromNapiValue for Retrying {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Log {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
     let log = unsafe { Function::<String, ()>::from_napi_value(env, value) }?;
     let told = log.build_threadsafe_function().callee_handled::<false>().weak::<true>().build()?;
-    Ok(Log(Arc::new(move |line| {
+    Ok(Self(Arc::new(move |line| {
       told.call(line.to_owned(), ThreadsafeFunctionCallMode::NonBlocking);
     })))
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Answer {
   /// A function of JavaScript as a model: it is called on the thread of JavaScript with the request and a function
   /// that tells what it writes, and the turn its promise gives is the answer, or what it threw is the refusal.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     /// What a call tells as it writes, as one type, which a future of the call carries to the thread of JavaScript.
-    struct Writing(crate::world::Told);
+    struct Writing(world::Told);
     // SAFETY: napi gives the value in its env, where it is read at once.
     let answer = unsafe { Function::<(), Promise<Json>>::from_napi_value(env, value) }?;
     let called = answer
@@ -191,12 +227,19 @@ impl FromNapiValue for Answer {
         Ok(FnArgs::from((request.raw(), write.raw())))
       })?;
     let called = Arc::new(called);
-    Ok(Answer(Arc::new(move |request, told| {
+    Ok(Self(Arc::new(move |request, told| {
       let called = Arc::clone(&called);
       let writing = Writing(told);
       Box::pin(async move {
         let promise = called.call_async_catch((request, writing)).await.map_err(|no| no.reason)?;
-        let turn = promise.await.map_err(|no| no.reason)?;
+        let turn = match promise.await {
+          Ok(turn) => turn,
+          // The collector of JavaScript drops a promise that nothing settles, and napi then
+          // ends its future as cancelled: no answer comes, so the reply stays open, and the
+          // end of the life cuts it, as it cuts a reply that a model has not answered yet.
+          Err(no) if no.reason == Canceled.to_string() => return future::pending().await,
+          Err(no) => return Err(no.reason),
+        };
         wire::inward(&turn).map_err(|fault| fault.message())
       })
     })))
@@ -204,6 +247,7 @@ impl FromNapiValue for Answer {
 }
 
 /// The ear an object of JavaScript holds, when it is an ear of the crate, taken out of it.
+#[expect(unsafe_code, reason = "napi reads an instance of a class only through an unsafe call")]
 fn native(env: &Env, object: &JsObject<'_>) -> Result<Option<Box<dyn crate::Ear>>, Fault> {
   if !NativeEar::instance_of(env, object).map_err(refused)? {
     return Ok(None);
@@ -232,12 +276,13 @@ pub struct JsAct {
 
 impl JsAct {
   /// The name an object of JavaScript holds, when it is an act.
+  #[expect(unsafe_code, reason = "napi reads an instance of a class only through an unsafe call")]
   fn named(env: &Env, object: &JsObject<'_>) -> Result<Option<String>, Fault> {
-    if !JsAct::instance_of(env, object).map_err(refused)? {
+    if !Self::instance_of(env, object).map_err(refused)? {
       return Ok(None);
     }
     // SAFETY: the object is an instance of the class, which is what the value is read as.
-    let held = unsafe { ClassInstance::<JsAct>::from_napi_value(env.raw(), object.raw()) }
+    let held = unsafe { ClassInstance::<Self>::from_napi_value(env.raw(), object.raw()) }
       .map_err(refused)?;
     Ok(Some(held.id.clone()))
   }
@@ -289,8 +334,10 @@ impl JsEngine {
   )]
   pub fn boot(env: Env, record: Vec<Value>, ears: Vec<(String, Given)>) -> napi::Result<Self> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
-    let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
-    JsEngine::held(env, engine, Vec::new())
+    // A record is data: what its entries name of JavaScript goes nowhere.
+    let hands = &mut Hands::default();
+    let engine = Engine::boot(record.into_iter().map(|one| one.handed(hands)), ears)?;
+    Self::held(env, engine, Vec::new())
   }
 
   /// A life opened as every host of the crate opens one: on its record, on these ears of the host, each a generator
@@ -302,7 +349,7 @@ impl JsEngine {
   )]
   pub fn open(env: Env, ears: Vec<(String, Given)>, opening: Opening) -> napi::Result<Self> {
     let (engine, record) = opening.boot(ears.into_iter().map(|(name, ear)| (name, ear.0)))?;
-    JsEngine::held(env, engine, record)
+    Self::held(env, engine, record)
   }
 
   /// The record the life opened on, which the journal said again whole before boot returned.
@@ -333,14 +380,13 @@ impl JsEngine {
   /// sandbox, or at once when the life stopped already.
   #[napi(ts_args_type = "listener: (why: string) => void")]
   pub fn on_stop(&self, listener: Function<'_, String, ()>) -> napi::Result<()> {
-    *self.held.listener.borrow_mut() = Some(listener.create_ref()?);
-    self.held.stops();
+    self.held.listen(listener.create_ref()?);
     Ok(())
   }
 
   #[napi(getter)]
   pub fn disposed(&self) -> bool {
-    self.held.engine.try_borrow().is_ok_and(|engine| engine.is_none())
+    self.held.disposed()
   }
 
   /// Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the work
@@ -359,10 +405,11 @@ impl JsEngine {
     &self,
     name: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, &kwargs);
-    self.said(&name, args, kwargs).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    self.said(&name, args, kwargs, hands).map(Value::of)
   }
 
   /// One callable the engine made, called back by the number it went out under, with these words.
@@ -374,10 +421,15 @@ impl JsEngine {
     &self,
     n: i64,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, &kwargs);
-    self.held.call(|engine| engine.made(n, args, kwargs)).map(Value)
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    let made = |engine: &mut Engine| {
+      engine.hand(hands);
+      engine.made(n, &args, kwargs)
+    };
+    self.held.call(made).map(Value::of)
   }
 
   /// A callable the engine made, forgotten: the host holds its number no more.
@@ -396,7 +448,7 @@ impl JsEngine {
   #[napi]
   pub fn outcome(&self, act: String) -> napi::Result<Outcome> {
     let got = self.held.call(|engine| engine.outcome(&act))?;
-    Ok(Outcome { done: got.is_some(), value: Value(got.unwrap_or_else(Object::none)) })
+    Ok(Outcome { done: got.is_some(), value: Value::of(got.unwrap_or_else(Object::none)) })
   }
 
   /// The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
@@ -436,10 +488,14 @@ impl JsEngine {
     key: String,
     kind: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<IndexMap<String, Value>>,
+    mut kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<JsAct> {
-    let (args, kwargs) = words(args, &kwargs);
-    let id = self.held.call(|engine| engine.keyed(&key, &kind, args, kwargs))?;
+    let mut hands = Hands::default();
+    let (args, kwargs) = words(args, kwargs.as_mut(), &mut hands);
+    let id = self.held.call(|engine| {
+      engine.hand(hands);
+      engine.keyed(&key, &kind, &args, kwargs)
+    })?;
     Ok(JsAct { held: Rc::clone(&self.held), id })
   }
 
@@ -448,21 +504,13 @@ impl JsEngine {
   pub fn inspect(&self, name: String, chain: Option<String>) -> napi::Result<Inspection> {
     let (kind, representation, value) =
       self.held.call(|engine| engine.inspect(&name, chain.as_deref()))?;
-    Ok(Inspection { name, kind, representation, value: Value(value) })
+    Ok(Inspection { name, kind, representation, value: Value::of(value) })
   }
 
   /// Every name the module of a chain binds, the root when none is given, in the order it bound them.
   #[napi]
   pub fn names(&self, chain: Option<String>) -> napi::Result<Vec<String>> {
     self.held.call(|engine| engine.names(chain.as_deref()))
-  }
-
-  /// The life ends with its checkpoint at the tip of its record, from which a later life on the
-  /// record opens, as the engine of the crate writes it; then the engine is gone, as after a
-  /// dispose. A life that keeps no record refuses it, and ends too.
-  #[napi]
-  pub fn checkpoint(&self) -> napi::Result<()> {
-    self.held.checkpoint()
   }
 
   /// The engine is gone, and every result JavaScript awaits of it is refused. Its ears go with it: a command of the
@@ -477,7 +525,7 @@ impl JsEngine {
   /// The engine, held on the thread of JavaScript.
   fn held(env: Env, engine: Engine, record: Vec<Object>) -> napi::Result<Self> {
     let (root, raised) = (engine.root().to_owned(), engine.raised().cloned());
-    Ok(JsEngine { held: Held::new(env, engine)?, root, raised, record })
+    Ok(Self { held: Held::new(env, engine)?, root, raised, record })
   }
 
   /// One verb, said by what the life hears now while it hears, and by the operator otherwise.
@@ -486,21 +534,26 @@ impl JsEngine {
     name: &str,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
+    hands: Hands,
   ) -> napi::Result<Object> {
-    self.held.call(|engine| engine.verb(name, args, kwargs))
+    self.held.call(|engine| {
+      engine.hand(hands);
+      engine.verb(name, &args, kwargs)
+    })
   }
 
   /// One verb of the contract with the words JavaScript gave, each as the contract says its type, and what it gave.
   fn worded(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Object> {
     let Words { given, placed, rest, options, keys } = words;
+    let mut hands = Hands::default();
     let mut args = Vec::new();
     for (one, word) in given {
-      args.push(host::inward(&env, one, word, 0)?);
+      args.push(host::inward(env, one, word, &mut hands)?);
     }
     let known: Vec<(&str, Word)> =
       placed.iter().map(|(key, word, _)| (*key, *word)).chain(keys.iter().copied()).collect();
     let mut kwargs = match options {
-      Some(options) => host::named(env, options, &known)?,
+      Some(options) => host::named(env, options, &known, &mut hands)?,
       None => Vec::new(),
     };
     // A word with a default that stands before the star goes by its place, so the words of the star follow it.
@@ -509,15 +562,15 @@ impl JsEngine {
       args.push(at.map_or_else(|| default.clone(), |at| kwargs.remove(at).1));
     }
     for one in rest.unwrap_or_default() {
-      args.push(host::inward(&env, one, Word::Plain, 0)?);
+      args.push(host::inward(env, one, Word::Plain, &mut hands)?);
     }
     let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-    self.said(name, args, kwargs)
+    self.said(name, args, kwargs, hands)
   }
 
   /// One verb of the contract that gives a value, as JavaScript reads it.
   fn plain(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Value> {
-    self.worded(env, name, words).map(Value)
+    self.worded(env, name, words).map(Value::of)
   }
 
   /// One verb of the contract that makes an act, and the act.

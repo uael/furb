@@ -1,2 +1,2 @@
 [test]
-preload = ["./tui/script/preload.ts"]
+preload = ["./crates/typescript/script/preload.ts"]

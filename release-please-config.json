@@ -25,23 +25,28 @@
         },
         {
           "type": "toml",
-          "path": "cli/Cargo.toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.dependencies['furb-wire'].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/cli/Cargo.toml",
           "jsonpath": "$.dependencies.furb.version"
         },
         {
           "type": "toml",
-          "path": "cli/Cargo.toml",
+          "path": "crates/cli/Cargo.toml",
           "jsonpath": "$.dependencies['furb-host'].version"
         },
         {
           "type": "toml",
-          "path": "host/Cargo.toml",
+          "path": "crates/host/Cargo.toml",
           "jsonpath": "$.dependencies.furb.version"
         },
         {
           "type": "toml",
           "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value==\"furb\" || @.name.value==\"furb-host\" || @.name.value==\"furb-cli\")].version"
+          "jsonpath": "$.package[?(@.name.value==\"furb\" || @.name.value==\"furb-host\" || @.name.value==\"furb-wire\" || @.name.value==\"furb-client\" || @.name.value==\"furb-cli\" || @.name.value==\"furb-window\" || @.name.value==\"furb-frames\" || @.name.value==\"furb-node\")].version"
         },
         {
           "type": "toml",
@@ -54,7 +59,7 @@
         },
         {
           "type": "generic",
-          "path": "bind/python/pyproject.toml"
+          "path": "crates/python/pyproject.toml"
         },
         {
           "type": "toml",
@@ -63,37 +68,37 @@
         },
         {
           "type": "json",
-          "path": "bind/typescript/package.json",
+          "path": "crates/typescript/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "bind/typescript/package.json",
+          "path": "crates/typescript/package.json",
           "jsonpath": "$.optionalDependencies.*"
         },
         {
           "type": "json",
-          "path": "bind/typescript/npm/linux-x64-gnu/package.json",
+          "path": "crates/typescript/npm/linux-x64-gnu/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "bind/typescript/npm/linux-arm64-gnu/package.json",
+          "path": "crates/typescript/npm/linux-arm64-gnu/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "bind/typescript/npm/darwin-arm64/package.json",
+          "path": "crates/typescript/npm/darwin-arm64/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "bind/typescript/npm/darwin-x64/package.json",
+          "path": "crates/typescript/npm/darwin-x64/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "bind/typescript/npm/win32-x64-msvc/package.json",
+          "path": "crates/typescript/npm/win32-x64-msvc/package.json",
           "jsonpath": "$.version"
         }
       ]

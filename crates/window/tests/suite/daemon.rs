@@ -1,0 +1,782 @@
+//! The daemon of a test, and a peer that drives its lives as a window with an input will.
+
+#![cfg(test)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on the runtime of its app")]
+
+use std::{
+  fs::{self, File},
+  future,
+  net::SocketAddr,
+  path::{Path, PathBuf},
+  process,
+  sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+  },
+  time::{Duration, SystemTime},
+};
+
+use furb::{
+  Object,
+  life::{Answer as Answered, Log, Opening},
+  world::Told,
+};
+use furb_host::{
+  GRACE, STALL, STARTING, Settings, Tailnet, TransportError,
+  access::{Access, Ports},
+  protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Role, Verb},
+  run,
+  transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Who},
+  upgrade,
+};
+use furb_window::{Machine, Reach};
+use futures::{SinkExt, StreamExt};
+use opentui::testing::TestApp;
+use serde_json::json;
+use tokio::{
+  io::{self, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+  process::Command,
+  runtime::Handle,
+  sync::mpsc,
+  time::{sleep, timeout},
+};
+use tokio_util::codec::{Framed, LinesCodec};
+
+use crate::{tailscale::tailnet, yard::Yard};
+
+/// How long a test waits for a daemon, which a loaded machine cannot pass. It stays under the 60 s
+/// after which the runner ends a test, so a wait that fails prints its frame.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(30);
+
+/// A daemon in a folder of one test, which goes with it. The runtime of the app of the test serves
+/// it, so it ends with that app.
+pub(crate) struct Daemon {
+  yard: Yard,
+  /// The folder where the daemon listens, and its transport.
+  host: PathBuf,
+  local: Local,
+  /// The transport that listens, until the daemon is served on it.
+  listener: Option<Listener>,
+  runtime: Handle,
+  /// The main checkout of each project of the machine.
+  projects: Vec<PathBuf>,
+  /// The claude command line of each life that a window opens: none, or one that holds the open.
+  claude: PathBuf,
+}
+
+impl Daemon {
+  /// A daemon that listens and answers no peer until it is served: a window that dials it stays in
+  /// its dial for as long as the test needs.
+  pub(crate) fn bound(app: &TestApp) -> Self {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    // A short name, since the path of a socket has a bound.
+    let yard = Yard::new(format!("fw{}-{n}", process::id()));
+    let host = yard.join("host");
+    let local = Local::new(&host);
+    let runtime = app.runtime();
+    let listener = runtime.block_on(local.listen()).expect("the folder of the test is free");
+    let claude = yard.join("no-claude");
+    Self { yard, host, local, listener: Some(listener), runtime, projects: Vec::new(), claude }
+  }
+
+  /// The daemon of the test ended with the app whose runtime served it, and a new one on the
+  /// records that the first one held, on the runtime of another app. It listens in a folder of its
+  /// own, since the end of the first one can take its socket with it at any moment.
+  pub(crate) fn again(&mut self, app: &TestApp) {
+    self.host = self.yard.join("host-again");
+    self.local = Local::new(&self.host);
+    self.runtime = app.runtime();
+    let listener =
+      self.runtime.block_on(self.local.listen()).expect("the folder of the test is free");
+    self.listener = Some(listener);
+  }
+
+  /// The daemon of the test ended with the app whose runtime served it, and a new one on the
+  /// records that the first one held, on the runtime of another app, in the same folder, where a
+  /// window that lost the first one dials it again. The end of the first one took its socket.
+  #[cfg(unix)]
+  pub(crate) fn back(&mut self, app: &TestApp) {
+    self.runtime = app.runtime();
+    let listener =
+      self.runtime.block_on(self.local.listen()).expect("the daemon before took its socket");
+    self.listener = Some(listener);
+  }
+
+  /// The opens of each life that a window asks held at the catalog of its models, after the read of
+  /// its record, until the test makes the file that this gives: their claude command line waits
+  /// for it, and the catalog waits for a command line that it never saw. A peer of the test opens
+  /// each life on no command line, so it never waits.
+  #[cfg(unix)]
+  pub(crate) fn holding(&mut self) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let (program, go) = (self.yard.join("claude"), self.yard.join("go"));
+    let waits = format!("#!/bin/sh\nuntil [ -e '{}' ]; do sleep 0.02; done\n", go.display());
+    fs::write(&program, waits).unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    self.claude = program;
+    go
+  }
+
+  /// The claude command line of each life and of the catalog says nothing and ends at once, so the
+  /// catalog offers the models of claude that it knows.
+  #[cfg(unix)]
+  pub(crate) fn catalog(&mut self) {
+    use std::os::unix::fs::PermissionsExt;
+    let program = self.yard.join("claude");
+    fs::write(&program, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    self.claude = program;
+  }
+
+  /// A daemon that took the dial of a window, read its hello and its ask of the cards, and is gone
+  /// before it answered: the window reads the end of the stream.
+  pub(crate) fn lost(&mut self) {
+    let mut listener = self.listener.take().expect("the daemon is not served");
+    let asked = async {
+      let mut lines = Framed::new(listener.accept().await.unwrap(), LinesCodec::new());
+      (lines.next().await, lines.next().await)
+    };
+    let asked = self.runtime.block_on(async { timeout(PATIENCE, asked).await });
+    assert!(matches!(asked, Ok((Some(Ok(_)), Some(Ok(_))))), "a window dials the daemon");
+  }
+
+  /// The model of each life of the daemon answers nothing until the test lets it, so a frame of
+  /// the window that the test reads shows what the window drew before an answer.
+  pub(crate) fn hold(&self) {
+    File::create(self.yard.join("held")).unwrap();
+  }
+
+  /// The model of each life of the daemon answers again.
+  pub(crate) fn let_go(&self) {
+    fs::remove_file(self.yard.join("held")).unwrap();
+  }
+
+  /// A project of the machine, which the daemon lists, and the folder of its sessions.
+  pub(crate) fn project(&mut self, name: &str) -> PathBuf {
+    let main = self.yard.join(name);
+    let sessions = main.join(".furb").join("sessions");
+    fs::create_dir_all(&sessions).unwrap();
+    self.projects.push(main);
+    let listed: Vec<_> =
+      self.projects.iter().map(|one| json!({ "directory": one.display().to_string() })).collect();
+    fs::create_dir_all(self.yard.join("config")).unwrap();
+    let list = json!({ "workspaces": listed }).to_string();
+    fs::write(self.yard.join("config").join("workspaces.json"), list).unwrap();
+    sessions
+  }
+
+  /// The daemon served, where the first peer that dials is another operator of a name, and each
+  /// later one the login of the machine with a role, as the window of the test is.
+  pub(crate) fn served_as(&mut self, first: &'static str, later: Role) {
+    let listener = self.listener.take().expect("a daemon is served once");
+    let identity = Other { local: self.local.clone(), dialed: Arc::default(), first, later };
+    let settings = self.settings();
+    drop(self.runtime.spawn(async move { run(&identity, listener, settings).await }));
+  }
+
+  /// The daemon served, on the runtime of the app. A life with no holder ends at once.
+  pub(crate) fn served(&mut self) {
+    let listener = self.listener.take().expect("a daemon is served once");
+    let (local, settings) = (self.local.clone(), self.settings());
+    drop(self.runtime.spawn(async move { run(&local, listener, settings).await }));
+  }
+
+  /// The daemon served on the tailnet too, by TCP on loopback, where the fake of the local API of
+  /// Tailscale names each peer by a login that may write, and names the machine of the daemon
+  /// online under a name. The tailnet where a window finds that machine, at the port of the daemon.
+  pub(crate) fn tailed(&mut self, name: &str, login: &str) -> furb_window::Tailnet {
+    let listener = self.listener.take().expect("a daemon is served once");
+    let (tell, mut reported) = mpsc::unbounded_channel();
+    let log = Log(Arc::new(move |line: &str| drop(tell.send(line.to_owned()))));
+    // The user of the far machine has the folder of the test as its home.
+    let home = dunce::canonicalize(&self.yard).ok().map(|one| one.display().to_string());
+    let settings = self.settings();
+    let opening = Opening { log: Some(log), home, ..settings.opening };
+    let local = self.local.clone();
+    let (login, name) = (login.to_owned(), name.to_owned());
+    self.runtime.block_on(async move {
+      let (api, _) = tailnet(&login, &[&name]).await;
+      let access: Access = [(login, Role::Write)].into_iter().collect();
+      let ports = Ports { tcp: Some(0), websocket: None };
+      let tailnet = Some(Tailnet { identity: Tailscale::new(api.clone(), access), ports });
+      let settings = Settings { opening, tailnet, ..settings };
+      tokio::spawn(async move { run(&local, listener, settings).await });
+      loop {
+        let line = timeout(PATIENCE, reported.recv()).await.ok().flatten();
+        let line = line.expect("the daemon listens on the tailnet");
+        if let Some(at) = line.strip_prefix("furb host: listens on the tailnet at ") {
+          let at = at.split_once(" by ").map_or(at, |one| one.0);
+          let port = at.parse::<SocketAddr>().expect("an address").port();
+          break furb_window::Tailnet { api, port };
+        }
+      }
+    })
+  }
+
+  /// A daemon of a new build in the place of the daemon that runs, on the runtime of another app,
+  /// as `furb host upgrade` puts it: the daemon that runs gives its lives and closes each window.
+  pub(crate) fn upgraded(&mut self, app: &TestApp) {
+    self.runtime = app.runtime();
+    let (local, settings) = (self.local.clone(), self.settings());
+    // The grace of the machine, so the daemon that took the lives waits for the window that dials
+    // it again, as a daemon of `furb host upgrade` does.
+    let settings = Settings { grace: GRACE, ..settings };
+    drop(self.runtime.spawn(async move { upgrade(&local, settings, None).await }));
+  }
+
+  /// Whether a window holds a life of the daemon that listens now: no while no daemon answers, or
+  /// while the one that answers stops.
+  pub(crate) fn watched(&self) -> bool {
+    let asked = async {
+      let mut lines = Framed::new(self.local.dial().await.ok()?, LinesCodec::new());
+      let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
+      for (id, verb) in [(0, Verb::Hello(hello)), (1, Verb::List { config: None })] {
+        lines.send(serde_json::to_string(&Request { id, verb }).ok()?).await.ok()?;
+        loop {
+          match serde_json::from_str(&lines.next().await?.ok()?).ok()? {
+            Frame::Reply { id: 1, answer: Answer::Lives(records) } => {
+              return Some(records.iter().any(|one| one.watched));
+            }
+            Frame::Reply { id: got, .. } if got == id => break,
+            Frame::Refused { .. } => return None,
+            _ => {}
+          }
+        }
+      }
+      None
+    };
+    self.runtime.block_on(async { timeout(PATIENCE, asked).await }).ok().flatten() == Some(true)
+  }
+
+  /// The settings of each daemon of the test.
+  fn settings(&self) -> Settings {
+    Settings {
+      opening: scripted(&self.yard, &self.claude),
+      grace: Duration::ZERO,
+      first: STARTING,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      data: Some(self.yard.join("data")),
+    }
+  }
+
+  /// A file of the folder of the test.
+  pub(crate) fn file(&self, name: &str) -> PathBuf {
+    self.yard.join(name)
+  }
+
+  /// The machine of the daemon under a name, as a window dials it. The command that serves it is
+  /// no program, so a window that dials it while no daemon listens starts nothing, and dials it
+  /// again.
+  pub(crate) fn machine(&self, name: &str) -> Machine {
+    self.served_by(name, &self.yard.join("no-furb"))
+  }
+
+  /// The machine of the daemon under a name, whose daemon a program serves, as `furb` beside the
+  /// window serves it.
+  pub(crate) fn served_by(&self, name: &str, program: &Path) -> Machine {
+    let served = Box::new(Command::new(program));
+    Machine {
+      name: name.to_owned(),
+      reach: Reach::Here { folder: self.host.clone(), served },
+      reads: false,
+    }
+  }
+
+  /// The machine of the daemon as a window reaches it over a link that lags: the first frame of
+  /// the daemon that holds a text, and each frame after it, come a second late, as a page that
+  /// stands behind what the daemon took.
+  pub(crate) fn lagging(&self, name: &str, held: &'static str) -> Machine {
+    let folder = self.yard.join("lag");
+    let mut listener = self.runtime.block_on(Local::new(&folder).listen()).expect("a free folder");
+    let daemon = self.local.clone();
+    self.runtime.spawn(async move {
+      while let Ok(window) = listener.accept().await {
+        let Ok(served) = daemon.dial().await else { return };
+        tokio::spawn(relayed(window, served, held));
+      }
+    });
+    let served = Box::new(Command::new(self.yard.join("no-furb")));
+    Machine { name: name.to_owned(), reach: Reach::Here { folder, served }, reads: false }
+  }
+
+  /// A peer of the daemon, which hears each change of its cards.
+  pub(crate) fn peer(&self) -> Peer {
+    let mut peer = self.dialed(Kind::Window, None);
+    assert!(matches!(peer.ask(Verb::Cards), Answer::Cards(_)));
+    peer
+  }
+
+  /// A peer of the daemon that is the process of a skill of a name, which serves views.
+  pub(crate) fn skill(&self, name: &str) -> Peer {
+    self.dialed(Kind::Skill, Some(name.to_owned()))
+  }
+
+  fn dialed(&self, kind: Kind, name: Option<String>) -> Peer {
+    let dialed = self.runtime.block_on(self.local.dial()).expect("the daemon listens");
+    let mut peer = Peer {
+      lines: Framed::new(dialed, LinesCodec::new()),
+      next: 0,
+      runtime: self.runtime.clone(),
+      claude: self.yard.join("no-claude").display().to_string(),
+    };
+    let hello = Hello { protocol: PROTOCOL, kind, name, role: None };
+    assert!(matches!(peer.ask(Verb::Hello(hello)), Answer::Welcome { .. }));
+    peer
+  }
+}
+
+/// The identity of a daemon whose first peer is another operator of a name, which the transport of
+/// a tailnet proves, and each later peer the login of the machine with a role.
+#[derive(Clone)]
+struct Other {
+  local: Local,
+  dialed: Arc<AtomicU32>,
+  first: &'static str,
+  later: Role,
+}
+
+impl Identity for Other {
+  type Stream = Accepted;
+
+  async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+    let who = self.local.identify(stream).await?;
+    let first = self.dialed.fetch_add(1, Ordering::SeqCst) == 0;
+    Ok(if first {
+      Who { operator: self.first.to_owned(), ..who }
+    } else {
+      Who { role: self.later, ..who }
+    })
+  }
+}
+
+/// A peer of a daemon of a test: its stream, the id of its next request, and the claude command
+/// line of each life that it opens.
+pub(crate) struct Peer {
+  lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
+  next: u64,
+  runtime: Handle,
+  claude: String,
+}
+
+impl Peer {
+  fn read(&mut self) -> Frame {
+    let next = async { timeout(PATIENCE, self.lines.next()).await };
+    let line = self.runtime.block_on(next).expect("the daemon says a frame");
+    serde_json::from_str(&line.expect("the daemon holds the stream").unwrap()).unwrap()
+  }
+
+  /// The answer of the daemon to a verb.
+  pub(crate) fn ask(&mut self, verb: Verb) -> Answer {
+    self.tried(verb).unwrap_or_else(|why| panic!("the daemon refused: {why}"))
+  }
+
+  /// The answer of the daemon to a verb, or why it refused it.
+  pub(crate) fn tried(&mut self, verb: Verb) -> Result<Answer, String> {
+    let id = self.next;
+    self.next += 1;
+    let line = serde_json::to_string(&Request { id, verb }).unwrap();
+    self.runtime.block_on(self.lines.send(line)).unwrap();
+    loop {
+      match self.read() {
+        Frame::Reply { id: got, answer } if got == id => return Ok(answer),
+        Frame::Refused { id: Some(got), why, .. } if got == id => return Err(why),
+        _ => {}
+      }
+    }
+  }
+
+  /// The first frame that the daemon says from now on and that the test waits for, while the app
+  /// runs its tasks, as a window that must answer a frame of the daemon first.
+  pub(crate) fn heard(&mut self, app: &TestApp, wanted: impl Fn(&Frame) -> bool) -> Frame {
+    let mut got = None;
+    app.wait_until(PATIENCE, || {
+      let next = async { timeout(Duration::from_millis(5), self.lines.next()).await };
+      if let Ok(Some(line)) = self.runtime.block_on(next) {
+        let frame: Frame = serde_json::from_str(&line.unwrap()).unwrap();
+        got = Some(frame).filter(&wanted);
+      }
+      got.is_some()
+    });
+    got.expect("the daemon said the frame")
+  }
+
+  /// The first card that the daemon tells from now on and that the test waits for.
+  pub(crate) fn card(&mut self, wanted: impl Fn(&Card) -> bool) -> Card {
+    loop {
+      if let Frame::Cards { changed, .. } = self.read()
+        && let Some(card) = changed.into_iter().find(&wanted)
+      {
+        return card;
+      }
+    }
+  }
+
+  /// A life opened on a record of the sessions of a project, which the peer holds as a view, or
+  /// with a pin and no view. The open attaches the peer, since a life with no holder ends at once.
+  pub(crate) fn opened(&mut self, record: &Path, view: bool) -> String {
+    let life = record.display().to_string();
+    let cwd = record.ancestors().nth(3).map(|main| main.display().to_string());
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd,
+      actor: None,
+      roster: None,
+      skills: None,
+      config: None,
+      claude: Some(self.claude.clone()),
+      answers: false,
+      attach: Some(0),
+    };
+    assert_eq!(self.ask(open), Answer::Done);
+    if !view {
+      let pin = Verb::Pin { life: life.clone(), holder: "test".to_owned() };
+      assert_eq!(self.ask(pin), Answer::Done);
+      assert_eq!(self.ask(Verb::Detach { life: life.clone() }), Answer::Done);
+    }
+    life
+  }
+
+  /// A message of the operator on the root of a life, which starts a thread: its prompt. The
+  /// thread stands once the model of the test answered, or works for ever when the model does.
+  pub(crate) fn said(&mut self, life: &str, message: &str) -> String {
+    let verb = Verb::Prompt {
+      life: life.to_owned(),
+      shape: "None".to_owned(),
+      message: message.to_owned(),
+      to: None,
+      on: None,
+    };
+    let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
+    let stands =
+      if [WORKS, THINKS, PONDERS, RETRIES, FANS, STREAMS].iter().any(|one| message.contains(one)) {
+        "thinks"
+      } else if [LONG, DELEGATES, AWAITS].iter().any(|one| message.contains(one)) {
+        "runs"
+      } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
+        "asks"
+      } else {
+        "resolved"
+      };
+    // Each life names its first prompt alike, so a card is the thread of this life by both.
+    let ours = |card: &Card| card.life == life && *card.thread.prompt == *prompt;
+    self.card(|card| ours(card) && json!(card.thread.standing)["is"] == stands);
+    prompt
+  }
+
+  /// A session of one thread on a new record, left at rest: the peer said its message, did what
+  /// the test asks of the thread, and let the life go.
+  pub(crate) fn rested(&mut self, record: &Path, message: &str, hold: Option<Hold>) -> String {
+    let life = self.opened(record, true);
+    let act = self.said(&life, message);
+    match hold {
+      Some(Hold::Seen) => self.ask(Verb::Seen { life: life.clone(), about: act }),
+      Some(Hold::Paused) => self.ask(Verb::Pause { life: life.clone(), act, why: None }),
+      None => Answer::Done,
+    };
+    self.left(&life);
+    life
+  }
+
+  /// The peer lets a life go, which ends once it wrote the index of its threads.
+  pub(crate) fn left(&mut self, life: &str) {
+    assert_eq!(self.ask(Verb::Detach { life: life.to_owned() }), Answer::Done);
+    self.card(|card| card.life == life && !card.held);
+  }
+}
+
+/// What the operator did with a thread before he left its session: he read it, or he paused it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Hold {
+  Seen,
+  Paused,
+}
+
+/// A record at rest as the daemon finds it when no life wrote the index of its threads: it last
+/// changed a count of seconds before a second.
+pub(crate) fn aged(life: &str, at: u64, before: u64) {
+  fs::remove_file(format!("{life}.threads.json")).unwrap();
+  let changed = SystemTime::UNIX_EPOCH + Duration::from_secs(at - before);
+  File::options().write(true).open(life).unwrap().set_modified(changed).unwrap();
+}
+
+/// The words of a message of a test that make the model of the test work for ever, and ask the
+/// operator a question.
+pub(crate) const WORKS: &str = "(the model works on it)";
+pub(crate) const ASKS: &str = "(the model asks)";
+
+/// The words of a message of a test that make the model ask the operator, each with the word that
+/// asks him: a choice of a Literal, a truth, a whole number, two questions at once, values to
+/// tick, and a notice, which asks nothing. Each word closes its thread with what it was told.
+pub(crate) const CHOOSES: &str = "(the model asks a choice)";
+pub(crate) const CONFIRMS: &str = "(the model asks yes or no)";
+pub(crate) const COUNTS: &str = "(the model asks a number)";
+pub(crate) const TWICE: &str = "(the model asks twice)";
+pub(crate) const TICKS: &str = "(the model asks ticks)";
+pub(crate) const TELLS: &str = "(the model tells)";
+const QUESTIONS: [(&str, &str); 5] = [
+  (
+    CHOOSES,
+    "side = await prompt(Literal['right', 'left'], 'Where does the list of cards stand?', to=OPERATOR)\nclose(side)",
+  ),
+  (CONFIRMS, "sure = await prompt(bool, 'Is the bar orange?', to=OPERATOR)\nclose(str(sure))"),
+  (
+    COUNTS,
+    "rows = await prompt(int, 'How many rows does the form take?', to=OPERATOR)\nclose(str(rows))",
+  ),
+  (
+    TWICE,
+    "one = prompt(bool, 'Does the head count the questions?', to=OPERATOR)\ntwo = prompt(str, 'What does the head say?', to=OPERATOR)\nclose(f'{await one} {await two}')",
+  ),
+  (
+    TICKS,
+    "keys = await prompt(list[Literal['up', 'down', 'tab']], 'Which keys does the form take?', to=OPERATOR)\nclose(' '.join(keys))",
+  ),
+];
+
+/// What the model of a test says once it read the refusal of a question.
+pub(crate) const READ: &str = "The model read the refusal.";
+
+/// The words of a message of a test that make the model think and write a word that it never
+/// ends, write a long word that waits, answer with prose, or write a word that fails once.
+pub(crate) const THINKS: &str = "(the model thinks)";
+/// The words of a message of a test that make the model think for ever.
+pub(crate) const PONDERS: &str = "(the model thinks for ever)";
+pub(crate) const LONG: &str = "(the model writes a long word)";
+/// The words of a message of a test that make the model stream a reply in [`STREAMED`] parts, one
+/// for each file `part<n>` of the folder of the test that the test makes, and never end it.
+pub(crate) const STREAMS: &str = "(the model streams)";
+pub(crate) const STREAMED: usize = 12;
+pub(crate) const ANSWERS: &str = "(the model answers)";
+pub(crate) const FAILS: &str = "(the model fails)";
+
+/// The words that the model of a test answers to [`ASKS`] and to [`FAILS`].
+const ASKED: &str = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
+const FAILED: &str =
+  "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
+
+/// The words of a message of a test whose model the provider asks again once, after a cause that
+/// passes, and which then fails for good.
+pub(crate) const RETRIES: &str = "(the model is asked again)";
+
+/// The words of a message of a test whose model answers after it read most of the window of its
+/// chain: 124,000 tokens in all, of which 98,000 came from the cache and 8,400 went to it, for
+/// $0.75.
+pub(crate) const READS: &str = "(the model reads much)";
+
+/// The words of a message of a test that make the model start three agents and wait on the first:
+/// it waits on a command, the second writes for ever, and the third answers at once.
+pub(crate) const DELEGATES: &str = "(the model delegates)";
+const DELEGATE: &str =
+  "bench = prompt(str, 'Run the bench of the replay\\n(the agent waits)', on=chain('bench'))
+boot = prompt(str, 'Read the boot of the host\\n(the model works on it)', on=chain('boot'))
+lines = await prompt(str, 'Count the lines of README.md\\n(the agent answers)', on=chain('count'))
+await wait(600, bench)";
+
+/// The words of a message of a test that make the model await an agent that works for ever.
+pub(crate) const AWAITS: &str = "(the model awaits an agent)";
+
+/// The words of a message of a test that make the model answer with a table and a block of code.
+pub(crate) const TABLES: &str = "(the model answers a table)";
+
+/// The words of a message of a test that make the model answer with each part of the markdown of
+/// GitHub.
+pub(crate) const MARKDOWN: &str = "(the model answers markdown)";
+
+/// The words of a message of a test that make the model run a command that writes forty lines.
+pub(crate) const PRINTS: &str = "(the model prints much)";
+
+/// The words of a message of a test that make the model write a file, read it and close.
+pub(crate) const OPENS: &str = "(the model opens a file)";
+
+/// The words of a message of a test that make the model write a new file, then change one of its
+/// lines into two, and close.
+pub(crate) const EDITS: &str = "(the model edits a file)";
+
+/// The words of a message of a test that make the model start two agents on one line, of which
+/// one answers at once and one works for ever.
+pub(crate) const FANS: &str = "(the model fans out)";
+
+/// The words of a message of a test that make the model draw a view of a list on a chain of its
+/// own, which the word does not await. Its thread stays open, since a prompt does not close while
+/// an act that its word made lives.
+pub(crate) const DRAWS: &str = "(the model draws a view)";
+/// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
+/// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
+/// and the second waits on its chain.
+const ANSWERED: [(&str, &str); 12] = [
+  (MARKDOWN, GFM),
+  (PRINTS, "out = await bash('seq 1 40')\nclose('It printed 40 lines.')"),
+  (
+    DRAWS,
+    r#"todo = prompt(str, '{"view": 1, "slot": "footer", "tree": {"id": "todo", "node": "text", "runs": [{"text": "buy milk"}]}}', to=OPERATOR, on=chain('todo'))"#,
+  ),
+  (DELEGATES, DELEGATE),
+  (
+    TABLES,
+    "close('| Stage | Time | Share |\\n| --- | ---: | :---: |\\n| seed | 181 s | 55% |\\n| boot | 104 s | 3% |\\n\\n| Stage of the open of a life | Where its time goes in the record | Share |\\n| --- | --- | --- |\\n| the seed of each chain | each entry sent to the ears of the host | 55% |\\n\\n```\\nprint(\\'a line of code wider than the box of the block of the answer\\')\\n```')",
+  ),
+  (
+    AWAITS,
+    "lines = await prompt(str, 'Count the lines\\n(the model works on it)', on=chain('count'))",
+  ),
+  ("(the agent answers)", "close('README.md has 3 lines.')"),
+  ("(the agent waits)", "n = 2\nawait wait(600, chain)"),
+  (READS, "close('The trace holds the open of each chain.')"),
+  (
+    FANS,
+    "read = prompt(str, 'Read\\n(the agent answers)', on=chain('read')); count = await prompt(str, 'Count\\n(the model works on it)', on=chain('count'))",
+  ),
+  (
+    OPENS,
+    "write(Text('notes.md', 'a\\nb\\nc\\n'))\nfound = read('notes.md')\nclose('It holds 3 lines.')",
+  ),
+  (
+    EDITS,
+    "write(Text('notes.md', 'a\\nb\\nc\\n'))\nm = read('notes.md')\nwrite(m.replace('b\\n', 'B\\nb2\\n'))\nclose('notes.md has 4 lines.')",
+  ),
+];
+
+/// The long word of a model of a test, which waits ten minutes on its chain at its end: a wait
+/// needs an act, and a chain is over only at its end.
+const WORD: &str = "birth = 'async def boot(): return await seed()'
+word = birth.split('async def')[1]
+cost = len(word)
+plan = 'read the boot, then the seed, then the turns of each chain, then say where the time of a resume goes'
+stages = ['read', 'boot', 'seed', 'turns']
+for stage in stages:
+  cost = cost + len(stage)
+total = cost * 2
+await wait(600, chain)";
+
+/// The answer of a model of a test with each part of the markdown of GitHub.
+const GFM: &str = r#"close('# A sample of GitHub flavored markdown\n\nEach part below is one feature of GFM, so you can judge how the window draws it.\n\n## Text\n\nPlain text, **bold**, *italic*, ***both***, ~~struck through~~, `inline code`, and a [link to the pull request](https://github.com/uael/furb/pull/1389). An autolink: https://github.com/uael/furb.\n\n> A quote: the record is the one truth of a life.\n>\n> > A quote inside a quote.\n\n## Lists\n\n- The window\n  - Whisper in French and English\n  - The view "In progress"\n- The engine\n  1. Replay at a flat depth\n  2. One bound of 1000 frames\n\n## Tasks\n\n- [x] Space bar on the timeline\n- [x] Padding of the colored boxes\n- [x] Reload with F5 or ⌘R\n- [ ] Replay at a flat depth\n- [ ] One handover at a time\n\n## Table\n\n| Chain | Work | State |\n| :--- | :---: | ---: |\n| window | speed of the window | working |\n| stability | replay depth | working |\n| ci | one upgrade, commands | working |\n| kits | his words as code | working |\n\n## Code\n\n```python\nasync def converge(check, fix, bound=8):\n  for n in range(bound):\n    if (got := await bash(check, ok=True)).code == 0:\n      return n\n    await prompt(str, fix + got.stdout.content[-2000:], on=chain("fix"))\n  raise Refused("no convergence")\n```\n\n```diff\n- let home = env::home_dir();\n+ let home = places.home.clone();\n```\n\n```rust\nfn main() {\n  println!("furb");\n}\n```\n\n## Rule and footnote\n\n---\n\nA sentence with a footnote.[^1]\n\n[^1]: The footnote, at the end of the text.\n\n## Alerts\n\n> [!NOTE]\n> A note that the reader should see.\n\n> [!TIP]\n> A tip that helps.\n\n> [!IMPORTANT]\n> What the reader must know.\n\n> [!WARNING]\n> What needs his care at once.\n\n> [!CAUTION]\n> What a step can break.\n')"#;
+
+/// The prose of a model of a test, which closes its thread.
+const PROSE: &str = "found = 2
+close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\n```python\\nopen = boot + seed\\n```\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
+
+/// The opening of each life of the daemon of a test: the config of the test, no skill, a claude
+/// command line of the test, and a model that answers from the message that it reads, once the test
+/// holds its answers no more. It closes the prompt of a message, asks the operator, never answers,
+/// or fails.
+fn scripted(at: &Path, claude: &Path) -> Opening {
+  let held = at.join("held");
+  let failed = Arc::new(AtomicU32::new(0));
+  let answer = Answered(Arc::new(move |request, told| {
+    let request = request.to_string();
+    let held = held.clone();
+    let failed = Arc::clone(&failed);
+    Box::pin(async move {
+      while held.exists() {
+        sleep(Duration::from_millis(10)).await;
+      }
+      if request.contains(RETRIES) {
+        return Err(failing(&failed));
+      }
+      endless(&request, &held, &told).await;
+      let named = QUESTIONS.iter().chain(&ANSWERED).find(|one| request.contains(one.0));
+      let read = format!("close({READ:?})");
+      let told = "await prompt(None, 'The bench ran.', to=OPERATOR)\nclose(None)";
+      let word = if request.contains("refused the question") {
+        &read
+      } else if let Some((_, word)) = named {
+        word
+      } else if request.contains(TELLS) {
+        told
+      } else if request.contains(ASKS) {
+        ASKED
+      } else if request.contains(LONG) {
+        WORD
+      } else if request.contains(ANSWERS) {
+        PROSE
+      } else if request.contains(FAILS) && !request.contains("ValueError") {
+        FAILED
+      } else {
+        "close(None)"
+      };
+      let turn = ["assistant", word].map(Object::string).into_iter();
+      Ok(Object::tuple(turn.chain([usage(&request), Object::none()])))
+    })
+  }));
+  Opening {
+    config: Some(at.join("config").display().to_string()),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
+    claude: Some(claude.display().to_string()),
+    skills: Some(false),
+    answer: Some(answer),
+    ..Opening::default()
+  }
+}
+
+/// The models of a test that never end their answer, which return for each other request: one that
+/// works, one that thinks, and one that streams [`STREAMS`], each part once the test made its file
+/// beside the file `held`. Each part is a line of one string, so no statement of the word ends and
+/// none runs.
+async fn endless(request: &str, held: &Path, told: &Told) {
+  if request.contains(WORKS) {
+    future::pending::<()>().await;
+  }
+  if request.contains(STREAMS) {
+    told("said = '''", "");
+    for part in 0..STREAMED {
+      while !held.with_file_name(format!("part{part}")).exists() {
+        sleep(Duration::from_millis(1)).await;
+      }
+      told(&format!("part {part} of the reply\n"), "");
+    }
+    future::pending::<()>().await;
+  }
+  // A model that thinks for ever writes no line of a word.
+  if request.contains(THINKS) || request.contains(PONDERS) {
+    told(
+      "",
+      "I read the stages from the frames and sum them, so the open shows where its time goes. ",
+    );
+    if request.contains(THINKS) {
+      told("", "Then the seed");
+      told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
+    }
+    future::pending::<()>().await;
+  }
+}
+
+/// The usage of an answer of the model of a test: what [`READS`] says, and none for another.
+fn usage(request: &str) -> Object {
+  if !request.contains(READS) {
+    return Object::none();
+  }
+  let tokens = [124_000, 900, 98_000, 8_400].map(Object::int).into_iter();
+  Object::tuple(tokens.chain([Object::float(0.75)]))
+}
+
+/// Why the model of a test fails: for a cause that passes the first time, and for good after.
+fn failing(failed: &AtomicU32) -> String {
+  let once = failed.fetch_add(1, Ordering::SeqCst) == 0;
+  let why = if once { "the provider is overloaded" } else { "the request is malformed" };
+  why.to_owned()
+}
+
+/// The frames between a window and its daemon, each way, where the frames of the daemon from the
+/// first that holds a text on come a second late.
+async fn relayed(window: Accepted, served: impl AsyncRead + AsyncWrite + Unpin, held: &str) {
+  let (mut from_window, mut to_window) = io::split(window);
+  let (from_daemon, mut to_daemon) = io::split(served);
+  let up = io::copy(&mut from_window, &mut to_daemon);
+  let down = async {
+    let mut lines = BufReader::new(from_daemon).lines();
+    let mut late = false;
+    while let Ok(Some(line)) = lines.next_line().await {
+      if !late && line.contains(held) {
+        late = true;
+        sleep(Duration::from_secs(1)).await;
+      }
+      if to_window.write_all(format!("{line}\n").as_bytes()).await.is_err() {
+        return;
+      }
+    }
+  };
+  let (_, ()) = tokio::join!(up, down);
+}

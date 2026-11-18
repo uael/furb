@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · which keys does the form take           Resolve     All projects ▾        This computer
+  ┃
+  ┃ which keys does the form take                              Needs you 1
+  ┃ (the model asks ticks)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● which keys does the…    ◆ Input ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    ◆  keys = await prompt(list[Literal['up', 'down',…+56     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    2  close(' '.join(keys))
+    …
+
+
+
+
+
+
+
+
+  ┃
+  ┃ ◆ opus/high asks
+  ┃ Which keys does the form take?
+  ┃
+  ┃   [x] up
+  ┃   [ ] down
+  ┃ › [x] tab
+  ┃   type your own answer
+  ┃
+  ┃  Message  Python    → which… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

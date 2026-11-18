@@ -41,9 +41,11 @@ use url::Url;
 
 use super::{
   Model,
-  catalog::{LEVELS, reached},
+  catalog::{leveled, reached},
   clients::{Client, Reach},
 };
+use tokio::task;
+use tokio::time;
 
 /// The provider of the models of a local server.
 pub(super) const LOCAL: &str = "local";
@@ -72,7 +74,7 @@ enum Error {
   #[error("it listed nothing in {0:?}")]
   Slow(Duration),
   #[error("{0}")]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
 }
 
 /// Why a server listed no model.
@@ -171,7 +173,7 @@ struct Asking {
 
 impl Server {
   /// The local server that the environment names, and none when the environment names no address.
-  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Server> {
+  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Self> {
     let env = |name: &str| env(name).filter(|one| !one.trim().is_empty());
     let address = env(ENV_URL)?;
     // A user and a password in the address would go into each error that names it, so the key goes in its own name.
@@ -190,7 +192,7 @@ impl Server {
     let path = url.path().trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/');
     let root = format!("{}://{}{path}", url.scheme(), url.authority());
     let count = |name: &str| env(name)?.trim().parse::<u64>().ok().filter(|one| *one > 0);
-    Some(Server {
+    Some(Self {
       root,
       key: env(ENV_KEY).unwrap_or_default(),
       window: count(ENV_WINDOW),
@@ -203,7 +205,7 @@ impl Server {
 
   /// The server, waiting this long for its list and this long before it asks again.
   #[cfg(test)]
-  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Server {
+  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Self {
     self.deadline = deadline;
     self.again = again;
     self
@@ -311,12 +313,12 @@ impl Server {
     // models when they do not come in time.
     let listing = async move {
       let began = Instant::now();
-      let mut offers = match tokio::time::timeout(deadline, asking.offers()).await {
+      let mut offers = match time::timeout(deadline, asking.offers()).await {
         Ok(listed) => listed?,
         Err(_elapsed) => return Err(Error::Slow(deadline)),
       };
       let windows = asking.windowed(&mut offers);
-      drop(tokio::time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
+      drop(time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
       Ok::<_, Error>(offers)
     };
     listing.await
@@ -387,17 +389,17 @@ impl Asking {
       && one.window.is_none()
       && let Ok(props) = self.asked("/props", None).await
     {
-      one.window = positive(&props["default_generation_settings"]["n_ctx"]);
+      one.window = positive(field(field(&props, "default_generation_settings"), "n_ctx"));
     }
     if offers.iter().any(|one| one.window.is_none())
       && let Ok(listed) = self.asked("/api/v0/models", None).await
     {
-      for entry in listed["data"].as_array().into_iter().flatten() {
-        let Some(one) = offers.iter_mut().find(|one| entry["id"] == one.id.as_str()) else {
+      for entry in field(&listed, "data").as_array().into_iter().flatten() {
+        let Some(one) = offers.iter_mut().find(|one| *field(entry, "id") == one.id.as_str()) else {
           continue;
         };
-        let kind = entry["type"].as_str().unwrap_or_default();
-        one.window = one.window.or(positive(&entry["loaded_context_length"]));
+        let kind = field(entry, "type").as_str().unwrap_or_default();
+        one.window = one.window.or(positive(field(entry, "loaded_context_length")));
         one.chat &= kind != "embeddings";
         one.images |= kind == "vlm";
       }
@@ -410,20 +412,22 @@ impl Asking {
     for one in offers.iter_mut().filter(|one| one.window.is_none()) {
       let Ok(shown) = self.asked("/api/show", Some(&json!({"model": one.id}))).await else { break };
       let capabilities =
-        shown["capabilities"].as_array().into_iter().flatten().filter_map(Value::as_str);
+        field(&shown, "capabilities").as_array().into_iter().flatten().filter_map(Value::as_str);
       let capabilities: Vec<&str> = capabilities.collect();
       if !capabilities.is_empty() {
         one.chat &= capabilities.contains(&"completion");
         one.images |= capabilities.contains(&"vision");
       }
-      let parameters = shown["parameters"].as_str().unwrap_or_default();
+      let parameters = field(&shown, "parameters").as_str().unwrap_or_default();
       let set = parameters
         .lines()
         .find_map(|line| line.trim().strip_prefix("num_ctx")?.trim().parse().ok());
-      let running = loaded["models"].as_array().into_iter().flatten();
-      let mut running = running
-        .filter(|model| model["name"] == one.id.as_str() || model["model"] == one.id.as_str());
-      let running = running.find_map(|model| positive(&model["context_length"]));
+      let running = field(&loaded, "models").as_array().into_iter().flatten();
+      let named = |model: &&Value| {
+        *field(model, "name") == one.id.as_str() || *field(model, "model") == one.id.as_str()
+      };
+      let running =
+        running.filter(named).find_map(|model| positive(field(model, "context_length")));
       one.window = set.filter(|one| *one > 0).or(running);
     }
   }
@@ -436,8 +440,7 @@ fn names(name: &str, id: &str) -> bool {
   let is = |one: &str| {
     one == id || one.strip_prefix(LOCAL).and_then(|rest| rest.strip_prefix(':')) == Some(id)
   };
-  let leveled = |(model, level): (&str, &str)| LEVELS.contains(&level) && is(model);
-  is(name) || name.rsplit_once('/').is_some_and(leveled)
+  is(name) || matches!(leveled(name), (model, Some(_)) if is(model))
 }
 
 /// The settings that ask a model of a local server again with its thought off, once its thought passed the most of a
@@ -460,6 +463,12 @@ pub(super) fn efforts() -> Vec<(String, Map<String, Value>)> {
 }
 
 /// A count of JSON that is more than zero.
+/// A field of a map of JSON, or null when it holds none, as an index of serde reads it.
+fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
+  const NULL: &Value = &Value::Null;
+  value.get(key).unwrap_or(NULL)
+}
+
 fn positive(one: &Value) -> Option<u64> {
   one.as_u64().filter(|one| *one > 0)
 }

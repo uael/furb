@@ -1,8 +1,13 @@
 //! The one writer of the configs of a life, in their layers: `config.json` in the config directory
 //! of the user, then `.furb/config.json` of the project, which git keeps, then
 //! `.furb/config.local.json` beside it, which git ignores. Each reader reads them in this order,
-//! as [`crate::extension::configs`] gives them, and a later layer wins for a key. A change that
+//! as [`crate::skill::configs`] gives them, and a later layer wins for a key. A change that
 //! the catalog cannot read stays on no disk: the writer puts its file back as it was.
+//!
+//! A schema names the keys, as the settings of VS Code do: furb names the keys that it reads, and
+//! each extension that the configs turn on adds the keys of the file that its manifest names under
+//! `furb-config`, each under the name of the extension. The writer refuses a value that the
+//! property of its key does not take, and keeps each key that no schema names as it is.
 
 use std::{
   fs, io,
@@ -11,47 +16,123 @@ use std::{
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::{
   Catalog, catalog,
   disk::{self, Access},
+  provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING, catalog::switched},
+  scratch,
 };
-use crate::extension::{Places, configs};
+pub use furb_wire::{
+  Layer,
+  config::{Kind, Property, Setting},
+};
 
-/// A layer of the configs, from the one that wins least to the one that wins most.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Layer {
-  User,
-  #[default]
-  Project,
-  Local,
-}
+use crate::{
+  skill::{self, Places, configs},
+  value::Fault,
+};
 
 const LAYERS: [Layer; 3] = [Layer::User, Layer::Project, Layer::Local];
 
-/// A key of the configs, the value that wins for it, and the layer that gives that value. A key is
-/// a name at the top of a config, or a name in an object at the top, as `["providers", "codex"]`,
-/// since each reader merges these objects name by name. The reader of the providers merges the
-/// fields of a provider too, so a value of a provider can hold fewer fields than it reads.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Setting {
-  pub key: Vec<String>,
-  pub value: Value,
-  pub layer: Layer,
+/// The keys of the file that the manifest of an extension names under `furb-config`.
+#[derive(Deserialize)]
+struct Keys {
+  properties: IndexMap<String, Property>,
 }
 
-/// A key of a layer set to a value, or taken out when the value is none. A true or a false on a
-/// key whose value is an object sets its field `enabled`, so a provider that is off keeps its
-/// settings.
+/// A key that a schema names, with its property and the extension that names it.
+struct Named {
+  key: Vec<String>,
+  property: Property,
+  skill: Option<String>,
+}
+
+/// The objects of furb that each reader merges name by name, which the settings give with each of
+/// their names after them.
+const PROVIDERS: &str = "providers";
+
+/// The keys that furb reads.
+/// Whether a name is a key of furb at the top of the configs, which no skill that gives keys of
+/// its own takes as its name, since the configs hold those keys under its name.
+pub(crate) fn furb_key(name: &str) -> bool {
+  own().iter().any(|one| one.key.first().is_some_and(|one| one == name))
+}
+
+/// The key of the voice of the operator, which the window reads at each start of its speech.
+pub const KEY_VOICE: &str = "voice";
+
+fn own() -> Vec<Named> {
+  let one = |name: &str, kind, default, description: &str| Named {
+    key: vec![name.to_owned()],
+    property: Property {
+      kind,
+      default,
+      description: description.to_owned(),
+      values: vec![],
+      scope: Layer::Project,
+    },
+    skill: None,
+  };
+  let local = |mut named: Named| {
+    named.property.scope = Layer::Local;
+    named
+  };
+  vec![
+    one(
+      KEY_THINKING,
+      Kind::Integer,
+      json!(THINKING),
+      "The most tokens of thought of a model in one turn, 0 turning the thought off.",
+    ),
+    one(KEY_AUTOMATIC, Kind::Array, json!([]), "The models of automatic work, the first first."),
+    one(
+      scratch::KEY,
+      Kind::Integer,
+      json!(scratch::DAYS),
+      "The days with no use after which the scratch directory of a record that no life holds is \
+       removed: no change of any file in it, at any depth, for that many days. A directory that \
+       the system refuses to remove, as one with an open file, stays. A reopen of the record \
+       makes it again from the writes that the record holds; the files that commands made in it \
+       are lost.",
+    ),
+    one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
+    one(
+      KEY_VOICE,
+      Kind::Object,
+      json!({"language": "auto", "task": "transcribe"}),
+      "The voice of the operator in the window: the language that he speaks, auto to find it in \
+       each record or a code as fr or en, and the task, transcribe to write in that language or \
+       translate to write in English.",
+    ),
+    one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
+    // A person turns an extension on or off for this machine, in the local config of the project,
+    // which git does not keep.
+    local(one(
+      skill::KEY,
+      Kind::Object,
+      json!({}),
+      "The skills that a life runs, each by its name: true, false, or the path of its folder.",
+    )),
+  ]
+}
+
+/// The kind of the fact that a life says at each change of a key of its configs through the
+/// protocol: the key, and the value that wins for it after the change. A change of `skills` that
+/// turns an extension on plays it at once, as a write of a config of the project does.
+pub const CONFIGURED: &str = "configured";
+
+/// A key of a layer set to a value, or taken out when the value is none. A change that names no
+/// layer writes the layer of the scope of its key. A true or a false on a provider whose value is
+/// an object is [`switched`], as each reader of the providers takes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Change {
   pub key: Vec<String>,
   #[serde(default)]
   pub value: Option<Value>,
   #[serde(default)]
-  pub layer: Layer,
+  pub layer: Option<Layer>,
 }
 
 /// Why the configs were not read, or a change of them was not kept.
@@ -73,20 +154,42 @@ pub enum Error {
   Refused(#[source] catalog::Error),
   #[error("The change was not kept: {refused}, and its config was not put back: {source}")]
   Restore { refused: catalog::Error, source: disk::Error },
+  #[error("The keys of the skills were not read: {0}")]
+  Skills(#[source] Fault),
+  #[error("The keys of the skill {name} are no schema of keys: {source}")]
+  Schema { name: String, source: serde_json::Error },
+  #[error("The key {key} takes {wanted}, and {value} is not")]
+  Value { key: String, wanted: String, value: Value },
 }
 
-/// The three configs of a project, under the config directory of a user.
+/// The three configs of a project, under the config directory of a user, and the claude command
+/// line whose catalog a change is checked against.
 #[derive(Debug, Clone)]
 pub struct Layers {
   project: PathBuf,
   user: PathBuf,
+  claude: Option<PathBuf>,
 }
 
 impl Layers {
   /// The configs of a project, under the config directory of the user of this process when none
-  /// is given.
-  pub fn new(project: impl Into<PathBuf>, user: Option<PathBuf>) -> Layers {
-    Layers { project: project.into(), user: user.unwrap_or_else(|| Places::here().config) }
+  /// is given, checked against the claude command line of this machine.
+  pub fn new(project: impl Into<PathBuf>, user: Option<PathBuf>) -> Self {
+    let user = user.unwrap_or_else(|| Places::here().config);
+    Self { project: project.into(), user, claude: None }
+  }
+
+  /// The configs checked against the claude command line at this program, as the life that holds
+  /// them runs it, in place of the one of this machine.
+  #[must_use]
+  pub fn claude(self, bin: Option<PathBuf>) -> Self {
+    Self { claude: bin, ..self }
+  }
+
+  /// The places of the extensions that these configs turn on: the config directory of their user,
+  /// and the home of this process.
+  pub fn places(&self) -> Places {
+    Places::under(self.user.clone())
   }
 
   fn file(&self, layer: Layer) -> PathBuf {
@@ -98,10 +201,43 @@ impl Layers {
     }
   }
 
-  /// Each key of the configs with the value that wins for it, in the order in which the layers
-  /// first give the keys. A config that is not on the disk gives no key.
+  /// Each key of the configs with the value that wins for it: each key of the schema, in its
+  /// order, with its default when no layer gives it, then each key that no schema names, in the
+  /// order in which the layers first give the keys. An object of furb comes with the object of
+  /// the values that win for its names, then with a setting for each of its names. A config that
+  /// is not on the disk gives no key.
   pub fn get(&self) -> Result<Vec<Setting>, Error> {
-    let mut won: IndexMap<Vec<String>, (Value, Layer)> = IndexMap::new();
+    let mut won = self.won()?;
+    let mut out = Vec::new();
+    for Named { key, property, skill } in self.schema()? {
+      let (value, layer, within) = if property.kind == Kind::Object && skill.is_none() {
+        let (within, rest) =
+          won.into_iter().partition(|(one, _)| one.len() == 2 && one.first() == key.first());
+        won = rest;
+        let within: Vec<Setting> = settings(within);
+        // Each setting within holds two words, as the partition above took them.
+        let names =
+          within.iter().filter_map(|one| Some((one.key.get(1)?.clone(), one.value.clone())));
+        let value =
+          if within.is_empty() { property.default.clone() } else { Value::Object(names.collect()) };
+        (value, None, within)
+      } else {
+        match won.shift_remove(&key) {
+          Some((value, layer)) => (value, Some(layer), vec![]),
+          None => (property.default.clone(), None, vec![]),
+        }
+      };
+      out.push(Setting { key, value, layer, property: Some(property), skill });
+      out.extend(within);
+    }
+    out.extend(settings(won));
+    Ok(out)
+  }
+
+  /// Each key that the layers give with the value and the layer that win for it, in the order in
+  /// which the layers first give the keys.
+  fn won(&self) -> Result<IndexMap<Vec<String>, (Value, Layer)>, Error> {
+    let mut won = IndexMap::new();
     for layer in LAYERS {
       for (name, value) in read(&self.file(layer))?.0 {
         if let Value::Object(within) = value {
@@ -113,27 +249,99 @@ impl Layers {
         }
       }
     }
-    Ok(won.into_iter().map(|(key, (value, layer))| Setting { key, value, layer }).collect())
+    Ok(won)
+  }
+
+  /// Each key that a schema names: the keys of furb, then the keys that each extension that the
+  /// configs turn on adds under its name, in the order a life runs them. A file of keys that is no
+  /// schema names no key, so the configs stay readable and a config can turn its extension off,
+  /// and the read of `settings://` and the name of that extension says why. An extension that
+  /// takes the name of a key of furb plays not, as [`skill::load`] says, and names no key.
+  fn schema(&self) -> Result<Vec<Named>, Error> {
+    let places = self.places();
+    let mut named = own();
+    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Skills)? {
+      if furb_key(&name) {
+        continue;
+      }
+      let Ok(keys) = serde_json::from_str::<Keys>(&text) else { continue };
+      named.extend(keys.properties.into_iter().map(|(one, property)| Named {
+        key: vec![name.clone(), one],
+        property,
+        skill: Some(name.clone()),
+      }));
+    }
+    Ok(named)
+  }
+
+  /// The value of each key of the configs as one object, as a word reads it: each key of furb,
+  /// and each extension by its name with the object of its keys, each with the value that wins
+  /// for it, or the default of its property when no layer gives it.
+  pub fn values(&self) -> Result<Map<String, Value>, Error> {
+    let mut out = Map::new();
+    for Setting { key, value, .. } in self.get()? {
+      match key.as_slice() {
+        [one] => {
+          out.insert(one.clone(), value);
+        }
+        [one, two] => {
+          let within = out.entry(one.clone()).or_insert_with(|| Value::Object(Map::new()));
+          if let Value::Object(within) = within {
+            within.insert(two.clone(), value);
+          }
+        }
+        _ => {}
+      }
+    }
+    Ok(out)
   }
 
   /// A change written to its layer, then the catalog of this machine configured on the layers, as
-  /// a stand of a life configures it. A change that the catalog refuses puts the file back as it
-  /// was, and gives why.
+  /// a stand of a life configures it. A value that the property of its key does not take writes
+  /// nothing. A change that the catalog refuses puts the file back as it was, and gives why.
   pub async fn set(&self, change: Change) -> Result<(), Error> {
-    let path = self.file(change.layer);
+    let schema = self.schema()?;
+    let named = schema.iter().find(|one| one.key == change.key);
+    if let (Some(value), Some(one)) = (&change.value, named)
+      && !one.property.takes(value)
+    {
+      let (key, wanted) = (change.key.join("."), one.property.wanted());
+      return Err(Error::Value { key, wanted, value: value.clone() });
+    }
+    // A name in an object of furb takes the scope of its object.
+    let scoped = schema.iter().filter(|one| change.key.starts_with(&one.key));
+    let scope = scoped.max_by_key(|one| one.key.len()).map(|one| one.property.scope);
+    let scope = scope.unwrap_or_default();
+    let path = self.file(change.layer.unwrap_or(scope));
     let (mut config, before) = read(&path)?;
     changed(&mut config, &path, &change.key, change.value)?;
     let mut text = serde_json::to_vec_pretty(&config)
       .map_err(|source| Error::Parse { path: path.clone(), source })?;
     text.push(b'\n');
     disk::write(&path, &text, Access::Owner)?;
-    let configured = Catalog::loaded().await.configure(&self.project, Some(&self.user)).await;
+    let catalog = Catalog::loaded(self.claude.clone()).await;
+    let configured = catalog.configure(&self.project, Some(&self.user)).await;
     let Err(refused) = configured else { return Ok(()) };
     match restored(&path, before.as_deref()) {
       Ok(()) => Err(Error::Refused(refused)),
       Err(source) => Err(Error::Restore { refused, source }),
     }
   }
+}
+
+/// The default of each key that the file of keys of the extension `name` gives, which holds when
+/// no config gives the key.
+pub fn defaults(name: &str, text: &str) -> Result<Map<String, Value>, Error> {
+  let keys: Keys =
+    serde_json::from_str(text).map_err(|source| Error::Schema { name: name.to_owned(), source })?;
+  Ok(keys.properties.into_iter().map(|(one, property)| (one, property.default)).collect())
+}
+
+/// The settings of keys with no property of their own, each with the layer that gives its value.
+fn settings(won: IndexMap<Vec<String>, (Value, Layer)>) -> Vec<Setting> {
+  let one =
+    |(key, (value, layer))| Setting { key, value, layer: Some(layer), property: None, skill: None };
+  won.into_iter().map(one).collect()
 }
 
 /// A config as an object, and its text, or an empty object and no text when it is not on the disk.
@@ -171,8 +379,10 @@ fn changed(
     (None, _) => {
       held.shift_remove(name);
     }
-    (Some(Value::Bool(on)), Some(Value::Object(fields))) => {
-      fields.insert("enabled".to_owned(), Value::Bool(on));
+    (Some(Value::Bool(on)), Some(Value::Object(fields)))
+      if key.first().is_some_and(|one| one == PROVIDERS) =>
+    {
+      switched(fields, on);
     }
     (Some(value), _) => {
       held.insert(name.clone(), value);
@@ -188,7 +398,3 @@ fn restored(path: &Path, before: Option<&str>) -> Result<(), disk::Error> {
     None => fs::remove_file(path).map_err(|source| disk::Error { path: path.to_owned(), source }),
   }
 }
-
-#[cfg(test)]
-#[path = "config.test.rs"]
-mod test;

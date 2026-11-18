@@ -1,0 +1,29 @@
+[package]
+name = "furb-node"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The engine of the npm package of furb: the crate with its door to TypeScript, as one addon of N-API."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[lints]
+workspace = true
+
+# The addon alone is a cdylib: a cdylib takes no hash in the names of its files, so the crate furb, which each other
+# crate links, stays a plain library whose builds of each set of features stand beside each other.
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+furb = { path = "../..", features = ["typescript"] }
+# napi writes the declarations of the package only for a crate that names its macros, which the crate furb runs.
+napi-derive = "3"
+furb-hack = { version = "0.1", path = "../hack" }
+
+[build-dependencies]
+napi-build = "2"

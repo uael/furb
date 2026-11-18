@@ -22,15 +22,15 @@ Each gate runs locally. `uv run` builds the crate again after a change of it, as
 | --- | --- |
 | A defect of the runtime | Reproduce it narrowly; run that proof again after the repair, and the tests beside it |
 | `src/furb/engine.py` | `uv run pytest -q`, which runs the suite on both engines and the hygiene laws, whose wall of tokens the engine must stay under |
-| `src/furb/engine.pyi` | The test of each sentence you changed, then `uv run pytest -q test/test_hygiene.py --no-cov` and `uv run ty check --error-on-warning` |
-| An extension | `uv run pytest -q extensions/<name> --no-cov`, and the hygiene laws |
+| `src/furb/engine.pyi` | The test of each sentence you changed, then `uv run pytest -q tests/test_hygiene.py --no-cov` and `uv run ty check --error-on-warning` |
+| An extension | `uv run pytest -q .agents/skills/<name> --no-cov`, and the hygiene laws |
 | The crate, `src/*.rs` | `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and again with `--features typescript`, then `uv run pytest -q` |
-| A door | The gates of the crate, then `uv run pytest -q test/outside` for python, and `bun run build && bun run check && bun run test` for TypeScript |
-| The command line, `cli/` | `cargo test -p furb-cli`, which runs `furb` as a process on a claude command line that answers from a script |
-| The TUI, `tui/` | `bun run check`, `bun run lint`, `bun run test`; after a change that a screen shows, `bun run screenshots` and read each capture |
+| A door | The gates of the crate, then `uv run pytest -q tests/outside` for python, and `bun run build && bun run check && bun run test` for TypeScript |
+| The command line, `crates/cli/` | `cargo test -p furb-cli`, which runs `furb` as a process on a claude command line that answers from a script |
+| The window, `crates/window/` | `cargo test -p furb-window` and `cargo clippy -p furb-window --all-targets -- -D warnings`; after a change that a screen shows, `INSTA_UPDATE=always cargo test -p furb-window` and read each capture in `crates/window/tests/screens` |
 | The contract of a value that crosses a door | The gates of both doors, since each door gives the same host API |
-| The workflow, or a script of `script/` | `git diff --check` and `uv run python script/paths.py`, then read the run of the workflow on the pull request |
-| The documents alone | Their links and their format, `uv run python script/links.py` for a README of a package, and `git diff --check`; no test of the runtime |
+| The workflow, or a script of `script/` or `crates/xtask/python/` | `git diff --check` and `cargo xtask paths`, then read the run of the workflow on the pull request |
+| The documents alone | Their links and their format, `cargo xtask links` for a README of a package, and `git diff --check`; no test of the runtime |
 
 ## Boundaries of source and state
 
@@ -38,9 +38,9 @@ Never open a life on a real record, and never run the engine against the record,
 owner. A replay of a record is a live run: its ears write files and run commands. Give a test a directory of its
 own, as `Sand` and `tmp_path` do.
 
-`script/smoke.py`, `script/play.py` and `script/deepswe.py` ask a real model. Each spends prompts, so
+`cargo xtask smoke`, `cargo xtask play`, `cargo xtask compaction` and `cargo xtask deepswe run` ask a real model. Each spends prompts, so
 run one only when the owner asks, or when the change touches the provider and no scripted model can prove it.
-`script/AGENTS.md` says how to run the rig of DeepSWE.
+`cargo xtask deepswe --help` says how to run the rig of DeepSWE.
 
 The suite and the gates of TypeScript run on Linux, on macOS and on Windows. A proof on one system does not
 prove the others. When CI fails on a system you do not have, read its log before you change anything.

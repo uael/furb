@@ -1,0 +1,5714 @@
+{
+  "type": "object",
+  "properties": {
+    "request": {
+      "$ref": "#/definitions/Request"
+    },
+    "frame": {
+      "$ref": "#/definitions/Frame"
+    }
+  },
+  "required": [
+    "request",
+    "frame"
+  ],
+  "title": "Protocol",
+  "description": "Both ways of the protocol, which its schema holds.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Request": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "hello"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Hello"
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The records of the machine: each record of the sessions of each project that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds.",
+          "properties": {
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The projects of the records that `list` gives with the same config, as [`Project::of`] folds\nthem.",
+          "properties": {
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "projects"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The files of the folder `cwd` and of each folder in it, which a mention of the input names:\ndot files too, less what an ignore file of git leaves out, the folder `.git` and the records\nof the sessions of furb, `.furb/sessions`. A `cwd` that starts with `~` names a folder of the\nhome of the user of the machine.",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "files"
+            }
+          },
+          "required": [
+            "verb",
+            "cwd"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The changes of the checkout of git that holds the folder `cwd`, against its last commit: its\nbranch, each file that differs, by its path from the top of the checkout, with the lines that\nit adds and removes, and the diff of the file at `path` when the peer names one. A folder in\nno checkout has no branch and no change.",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "changes"
+            }
+          },
+          "required": [
+            "verb",
+            "cwd"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The models that the catalog of the machine offers to a life in the folder `cwd`, with the\nsettings of the folder `config` and the claude command line at `claude`, each as `open`\ntakes it, with no life: the ones of the daemon when the peer names none.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "claude": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "models"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "cards"
+            }
+          },
+          "required": [
+            "verb"
+          ],
+          "description": "The cards of the machine: each thread that an operator started in each record that `list`\ngives with no config. The peer then hears a frame `cards` at each change of them, until it\nleaves."
+        },
+        {
+          "type": "object",
+          "description": "What the peer sent in the project of a record, the newest first and each text once: what it\nsent to that record, then to each other record of the project, the record that changed last\nfirst. A record whose index does not agree with it gives nothing until the daemon made its\nindex.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "history"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The skills that the root of a life read last, by a read of `skills://`, in the order of their\nnames: those of the record, else those of each other record of its project, the record that\nchanged last first, so a new session offers the skills of the last session of its project.\nA record whose index does not agree with it gives none until the daemon made its index.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "skills"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "roster": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "skills": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "claude": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "answers": {
+              "type": "boolean",
+              "default": false
+            },
+            "attach": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0,
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "open"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The events of a life from a place in its log, which the daemon pushes to the peer.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "from": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "attach"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "from"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "detach"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "holder"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "pin"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "holder"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "unpin"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it\nwrites its image, each of its windows hears its end, and its record opens again at its tip,\nwhere the life takes its open work again, so an end is a pause. With `cancel`, the end is a\nkill: the operator first cancels each open work of the life, so the next life takes none.\nIt is refused while a window of another peer holds the life, so no view ends a life that\nanother view shows.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "cancel": {
+              "type": "boolean",
+              "default": false
+            },
+            "verb": {
+              "type": "string",
+              "const": "end"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "Each operator whose window holds a life now.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "presence"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The draft that the person of the window writes now, or none once it is empty, which each\nwindow of the life hears in the presence. It is no fact, and it goes with the window.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "draft": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Draft"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "writes"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "get"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "peek"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "An act as the life folds it once it is done: at once when it is done, else when its done\ncomes. The window that ran a word asks it of the rung of that word, and asks it again after a\nreconnect, since the record keeps the end.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "ended"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "of": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "transcript"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "turns"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "program"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "standing"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The share of the window of its model that the prompt of an answer filled, as `filled` of\nthe engine gives it from the reply that took that answer, and nothing before an answer.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "filled"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "cwd"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "name"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "inspect"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The prompts of a life that wait for an operator.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "shape",
+            "message"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "to": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "prompt"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The close of a prompt to the operator, with a line that the operator wrote.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "answer"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act",
+            "line"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A pause of an act or of a chain, with the cause that the operator gives.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "pause"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "wake"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A cancel of an act or of a chain, with the cause that the operator gives.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "cancel"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A word that runs on a chain as a turn of the operator: each act of a person goes this way, as\nthe word that `Door` gives, so the transcript shows it as it shows the act of a model.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "word": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "run"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "word"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A close of an act with a value, written as the record writes a value: `2.0` stays a float,\nand `{\"is\": \"Refused\", \"args\": [\"why\"]}` is a refusal.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "close"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The names that the module of a chain binds.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "names"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The models that a life offers, in place of the roster of the life, which no word can say,\nsince the roster is the World's: the life then stands on them, as after a change of its\nconfigs, and each later birth of it keeps them.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "roster": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "verb": {
+              "type": "string",
+              "const": "roster"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "roster"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The configs of the folder of the life, in their layers: what each key holds, a change of a\nkey, or a stand on them as the disk holds them now.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "config": {
+              "$ref": "#/definitions/Config"
+            },
+            "verb": {
+              "type": "string",
+              "const": "config"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "config"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "cancel_sign_in"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The fact that the operator read a chain or a thread up to now, which each window and each\nlater life reads in the record.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "seen"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "about"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The resolve of a thread of the operator: a close of each act that keeps it open, the last\nfirst, with the text `resolved` or with None, as its shape takes. A message on the thread\nopens it again.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "resolve"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "thread"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "queue"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "entry",
+            "shape",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A follow-up taken out of its queue before the life sent it.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "unqueue"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "entry"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The follow-ups that wait on a chain, in order.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "queued"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "What waits for the operator in a life, with each notice that the window still shows.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "notices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "verb": {
+              "type": "string",
+              "const": "desk"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment. `read`\nis the place up to which the window read the chain, from which the runs of notes count the\nones not yet read; none reads nothing.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "read": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0,
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "threads"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The threads of every chain of a life but those it names, as one tree in the order of the\nlist of the threads, now or as they stood just after a moment.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "rail"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The ladder of a chain, now or as it stood just after a moment: the steps that show and the\nfolds of the others, with the folds that the window opened, the prompts that the operator\nowes, the only acts at its top when `taken` names them, and how many last steps show.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "opened": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "owed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "taken": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "default": null
+            },
+            "shown": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Shown"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "ladder"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The acts of a life as they stood just after a moment, each with its meaning then.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "as_of"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "A page of a thread of a life, its prompt: the exchanges before the one at `before`, or\nbefore the end, at most `limit` of them, the newest page first. The page of the end also\nmakes the peer hear a frame `thread` at each change of that thread, until it reads the end\nof another thread or leaves: a peer reads one thread at a time.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "before": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0,
+              "default": null
+            },
+            "limit": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "thread",
+            "limit"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "Each moment of a life at which an act began or ended, in order.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The chain whose acts give the moments; none gives those of the whole life.",
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "moments"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turn": true,
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "answered"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "What the peer added to the text and to the thought of the turn of a request, as it writes.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            },
+            "thinking": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "wrote"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask",
+            "text",
+            "thinking"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "handover"
+            }
+          },
+          "required": [
+            "verb"
+          ],
+          "description": "The place of the daemon given to the daemon of a new build: each life written to its\ncheckpoint and ended, and the lives with their pins in the answer, once the daemon stopped to\nlisten."
+        },
+        {
+          "type": "object",
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves.",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "view.mount"
+            }
+          },
+          "required": [
+            "verb",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The tree of a view, which takes the place of each tree of a lower version.",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
+            "verb": {
+              "type": "string",
+              "const": "view.tree"
+            }
+          },
+          "required": [
+            "verb",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "What a person did to a node of a view, with the value of an input.",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "view.event"
+            }
+          },
+          "required": [
+            "verb",
+            "viewer",
+            "node",
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "What a skill asks of the one window of a view.",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
+            "verb": {
+              "type": "string",
+              "const": "view.effect"
+            }
+          },
+          "required": [
+            "verb",
+            "viewer",
+            "effect"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The end of a view in its window.",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "view.dispose"
+            }
+          },
+          "required": [
+            "verb",
+            "viewer"
+          ]
+        }
+      ],
+      "description": "One request of a peer: an id that the reply gives back, and the verb. A verb names an act as\n`act`, since `id` is the key of the request."
+    },
+    "Kind": {
+      "type": "string",
+      "enum": [
+        "window",
+        "skill",
+        "daemon"
+      ],
+      "description": "What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,\nwhich asks the handover."
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "description": "What a peer may do: read a life, or read and write it. Write holds each right of read."
+    },
+    "Hello": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/definitions/Kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Role"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "protocol",
+        "kind"
+      ],
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the\nrole that it asks. The daemon gives the peer the lesser of that role and the role that its\ntransport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer\nhas the role that its transport proved."
+    },
+    "Draft": {
+      "type": "object",
+      "properties": {
+        "on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "Where a person writes a draft: in a thread, or for a new thread when it names none."
+    },
+    "Config": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "get"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "description": "Each key of the configs with the value that wins for it and its layer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "value": true,
+            "layer": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Layer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "action": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "required": [
+            "action",
+            "key"
+          ],
+          "description": "A key of a layer, the project when none is named, set to a value, or taken out with no\nvalue, then a stand of the life on the configs. A change that the catalog refuses puts its\nconfig back as it was, and the life does not stand."
+        }
+      ],
+      "description": "What a peer asks of the configs of a life, which the World writes, so no window writes a disk."
+    },
+    "Layer": {
+      "type": "string",
+      "enum": [
+        "user",
+        "project",
+        "local"
+      ],
+      "description": "A layer of the configs, from the one that wins least to the one that wins most."
+    },
+    "Shown": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "rungs": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts",
+        "rungs"
+      ],
+      "description": "How many of the last prompts of a thread, and of the last rungs of each ladder, show."
+    },
+    "Slot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "on": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "dock"
+            }
+          },
+          "required": [
+            "slot",
+            "on"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "sidebar"
+            }
+          },
+          "required": [
+            "slot"
+          ],
+          "description": "A section of the sidebar."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "row"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "The row of one act, of a kind that the skill draws."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "detail"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "The detail of one act, of a kind that the skill draws."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "act": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "mark"
+            }
+          },
+          "required": [
+            "slot",
+            "act"
+          ],
+          "description": "A mark in the feed, after one act, of a kind that the skill marks."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "footer"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "screen"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "overlay"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        }
+      ],
+      "description": "Where a window shows a view. The dock follows the chain that it names, and the row, the detail\nand the mark follow the chain of the act that they name. The sidebar, the footer, a screen and\nan overlay follow the life."
+    },
+    "Node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "$ref": "#/definitions/Axis"
+            },
+            "gap": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "border": {
+              "type": "boolean"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Node"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "box"
+            }
+          },
+          "required": [
+            "node",
+            "axis",
+            "gap",
+            "border",
+            "children"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "runs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Run"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "node",
+            "runs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Node"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "required": [
+            "node",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "header": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Node"
+                }
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "table"
+            }
+          },
+          "required": [
+            "node",
+            "header",
+            "rows"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "inert": {
+              "type": "boolean",
+              "description": "A node that acts is inert in the window of a peer that only reads: it draws and takes no\ngesture.",
+              "default": false
+            },
+            "node": {
+              "type": "string",
+              "const": "input"
+            }
+          },
+          "required": [
+            "node",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "inert": {
+              "type": "boolean",
+              "default": false
+            },
+            "node": {
+              "type": "string",
+              "const": "button"
+            }
+          },
+          "required": [
+            "node",
+            "label"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "node": {
+              "type": "string",
+              "const": "progress"
+            }
+          },
+          "required": [
+            "node"
+          ],
+          "description": "The share of the work that is done, from 0 to 1, or none while it is not known."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "node": {
+              "type": "string",
+              "const": "code"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string",
+              "const": "diff"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ],
+          "description": "A diff in the unified form."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string",
+              "const": "markdown"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ]
+        }
+      ],
+      "description": "One node of a view, under an id that an event names."
+    },
+    "Axis": {
+      "type": "string",
+      "enum": [
+        "row",
+        "column"
+      ],
+      "description": "The way a box lays out its children."
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "default": "text",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Tone"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "description": "A run of a text, in a tone."
+    },
+    "Tone": {
+      "type": "string",
+      "enum": [
+        "text",
+        "muted",
+        "faint",
+        "accent",
+        "success",
+        "warning",
+        "danger"
+      ],
+      "description": "The tone of a run, which each window gives its own color."
+    },
+    "Gesture": {
+      "type": "string",
+      "enum": [
+        "press",
+        "change",
+        "submit"
+      ],
+      "description": "What a person does to a node."
+    },
+    "Effect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "open"
+            }
+          },
+          "required": [
+            "effect",
+            "url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "draft"
+            }
+          },
+          "required": [
+            "effect",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "notice"
+            }
+          },
+          "required": [
+            "effect",
+            "text"
+          ]
+        }
+      ],
+      "description": "What a skill asks of a window."
+    },
+    "Frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "answer": {
+              "$ref": "#/definitions/Answer"
+            },
+            "frame": {
+              "type": "string",
+              "const": "reply"
+            }
+          },
+          "required": [
+            "frame",
+            "id",
+            "answer"
+          ],
+          "description": "The answer to the request of an id."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "$ref": "#/definitions/ProtocolError"
+            },
+            "why": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "refused"
+            }
+          },
+          "required": [
+            "frame",
+            "error",
+            "why"
+          ],
+          "description": "A refusal of the request of an id, or of a frame with no id that could be read, with the\ntext that a person reads."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "event": {
+              "$ref": "#/definitions/Event"
+            },
+            "frame": {
+              "type": "string",
+              "const": "event"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "seq",
+            "event"
+          ],
+          "description": "One event of a life that the peer attached, under its place in the log of the life."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "operators": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Present"
+              }
+            },
+            "frame": {
+              "type": "string",
+              "const": "presence"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "operators"
+          ],
+          "description": "Each operator that a window of a life holds now, pushed to each of its windows after each\nattach, detach and draft."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Card"
+              }
+            },
+            "gone": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "frame": {
+              "type": "string",
+              "const": "cards"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "changed",
+            "gone"
+          ],
+          "description": "A change of the cards of one record, pushed to each peer that asked the cards: each card that\nis new or that changed, and the prompt of each card that the record holds no more."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "done": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "of": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "frame": {
+              "type": "string",
+              "const": "indexing"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "done",
+            "of"
+          ],
+          "description": "How far the daemon stands in the index of the cards of a record that no life holds, pushed to\neach peer that asked the cards while the daemon reads the record: the thousandths of the read\ndone, of 1000, which never go back. The frame with `done` equal to `of` comes before the frame\n`cards` of the record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "page": {
+              "$ref": "#/definitions/Page"
+            },
+            "frame": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "thread",
+            "page"
+          ],
+          "description": "A change of the thread that the peer reads: each exchange that is new or that changed, how\nmany exchanges stand before the first of the page of the end now, and the agents of the\nthread."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "stage": {
+              "$ref": "#/definitions/Stage"
+            },
+            "done": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "of": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "frame": {
+              "type": "string",
+              "const": "opening"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "stage",
+            "done",
+            "of"
+          ],
+          "description": "How far the open of a life stands, pushed to each of its windows while the life opens: the\nstage, its work done and its work known, each in the unit of the stage, and both 0 for a\nstage that counts nothing. The stages of one open come in their order, the numbers of a stage\nnever go back, and `done` never passes `of`. A window hears a frame at once for each stage\nthat the open reaches, and at most four each second for a stage that goes on. The frame of\n`log` with `done` equal to `of` ends the open, and comes before the first event that the open\ntells. It is no event of the log and no fact of the record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "acts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Open"
+              }
+            },
+            "notice": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "stalled"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "acts",
+            "notice"
+          ],
+          "description": "A life that holds open acts and said no fact for the bound of the daemon, pushed once to each\nof its windows by the watch of the daemon, which no word of the life runs: each open act, and\nthe notice that a window shows as it stands."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string",
+              "const": "sign_in"
+            }
+          },
+          "required": [
+            "frame",
+            "state"
+          ],
+          "description": "The state of the sign-in of codex that this peer asked with a config of its provider, pushed\nat each change of the state, so no window asks it again: the word of the state, the browser\naddress while it waits, and what to tell the operator when it needs him or failed."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": true,
+            "frame": {
+              "type": "string",
+              "const": "ask"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "ask",
+            "request"
+          ],
+          "description": "A request of a model of a life that the peer answers: its number, and the request with the\nactor, the chain, the messages and the settings."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "view.mount"
+            }
+          },
+          "required": [
+            "frame",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
+          ],
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
+            "frame": {
+              "type": "string",
+              "const": "view.tree"
+            }
+          },
+          "required": [
+            "frame",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
+          ],
+          "description": "The tree of a view, which takes the place of each tree of a lower version."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string",
+              "const": "view.event"
+            }
+          },
+          "required": [
+            "frame",
+            "viewer",
+            "node",
+            "kind"
+          ],
+          "description": "What a person did to a node of a view, with the value of an input."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
+            "frame": {
+              "type": "string",
+              "const": "view.effect"
+            }
+          },
+          "required": [
+            "frame",
+            "viewer",
+            "effect"
+          ],
+          "description": "What a skill asks of the one window of a view."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "view.dispose"
+            }
+          },
+          "required": [
+            "frame",
+            "viewer"
+          ],
+          "description": "The end of a view in its window."
+        }
+      ],
+      "description": "What the daemon says to a peer."
+    },
+    "Answer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "answer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "welcome"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "protocol": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "peer": {
+                  "$ref": "#/definitions/Peer"
+                },
+                "machine": {
+                  "type": "string"
+                },
+                "build": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "protocol",
+                "peer",
+                "machine",
+                "build"
+              ]
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, and its build."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "lives"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Listed"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "projects"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Project"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "models"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Model"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "files"
+            },
+            "data": {
+              "$ref": "#/definitions/Files"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "changes"
+            },
+            "data": {
+              "$ref": "#/definitions/Changes"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "cards"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Card"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The cards of the machine."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "history"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Sent"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "What the peer sent, the newest first."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "skills"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Skill"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The skills of a life, each with what it is for."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "act"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The name of the act that the verb made."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "value"
+            },
+            "data": true
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "values"
+            },
+            "data": {
+              "type": "array",
+              "items": true
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "inspected"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "repr": {
+                  "type": "string"
+                },
+                "value": true
+              },
+              "required": [
+                "kind",
+                "repr",
+                "value"
+              ]
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "A name of a module: the name of its type, its representation, and its value as JSON."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "presence"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Present"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "handed"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Handed"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The lives that a daemon gave at its handover."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "desk"
+            },
+            "data": {
+              "$ref": "#/definitions/Desk"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "What waits for the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "threads"
+            },
+            "data": {
+              "$ref": "#/definitions/Threads"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The threads of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "rail"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ThreadNode"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The threads of every chain of a life, as one tree."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "ladder"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Rung"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The ladder of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "acts"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Act"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The acts as they stood at a moment, or the one act that `ended` names."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "moments"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "Each moment at which an act began or ended."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "page"
+            },
+            "data": {
+              "$ref": "#/definitions/Page"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "A page of a thread."
+        }
+      ],
+      "description": "What a verb comes to."
+    },
+    "Peer": {
+      "type": "object",
+      "properties": {
+        "operator": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "kind": {
+          "$ref": "#/definitions/Kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "operator",
+        "role",
+        "kind"
+      ],
+      "description": "A peer as the daemon knows it after its hello: its operator, the login that its transport\nproved, its role, its kind, and the name of a skill. No window is named apart from its\noperator, so two windows of one operator are one operator."
+    },
+    "Listed": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "project": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "held": {
+          "type": "boolean"
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "watched": {
+          "type": "boolean",
+          "description": "Whether a window of any connection holds the life now: a pin holds it with no window.",
+          "default": false
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The holder of each pin of the life, so a life that only a pin holds stands in the background,\nand a life with no holder, which ends at its grace, does not.",
+          "default": []
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "life",
+        "held",
+        "open"
+      ],
+      "description": "A record of the machine: the main checkout of the project whose sessions hold it, when the\nlist names one, else the checkout whose `.furb/sessions` holds a record that a life holds,\nthe second of the epoch of the last write of the record, when the disk holds it,\nwhether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
+    },
+    "Project": {
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string"
+        },
+        "sessions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "folder",
+        "sessions"
+      ],
+      "description": "A project of the machine: its main checkout, the count of the records of its sessions, and the\nsecond of the epoch of the last write of one of them."
+    },
+    "Model": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "efforts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "window": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "images": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "efforts",
+        "window",
+        "images"
+      ],
+      "description": "A model that the catalog of a machine offers: the name that a stand takes, the levels of effort\nthat it takes, the level that a life takes when its actor names none, the tokens of its window,\nand whether it sees images."
+    },
+    "Files": {
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paths",
+        "more"
+      ],
+      "description": "The closed set of the nodes of a view, which each window draws in its own way.\nThe files of a folder: the path of each from the folder, in the order of a walk by name, and\nwhether more files stand there than the daemon gives."
+    },
+    "Changes": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Changed"
+          }
+        },
+        "diff": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "description": "The changes of a checkout of git against its last commit: its branch, none when its head names\nno branch, each file that differs, and the diff of the file that the peer named, as git writes\na unified diff, a file that git does not track yet added whole."
+    },
+    "Changed": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "added": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/definitions/Change"
+        }
+      },
+      "required": [
+        "path",
+        "added",
+        "removed",
+        "state"
+      ],
+      "description": "A file of a checkout that differs from the last commit: its path from the top of the checkout,\nthe lines that it adds and removes, and how it differs."
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "added",
+            "modified",
+            "deleted",
+            "renamed"
+          ]
+        },
+        {
+          "type": "string",
+          "const": "untracked",
+          "description": "A file that git does not track yet."
+        }
+      ],
+      "description": "How a file differs from the last commit."
+    },
+    "Card": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why no life of the machine opens the record of the card, whose thread then only reads."
+        },
+        "held": {
+          "type": "boolean"
+        },
+        "viewers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The holder of each pin of the life, as `list` gives it."
+        },
+        "since": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "standing": {
+          "$ref": "#/definitions/Standing"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agents": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "readers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "life",
+        "held",
+        "viewers",
+        "pins",
+        "since",
+        "prompt",
+        "title",
+        "standing"
+      ],
+      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\neach operator whose window holds that life, and the second of the epoch since which the thread\nstands as it does. A record that has no index of its threads yet gives no card until\nthe daemon made its index."
+    },
+    "Standing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "of": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "is": {
+              "type": "string",
+              "const": "asks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "by": {
+              "type": "string"
+            },
+            "is": {
+              "type": "string",
+              "const": "paused"
+            }
+          },
+          "required": [
+            "is",
+            "by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "thinks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "runs"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "delegates"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "stopped"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "rests"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "resolved"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        }
+      ],
+      "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
+    },
+    "Sent": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "python": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "by",
+        "text"
+      ],
+      "description": "What an operator sent to a life: a message, or a word of Python, with the site that sent it,\n`operator` or `operator/<login>`."
+    },
+    "Skill": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "description": "A skill that the root of a life was told of, by the last read of `skills://` there: its name,\nand what it is for."
+    },
+    "Present": {
+      "type": "object",
+      "properties": {
+        "operator": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "writes": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Draft"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operator",
+        "role"
+      ],
+      "description": "An operator whose window holds a life now: the operator, the greatest role of his windows,\nand the draft that he writes, when one of his windows writes one."
+    },
+    "Handed": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "life",
+        "cwd",
+        "pins"
+      ],
+      "description": "A life that a daemon gave at its handover: its record, its folder, and the holder of each pin."
+    },
+    "Desk": {
+      "type": "object",
+      "properties": {
+        "asks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Ask"
+          }
+        },
+        "questions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "notices": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asks",
+        "questions",
+        "notices"
+      ],
+      "description": "What waits for the operator in a life: each ask, the oldest first, and how many of them are\nquestions and notices."
+    },
+    "Ask": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string",
+          "description": "The chain that the prompt stands in."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who made the prompt: a rung, an ear, or the operator."
+        },
+        "shape": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "notice": {
+          "type": "boolean"
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The lines that answer a choice, one for each value that the shape allows."
+        },
+        "ticks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tick"
+          },
+          "description": "The values of a list of a Literal, which the operator ticks."
+        },
+        "hint": {
+          "type": "string",
+          "description": "What the line of the operator is, in words, when its shape is more than text or a choice."
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "chain",
+        "by",
+        "shape",
+        "message",
+        "notice",
+        "choices",
+        "ticks",
+        "hint",
+        "began"
+      ],
+      "description": "A prompt to the operator that waits for him. A question waits for an answer of its shape. A\nnotice is a prompt of None, which the console closed as it took it, and which waits only until\nthe operator dismisses it."
+    },
+    "Tick": {
+      "type": "object",
+      "properties": {
+        "shown": {
+          "type": "string"
+        },
+        "json": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "shown",
+        "json"
+      ],
+      "description": "A value of a list of a Literal: as the operator reads it, and as the line of the list writes it."
+    },
+    "Threads": {
+      "type": "object",
+      "properties": {
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThreadNode"
+          }
+        },
+        "asides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ChainAside"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NoteRun"
+          }
+        },
+        "attention": {
+          "$ref": "#/definitions/Attention"
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        }
+      },
+      "required": [
+        "threads",
+        "asides",
+        "notes",
+        "attention",
+        "state"
+      ],
+      "description": "The threads of one chain as a window draws them: the tree of its threads, its asides, the runs\nof its notes, what the tree says to the operator, and the state of the chain."
+    },
+    "ThreadNode": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "$ref": "#/definitions/ChainThread"
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThreadNode"
+          }
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        }
+      },
+      "required": [
+        "thread",
+        "agents",
+        "state"
+      ],
+      "description": "A thread with the threads that its ladder made, its agents. Its state is its own, or asks while\na question waits in an agent under it: a failure or an unread in an agent does not roll up."
+    },
+    "ChainThread": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "description": "The name of the thread: the label of its chain for the first thread that no operator made on\na chain under the root, the name of the session for the first thread of the operator on the\nroot, and else the first line of its message that is not empty."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "origin": {
+          "$ref": "#/definitions/Origin"
+        },
+        "yours": {
+          "type": "boolean",
+          "description": "Whether the operator started it, himself or by a word of his own."
+        }
+      },
+      "required": [
+        "prompt",
+        "title",
+        "messages",
+        "asked",
+        "asks",
+        "state",
+        "over",
+        "origin",
+        "yours"
+      ],
+      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until\nits model closes the message."
+    },
+    "State": {
+      "type": "string",
+      "enum": [
+        "asks",
+        "unread",
+        "failed",
+        "paused",
+        "thinks",
+        "runs",
+        "delegates",
+        "done",
+        "cancelled",
+        "idle"
+      ],
+      "description": "The state of work: it asks the operator, it ended while the operator looked away, it failed, a\npause holds it, its model thinks or writes its word, a word or a command of it runs, its word\nawaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is\nthe order of the roll-up. Only a window says unread, since only it knows what its operator saw."
+    },
+    "Origin": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "rung",
+        "ear"
+      ],
+      "description": "Who made the prompt of a thread: the operator, a rung of a word, or an ear."
+    },
+    "ChainAside": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "aside": {
+          "$ref": "#/definitions/Aside"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "prompt",
+        "aside",
+        "messages"
+      ],
+      "description": "A prompt of a chain that is no thread, with what it is and the prompts on it, in order."
+    },
+    "Aside": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "notice"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as\nthe acknowledgment of an act that stands in no thread of the chain, a stall that the watch of\nthe daemon tells, or the question of the act that names the session."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "rung"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "What a word of the operator told the chain: a prompt of None that a rung of his made, or the\nacknowledgment of a rung that stands in no thread."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "wake"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "A wake of the chain: a prompt of None that an ear or a verb of the round made."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "question"
+            },
+            "from": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "aside",
+            "from"
+          ],
+          "description": "A question of another chain to this one, a worker that asks its coordinator, with the chain\nthat asks."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "agent"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "The work of an agent: a prompt that a rung made on a chain under its own, when that rung\nstands in no thread, as a command of the operator runs its word. It is no thread of the\noperator and never takes an unread mark of his."
+        }
+      ],
+      "description": "What a prompt of a chain is that is no conversation, which the feed of its chain draws as what\nit is and the list of its threads leaves out."
+    },
+    "NoteRun": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "unread": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts",
+        "count",
+        "unread"
+      ],
+      "description": "A run of notes: the asides of a chain that are no question and follow one another in its feed\nwith no card of another kind between them, which a window draws as one block. `unread` counts\nthe notes that began or ended after the place up to which the operator read the chain."
+    },
+    "Attention": {
+      "type": "object",
+      "properties": {
+        "asks": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "unread": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asks",
+        "failed",
+        "paused",
+        "unread"
+      ],
+      "description": "What a tree of threads says to the operator, counted by thread."
+    },
+    "Rung": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "step"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "depth"
+          ],
+          "description": "A step, with the steps under it after it, each one level deeper."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rungs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "ear"
+            }
+          },
+          "required": [
+            "type",
+            "rungs",
+            "depth"
+          ],
+          "description": "The rungs in a row that one maker wrote on the chain with no word of its own, as the words of\nthe skills and the setup of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "of": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "heads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "more"
+            }
+          },
+          "required": [
+            "type",
+            "head",
+            "depth",
+            "count",
+            "of",
+            "key",
+            "heads"
+          ],
+          "description": "A fold of `count` earlier steps of a level, from the step `head`, with the kinds of the steps\nthat it holds in the order they first come. `key` opens it: prompts: or rungs: and the act\nthat the steps stand under, or the chain at the top."
+        }
+      ],
+      "description": "One line of a ladder, in the order that the window draws it."
+    },
+    "Act": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "maker": {
+          "default": {
+            "role": "engine"
+          },
+          "description": "Who made the act: for a rung that waits for the word of an actor, that actor; for any\nother act, the role of the act or the person that made it.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Maker"
+            }
+          ]
+        },
+        "on": {
+          "type": "string",
+          "description": "What the act is on: a chain, or the prompt of a thread for a prompt on a thread."
+        },
+        "chain": {
+          "type": "string",
+          "description": "The chain that the act stands in."
+        },
+        "words": {
+          "type": "array",
+          "items": true,
+          "description": "The words of the act after its kind, its name, its maker and what it is on."
+        },
+        "phase": {
+          "$ref": "#/definitions/Phase"
+        },
+        "operator": {
+          "type": "boolean",
+          "description": "Whether the console of the operator took the act: a question to him, or a notice."
+        },
+        "pause": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pause"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The pause that holds the act while it lives."
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the word of a rung ran, for a rung alone."
+        },
+        "word": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The word of a rung, once its chain took it to run or to refuse."
+        },
+        "asking": {
+          "type": "boolean",
+          "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
+          "default": false
+        },
+        "taken": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The messages of the operator that a chain with a source took from it, in their order: each\nprompt of the operator that the prefix of the chain carries, with the id it has on the source."
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was made, which is its place in time."
+        },
+        "ended": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was done."
+        },
+        "spend": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Spend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the models cost: the answers that wrote the word of a rung, or each answer on a chain."
+        },
+        "closer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Maker"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who closed the act, as a window names who made an act, once a close of it was said."
+        },
+        "state": {
+          "description": "The state of the act, or of the work of a chain for a chain.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/State"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "by",
+        "on",
+        "chain",
+        "words",
+        "phase",
+        "operator",
+        "began",
+        "state"
+      ],
+      "description": "One act of a life with its meaning, as it stands after the last fact about it."
+    },
+    "Maker": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "operator"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "const": "member"
+            }
+          },
+          "required": [
+            "role",
+            "operator"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "effort": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "role": {
+              "type": "string",
+              "const": "model"
+            }
+          },
+          "required": [
+            "role",
+            "model"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "skill"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "engine"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        }
+      ],
+      "description": "Who made an act, as a window names it: the operator, a member who answers as him by his login,\na model with its effort when its actor names one, a skill, or the engine itself."
+    },
+    "Phase": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "asked"
+            }
+          },
+          "required": [
+            "phase"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "started"
+            }
+          },
+          "required": [
+            "phase"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "done"
+            },
+            "value": true
+          },
+          "required": [
+            "phase",
+            "value"
+          ]
+        }
+      ],
+      "description": "Where an act stands: asked, started by the ear that owns it, or done, with what it came to."
+    },
+    "Pause": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "why": true
+      },
+      "required": [
+        "by"
+      ],
+      "description": "A pause, as its fact holds it: who said it, and the cause that it gave."
+    },
+    "RunState": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "cancelled"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        }
+      ],
+      "description": "How the word of a rung ran: it runs or waits for its word, it ran, or a fault or a cancel ended\nit, each with what a person reads."
+    },
+    "Spend": {
+      "type": "object",
+      "properties": {
+        "dollars": {
+          "type": "number",
+          "format": "double"
+        },
+        "answers": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The account of the last answer, none when that answer named none."
+        },
+        "read": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Read"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the last answer read."
+        }
+      },
+      "required": [
+        "dollars",
+        "answers"
+      ],
+      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last\nand what it read."
+    },
+    "Read": {
+      "type": "object",
+      "properties": {
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cached": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "written": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tokens",
+        "cached",
+        "written"
+      ],
+      "description": "What an answer of a model read: the tokens of its whole prompt, and of them those that it read\nfrom the cache and those that it wrote to it."
+    },
+    "Page": {
+      "type": "object",
+      "properties": {
+        "exchanges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Exchange"
+          }
+        },
+        "above": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Agent"
+          }
+        },
+        "context": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Context"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "exchanges",
+        "above",
+        "agents"
+      ],
+      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the\nagents of the whole thread, in the order the thread made them, and the context of its chain."
+    },
+    "Exchange": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/definitions/Maker"
+        },
+        "text": {
+          "type": "string"
+        },
+        "python": {
+          "type": "boolean",
+          "default": false
+        },
+        "runs": {
+          "type": "boolean",
+          "default": false
+        },
+        "block": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Block"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Said"
+          }
+        }
+      },
+      "required": [
+        "at",
+        "message",
+        "by",
+        "text",
+        "said"
+      ],
+      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, who said it and its text, whether it is a word of Python\nthat an operator ran on the thread, whose block holds its code and which has no text, whether\nthe message still runs, the block of code that answers it once a model answers, and what the\nanswer says to the operator, in the order it was said. A message that the operator said on a\nthread that works is done at once, since its model reads it at its next step, so only one that\nasks still runs. A message is the prompt of the thread, what an operator said on it, or a word\nthat he ran on it, and what answers it is what came after it and before the next message."
+    },
+    "Block": {
+      "type": "object",
+      "properties": {
+        "maker": {
+          "$ref": "#/definitions/Maker"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Line"
+          }
+        },
+        "more": {
+          "type": "boolean"
+        },
+        "thought": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Thought"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "maker",
+        "lines",
+        "more"
+      ],
+      "description": "The code of one answer: the model that wrote its last word, each line of its words, whether more\ncomes since the answer works, and the thought of its model."
+    },
+    "Line": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "mark": {
+          "$ref": "#/definitions/Mark"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Output"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "number",
+        "text",
+        "mark"
+      ],
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, and\nwhat the last command that it awaited wrote."
+    },
+    "Mark": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "ran"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "work": {
+              "$ref": "#/definitions/Work"
+            },
+            "began": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "is": {
+              "type": "string",
+              "const": "runs"
+            }
+          },
+          "required": [
+            "is",
+            "work"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "asks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "required": [
+            "is"
+          ],
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "retries"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Retrying"
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "is": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "is",
+            "why"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "is": {
+              "type": "string",
+              "const": "stopped"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        }
+      ],
+      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nmillisecond of the epoch at which the host saw it begin, so a time of a second shows after a\nwhole second; it asks the operator; its model is asked again after a call that failed; it\nfailed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch\nat which the host saw the stop, which a host that opened the life after it does not know."
+    },
+    "Work": {
+      "type": "string",
+      "enum": [
+        "writes",
+        "command",
+        "agent"
+      ],
+      "description": "What a line that runs waits for: its model that writes it, a command or a wait, or an agent."
+    },
+    "Retrying": {
+      "type": "object",
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "most": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "wait": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt",
+        "most",
+        "wait",
+        "at",
+        "why"
+      ],
+      "description": "A call of a model that failed for a cause that passes, so its provider asks the model again:\nthe attempt that comes, the most attempts of the call, the seconds that the provider waits\nbefore that attempt and the second of the epoch at which it comes, and why the attempt before\nit failed. What the model wrote before is void."
+    },
+    "Output": {
+      "type": "object",
+      "properties": {
+        "tail": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tail",
+        "more"
+      ],
+      "description": "What a command that a line awaited wrote, as it writes it and once it ended: its last lines,\nthose of its stdout then those of its stderr, each as a terminal shows it, how many lines came\nbefore them, and the seconds that it took once it ended, counted from milliseconds, which a\nhost that opened the life after the command began does not know."
+    },
+    "Thought": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "text",
+        "began"
+      ],
+      "description": "What a model thought before it wrote: the millisecond of the epoch at which it began to think,\nas the host saw it begin, and in how many seconds it thought, which is none while it thinks."
+    },
+    "Said": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/Saying"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "text"
+      ],
+      "description": "What an answer says to the operator: the value of the close of its message, a notice, or a\nquestion, with its act and its text."
+    },
+    "Saying": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "answer",
+            "notice"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "object",
+              "properties": {
+                "shape": {
+                  "type": "string"
+                },
+                "answered": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Answered"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "shape"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and\n`hint` of the view read, and what answered it once it is closed: it is open until then."
+    },
+    "Answered": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "$ref": "#/definitions/Maker"
+        },
+        "reply": {
+          "$ref": "#/definitions/Reply"
+        }
+      },
+      "required": [
+        "by",
+        "reply"
+      ],
+      "description": "What closed a question: who closed it, and what it came to."
+    },
+    "Reply": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "value"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "is",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "refused"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "is",
+            "text"
+          ]
+        }
+      ],
+      "description": "What a question came to: a value, as a person reads it, or a refusal with its reason."
+    },
+    "Agent": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "standing": {
+          "$ref": "#/definitions/Standing"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agents": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "readers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "began": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "line": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Line"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "prompt",
+        "title",
+        "standing"
+      ],
+      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once\nit ended, counted from milliseconds as the time of a thought, and the line of its last word\nwhere it stands: the line that runs or asks, else the last one. A host that opened the life\nafter the agent began saw it begin at that open."
+    },
+    "Context": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "$ref": "#/definitions/Read"
+        },
+        "window": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "dollars": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "read",
+        "dollars"
+      ],
+      "description": "The context of a chain at its last answer: what that answer read, the window that the roster of\nthe standing offers its actor, none when the roster holds no such actor, and the dollars of each\nanswer on the chain."
+    },
+    "ProtocolError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ours": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "theirs": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "protocol"
+            }
+          },
+          "required": [
+            "error",
+            "ours",
+            "theirs"
+          ],
+          "description": "The hello names another protocol, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "first"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "The first frame of the peer was no hello, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "again"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "A second hello of the same peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "needs": {
+              "$ref": "#/definitions/Role"
+            },
+            "has": {
+              "$ref": "#/definitions/Role"
+            },
+            "error": {
+              "type": "string",
+              "const": "role"
+            }
+          },
+          "required": [
+            "error",
+            "needs",
+            "has"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unread"
+            }
+          },
+          "required": [
+            "error",
+            "why"
+          ],
+          "description": "A frame that is no frame of the protocol, with what the reader found."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bound": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "large"
+            }
+          },
+          "required": [
+            "error",
+            "bound"
+          ],
+          "description": "A frame past the bound, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "refused"
+            }
+          },
+          "required": [
+            "error",
+            "why"
+          ],
+          "description": "The daemon or the life refused the verb, with why."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "stopped"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "The daemon gave its place to the daemon of a new build, or stops."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "closed"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "relative"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A life is named by the absolute path of its record, the same for each peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unattached"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "shown"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A peer may not end a life that the window of another peer shows."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unpinned"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "holder"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "unasked"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that the life does not wait for."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "foreign"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that another peer answers: only the peer that\nopened the life with `answers` speaks for its requests."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "answerless"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A turn for a life whose models no peer answers."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "answering"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "An open with `answers` of a life whose models a peer that lives answers already."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "needs": {
+              "$ref": "#/definitions/Kind"
+            },
+            "has": {
+              "$ref": "#/definitions/Kind"
+            },
+            "error": {
+              "type": "string",
+              "const": "speaker"
+            }
+          },
+          "required": [
+            "error",
+            "needs",
+            "has"
+          ],
+          "description": "A frame of a view that only a window says, or only a skill, and the peer is of another kind."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "nameless"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "A skill says its name at its hello, since a window mounts the views of a skill by it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "skill": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "no_skill"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "skill"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unmounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A view belongs to the window that mounted it and to the skill that serves it, and to no other\npeer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "mounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A viewer names one view of the daemon."
+        }
+      ],
+      "description": "Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text."
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "fact"
+            },
+            "data": true
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "One fact that the life said, as JSON reads it: each fact of the record that the life said\nagain as it opened, then each fact that it said after."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "act"
+            },
+            "data": {
+              "$ref": "#/definitions/Act"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "An act with its meaning as it stands after a fact about it, which takes the place of each\nearlier event of the same act."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "text"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "rung": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "thinking": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rung",
+                "chain",
+                "text",
+                "thinking"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "What a model added to its text and to its thought, as it writes the reply of a rung on a\nchain. It is no fact, and the turn of the reply holds all of it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "retried"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "rung": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                },
+                "retry": {
+                  "$ref": "#/definitions/Retrying"
+                }
+              },
+              "required": [
+                "rung",
+                "chain",
+                "retry"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A call of a model that failed for a cause that passes, as it writes the reply of a rung on a\nchain, and the retry of its provider after a wait. What the model wrote for the rung before\nit is void. It is no fact."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "queued"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "chain": {
+                  "type": "string"
+                },
+                "waiting": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/FollowUp"
+                  }
+                }
+              },
+              "required": [
+                "chain",
+                "waiting"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The follow-ups that wait on a chain, in order, each time that a fact of the operator or a send\nof the life changed them."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "notice"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A report of the life that no model reads, one line."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "changed"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A chain whose queries give another answer now, once each fact that changed it was told."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "reborn"
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The life told the past of its record and is born on it, with no fault: each event after it\nis of the birth, which tells each chain, its turns and each open prompt again as it stood."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "ended"
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The end of the life, with the fault that ended it, or none when a client ended it. It is the\nlast event."
+        }
+      ],
+      "description": "What a life tells its clients, in the order of its log."
+    },
+    "FollowUp": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        },
+        "shape": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "failed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entry",
+        "chain",
+        "shape",
+        "message"
+      ],
+      "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
+    },
+    "Stage": {
+      "oneOf": [
+        {
+          "type": "string",
+          "const": "recall",
+          "description": "A host tells its readers what the record told before its last checkpoint: the thousandths of\nthe read done, of 1000. The two passes of the reader over the record make the first two\nthirds, and the fold of the facts that it tells, as far as that checkpoint, the last third.\nThe crate furb never tells this stage."
+        },
+        {
+          "type": "string",
+          "const": "find",
+          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate furb tells, at once, and the life then reads its settings and the catalog\nof its models in it. A life that opens from its image reads no entry, and tells each byte\npassed once the image agrees with the record."
+        },
+        {
+          "type": "string",
+          "const": "cross",
+          "description": "A life that ran another engine of the major is carried across to this build, by a life that\ninspects it and writes its checkpoint. It counts nothing."
+        },
+        {
+          "type": "string",
+          "const": "read",
+          "description": "The record is read again from its last checkpoint under its lease, when it changed after\nthe stage find: the bytes passed, of the bytes of the record."
+        },
+        {
+          "type": "string",
+          "const": "seed",
+          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it, or the sandbox loads the session of the image of the life, which then boots on\nno entry. An open whose image does not load reads its record from its last checkpoint in this\nstage, then seeds it. It counts nothing."
+        },
+        {
+          "type": "string",
+          "const": "boot",
+          "description": "The life boots: the entries that its journal passed, of the entries that it boots on. It is\nthe last stage that the crate furb tells, and a boot that succeeds ends with each entry\ncounted."
+        },
+        {
+          "type": "string",
+          "const": "log",
+          "description": "A host puts what the open told in the log that its readers read: the events put, of those\nevents. The crate furb never tells this stage."
+        }
+      ],
+      "description": "A stage of the open of a life, in the order that an open passes them. An open skips a stage that\nit has no work for, and a stage never comes again in one open. Each stage counts its work in a\nunit of its own, and a stage that counts nothing tells 0 of 0."
+    },
+    "Open": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "chain"
+      ],
+      "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
+    }
+  },
+  "x-protocol": 44
+}

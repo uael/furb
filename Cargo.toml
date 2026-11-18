@@ -7,17 +7,35 @@ description = "The core of an AI harness: the engine in a sandbox, behind an asy
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 readme = "README.md"
-# What the crate on crates.io holds: the engine and what its build reads, the extensions that the crate carries, the
-# doctrine, and the examples. The rest of the repository is other packages and their tests.
+# What the crate on crates.io holds: the engine and what its build reads, the skills that the crate carries by name, the
+# doctrine, and the examples. The rest of the repository is other packages and their tests. Each official extension,
+# a folder of `.agents/skills` that holds the file of its word, is here by name, which a test of `src/skill.rs` holds.
 include = [
   "/build.rs",
   "/build/*.rs",
+  "/docs/promise.md",
   "/src/**",
-  "/extensions/*/SKILL.md",
-  "/extensions/*/*.py",
-  "/extensions/*/*.pyi",
-  "/extensions/*/tui.ts",
-  "/extensions/*/*/SKILL.md",
+  "/.agents/skills/catchup/SKILL.md",
+  "/.agents/skills/catchup/catchup.py*",
+  "/.agents/skills/memory/SKILL.md",
+  "/.agents/skills/memory/memory.py*",
+  "/.agents/skills/skills/SKILL.md",
+  "/.agents/skills/skills/skills.py*",
+  "/.agents/skills/compaction/SKILL.md",
+  "/.agents/skills/compaction/compaction.py*",
+  "/.agents/skills/naming/SKILL.md",
+  "/.agents/skills/naming/naming.py*",
+  "/.agents/skills/furb-kit/SKILL.md",
+  "/.agents/skills/furb-kit/furb-kit.py*",
+  "/.agents/skills/web/SKILL.md",
+  "/.agents/skills/web/web.py*",
+  "/.agents/skills/web/process.py",
+  "/.agents/skills/mcp/SKILL.md",
+  "/.agents/skills/mcp/mcp.py*",
+  "/.agents/skills/mcp/process.py",
+  "/.agents/skills/grant/SKILL.md",
+  "/.agents/skills/grant/grant.py*",
+  "/.agents/skills/*/keys.json",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",
   "/LICENSE",
@@ -25,9 +43,14 @@ include = [
 ]
 
 [workspace]
-# The command line is a program of its own on this crate, so the library takes none of its dependencies. The host
-# holds each life of a machine, on the public API of the crate alone.
-members = ["cli", "host"]
+# Each other crate stands in `crates/`. The command line is a program of its own on this crate, so the library takes
+# none of its dependencies. The host holds each life of a machine, on the public API of the crate alone. The window
+# draws the daemon of the host, and only the frames of the window depend on it, so only a build of those two needs Zig.
+# `crates/typescript` is the addon of N-API of the npm package, and `crates/xtask` the tasks of a developer, which
+# `cargo xtask` runs. `crates/python` is the package of python that maturin builds from this crate, and
+# `crates/reserve` a workspace of its own.
+members = ["crates/*"]
+exclude = ["crates/python", "crates/reserve"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
@@ -35,6 +58,7 @@ version = "0.4.2"
 
 # The bar of the Rust of furb, which the skill rust says. A module that breaks it holds an expect at its top.
 [workspace.lints.rust]
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
@@ -46,31 +70,58 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 unwrap_used = "deny"
-expect_used = "warn"
+# The code of furb does not panic: a site that can fail gives the caller a value that it handles,
+# and a site that truly cannot fail says why in an expect, as rule 4 of the skill rust says.
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+get_unwrap = "deny"
+panic_in_result_fn = "deny"
 let_underscore_must_use = "deny"
 let_underscore_untyped = "warn"
 map_err_ignore = "warn"
-str_to_string = "warn"
-clone_on_ref_ptr = "warn"
-redundant_clone = "warn"
-needless_pass_by_value = "warn"
+# Each copy of a value is an allocation: a site borrows what it reads, and owns only what outlives its source.
+str_to_string = "deny"
+clone_on_ref_ptr = "deny"
+redundant_clone = "deny"
+implicit_clone = "deny"
+unnecessary_to_owned = "deny"
+needless_pass_by_value = "deny"
+box_collection = "deny"
+boxed_local = "deny"
+redundant_allocation = "deny"
 unused_async = "warn"
 too_many_lines = "warn"
 undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
+absolute_paths = "warn"
+use_self = "warn"
+
+# Each crate of the workspace depends on furb-hack, which cargo hakari writes, for the features that it turns on alone.
+# A crate that loads it through no other crate of the workspace, as furb-wire, names none of its code, so cargo reports
+# the dependency unused. cargo takes no lint for one dependency, and `cargo hakari publish` removes the dependency, so
+# no line of code can name it.
+[workspace.lints.cargo]
+unused_dependencies = "allow"
 
 [lints]
 workspace = true
 
+# A plain library: maturin builds the extension module of the python distribution as a cdylib by itself, and the
+# addon of N-API is a crate of its own, since a cdylib takes no hash in the names of its files and each build of
+# another set of features would write over the one before it.
 [lib]
 name = "furb"
 path = "src/lib.rs"
-# A library to a Rust host, and the extension module of the python distribution when the python feature is on.
-crate-type = ["rlib", "cdylib"]
 
-# The examples of the framework, one for each thing that it shows, which tests/examples.rs runs as programs.
+# The examples of the framework, one for each thing that it shows, which tests/suite/examples.rs runs as programs.
 [[example]]
 name = "durable"
 path = "docs/examples/rust/durable.rs"
@@ -96,24 +147,30 @@ path = "docs/examples/rust/door.rs"
 # extension module is, so the module feature is on only where maturin builds the wheel.
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
-typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+typescript = ["dep:napi", "dep:napi-derive"]
 
 [dependencies]
-# The sandbox the engine runs in, and its type checker, which is the gate of the
-# Kernel. A revision of the fork, since the interpreter the engine needs is not
+# What crosses the wire: the shapes of the meaning of a life, which the view folds and each client reads.
+furb-wire = { path = "crates/wire", version = "0.4.2" }
+# The sandbox the engine runs in. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-types = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
+monty = { git = "https://github.com/uael/monty", rev = "7ea4fd44" }
+monty-types = { git = "https://github.com/uael/monty", rev = "7ea4fd44" }
+# A map of a file into memory, by which the session of an image reaches monty as the system reads
+# it, with no buffer of the process: a session is as large as the life.
+memmap2 = "0.9"
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
 # is JSON too, read into the shapes it holds.
-serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
-serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order", "raw_value"] }
+serde = { version = "1", features = ["derive", "rc"] }
 thiserror = "2"
 url = "2"
 indexmap = { version = "2", features = ["serde"] }
+# The stack that a run of the sandbox takes, grown when the thread that runs it holds less, as the parser of monty
+# grows its own.
+stacker = "0.1"
 # The search for a byte, which finds the end of each line of the record many bytes at a time, even in a build that
 # does not optimize the crate.
 memchr = "2"
@@ -122,9 +179,10 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
 # The one interface of the models of the provider, which the claude command line answers too, and the clients of the
-# providers of the network, over its TLS.
-rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
-# The client of HTTP that rig brings, which the servers of MCP and their logins take as it is.
+# providers of the network, over its TLS. The model that answers from a script, which the tests of the provider ask,
+# is a feature of the build too: a feature that only the tests add builds rig and this crate a second time for them.
+rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls", "test-utils"] }
+# The client of HTTP that rig brings, which the fetch of a page, of the catalog and of uv takes as it is.
 reqwest = { version = "0.13", default-features = false }
 # The providers of the clouds, which sign a request with the credentials of the cloud: Amazon Bedrock, and Google
 # Vertex AI, whose key of an API the credentials of Google carry. The bytes of a request, which a client of HTTP
@@ -135,8 +193,13 @@ google-cloud-auth = "1"
 bytes = "1"
 # The JSON Schema of the meaning of a life in `view`, which the protocol of the host carries.
 schemars = "1"
+# The escapes of a terminal that a command writes, which a page drops from what it shows of it.
+anstream = { version = "1", default-features = false }
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
+# The lines of the engine that differ at a crossing, which each chain of the life is told. The tests of the window
+# take it with its feature inline, which the build takes too, so the tests build this crate again for no feature.
+similar = { version = "2", features = ["inline"] }
 base64 = "0.22"
 # The reactor that wakes an ear when what it waits for is ready: a pipe of a command, a timer, a socket of a model,
 # and the listener on 127.0.0.1 that takes back the code of a login to a server of MCP.
@@ -144,49 +207,55 @@ base64 = "0.22"
 tokio = { version = "1", features = ["rt", "process", "io-util", "time", "sync", "macros", "net"] }
 # The futures an ear holds and selects over, and the streams of a model.
 futures = "0.3"
+# The cell of the reactor, which stays empty when the system refuses it, so the next call asks again: the std cell
+# gives no fallible init on the pinned toolchain.
+once_cell = "1"
 # The channels between an ear and its work, which stay on the thread of the life.
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
 jiff = "0.2"
 # A page of the web, which the extension web reads, as Markdown.
-htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols", "object_indexmap"], optional = true }
 napi-derive = { version = "3", optional = true }
-# No line of furb names salsa. The ruff crates 0.0.9 build on salsa 0.28.2 alone, and salsa 0.28.5 breaks them, so a
-# crate that takes furb with no lock of ours builds only when furb pins salsa and its macros of rules.
-salsa = { version = "=0.28.2", default-features = false }
-salsa-macro-rules = "=0.28.2"
-# The parser of the checker, which finds each import of a sheet for the sandbox to run.
+# The parser of python, which finds each name of the engine that the word of a skill binds, and where a statement of a
+# word ends while its model writes it.
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
-# The builtins of python, which a name that a word deletes falls back to.
-ruff_python_stdlib = "0.0.14"
+# The union of the features of each dependency over the workspace, which `cargo hakari` writes, so each set of
+# packages that a command selects builds this crate once.
+furb-hack = { version = "0.1", path = "crates/hack" }
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.
 rustix = { version = "1", features = ["fs", "process"] }
 
 [target.'cfg(windows)'.dependencies]
-# The console of Windows, whose end a host hears through a door.
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+# The console of Windows, whose end a host hears through a door, and the share of a part file that
+# a write holds.
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Console",
+] }
 # The job that holds every process of a command, and ends them when it closes.
 win32job = "2"
 
-[dev-dependencies]
-# The model of rig that answers from a script, which the tests of the provider ask.
-rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
-# The validator of JSON Schema, which checks that a call of a binding of MCP sends what the tool asks.
-jsonschema = { version = "0.33", default-features = false }
-
 [build-dependencies]
-napi-build = { version = "2", optional = true }
 # The contract is read at the build, and every verb of it becomes a method of the engine and of each door. The
 # engine is read too, and written again in layout alone, which is the system prompt.
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
+
+# A build for development keeps no debug information: a panic names its file and line by itself, and a backtrace names
+# each function. On macOS the line tables of a program stay in its object files, beside it in target/*/deps, and cargo
+# does not remove them, so each link of a test program left hundreds of files there. A test that builds a client of
+# HTTP asks the system for its proxies, which reads the whole folder of the program once in each process: at 445,000
+# files, 5 s for each such test, which nextest runs in a process of its own.
+[profile.dev]
+debug = false
 
 # A dependency is built once and run many times: the interpreter runs every word of every test. A build for
 # development builds each dependency as a release does, so a test runs them as a user does, and the crates of the
@@ -195,3 +264,29 @@ ruff_text_size = "0.0.9"
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The crates that open and replay a record are built as a release builds them too, since the owner runs the daemon and
+# the window from a tree: at opt-level 0 an open of a record of 1.95 GB took 132 s, at 2 it takes 86.7 s, as a release
+# does. A change of one line rebuilds them in the same time, and the Rust suite costs 13% less work.
+[profile.dev.package.furb]
+opt-level = 2
+
+[profile.dev.package.furb-host]
+opt-level = 2
+
+[profile.dev.package.furb-wire]
+opt-level = 2
+
+# The window lays out its feed again at each key, each move of the pointer and each event of a life, which at opt-level
+# 0 took 5.3 ms of CPU for each, and at 2 takes 0.7 ms, on a thread of 114 rungs. A change of one line of the window
+# builds it again in 3.8 s, against 1.3 s at 0.
+[profile.dev.package.furb-window]
+opt-level = 2
+
+[profile.dev.package.furb-client]
+opt-level = 2
+
+# The frames draw each screen of a recording as an image, and the images of the README at a density of two, thousands
+# of screens for one GIF, which take minutes at opt-level 0.
+[profile.dev.package.furb-frames]
+opt-level = 2

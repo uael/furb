@@ -1,65 +1,29 @@
 //! The desk of the operator: each question that waits for him and each notice that he did not
 //! dismiss, with what the line of his answer is for the shape that each one asks.
 
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::{
-  value::Object,
+  value::{Fault, Object},
   wire::outward,
   world::{Shape, named},
 };
 
-use super::act::Act;
-
-/// A prompt to the operator that waits for him. A question waits for an answer of its shape. A
-/// notice is a prompt of None, which the console closed as it took it, and which waits only until
-/// the operator dismisses it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Ask {
-  pub id: String,
-  /// The chain that the prompt stands in.
-  pub chain: String,
-  /// Who made the prompt: a rung, an ear, or the operator.
-  pub by: String,
-  pub shape: String,
-  pub message: String,
-  pub notice: bool,
-  /// The lines that answer a choice, one for each value that the shape allows.
-  pub choices: Vec<String>,
-  /// The values of a list of a Literal, which the operator ticks.
-  pub ticks: Vec<Tick>,
-  /// What the line of the operator is, in words, when its shape is more than text or a choice.
-  pub hint: String,
-  pub began: u64,
-}
-
-/// A value of a list of a Literal: as the operator reads it, and as the line of the list writes it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct Tick {
-  pub shown: String,
-  pub json: String,
-}
-
-/// What waits for the operator in a life: each ask, the oldest first, and how many of them are
-/// questions and notices.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Desk {
-  pub asks: Vec<Ask>,
-  pub questions: usize,
-  pub notices: usize,
-}
+use furb_wire::{
+  Act,
+  desk::{Ask, Desk, Tick},
+};
 
 /// The desk of a life: each question that the operator owes, and each notice that a window still
 /// shows, of the acts that the life made, the oldest first.
-pub fn desk(acts: &[Act], notices: &[&str]) -> Desk {
+pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> Desk {
   let asked = |act: &Act, notice: bool| {
     let word = |at: usize| act.words.get(at).and_then(|one| one.as_str()).unwrap_or_default();
     let shape = if notice { "None" } else { word(0) };
     Ask {
-      id: act.id.clone(),
-      chain: act.chain.clone(),
-      by: act.by.clone(),
+      id: Arc::clone(&act.id),
+      chain: Arc::clone(&act.chain),
+      by: Arc::clone(&act.by),
       shape: shape.to_owned(),
       message: word(1).to_owned(),
       notice,
@@ -69,12 +33,25 @@ pub fn desk(acts: &[Act], notices: &[&str]) -> Desk {
       began: act.began,
     }
   };
-  let questions = acts.iter().filter(|act| act.owed()).map(|act| asked(act, false));
-  let shown = acts.iter().filter(|act| notices.contains(&act.id.as_str()));
-  let mut asks: Vec<Ask> = questions.chain(shown.map(|act| asked(act, true))).collect();
-  asks.sort_by_key(|ask| ask.began);
+  let asks = acts.into_iter().flat_map(|act| {
+    let question = act.owed().then(|| asked(act, false));
+    question.into_iter().chain(notices.contains(&act.id.as_ref()).then(|| asked(act, true)))
+  });
+  let mut asks: Vec<Ask> = asks.collect();
+  // A question stands before a notice of the same moment.
+  asks.sort_by_key(|ask| (ask.began, ask.notice));
   let questions = asks.iter().filter(|ask| !ask.notice).count();
   Desk { notices: asks.len() - questions, questions, asks }
+}
+
+/// The reason of the refusal of a question that the operator refused with no words.
+pub const REFUSED: &str = "The operator refused the question.";
+
+/// The close of a question that the operator refused with words, as the record writes a value: the
+/// await of the word that asked raises a refusal with those words, so its model reads them. The
+/// words of the operator that take none of the values of a choice close it so too.
+pub fn declined(words: &str) -> String {
+  outward(Fault::refused(words).object().as_ref()).to_string()
 }
 
 /// A value of a Literal as JSON.
@@ -118,12 +95,12 @@ fn said(form: &Shape) -> String {
     Shape::Choice(values) => {
       format!("one of {}", values.iter().map(json_of).collect::<Vec<_>>().join(", "))
     }
-    Shape::List(of) => {
-      of.as_ref().map_or("a list".to_owned(), |of| format!("a list, each item {}", said(of)))
-    }
-    Shape::Dict(of) => {
-      of.as_ref().map_or("an object".to_owned(), |of| format!("an object, each value {}", said(of)))
-    }
+    Shape::List(of) => of
+      .as_ref()
+      .map_or_else(|| "a list".to_owned(), |of| format!("a list, each item {}", said(of))),
+    Shape::Dict(of) => of
+      .as_ref()
+      .map_or_else(|| "an object".to_owned(), |of| format!("an object, each value {}", said(of))),
     Shape::Tuple(of) => {
       let noun = if of.len() == 1 { "item" } else { "items" };
       let each: Vec<String> = of.iter().map(said).collect();
@@ -142,12 +119,13 @@ fn sample(form: &Shape, n: usize) -> String {
     Shape::Float => two("1.5", "2.5"),
     Shape::Bool => two("true", "false"),
     Shape::None => "null".to_owned(),
-    Shape::Choice(values) => json_of(&values[n % values.len()]),
-    Shape::List(of) => of
-      .as_ref()
-      .map_or("[\"a\", 1]".to_owned(), |of| format!("[{}, {}]", sample(of, 0), sample(of, 1))),
+    Shape::Choice(values) => values.get(n % values.len().max(1)).map_or_else(String::new, json_of),
+    Shape::List(of) => of.as_ref().map_or_else(
+      || "[\"a\", 1]".to_owned(),
+      |of| format!("[{}, {}]", sample(of, 0), sample(of, 1)),
+    ),
     Shape::Dict(of) => {
-      format!("{{\"a\": {}}}", of.as_ref().map_or("1".to_owned(), |of| sample(of, n)))
+      format!("{{\"a\": {}}}", of.as_ref().map_or_else(|| "1".to_owned(), |of| sample(of, n)))
     }
     Shape::Tuple(of) => {
       format!("[{}]", of.iter().map(|one| sample(one, n)).collect::<Vec<_>>().join(", "))
@@ -176,7 +154,10 @@ fn line(form: &Shape) -> String {
       };
       format!("a JSON {noun}{of}, as {}", sample(form, 0))
     }
-    Shape::Tuple(_) => format!("a JSON {}, as {}", &said(form)[2..], sample(form, 0)),
+    Shape::Tuple(_) => {
+      let said = said(form);
+      format!("a JSON {}, as {}", said.get(2..).unwrap_or(&said), sample(form, 0))
+    }
     Shape::Either(of) => {
       let arms: Vec<&Shape> = of.iter().filter(|one| !matches!(one, Shape::None)).collect();
       let words: Vec<String> = arms

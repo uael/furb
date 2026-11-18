@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · how many rows                           Resolve     All projects ▾        This computer
+  ┃
+  ┃ how many rows                                              Needs you 1
+  ┃ (the model asks a number)                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● how many rows           ◆ Input ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    ◆  rows = await prompt(int, 'How many rows does t…+28     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    2  close(str(rows))
+    …
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ ◆ opus/high asks
+  ┃ How many rows does the form take?
+  ┃
+  ┃ many
+  ┃ Refused: "many" is no int: invalid digit found in
+  ┃ string
+  ┃
+  ┃  Message  Python    → how many… ▾   opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⏎ answer                                      ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

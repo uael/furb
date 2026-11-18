@@ -1,0 +1,44 @@
+"""Show, what says which lines of a text the engine tells."""
+
+import pytest
+
+from conftest import MANY, acts, born, plain, said, settle
+from furb import engine
+from furb.engine import HEAD, Refused, Text, differs, grep, picked, span
+
+ODD = "odd = lambda lines: [i for i in range(1, len(lines) + 1) if i % 2]\nread('a.txt', odd)\nclose(1)\n"
+"""A word of a rung that writes a show of its own, which picks the odd lines, and reads with it."""
+
+
+async def test_a_show_says_which_lines_of_a_text_to_tell_and_picked_gives_their_numbers() -> None:
+  """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text."""
+  born()
+  assert picked(span(2, 3), ["a", "b", "c", "d"]) == [2, 3]
+  assert picked(grep("^t"), ["one", "two", "three"]) == [2, 3]
+  assert picked(differs(["one", "two"]), ["one", "TWO"]) == [2]
+  assert picked(HEAD, Text("/w/n.txt", MANY).lines) == list(range(1, 301))
+
+
+async def test_a_show_of_the_file_is_plain_data_so_it_is_a_word_of_each_act_that_it_is_given_to() -> None:
+  """A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it."""
+  assert (span(1, 2), grep("^t"), differs(["one"])) == ((1, 2), "^t", ["one"])
+  sand, log, root = born("x = bash('echo hi', show=span(1, 1), show_err=grep('a'))\nawait x\nclose(1)")
+  assert await engine.prompt(int, "run it", on=root) == 1
+  await settle()
+  (command,) = said(log, "bash")
+  assert command[4:] == ("echo hi", "", 120.0, None, (1, 1), "a")
+  assert [fact[8:] for (fact, *_) in plain(sand.record) if fact[:2] == command[:2]] == [((1, 1), "a")]
+
+
+async def test_a_show_is_any_callable_that_is_given_the_lines_of_a_text() -> None:
+  """A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show to a read by writing one, which the word makes again when it runs again; no later life makes it again as it was, so bash, whose shows are words of its act, refuses one."""
+  _, log, root = born(ODD)
+  assert await engine.prompt(int, "show the odd lines", on=root) == 1
+  assert engine.turns(on=root)[-1][1] == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'"
+  assert [a[4:] for a in acts(log).values() if a[0] == "read"] == [("a.txt",)]
+  _, log, root = born()
+  with pytest.raises(Refused, match="no callable"):
+    engine.bash("echo hi", show=lambda _: [1], on=root)
+  with pytest.raises(Refused, match="no callable"):
+    engine.bash("echo hi", show_err=lambda _: [1], on=root)
+  assert said(log, "bash") == []

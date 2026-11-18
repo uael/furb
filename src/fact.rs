@@ -4,11 +4,17 @@
 //! crate reads a fact as the tuple it is and nothing more: what a kind means is the engine's, and a host that
 //! hears facts reads the ones it knows by position, as the contract declares them.
 
-use crate::value::{Object, ObjectRef, entry};
+use std::sync::Arc;
 
-/// One fact of a life, as the tuple the engine said.
-#[derive(Debug, Clone)]
-pub struct Fact(pub Object);
+use serde::{Deserialize, Serialize};
+
+use crate::value::{Object, ObjectRef, entry, items};
+
+/// One fact of a life, as the tuple the engine said. Each ear that hears a fact shares it, so a
+/// copy of a fact copies no part of it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Fact(Arc<Object>);
 
 impl Fact {
   /// A saying: a kind, what it is about, and its words, with no slot for who said it, since the bus says that.
@@ -16,24 +22,28 @@ impl Fact {
   pub fn says(kind: &str, about: &str, words: impl IntoIterator<Item = Object>) -> Self {
     let mut held = vec![Object::string(kind), Object::string(about)];
     held.extend(words);
-    Fact(Object::tuple(held))
+    Self(Arc::new(Object::tuple(held)))
   }
 
   /// One fact or saying from an object, which must be a tuple whose kind and about are text: a fact has who said
   /// it third, and a saying has its first word there.
-  pub fn of(said: ObjectRef<'_>) -> Option<Fact> {
-    let held = said.items()?;
-    (held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()))
-      .then(|| Fact(said.to_owned()))
+  pub fn of(said: ObjectRef<'_>) -> Option<Self> {
+    fits(&said).then(|| Self(Arc::new(said.to_owned())))
+  }
+
+  /// The fact of an entry of a record, which is its first item.
+  pub fn of_entry(entry: &Object) -> Option<Self> {
+    items(entry.as_ref())?.next().and_then(Self::of)
   }
 
   /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.
-  pub fn owned(said: Object) -> Option<Fact> {
-    let fits = said
-      .as_ref()
-      .items()
-      .is_some_and(|held| held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()));
-    fits.then_some(Fact(said))
+  pub fn owned(said: Object) -> Option<Self> {
+    fits(&said.as_ref()).then(|| Self(Arc::new(said)))
+  }
+
+  /// The tuple that the engine said.
+  pub fn object(&self) -> &Object {
+    &self.0
   }
 
   /// The kind of the fact, which is its first entry.
@@ -53,7 +63,7 @@ impl Fact {
 
   /// One word of the fact, by its place after who said it.
   pub fn word(&self, at: usize) -> Option<ObjectRef<'_>> {
-    entry(&self.0.as_ref(), 3 + at)
+    entry(&self.0.as_ref().as_ref(), 3 + at)
   }
 
   /// The chain a question is on, which is its first word.
@@ -67,8 +77,13 @@ impl Fact {
   }
 
   fn at(&self, i: usize) -> &str {
-    entry(&self.0.as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
+    entry(&self.0.as_ref().as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
   }
+}
+
+/// Whether an object reads as a fact or a saying: a tuple whose kind and about are text.
+fn fits(said: &ObjectRef<'_>) -> bool {
+  (0..2).all(|at| entry(said, at).is_some_and(|one| one.as_str().is_some()))
 }
 
 /// Whether a name is the name of an act of a kind: the kind and a number, as `chain1` or `stand3`.

@@ -1,9 +1,9 @@
 //! The keeper of the conversations of the claude command line: one task that lends each
 //! conversation to one turn at a time, takes it back, and sweeps the processes and the
 //! conversations that no turn needs.
-
 use std::{
   collections::{HashMap, VecDeque},
+  io,
   sync::Arc,
   time::{Duration, SystemTime},
 };
@@ -16,6 +16,8 @@ use super::{
   conversation::{Conversation, canonical},
   failed,
 };
+use std::mem;
+use tokio::time;
 
 /// How many conversations keep a process at most.
 const WARM: usize = 8;
@@ -29,16 +31,17 @@ const IDLE: Duration = Duration::from_secs(300);
 /// What the keeper of the conversations is asked: to lend the conversation of a key to a turn, or
 /// to take it back.
 pub(super) enum Kept {
-  Lend {
-    key: String,
-    fresh: Box<Conversation>,
-    messages: Vec<Message>,
-    lent: oneshot::Sender<Lent>,
-  },
-  Back {
-    key: String,
-    conversation: Box<Conversation>,
-  },
+  Lend(Lend),
+  Back { key: String, conversation: Box<Conversation> },
+}
+
+/// A turn that asks for the conversation of its key: a new conversation to take when the keeper
+/// holds none, the messages of the turn, and where the keeper lends it.
+pub(super) struct Lend {
+  key: String,
+  fresh: Box<Conversation>,
+  messages: Vec<Message>,
+  lent: oneshot::Sender<Lent>,
 }
 
 /// The conversation of a key as the keeper holds it: at hand, or lent to a turn, with the turns
@@ -59,7 +62,10 @@ pub(super) struct Lent {
 }
 
 impl Lent {
-  #[expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+  #[expect(
+    clippy::expect_used,
+    reason = "only `taken` and the drop empty it, and each consumes the lent conversation"
+  )]
   pub(super) fn conversation(&mut self) -> &mut Conversation {
     self.conversation.as_mut().expect("a lent conversation is held until it goes back")
   }
@@ -77,7 +83,7 @@ impl Drop for Lent {
     if let Some(conversation) = self.conversation.take()
       && let Some(keeper) = self.keeper.upgrade()
     {
-      let key = std::mem::take(&mut self.key);
+      let key = mem::take(&mut self.key);
       drop(keeper.send(Kept::Back { key, conversation }));
     }
   }
@@ -94,15 +100,13 @@ pub(super) async fn kept(
   back: mpsc::WeakUnboundedSender<Kept>,
 ) {
   let mut keeper = Keeper { held: HashMap::new(), accounts, back };
-  let mut ticks = tokio::time::interval(IDLE);
+  let mut ticks = time::interval(IDLE);
   ticks.tick().await;
   loop {
     tokio::select! {
       one = asked.recv() => match one {
         None => return,
-        Some(Kept::Lend { key, fresh, messages, lent }) => {
-          keeper.lend(key, fresh, &messages, lent);
-        }
+        Some(Kept::Lend(asked)) => keeper.lend(asked),
         Some(Kept::Back { key, conversation }) => {
           keeper.back(key, conversation);
           keeper.swept();
@@ -124,13 +128,8 @@ struct Keeper {
 impl Keeper {
   /// The conversation of a key, lent to a turn: the one the keeper holds, or a new one. A turn of a
   /// conversation lent waits for it.
-  fn lend(
-    &mut self,
-    key: String,
-    fresh: Box<Conversation>,
-    messages: &[Message],
-    lent: oneshot::Sender<Lent>,
-  ) {
+  fn lend(&mut self, asked: Lend) {
+    let Lend { key, fresh, messages, lent } = asked;
     let conversation = match self.held.remove(&key) {
       Some(Slot::Idle(conversation)) => conversation,
       Some(Slot::Lent(mut waiting)) => {
@@ -138,7 +137,7 @@ impl Keeper {
         self.held.insert(key, Slot::Lent(waiting));
         return;
       }
-      None => self.made(fresh, messages),
+      None => self.made(fresh, &messages),
     };
     self.handed(key, conversation, VecDeque::from([lent]));
   }
@@ -164,13 +163,17 @@ impl Keeper {
           && one.system == made.system
           && self.accounts.store(one.account) == store
           && chain < incoming.len()
-          && incoming[..chain] == one.chain[..]
-          && messages[chain..].iter().all(|one| !matches!(one, Message::Assistant { .. }))
+          && incoming.get(..chain) == Some(&one.chain[..])
+          && messages.iter().skip(chain).all(|one| !matches!(one, Message::Assistant { .. }))
       })
       .max_by_key(|one| one.chain.len());
     if let Some(donor) = donor {
       made.parent = Some(donor.id.clone());
       made.chain.clone_from(&donor.chain);
+      made.said.clone_from(&donor.said);
+      // The fork resumes each block of its parent, with the mark of the cache that one holds, so
+      // it marks none more, and a fork of a fork stays within the four marks that the API takes.
+      made.marked = donor.marked;
     }
     made
   }
@@ -242,16 +245,19 @@ impl Keeper {
 }
 
 /// The conversation of a key, lent to this turn alone by the keeper, to which it goes back however
-/// the turn ends.
+/// the turn ends; or why the system gave the keeper no runtime.
 pub(super) async fn borrow(
-  keeper: &mpsc::UnboundedSender<Kept>,
+  keeper: &Result<mpsc::UnboundedSender<Kept>, Arc<io::Error>>,
   key: String,
   fresh: Box<Conversation>,
   messages: Vec<Message>,
 ) -> Result<Lent, CompletionError> {
   let (lent, borrowed) = oneshot::channel();
+  let keeper = keeper
+    .as_ref()
+    .map_err(|no| failed(format!("the conversations of claude have no keeper: {no}")))?;
   let gone = || failed("the keeper of the conversations of claude is gone");
-  if keeper.send(Kept::Lend { key, fresh, messages, lent }).is_err() {
+  if keeper.send(Kept::Lend(Lend { key, fresh, messages, lent })).is_err() {
     return Err(gone());
   }
   let Ok(lent) = borrowed.await else { return Err(gone()) };

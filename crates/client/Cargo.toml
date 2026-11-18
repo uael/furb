@@ -1,0 +1,31 @@
+[package]
+name = "furb-client"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The client of furb with no drawing: what each machine told, which every window maps."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+# Only the window takes it for now, and the window is not published.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The bytes of an image that the input sends to its session, in a frame of text.
+base64 = "0.22"
+# The emojis that a colon finds by their short codes.
+emojis = "0.9"
+# The protocol of the daemon and the shapes of the meaning of a life.
+furb-wire = { path = "../wire", version = "0.4.2" }
+# The second of the name of the record of a new session.
+jiff = "0.2"
+# The size in pixels of an image that a thread shows, from the head of its bytes.
+imagesize = "0.13"
+# The match of what the operator types against the rows of a list.
+nucleo-matcher = "0.3"
+serde = { version = "1", features = ["derive"] }
+# The text of an actor as a literal of python, in the word that gives it to a life.
+serde_json = "1"
+furb-hack = { version = "0.1", path = "../hack" }

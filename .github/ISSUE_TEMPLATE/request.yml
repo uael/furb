@@ -30,7 +30,7 @@ body:
       label: The part of furb
       multiple: true
       options:
-        - The TUI
+        - The window
         - The command line, furb
         - The Python package
         - The TypeScript package

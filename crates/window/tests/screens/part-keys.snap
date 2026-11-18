@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  furb
+
+
+
+               Each key
+               ▌Search a key                                                 1 / 45
+
+               Go                                                                    ┃
+               ▌⌃P          go to anything, or run a command                         ┃
+                ⌃X ? or F1  each key                                                 ┃
+                F5          reload on the newest build                               ┃
+                ⌥A or ⌃X A  the next thread that needs you
+                ⌥↓ or ⌃X J  the next card
+                ⌥↑ or ⌃X K  the card before
+                ⌃X L or ⌃\  show or hide the list
+
+               The thread
+                ⌃N          a new thread, and back to the thread
+  Nothing nee   ↘           jump to the latest
+  ● 1 session   ⇞           a page up
+                ⇟           a page down
+  ⌃P            ⌥[ or ⌃X [  the message before in the thread
+  ⌃X ?          ⌥] or ⌃X ]  the next message in the thread
+                ⎋ ⎋         stop the work of the thread
+  ┃
+  ┃ Ask for a  ↑↓ move · ⏎ run · ⎋ close
+  ┃
+  ┃  Message  Python    This computer ▾   FT furb-try ▾                               opus  high
+  ┃
+  ~/furb-try                                                                       ⌃X L the list

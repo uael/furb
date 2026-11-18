@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · the bench stalls on a cold build        Resolve     All projects ▾        This computer
+  ┃
+  ┃ the bench stalls on a cold build                           Needs you 1
+  ┃ (the model is asked again)                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● the bench stalls on…   ‖ Paused ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    ✗  opus/high answered nothing: the request is             ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       malformed
+
+  ‖ This thread is paused. Nothing is lost.
+
+     Resume    Change the model
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ Reply to this thread
+  ┃
+  ┃  Message  Python    → the bench… ▾  opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ‖ Paused · ⌃X Z or a message resumes it         ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

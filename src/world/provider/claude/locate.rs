@@ -5,7 +5,10 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use crate::world;
 use crate::world::provider::numbers;
+use std::cmp;
+use std::fs;
 
 /// The name of the program of the command line.
 pub(super) const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
@@ -24,14 +27,14 @@ pub(in crate::world::provider) fn located() -> Option<PathBuf> {
     folders.push(home.join(".local/bin"));
     if cfg!(target_os = "macos") {
       let desktop = home.join("Library/Application Support/Claude/claude-code");
-      let mut versions: Vec<PathBuf> = std::fs::read_dir(&desktop)
+      let mut versions: Vec<PathBuf> = fs::read_dir(&desktop)
         .map(|found| found.filter_map(|one| one.ok().map(|one| one.path())).collect())
         .unwrap_or_default();
-      versions.sort_by_key(|one| std::cmp::Reverse(numbered(one)));
+      versions.sort_by_key(|one| cmp::Reverse(numbered(one)));
       folders.extend(versions.iter().map(|one| one.join("claude.app/Contents/MacOS")));
     }
   }
-  crate::world::program("claude", folders)
+  world::program("claude", folders)
 }
 
 /// The numbers of a version, in order, which sort as a version does.

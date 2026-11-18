@@ -33,6 +33,10 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+  "beautifulsoup4>=4.13",
+  "datamodel-code-generator>=0.96.0",
+  "markdownify>=1.2",
+  "mcp>=2.3.0",
   "pre-commit>=4.6.2",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
@@ -46,12 +50,20 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["bind/python", "cli"]
+members = ["crates/python", "crates/cli"]
 
 [tool.uv]
+# uv builds the two wheels of the workspace again each time a file of their cache-keys changes, and it keeps each old
+# copy in its cache for ever, 110 MB each time. No cache keeps no copy, and a new environment takes its packages from
+# the index in seconds.
+no-cache = true
 # An environment of development builds the crate in the dev profile, which optimizes each dependency and builds the
 # crates of the workspace quickly. A wheel built for a release takes the release profile of maturin.
 config-settings-package = { furb-monty = { build-args = "--profile=dev" }, furb-cli = { build-args = "--profile=dev" } }
+
+# The source of a release ships the promise of its major, which docs/promise.md states.
+[tool.uv.build-backend]
+source-include = ["docs/promise.md"]
 
 [tool.uv.sources]
 furb-monty = { workspace = true }
@@ -61,18 +73,18 @@ furb-cli = { workspace = true }
 line-length = 120
 indent-width = 2
 target-version = "py314"
-src = ["src", "test", "bind/python"]
+src = ["src", "tests", "crates/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
-# A word of the project reads the names that a word before it in .furb/config.json defines: pr and shq of pr. A test
-# holds each of them to a definition.
-builtins = ["pr", "shq"]
+# The checkpointer that stands in for a listed one replays the records of its builds, so no tool changes a byte of it.
+extend-exclude = ["src/engine/carrier.py"]
+# A word of the project reads the names that a word before it in .furb/config.json defines as builtins. A test holds each
+# of them to a definition.
+builtins = []
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
-"script/pytest_ids.py" = "py38"
-# The scripts of the skill converge-tui run on the python3 of the machine.
-".agents/skills/converge-tui/*.py" = "py39"
+"crates/xtask/src/deepswe/pytest_ids.py" = "py38"
 
 [tool.ruff.lint]
 select = [
@@ -84,20 +96,27 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"{test,extensions/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
+"{tests,.agents/skills/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
-"extensions/*/*.pyi" = ["E501"]
+"src/furb/checkpoint.pyi" = ["E501"]
+# The checkpoint holds the code that the engine held, in its form, and its contract holds its types.
+"src/furb/checkpoint.py" = ["ANN", "PLR0913", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
+".agents/skills/*/*.pyi" = ["E501"]
 # An example of the framework starts itself again as a process of its own, to show a life that resumes after its
 # process ends.
 "docs/examples/**/*.py" = ["T201"]
 # A life speaks the vocabulary of the engine, whose ids shadow a builtin, and open opens a life as open opens a file.
 "src/furb/life.py" = ["A001", "A002", "PLR0913"]
 "src/furb/__init__.py" = ["A004"]
+# The client of a skill names its errors as the client of TypeScript and the engine do.
+"src/furb/skill.py" = ["N818"]
+# A process of a kit names its refusal as the engine names it.
+".agents/skills/*/process.py" = ["N818"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
-"extensions/*/*.py" = ["A002", "ANN001"]
+".agents/skills/*/*.py" = ["A002", "ANN001"]
 # A word of the project is read for what breaks it: a name that nothing binds, a call that cannot run, a bug of the
 # B family. Its style stays its own, as the chain it runs in reads it, and the data of .furb are no python.
 ".furb/**" = [
@@ -112,7 +131,7 @@ max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "furb_monty", "conftest", "extensions"]
+known-first-party = ["furb", "furb_monty", "conftest", "skills"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -135,13 +154,13 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
-include = ["src", "test", "script", "bind/python", "extensions", ".furb/extensions/*/*.py"]
+include = ["src", "tests", "script", "crates/xtask/python", "crates/python", ".agents/skills", ".furb/skills/*/*.py"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
-# its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its
+# its own helpers from skills.conftest. The package furb_monty is read from its source and the stub of its
 # extension, so the check needs no build of the crate.
 [tool.ty.environment]
-extra-paths = ["test", "bind/python"]
+extra-paths = ["tests", "crates/python", ".agents"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
@@ -158,33 +177,30 @@ unresolved-global = "ignore"
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.
 [[tool.ty.overrides]]
-include = ["bind/python/furb_monty/engine.py"]
+include = ["crates/python/furb_monty/engine.py"]
 
 [tool.ty.overrides.rules]
 unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 
-# A word of the project reads the names of the words before it, which ty cannot follow from file to file, and get gives
-# nothing for a name of no act, which the contract types as an act (ruff reads these names through its builtins).
 [[tool.ty.overrides]]
-include = [".furb/extensions/conductor/conductor.py"]
-
-[tool.ty.overrides.rules]
-unresolved-reference = "ignore"
-
-[[tool.ty.overrides]]
-include = [".furb/extensions/*/*.py"]
+include = [".furb/skills/*/*.py"]
 
 [tool.ty.overrides.rules]
 redundant-condition = "ignore"
 
 [tool.pytest.ini_options]
-testpaths = ["test", "extensions", ".furb/extensions"]
-pythonpath = [".", "test"]
+testpaths = ["tests", ".agents/skills", ".furb/skills"]
+pythonpath = [".", ".agents", "tests"]
+consider_namespace_packages = true
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 # A worker that is idle takes the tests that another worker has not started, so no core waits on a run of slow tests
 # at the end: on 3 cores this ran the suite in 88 s and 92 s, against 107 s and 102 s when each worker kept its share.
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--dist", "worksteal", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]
+# Coverage counts furb by its folder and furb_monty by its name. A name counts each module of that name, and a process
+# of a kit that the suite starts runs its own copy of furb.skill and furb.protocol from the config folder of a test,
+# under the coverage that the active environment carries into it. furb_monty has no copy, and the suite of CI imports
+# it from the wheel that its build made, which stands outside the folder of the repository.
+addopts = ["-ra", "--durations=10", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--dist", "worksteal", "--cov=src/furb", "--cov=furb_monty", "--cov-report=term-missing"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"

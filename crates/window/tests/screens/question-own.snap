@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · where does the list stand               Resolve     All projects ▾        This computer
+  ┃
+  ┃ where does the list stand                                  Needs you 1
+  ┃ (the model asks a choice)                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● where does the list…    ◆ Input ▌
+                                                opus/high     ▐   FU furb                    opus ▌
+    ◆  side = await prompt(Literal['right', 'left'], …+51     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    2  close(side)
+    …
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ ◆ opus/high asks
+  ┃ Where does the list of cards stand?
+  ┃
+  ┃   right
+  ┃   left
+  ┃ › at the top
+  ┃
+  ┃  Message  Python    → where… ▾      opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · ⏎ answer                          ⌃C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

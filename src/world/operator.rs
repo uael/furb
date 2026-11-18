@@ -39,13 +39,13 @@ impl Asked {
   /// answers not, with the refusal of that shape, and gives it not. So every console of furb puts
   /// to the operator the same shapes. A prompt of None asks nothing, so the console closes it with
   /// None at once and gives it, as a notice that the operator reads and answers not.
-  pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
+  pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Self>, Fault> {
     if a.kind() != "prompt" || !a.question() {
       return Ok(None);
     }
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let scope = co.call("scope", vec![Object::string(a.about())], vec![]).await?;
-    let asked = Asked {
+    let asked = Self {
       about: a.about().to_owned(),
       on: scope.as_ref().as_str().unwrap_or(a.on()).to_owned(),
       shape: word(1).unwrap_or_default(),
@@ -74,15 +74,15 @@ pub enum Shape {
   Int,
   Float,
   /// A list, whose every item has a shape, or any shape.
-  List(Option<Box<Shape>>),
+  List(Option<Box<Self>>),
   /// A dict with keys of text, whose every value has a shape, or any shape.
-  Dict(Option<Box<Shape>>),
+  Dict(Option<Box<Self>>),
   /// A tuple: the shape of each item.
-  Tuple(Vec<Shape>),
+  Tuple(Vec<Self>),
   /// A Literal: its values.
   Choice(Vec<Object>),
   /// A union: the first of its shapes that reads a line.
-  Either(Vec<Shape>),
+  Either(Vec<Self>),
 }
 
 /// Whether the operator answers a shape: one of SHAPES, a Literal whose every value is a string, a whole number, a
@@ -107,64 +107,66 @@ fn parts(text: &str, mark: char) -> Vec<&str> {
       (None, '[' | '(' | '{') => depth += 1,
       (None, ']' | ')' | '}') => depth -= 1,
       (None, c) if c == mark && depth == 0 => {
-        found.push(&text[start..at]);
+        found.push(text.get(start..at).unwrap_or_default());
         start = at + c.len_utf8();
       }
       _ => {}
     }
   }
-  found.push(&text[start..]);
+  found.push(text.get(start..).unwrap_or_default());
   found
 }
 
 impl Shape {
   /// A shape as its name reads, or none when the operator answers it not.
-  pub fn parse(name: &str) -> Option<Shape> {
+  pub fn parse(name: &str) -> Option<Self> {
     let text = name.trim();
     let arms = parts(text, '|');
     if arms.len() > 1 {
       let mut shapes = vec![];
       for arm in arms {
-        match Shape::parse(arm)? {
-          Shape::Either(more) => shapes.extend(more),
+        match Self::parse(arm)? {
+          Self::Either(more) => shapes.extend(more),
           one => shapes.push(one),
         }
       }
-      return Some(Shape::Either(shapes));
+      return Some(Self::Either(shapes));
     }
     let (head, inside) = match text.split_once('[') {
       Some((head, rest)) => (head.trim(), Some(rest.strip_suffix(']')?)),
       None => (text, None),
     };
     Some(match (head, inside) {
-      ("str", None) => Shape::Str,
-      ("None", None) => Shape::None,
-      ("bool", None) => Shape::Bool,
-      ("int", None) => Shape::Int,
-      ("float", None) => Shape::Float,
-      ("list", None) => Shape::List(None),
-      ("dict", None) => Shape::Dict(None),
-      ("list", Some(item)) => Shape::List(Some(Box::new(Shape::parse(item)?))),
+      ("str", None) => Self::Str,
+      ("None", None) => Self::None,
+      ("bool", None) => Self::Bool,
+      ("int", None) => Self::Int,
+      ("float", None) => Self::Float,
+      ("list", None) => Self::List(None),
+      ("dict", None) => Self::Dict(None),
+      ("list", Some(item)) => Self::List(Some(Box::new(Self::parse(item)?))),
       ("dict", Some(pair)) => match parts(pair, ',')[..] {
-        [key, value] if matches!(Shape::parse(key)?, Shape::Str) => {
-          Shape::Dict(Some(Box::new(Shape::parse(value)?)))
+        [key, value] if matches!(Self::parse(key)?, Self::Str) => {
+          Self::Dict(Some(Box::new(Self::parse(value)?)))
         }
         _ => return None,
       },
       ("tuple", Some(items)) => {
-        Shape::Tuple(parts(items, ',').into_iter().map(Shape::parse).collect::<Option<_>>()?)
+        Self::Tuple(parts(items, ',').into_iter().map(Self::parse).collect::<Option<_>>()?)
       }
-      ("Literal", Some(_)) => Shape::Choice(literal(text)?),
+      ("Literal", Some(_)) => Self::Choice(literal(text)?),
       _ => return None,
     })
   }
 
-  /// The lines that answer a shape that is a choice: yes and no for a bool, and each value of a
-  /// Literal as `named` gives it. Any other shape gives none.
+  /// The lines that answer a shape that is a choice: yes and no for a bool, each value of a
+  /// Literal as `named` gives it, and each of those of the arms of a union that holds no None. A
+  /// union that holds None takes a line of no word, so it is no choice. Any other shape gives none.
   pub fn choices(&self) -> Vec<String> {
     match self {
-      Shape::Bool => vec!["yes".to_owned(), "no".to_owned()],
-      Shape::Choice(values) => values.iter().map(named).collect(),
+      Self::Bool => vec!["yes".to_owned(), "no".to_owned()],
+      Self::Choice(values) => values.iter().map(named).collect(),
+      Self::Either(arms) if !self.takes_nothing() => arms.iter().flat_map(Self::choices).collect(),
       _ => Vec::new(),
     }
   }
@@ -172,7 +174,7 @@ impl Shape {
   /// Whether a line of no word answers the shape: a union that holds None, which such a line
   /// answers with None.
   pub fn takes_nothing(&self) -> bool {
-    matches!(self, Shape::Either(arms) if arms.iter().any(|one| matches!(one, Shape::None)))
+    matches!(self, Self::Either(arms) if arms.iter().any(|one| matches!(one, Self::None)))
   }
 
   /// A shape as a prompt is given it, by its name: None itself, or the name of a type.
@@ -205,13 +207,14 @@ fn literal(shape: &str) -> Option<Vec<Object>> {
 fn choice(text: &str) -> Option<(Object, &str)> {
   let Some(quote) = text.chars().next().filter(|c| *c == '\'' || *c == '"') else {
     let end = text.find(|c: char| c == ',' || c.is_whitespace()).unwrap_or(text.len());
-    let value = match &text[..end] {
+    let (word, rest) = text.split_at_checked(end)?;
+    let value = match word {
       "None" => Object::none(),
       "True" => Object::bool(true),
       "False" => Object::bool(false),
       word => Object::int(word.parse().ok()?),
     };
-    return Some((value, &text[end..]));
+    return Some((value, rest));
   };
   let mut value = String::new();
   let mut chars = text.char_indices().skip(1);
@@ -238,7 +241,7 @@ fn choice(text: &str) -> Option<(Object, &str)> {
           value.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
         }
       }
-      c if c == quote => return Some((Object::string(value), &text[at + 1..])),
+      c if c == quote => return Some((Object::string(value), text.get(at + c.len_utf8()..)?)),
       c => value.push(c),
     }
   }
@@ -388,7 +391,3 @@ fn written(raw: &RawValue) -> Result<Object, Fault> {
     _ => inward(&serde_json::from_str(raw.get()).map_err(invalid)?),
   }
 }
-
-#[cfg(test)]
-#[path = "operator.test.rs"]
-mod test;

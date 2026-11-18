@@ -1,0 +1,157 @@
+"""jump, a chain that goes on as another chain."""
+
+from asyncio import CancelledError
+
+from conftest import born, paragraphs, said, settle
+from furb import engine
+
+
+async def test_a_jump_keeps_each_fact_that_the_chain_held_so_its_turns_never_change() -> None:
+  """A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change."""
+  _, _, root = born()
+  assert await engine.rung("k = 7", on=root) is None
+  before, turns = [x[:3] for x in engine.transcript(root)], engine.turns(on=root)
+  await engine.jump(on=root)
+  assert await engine.rung("k = 8", on=root) is None
+  assert ([x[:3] for x in engine.transcript(root)][: len(before)], engine.turns(on=root)) == (before, turns)
+  assert [x for x in engine.transcript(root) if x[0] == "rung" and x[4] == "k = 8"] == []
+
+
+async def test_jump_makes_at_rest_a_chain_with_the_chain_as_its_source() -> None:
+  """jump makes, once no step of a word of the chain runs and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain, while a word or a task that awaits an act goes on."""
+  _, _, root = born()
+  assert await engine.rung("k = 7", on=root) is None
+  engine.read("a.txt", on=root)
+  kept = engine.bash("echo hi", on=root)
+  await settle()
+  read = next(x[1] for x in engine.transcript(root) if x[0] == "read")
+  went = engine.jump([read], "w = k + 1", on=root)
+  await settle()
+  new = str(engine.peek(went))
+  assert (engine.get(new)[0], engine.get(new)[5], engine.module(new)["w"]) == ("chain", root, 8)
+  held = {x[1] for x in engine.transcript(new)}
+  assert (kept in held, read in held) == (True, False)
+  assert [x[2] for x in engine.transcript(new) if x[0] == "rung" and x[4] == "w = k + 1"] == [went]
+  _, log, root = born(auto=False)
+  waits = engine.rung("x = await bash('slow')", on=root)
+  await settle()
+  new = await engine.jump(on=root)
+  assert (engine.scope(root), engine.over(waits), engine.over(said(log, "bash")[0][1])) == (new, False, False)
+
+
+async def test_each_jump_before_the_chain_rests_makes_that_one_chain() -> None:
+  """Each jump of a chain that comes before the chain jumps makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps."""
+  _, _, root = born()
+  one, two = engine.bash("echo 1", on=root), engine.bash("echo 2", on=root)
+  await settle()
+  word = f"a = jump([{one!r}], 'w = [1]')\nb = jump([{two!r}], 'w.append(2)')"
+  assert await engine.rung(word, on=root) is None
+  await settle()
+  a, b = engine.module(root)["a"], engine.module(root)["b"]
+  new = str(engine.peek(a))
+  assert (engine.peek(b), engine.scope(root), engine.module(new)["w"]) == (new, new, [1, 2])
+  assert {one, two} & {x[1] for x in engine.transcript(new)} == set()
+
+
+async def test_the_chain_that_a_jump_makes_keeps_each_stand_and_each_cd() -> None:
+  """The chain that a jump makes keeps each stand and each cd of the chain whatever drop names, so it stands where the chain stood and works in its directory."""
+  _, _, root = born()
+  assert await engine.rung("cd('sub')", on=root) is None
+  went = [x[1] for x in engine.transcript(root) if x[0] in ("stand", "cd")]
+  new = await engine.jump(went, on=root)
+  assert (engine.cwd(on=new), engine.standing()) == ("/w/sub", engine.standing())
+  assert {x[1] for x in engine.transcript(new) if x[0] in ("stand", "cd")} >= set(went)
+
+
+async def test_after_a_jump_each_act_that_names_the_chain_is_on_the_chain_that_it_jumped_to() -> None:
+  """After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says whatever it drops, so its threads, its messages, its pauses and the next ask of its model are there."""
+  _, _, root = born()
+  new = await engine.jump(on=root)
+  later = engine.rung("x = 1", on=root)
+  assert await later is None and engine.scope(later) == new
+  newer = await engine.jump(on=root)
+  assert engine.scope(root) == newer == engine.scope(new)
+  # The operator wakes the chain that the root went on as, and a pause of a thread of the root ends on each chain
+  # that it jumps to after.
+  sand, _, root = born()
+  sand.script.update({"chain2": ["jump()"], "chain3": ["close(7)"]})
+  went = await engine.jump(on=root)
+  asked = engine.prompt(int, "the k", on=root)
+  engine.pause(asked)
+  engine.wake(went)
+  await settle(300)
+  assert (engine.scope(root), engine.peek(asked, ...)) == ("chain3", 7)
+  # A wake of the chain by its first name ends the pause of a thread, and a later jump drops each act under that name,
+  # as a compaction does: the thread stays awake there, and a message on it asks its model with no wake.
+  sand, _, root = born(*["await wait(600, 'prompt1')"] * 3)
+  sand.script.update(
+    {"chain2": ["await wait(600, 'prompt1')"] * 3, "chain3": ["await wait(600, 'prompt1')", "close(8)"]}
+  )
+  asked = engine.prompt(int, "the k", on=root)
+  await settle()
+  engine.pause(asked)
+  engine.wake(root)
+  await engine.jump(on=root)
+  await settle()
+  went = [x[1] for x in engine.transcript(engine.scope(root)) if engine.question(x) and engine.under(x[1], root)]
+  await engine.jump(went, on=root)
+  told = engine.prompt(int, "the n", on=asked)
+  await settle(300)
+  assert (engine.scope(root), engine.paused(asked), engine.peek(told, ...)) == ("chain3", False, 8)
+
+
+async def test_each_open_thread_of_the_chain_is_asked_again_on_the_chain_that_it_jumped_to() -> None:
+  """Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled."""
+  sand, log, root = born("jump()")
+  sand.script["chain2"] = ["close(7)"]
+  asked = engine.prompt(int, "the k", on=root)
+  assert await asked == 7
+  rungs = [a for a in said(log, "rung") if a[2] == asked]
+  assert [engine.get(a[1])[3] for a in rungs] == [root, "chain2"]
+  assert engine.over(rungs[0][1]) and not isinstance(engine.peek(rungs[0][1]), CancelledError)
+  sand, log, root = born("jump()")
+  sand.script["chain2"] = ["close(1)", "close(2)"]
+  one = engine.prompt(int, "one", on=root)
+  two = engine.prompt(int, "two", on=root)
+  assert (await one, await two) == (1, 2)
+  waited = [a[1] for a in said(log, "rung") if a[2] == two and engine.get(a[1])[3] == root]
+  assert [type(engine.peek(x)) for x in waited] == [CancelledError]
+
+
+async def test_the_reading_and_the_transcript_of_a_chain_that_jumped_stay_their_own() -> None:
+  """The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it."""
+  _, _, root = born()
+  assert await engine.rung("k = 1", on=root) is None
+  turns, facts = engine.turns(on=root), [x[:3] for x in engine.transcript(root)]
+  new = await engine.jump(on=root)
+  assert await engine.rung("k = 2", on=new) is None
+  assert engine.turns(on=root) == turns and paragraphs(engine.turns(on=new)) != paragraphs(turns)
+  assert [x[:3] for x in engine.transcript(root)][: len(facts)] == facts
+  assert [x[:3] for x in engine.transcript(new)] != [x[:3] for x in engine.transcript(root)]
+
+
+async def test_a_word_that_jumps_its_own_chain_ends_first() -> None:
+  """The step of a word that jumps its own chain ends first, and a word that awaits across a jump binds each later name in the module of the chain that it ran on: the chain that the jump made holds its later facts and the names that its told runs bind, so a model that names another of its names there meets a NameError."""
+  _, _, root = born()
+  assert await engine.rung("went = jump()\nz = 3", on=root) is None
+  await settle()
+  new = engine.scope(root)
+  assert new != root and engine.module(new)["z"] == 3
+  sand, log, root = born(auto=False)
+  waits = engine.rung("x = await bash('slow')\ny = (await bash('more')).code", on=root)
+  await settle()
+  new = await engine.jump(on=root)
+  sand.exits(said(log, "bash")[0][1], 0)
+  await settle()
+  sand.exits(said(log, "bash")[1][1], 0)
+  assert await waits is None
+  assert (engine.module(root)["y"], "y" in engine.module(new), engine.scope(waits)) == (0, False, new)
+
+
+async def test_a_jump_whose_word_is_no_str_is_refused() -> None:
+  """A jump whose word is no str is refused, since no chain takes it, so the chain does not jump."""
+  _, log, root = born("close(3)")
+  await engine.rung("j = jump(word=5)", on=root)
+  assert repr(engine.peek(engine.module(root)["j"])) == repr(engine.Refused("nothing takes jump"))
+  assert await engine.prompt(int, "n", on=root) == 3
+  assert engine.scope(root) == root and [x[1] for x in said(log, "chain")] == [root]

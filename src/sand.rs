@@ -9,21 +9,40 @@
 //! each call with a [`Host`], and while it answers, it may call into the sandbox again through the same [`Sand`], to
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
-
 use std::{mem, time::Duration};
 
-use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
+use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
-  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
+  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker, unstable,
 };
 
 use crate::value::{Fault, Object};
+use std::{cell::Cell, time::Instant};
+
+/// The file of the code that `exec` runs from a text, where the opening defines the engine.
+const EXEC: &str = "<string>";
+
+/// The function of the engine that makes each act and returns it.
+const MADE: &str = "act";
 
 /// How many allocations the collector of cycles lets pass between two of its runs. Monty runs it after 100000
 /// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
+
+/// The most frames and levels of a value that a run on the engine of an earlier build stacks. Such
+/// an engine nests two frames for each entry that its replay plays, and each part of a record
+/// replays on the engine that made it, so a record of a few thousand entries passed the 1000 of
+/// monty there. The engine of this build replays at a depth that no count of entries grows, so a
+/// run on it holds the bound of monty.
+pub(crate) const DEPTH: usize = 20_000;
+
+/// The stack that a run takes. Monty walks a value one level at a time on the stack of the thread,
+/// up to [`DEPTH`] levels: 1,054 bytes a level on Windows and 673 on macOS in a build for
+/// development, so a run grows a stack of half again the most on a thread that holds less, and
+/// never ends the process. The run touches only the part that its walk reaches.
+const STACK: usize = DEPTH * 1600;
 
 /// The longest stretch of a word of a rung between two round trips to the host. Past it, monty
 /// raises a
@@ -32,13 +51,14 @@ const GC_INTERVAL: usize = 10_000_000;
 /// life goes on. The bound holds while a word steps, live or run again by a replay, and in each
 /// live entry of the host; the replay, the seed and the gather of a checkpoint around the words are
 /// the engine's own work, which grows with the life, so they run unbounded and a life that ran
-/// within its bounds always resumes.
+/// within its bounds always resumes. The live work of the ears outside any step of a word holds the
+/// bound too: an act that asks the World past it ends, with its question refused.
 pub(crate) const TURN: Duration = Duration::from_secs(30);
 
 #[cfg(test)]
 thread_local! {
   /// The bound of each sandbox that this thread makes, which a test sets short.
-  pub(crate) static BOUND: std::cell::Cell<Duration> = const { std::cell::Cell::new(TURN) };
+  pub(crate) static BOUND: Cell<Duration> = const { Cell::new(TURN) };
 }
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
@@ -48,6 +68,10 @@ const ENTER: &str = "__enter";
 pub(crate) trait Host {
   /// One call of the sandbox, answered: the object of the host it is on, by its id, the method or function it called,
   /// and what it handed over. The host may call into the sandbox with `sand` while it answers.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "a call of the sandbox lends it to the host apart, with the object that the call is on, its name and its values"
+  )]
   fn answer(
     &mut self,
     sand: &mut Sand,
@@ -95,28 +119,98 @@ pub(crate) struct Sand {
   /// the engine's own work over words that already ran within the bound, so they run unbounded,
   /// while each word that they run again keeps it.
   bounded: bool,
-  /// The bound that the session holds, which a round trip brings to `bounded`.
-  applied: bool,
+  /// The bound of a turn that the session holds, which a round trip brings to the bound that
+  /// holds now: [`turn`] while `bounded`, and none else.
+  applied: Duration,
+  /// The line of the word that made each act while a word stood on the stack, by the name of the
+  /// act, in the order the acts were made: a function of the record, since each open runs each
+  /// word again, and none of a fact.
+  lines: Vec<(String, u32)>,
+  /// The stack that a run grows when its thread holds less: [`STACK`] for the engine of an earlier
+  /// build, and none for the engine of this build, which holds the bound of monty.
+  stack: usize,
 }
 
 impl Sand {
-  /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
-  pub(crate) fn new() -> Self {
-    let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
+  /// A sandbox with the limits of monty, which holds handles, and nothing in it yet: with
+  /// [`DEPTH`] frames for the engine of an earlier build, and else with the 1000 of monty.
+  pub(crate) fn new(earlier: bool) -> Self {
+    let mut limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
+    if earlier {
+      limits = limits.max_recursion_depth(DEPTH);
+    }
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: true }
+    let stack = if earlier { STACK } else { 0 };
+    Self {
+      state: State::Idle(repl),
+      fed: 0,
+      bounded: true,
+      applied: turn(),
+      lines: Vec::new(),
+      stack,
+    }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0, bounded: true, applied: true }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: turn(), lines: Vec::new(), stack: 0 }
+  }
+
+  /// Watches each return of `act` of the engine, which the opening defined, so the sandbox keeps
+  /// the line of the word that made each act: monty gives the host each value that it returns,
+  /// with the frames that stand at its call, and the caller takes that value as if no one watched.
+  pub(crate) fn watch(&mut self) {
+    if let State::Idle(repl) = &mut self.state {
+      repl.watch(EXEC, MADE);
+    }
+  }
+
+  /// The line of the word that made each act, in the order the acts were made.
+  pub(crate) fn lines(&self) -> &[(String, u32)] {
+    &self.lines
+  }
+
+  /// Takes the lines that an earlier life of the record kept, as an image or a carry holds them,
+  /// before each line of this one.
+  pub(crate) fn lined(&mut self, lines: Vec<(String, u32)>) {
+    self.lines.splice(..0, lines);
   }
 
   /// How many runs the session began.
-  #[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]
   pub(crate) fn fed(&self) -> usize {
     self.fed
+  }
+
+  /// The session between two runs, as the image that monty dumps of it.
+  pub(crate) fn image(&self) -> Result<Vec<u8>, Fault> {
+    let State::Idle(repl) = &self.state else {
+      return Err(Fault::refused("a sandbox gives its image only between two runs"));
+    };
+    monty::dump("furb", None, &[], SessionRef::Idle(repl))
+      .map_err(|no| Fault::refused(format!("monty dumps no image: {no}")))
+  }
+
+  /// A sandbox on the session that monty loads from an image, which began `fed` runs. The image
+  /// holds the bound of a turn that the session held and no clock of the process, so the bound of
+  /// this process is set again.
+  pub(crate) fn of_image(image: &[u8], fed: usize) -> Result<Self, Fault> {
+    let loaded = Dump::load(image).map_err(|no| Fault::refused(no.to_string()))?;
+    let Session::Idle(mut repl) = loaded.state else {
+      return Err(Fault::refused("the image holds no session between two runs"));
+    };
+    repl.tracker_mut().set_max_turn_duration(turn());
+    // An image of a build before the watch holds none, and a second watch changes nothing.
+    repl.watch(EXEC, MADE);
+    // An image holds the session of the engine of this build, whose key names its texts.
+    Ok(Self {
+      state: State::Idle(*repl),
+      fed,
+      bounded: true,
+      applied: turn(),
+      lines: Vec::new(),
+      stack: 0,
+    })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -140,8 +234,11 @@ impl Sand {
     if let Some(limit) = self.changed() {
       repl.tracker_mut().set_max_turn_duration(limit);
     }
-    let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
-    self.drive(step, host)
+    let stack = self.stack;
+    stacker::maybe_grow(stack, stack, || {
+      let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
+      self.drive(step, host)
+    })
   }
 
   /// One entry of the host into the sandbox, which is a run of its own: `body` runs as the answer of the one call
@@ -150,7 +247,7 @@ impl Sand {
   pub(crate) fn enter<H: Host, T>(
     &mut self,
     host: &mut H,
-    body: impl FnOnce(&mut Sand, &mut H) -> T,
+    body: impl FnOnce(&mut Self, &mut H) -> T,
   ) -> Result<T, Fault> {
     let mut entering = Entering { body: Some(body), host, got: None };
     let mut inputs = NamedValues::new();
@@ -160,6 +257,10 @@ impl Sand {
   }
 
   /// A callable of the sandbox, called with these words while the host answers a call, and what it gave.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the host is lent apart to answer each call back, and a call is its callee, its values and its keyword values"
+  )]
   pub(crate) fn call<H: Host>(
     &mut self,
     host: &mut H,
@@ -170,9 +271,12 @@ impl Sand {
     let call = self.taken()?;
     let call = self.limited(call);
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
-    let step =
-      call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
-    self.drive(step, host)
+    let stack = self.stack;
+    stacker::maybe_grow(stack, stack, || {
+      let step =
+        call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
+      self.drive(step, host)
+    })
   }
 
   /// Whether the bound of the turn holds from the next round trip to the host on, and whether it
@@ -183,14 +287,16 @@ impl Sand {
 
   /// The bound of the turn that the session must hold from now, when it holds another.
   fn changed(&mut self) -> Option<Duration> {
-    (self.applied != self.bounded).then(|| {
-      self.applied = self.bounded;
-      if self.bounded { turn() } else { Duration::MAX }
-    })
+    let bound = if self.bounded { turn() } else { Duration::MAX };
+    (mem::replace(&mut self.applied, bound) != bound).then_some(bound)
   }
 
   /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
   /// changed.
+  #[expect(
+    clippy::unreachable,
+    reason = "monty sets the bound of a turn on a progress alone, so the call goes in one and comes back out"
+  )]
   fn limited(&mut self, call: ReplFunctionCall) -> ReplFunctionCall {
     let Some(limit) = self.changed() else { return call };
     let mut progress = ReplProgress::FunctionCall(call);
@@ -234,8 +340,18 @@ impl Sand {
           self.state = State::Answering(Box::new(call));
           return result.map_err(|error| fault(&error));
         }
-        ReplProgress::FunctionCall(call) => {
-          let args: Vec<Object> = call.args.args().map(|one| one.to_owned()).collect();
+        ReplProgress::FunctionCall(call)
+          if call.object_id.is_none() && call.function_name == MADE =>
+        {
+          self.made(&call);
+          self.limited(call).resume(Object::none(), PrintWriter::Disabled)
+        }
+        ReplProgress::FunctionCall(mut call) => {
+          let Some(args) = owned(mem::take(&mut call.args)) else {
+            let fault = Fault::refused("a call of the sandbox names a value that its arena lacks");
+            step = self.limited(call).abort(raised(&fault), PrintWriter::Disabled);
+            continue;
+          };
           let (on, name) = (call.object_id, call.function_name.clone());
           self.state = State::Answering(Box::new(call));
           let answer = host.answer(self, on, &name, args);
@@ -277,6 +393,20 @@ impl Sand {
     }
   }
 
+  /// The act that `act` returned, kept with the line of the word that made it: the innermost frame
+  /// of a word at the call, which the Kernel compiles under the name of its rung. An act that no
+  /// word made, as one that a host made by a verb, has no such frame and no line.
+  fn made(&mut self, call: &ReplFunctionCall) {
+    let named = call.args.args().next().and_then(|one| one.as_str().map(str::to_owned));
+    let worded = |name: &str| name.strip_prefix("rung").is_some_and(|n| n.parse::<u64>().is_ok());
+    let stack = call.stack();
+    let line =
+      stack.iter().rev().find(|frame| worded(&frame.filename)).map(|frame| frame.start.line);
+    if let (Some(name), Some(line)) = (named, line) {
+      self.lines.push((name, line));
+    }
+  }
+
   /// What the sandbox raised, as the fault a host reads, with the session kept for the next run. Every call the host
   /// was answering ended with the run.
   fn failed(&mut self, failed: ReplStartError) -> Fault {
@@ -307,8 +437,26 @@ impl Sand {
   }
 }
 
+thread_local! {
+  /// When the step of a word that runs on this thread began, while one runs under the bound.
+  static STEP: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// A step of a word under the bound begins on this thread, or it ends when `on` is false.
+pub(crate) fn step(on: bool) {
+  STEP.set(on.then(Instant::now));
+}
+
+/// Whether the step of a word that runs on this thread has run for longer than the bound of a
+/// turn. monty counts a turn again from each round trip to the host, so a word that loops on an
+/// answer of the host, as a reading of the clock, never meets the bound of monty; the host refuses
+/// such an answer once the step ran past it, and the refusal raises in the word.
+pub(crate) fn past() -> Option<Duration> {
+  STEP.get().filter(|at| at.elapsed() >= turn()).map(|_| turn())
+}
+
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.
-fn turn() -> Duration {
+pub(crate) fn turn() -> Duration {
   #[cfg(test)]
   let bound = BOUND.get();
   #[cfg(not(test))]
@@ -325,6 +473,19 @@ fn fault(error: &MontyException) -> Fault {
 /// What a life is refused for asking something no life asks.
 fn refusal(why: &str) -> MontyException {
   MontyException::new(ExcType::RuntimeError, Some(why.to_owned()))
+}
+
+/// The values of a call of the sandbox, each one its own. A call of one value with no keyword
+/// takes the arena of the call as it stands, as most calls do, and a call of more copies each value
+/// out of it. None when the arena lacks a value that the call names.
+fn owned(args: CallArgs) -> Option<Vec<Object>> {
+  let (graph, ids, kwargs) = unstable::into_call_args_parts(args);
+  match ids[..] {
+    [one] if kwargs.is_empty() => unstable::object_from_graph(graph, one).ok().map(|one| vec![one]),
+    _ => unstable::call_args_from_parts(graph, ids, kwargs)
+      .ok()
+      .map(|args| args.args().map(|one| one.to_owned()).collect()),
+  }
 }
 
 /// A fault of the host, raised where the sandbox called: the builtin exception it names, with its message, or a

@@ -8,7 +8,7 @@ mod shell;
 use std::{
   collections::{HashMap, HashSet},
   future,
-  path::PathBuf,
+  path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
   time::Duration,
@@ -20,16 +20,14 @@ use futures::{
   future::FusedFuture,
   stream,
 };
+use std::io;
 use tokio::{
   io::AsyncWriteExt,
   process::ChildStdin,
-  task::JoinHandle,
   time::{Instant, sleep, sleep_until},
 };
 use unsync::spsc;
 
-#[cfg(test)]
-pub(super) use self::kept::whole;
 pub use self::shell::{program, shell};
 use self::{
   kept::{HEAD, Kept, Stream, TAIL, Unread, read},
@@ -55,17 +53,21 @@ use crate::{
 /// wants, and its doors keep what it wrote before. It takes no write.
 ///
 /// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the
-/// pipe to its end, says the first bytes as they come and then a line that says the rest is cut,
-/// and its exit gives the first bytes, a line that counts the bytes cut, and the last bytes.
+/// pipe to its end, says the first bytes as they come, each tenth of a second of them as one fact,
+/// and then a line that says the rest is cut, and its exit gives the first bytes, a line that
+/// counts the bytes cut, and the last bytes.
 ///
-/// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the
-/// process, so it finds the programs that the profile of the user adds. A command runs with
+/// A command runs with the PATH of the login shell of the user, ahead of the PATH of the process,
+/// so it finds the programs that the profile of the user adds. The process reads it once, from the
+/// first of these ears that it makes, and a command that starts before that read ends waits for
+/// it. A command runs with
 /// `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
 /// every process it started, which its group holds. A command that a control ended first, which the
 /// engine says done, is ended so and says nothing more.
-pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
-  let mut commands = Commands { scratch, running: HashMap::new(), closed: HashSet::new() };
+pub fn bash(scratch: Scratch, home: Option<PathBuf>) -> Box<dyn Ear> {
+  shell::read_login();
+  let mut commands = Commands { scratch, home, running: HashMap::new(), closed: HashSet::new() };
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     loop {
       match co.next().await {
@@ -77,10 +79,11 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
   })
 }
 
-/// What the ear of the commands holds: the scratch directory of the life, each command that runs
-/// in this life, and the commands whose stdin a write closed.
+/// What the ear of the commands holds: the scratch directory of the life, the home of its user,
+/// each command that runs in this life, and the commands whose stdin a write closed.
 struct Commands {
   scratch: Scratch,
+  home: Option<PathBuf>,
   running: HashMap<String, Running>,
   closed: HashSet<String>,
 }
@@ -119,7 +122,7 @@ impl Commands {
   /// A command that starts: its stdin kept, and its streams worked until its act is done.
   async fn started(&mut self, co: &mut Co<Said>, a: &Fact, about: String) -> Result<(), Fault> {
     say(co, Fact::says("started", &about, []));
-    match begun(co, a, &self.scratch).await {
+    match begun(co, a, &self.scratch, self.home.as_deref()).await {
       Ok(mut begun) => {
         let (stdin, fed_in) = spsc::unbounded();
         let mut one = Running { stdin };
@@ -237,9 +240,21 @@ struct Begun {
   given: Option<String>,
 }
 
+/// The environment that makes a request for an editor or a terminal fail at once. No one answers
+/// a command at a terminal, so `git commit` with no message, or a prompt for a password, would
+/// wait for ever: with these set, git fails on the editor `false` and on a prompt, and a program
+/// that reads `VISUAL` or `EDITOR` runs `false`.
+const UNASKING: [(&str, &str); 4] =
+  [("GIT_EDITOR", "false"), ("VISUAL", "false"), ("EDITOR", "false"), ("GIT_TERMINAL_PROMPT", "0")];
+
 /// A command begun: its shell made ready in the directory of its chain, with the scratch directory
 /// as its `TMPDIR`.
-async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
+async fn begun(
+  co: &mut Co<Said>,
+  a: &Fact,
+  scratch: &Scratch,
+  home: Option<&Path>,
+) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
   let line = command_line(a);
@@ -254,7 +269,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   let timeout = a.word(3).and_then(|one| one.seconds());
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   let timeout = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-  let dir = here(co, &on).await?;
+  let dir = here(co, &on, home).await?;
   let asked = vec![Object::string("merged"), Object::string(on), Object::string(about.clone())];
   let merged = co.call("ask", asked, vec![]).await?.as_ref().as_bool().unwrap_or_default();
   let mut command = Command::new(shell());
@@ -267,6 +282,9 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
   command.env("TMPDIR", tmp);
+  for (name, value) in UNASKING {
+    command.env(name, value);
+  }
   if cfg!(windows) {
     command.env("TMP", tmp).env("TEMP", tmp);
   }
@@ -297,8 +315,8 @@ fn command(begun: Begun, fed: spsc::Receiver<Option<String>>) -> impl futures::S
 /// What ended the wait on a command before its exit.
 enum Cut {
   Unread(Unread),
-  Unslain(std::io::Error),
-  Unwaited(std::io::Error),
+  Unslain(io::Error),
+  Unwaited(io::Error),
 }
 
 /// How a command exited: the code of its shell, and whether its timeout ended it.
@@ -318,8 +336,12 @@ enum Phase {
 /// The wait on a command through its three phases. A fault of a stream or a signal that cannot
 /// reach the group ends it with that fault, and the timeout of the command ends its processes at
 /// any time.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the watch selects over the four futures of one command, its shell, its streams, its timeout and its stdin, and ends its group"
+)]
 async fn watch(
-  shell: JoinHandle<std::io::Result<Option<i32>>>,
+  shell: impl Future<Output = io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
@@ -333,7 +355,7 @@ async fn watch(
     tokio::select! {
       biased;
       got = &mut shell, if matches!(phase, Phase::Running) => {
-        let status = got.map_err(std::io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
+        let status = got.map_err(Cut::Unwaited)?;
         phase = Phase::Draining { status, until: Instant::now() + DRAIN };
       }
       read = &mut streams => read.map_err(Cut::Unread)?,

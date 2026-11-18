@@ -2,7 +2,6 @@
 //! the types that serde reads. A field that the protocol gives is required here, so an event that
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
-
 use std::collections::HashMap;
 
 use rig_core::{
@@ -13,7 +12,8 @@ use rig_core::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{CLAUDE, Deltas};
+use super::{CLAUDE, Deltas, conversation::Unpaid};
+use crate::world::provider::answer::Bill;
 
 /// One line of the stdout.
 #[derive(Deserialize)]
@@ -26,6 +26,8 @@ pub(super) enum Event {
   Assistant { message: Said },
   /// The end of the turn.
   Result(Finished),
+  /// The answer of a control request, which the probe of the models sends.
+  ControlResponse { response: Control },
   #[serde(other)]
   Other,
 }
@@ -33,19 +35,40 @@ pub(super) enum Event {
 impl Event {
   /// The event that a JSON value is. A value with no type is none of the events, and reads as
   /// `Other`.
-  pub(super) fn read(value: Value) -> Result<Event, serde_json::Error> {
+  pub(super) fn read(value: Value) -> Result<Self, serde_json::Error> {
     if value.get("type").is_none() {
-      return Ok(Event::Other);
+      return Ok(Self::Other);
     }
     serde_json::from_value(value)
   }
+}
+
+/// The answer of a control request, by the id of the request: what it gave, or that it failed.
+#[derive(Deserialize)]
+#[serde(tag = "subtype", rename_all = "snake_case")]
+pub(super) enum Control {
+  Success {
+    request_id: String,
+    #[serde(default)]
+    response: Value,
+  },
+  Error {
+    request_id: String,
+  },
+  #[serde(other)]
+  Other,
 }
 
 /// An event of the message that streams.
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum Streamed {
-  MessageStart,
+  /// The start of a message, with the model that writes it and what its request read, which is all
+  /// that a turn cut before its end says of what it read.
+  MessageStart {
+    #[serde(default)]
+    message: Begun,
+  },
   ContentBlockStart {
     index: u64,
     content_block: Start,
@@ -57,8 +80,22 @@ pub(super) enum Streamed {
   ContentBlockStop {
     index: u64,
   },
+  /// The end of a message, with what its request spent in all. The usage of the assistant events
+  /// before it is the usage of the start of the message.
+  MessageDelta {
+    usage: Spent,
+  },
   #[serde(other)]
   Other,
+}
+
+/// The message that a stream starts, as far as it says the model that writes it and what its
+/// request read.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub(super) struct Begun {
+  model: Option<String>,
+  usage: Option<Spent>,
 }
 
 /// The block that a stream opens.
@@ -70,6 +107,9 @@ pub(super) enum Start {
   },
   Thinking {
     thinking: String,
+  },
+  RedactedThinking {
+    data: String,
   },
   #[serde(other)]
   Other,
@@ -107,13 +147,16 @@ pub(super) enum Whole {
     thinking: String,
     signature: Option<String>,
   },
+  RedactedThinking {
+    data: String,
+  },
   #[serde(other)]
   Other,
 }
 
 /// What a request read and wrote. A count that the command line leaves out is none, since it says
 /// `{}` of a turn that spent nothing.
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, PartialEq)]
 #[serde(default)]
 pub(super) struct Spent {
   #[serde(rename = "input_tokens")]
@@ -124,6 +167,16 @@ pub(super) struct Spent {
   pub(super) cache_read: u64,
   #[serde(rename = "cache_creation_input_tokens")]
   pub(super) cache_creation: u64,
+}
+
+impl Spent {
+  /// The counts of a later usage of the same message, which only grow.
+  fn grow(&mut self, later: &Self) {
+    self.input = self.input.max(later.input);
+    self.output = self.output.max(later.output);
+    self.cache_read = self.cache_read.max(later.cache_read);
+    self.cache_creation = self.cache_creation.max(later.cache_creation);
+  }
 }
 
 /// The end of a turn. Only a turn that fails has an error, a subtype and a status, so the fields
@@ -152,19 +205,22 @@ pub(super) enum Stop {
   Other,
 }
 
-/// One block of a reply as the command line streams it: a text, or a thought and its signature.
+/// One block of a reply as the command line streams it: a text, a thought and its signature, or a
+/// thought that the API redacted, as its opaque data, which the next turn gives back whole.
 enum Block {
   Text(String),
   Thinking(String, Option<String>),
+  Redacted(String),
 }
 
 impl Block {
   fn content(&self) -> AssistantContent {
     match self {
-      Block::Text(text) => AssistantContent::text(text.clone()),
-      Block::Thinking(text, signature) => {
+      Self::Text(text) => AssistantContent::text(text.clone()),
+      Self::Thinking(text, signature) => {
         AssistantContent::Reasoning(Reasoning::new_with_signature(text, signature.clone()))
       }
+      Self::Redacted(data) => AssistantContent::Reasoning(Reasoning::redacted(data.clone())),
     }
   }
 }
@@ -183,12 +239,16 @@ pub(super) struct Reply<'a> {
   /// The usage of the last message the command line settled, which is the one request of the turn
   /// whose answer the reply holds.
   pub(super) spent: Option<Spent>,
+  /// The model that writes the current message, when its start names it.
+  pub(super) model: Option<String>,
+  /// The usage that the stream told last, as [`Reply::billed`] says.
+  billed: Option<Spent>,
   deltas: Option<&'a Deltas>,
 }
 
 impl<'a> Reply<'a> {
   /// A reply with no block yet, whose parts go where the turn streams.
-  pub(super) fn new(deltas: Option<&'a Deltas>) -> Reply<'a> {
+  pub(super) fn new(deltas: Option<&'a Deltas>) -> Self {
     Reply { deltas, ..Reply::default() }
   }
 
@@ -204,7 +264,7 @@ impl<'a> Reply<'a> {
     let id = self.blocks.len().to_string();
     self.told(match block {
       Block::Text(_) => RawStreamingChoice::TextStart { id: id.into(), additional_params: None },
-      Block::Thinking(..) => {
+      Block::Thinking(..) | Block::Redacted(_) => {
         RawStreamingChoice::ReasoningStart { id: id.into(), provider_id: None }
       }
     });
@@ -228,7 +288,7 @@ impl<'a> Reply<'a> {
           reasoning,
         });
       }
-      None => {}
+      Some(Block::Redacted(_)) | None => {}
     }
   }
 
@@ -237,7 +297,7 @@ impl<'a> Reply<'a> {
     let id = at.to_string().into();
     match self.blocks.get(at) {
       Some(Block::Text(_)) => self.told(RawStreamingChoice::TextEnd { id }),
-      Some(block @ Block::Thinking(..)) => {
+      Some(block @ (Block::Thinking(..) | Block::Redacted(_))) => {
         let AssistantContent::Reasoning(reasoning) = block.content() else { return };
         let reasoning = Some(reasoning);
         self.told(RawStreamingChoice::ReasoningEnd {
@@ -251,11 +311,31 @@ impl<'a> Reply<'a> {
     }
   }
 
+  /// What the request of the reply read so far, told to whoever streams the turn each time it
+  /// grows, as a [`Bill`] in the form of the usage of a turn, so the reader pays that request
+  /// whatever the turn comes to. A turn that no one streams gives it back, unpaid.
+  pub(super) fn billed(&mut self) -> Option<Unpaid> {
+    let spent = self.spent.clone()?;
+    let unpaid = Unpaid { model: self.model.clone(), spent };
+    if self.deltas.is_none() {
+      return Some(unpaid);
+    }
+    if self.billed.as_ref() != Some(&unpaid.spent) {
+      let Spent { input, output, cache_read: read, cache_creation: wrote } = unpaid.spent;
+      let input = input + read + wrote;
+      let bill = Bill { input, output, read, wrote, dollars: unpaid.cost() };
+      self.told(RawStreamingChoice::Unknown(bill.part()));
+      self.billed = Some(unpaid.spent);
+    }
+    None
+  }
+
   /// One event of a message as it streams.
   pub(super) fn streamed(&mut self, update: &Streamed) {
-    if matches!(update, Streamed::MessageStart) {
+    if matches!(update, Streamed::MessageStart { .. }) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
+      self.spent = None;
     }
     let places = self.streamed.get_or_insert_default();
     match update {
@@ -263,6 +343,7 @@ impl<'a> Reply<'a> {
         let block = match content_block {
           Start::Text { text } => Block::Text(text.clone()),
           Start::Thinking { thinking } => Block::Thinking(thinking.clone(), None),
+          Start::RedactedThinking { data } => Block::Redacted(data.clone()),
           Start::Other => return,
         };
         places.insert(*index, self.blocks.len());
@@ -288,8 +369,25 @@ impl<'a> Reply<'a> {
           self.closed(at);
         }
       }
-      Streamed::MessageStart | Streamed::Other => {}
+      Streamed::MessageDelta { usage } => self.spent.get_or_insert_default().grow(usage),
+      Streamed::MessageStart { message } => {
+        self.model.clone_from(&message.model);
+        if let Some(usage) = &message.usage {
+          self.spent = Some(usage.clone());
+        }
+      }
+      Streamed::Other => {}
     }
+  }
+
+  /// A message that the command line says whole: its blocks, and its usage, which grows what the
+  /// reply holds, since the command line settles a message with the usage of its start, and may do
+  /// so after the delta that says the whole usage.
+  pub(super) fn said(&mut self, message: &Said) {
+    if let Some(usage) = &message.usage {
+      self.spent.get_or_insert_default().grow(usage);
+    }
+    self.settled(&message.content);
   }
 
   /// The blocks of a message that the command line says whole. It says each block again, once it is
@@ -302,23 +400,26 @@ impl<'a> Reply<'a> {
         Whole::Thinking { thinking, signature } => {
           Some(Block::Thinking(thinking.clone(), signature.clone()))
         }
+        Whole::RedactedThinking { data } => Some(Block::Redacted(data.clone())),
         Whole::Other => None,
       };
       if let Some(streamed) = &self.streamed {
         let at = streamed.get(&self.settled).copied();
         self.settled += 1;
-        if let (Some(at), Some(block)) = (at, block) {
-          self.blocks[at] = block;
+        if let (Some(at), Some(block)) = (at.and_then(|at| self.blocks.get_mut(at)), block) {
+          *at = block;
         }
       } else {
         let Some(block) = block else { continue };
         let whole = match &block {
           Block::Text(text) | Block::Thinking(text, _) => text.clone(),
+          Block::Redacted(_) => String::new(),
         };
         let at = self.blocks.len();
         self.opened(match block {
           Block::Text(_) => Block::Text(String::new()),
           Block::Thinking(_, signature) => Block::Thinking(String::new(), signature),
+          redacted @ Block::Redacted(_) => redacted,
         });
         self.grew(at, &whole);
         self.closed(at);
@@ -332,6 +433,10 @@ impl<'a> Reply<'a> {
   /// turn, and the command line makes many when the model calls a tool, which it refuses, or stops
   /// at its limit of output, so only the last request says what the answer read of the window. A
   /// result that no message with a usage came before gives its own usage.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "the response takes the result, the name of the model and the id of the session that the conversation holds, and the cost paid so far that the process holds"
+  )]
   pub(super) fn response(
     mut self,
     result: &Finished,
@@ -350,10 +455,11 @@ impl<'a> Reply<'a> {
     usage.output_tokens = spent.output;
     usage.cached_input_tokens = spent.cache_read;
     usage.cache_creation_input_tokens = spent.cache_creation;
-    usage.total_tokens = usage.input_tokens
-      + usage.output_tokens
-      + usage.cached_input_tokens
-      + usage.cache_creation_input_tokens;
+    // The counts come from the command line, so their sum saturates.
+    usage.total_tokens =
+      [usage.output_tokens, usage.cached_input_tokens, usage.cache_creation_input_tokens]
+        .into_iter()
+        .fold(usage.input_tokens, u64::saturating_add);
     let total = result.total_cost_usd.unwrap_or(*paid);
     let cost = (total - *paid).max(0.0);
     *paid = total;
@@ -392,7 +498,3 @@ pub(super) fn unexplained(event: &Finished) -> String {
   let tail = if errors.is_empty() { String::new() } else { format!(": {errors}") };
   format!("Claude reported an error{head}{tail}.")
 }
-
-#[cfg(test)]
-#[path = "protocol.test.rs"]
-mod test;

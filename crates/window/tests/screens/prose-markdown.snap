@@ -1,0 +1,144 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · draw some markdown                                                                                                    ✓ Resolved      All projects ▾                          This computer
+  ┃
+  ┃ draw some markdown                                                                                                                           Resting 1
+  ┃ (the model answers markdown)                                                                                                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                                                                                                             ▐ ● draw some markdown                            now ▌
+                                                                                                                                  opus/high     ▐   FU furb                                      opus ▌
+    1  close('# A sample of GitHub flavored markdown\n\nEach part below is one feature of GFM, so you can judge how the window draws…+1630      ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+
+  A sample of GitHub flavored markdown
+
+  Each part below is one feature of GFM, so you can judge how the window draws it.
+
+  Text
+
+  Plain text, bold, italic, both, struck through, inline code, and a link to the pull request. An
+  autolink: https://github.com/uael/furb.
+
+  │ A quote: the record is the one truth of a life.
+  │
+  │ │ A quote inside a quote.
+
+  Lists
+
+  • The window
+    • Whisper in French and English
+    • The view "In progress"
+  • The engine
+    1. Replay at a flat depth
+    2. One bound of 1000 frames
+
+  Tasks
+
+  ✓ Space bar on the timeline
+  ✓ Padding of the colored boxes
+  ✓ Reload with F5 or ⌘R
+  ○ Replay at a flat depth
+  ○ One handover at a time
+
+  Table
+
+  Chain               Work              State
+  ───────────────────────────────────────────
+  window       speed of the window    working
+  stability       replay depth        working
+  ci          one upgrade, commands   working
+  kits          his words as code     working
+
+  Code
+
+                                                                                                                                     python
+    1  async def converge(check, fix, bound=8):
+    2    for n in range(bound):
+    3      if (got := await bash(check, ok=True)).code == 0:
+    4        return n
+    5      await prompt(str, fix + got.stdout.content[-2000:], on=chain("fix"))
+    6    raise Refused("no convergence")
+
+                                                                                                                                       diff
+    1  - let home = env::home_dir();
+    2  + let home = places.home.clone();
+
+                                                                                                                                       rust
+    1  fn main() {
+    2    println!("furb");
+    3  }
+
+  Rule and footnote
+
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  A sentence with a footnote.[1]
+
+  [1] The footnote, at the end of the text.
+
+  Alerts
+
+  │ ⓘ Note
+  │ A note that the reader should see.
+
+  │ ✦ Tip
+  │ A tip that helps.
+
+  │ ❢ Important
+  │ What the reader must know.
+
+  │ ▲ Warning
+  │ What needs his care at once.
+
+  │ ⊘ Caution
+  │ What a step can break.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → draw some markdown ▾                                                                 opus  high   + New thread ⌃N      Context
+  ┃                                                                                                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb                                                                                                            ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

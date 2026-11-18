@@ -1,0 +1,586 @@
+//! A life that opens from the image beside its record: it stands where the life before it stood,
+//! reads no fact of its record, and takes again each act that the life before it held in flight.
+#![expect(clippy::indexing_slicing, reason = "a panic is how a test fails")]
+#![expect(clippy::panic, reason = "a panic is how a test fails")]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "a test blocks on the runtime that tokio starts for it"
+)]
+#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
+
+use std::{
+  fs, future,
+  path::Path,
+  sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+  },
+  time::Duration,
+};
+
+use furb::{
+  Object,
+  life::{Answer, Opening},
+  view::{Act, Kind, Phase, Reach},
+  world,
+};
+use furb_host::{Command, Event, Life, LifeHandle, Reply};
+use futures::StreamExt;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use tokio::time::timeout;
+
+use crate::life::{Logged, birth, crossed, done, facts_of, kept, made, place, rung, until};
+
+/// A life that keeps its record, whose model closes each request with a word, or answers none when
+/// it is given no word, so each reply stays in flight.
+fn answering(at: &Path, word: Option<&'static str>) -> Opening {
+  let answer = Answer(Arc::new(move |_, _| {
+    Box::pin(async move {
+      let Some(word) = word else { return future::pending().await };
+      let said =
+        [Object::string("assistant"), Object::string(word), Object::none(), Object::none()];
+      Ok(Object::tuple(said))
+    })
+  }));
+  Opening { answer: Some(answer), ..kept(at) }
+}
+
+/// What a window asks a life for its first screen, and what the engine says of its root.
+async fn views(life: &LifeHandle) -> Vec<Reply> {
+  let asked = [
+    Command::Desk { notices: Vec::new() },
+    Command::Threads { on: None, at: None, read: None, site: None },
+    Command::Rail { hidden: Vec::new(), at: None },
+    Command::Ladder {
+      on: None,
+      at: None,
+      opened: Vec::new(),
+      owed: Vec::new(),
+      taken: None,
+      shown: None,
+    },
+    Command::Moments { on: None },
+    Command::Queued { on: None },
+    Command::Turns { on: None },
+    Command::Standing,
+  ];
+  let mut got = Vec::new();
+  for one in asked {
+    got.push(life.send(one).await.expect("a view of the life"));
+  }
+  got
+}
+
+/// A fact that the operator says last, and the log of the life up to it, as a reader that attaches
+/// then reads it from its first place.
+async fn log_of(life: &LifeHandle) -> Vec<Logged> {
+  let sent = life.send(Command::Seen { about: "the tip".to_owned() }).await;
+  assert!(matches!(sent, Ok(Reply::Done)), "{sent:?}");
+  let tip =
+    |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "seen" && fact[1] == "the tip");
+  until(&mut Box::pin(life.events(0)), tip).await
+}
+
+/// The end of a life, once its thread is gone, so the record and its image stand whole.
+async fn ended(life: LifeHandle) {
+  let mut events = Box::pin(life.events(0));
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  while events.next().await.is_some() {}
+}
+
+/// The name of the act that a name of the module of the root binds.
+async fn act_of(life: &LifeHandle, name: &str) -> String {
+  match life.send(Command::Inspect { name: name.to_owned(), on: None }).await {
+    Ok(Reply::Inspected { repr, .. }) => {
+      repr.split('\'').nth(1).expect("the repr of an act").to_owned()
+    }
+    other => panic!("{name} binds no act: {other:?}"),
+  }
+}
+
+/// The facts of a record of a kind about an act.
+fn recorded(at: &Path, kind: &str, about: &str) -> Vec<Value> {
+  recorded_all(at, kind).into_iter().filter(|fact| fact[1] == about).collect()
+}
+
+/// The facts of a record of a kind.
+fn recorded_all(at: &Path, kind: &str) -> Vec<Value> {
+  let record = fs::read_to_string(at.join("record.jsonl")).expect("the record");
+  let facts = record.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
+  facts.map(|entry| entry[0].clone()).filter(|fact| fact[0] == kind).collect()
+}
+
+#[tokio::test]
+async fn a_life_opens_from_its_image_where_the_life_before_it_stood() {
+  let at = place("image-stood");
+  let (record, image) = (at.join("record.jsonl"), at.join("record.jsonl.image"));
+  // The first life ends with a crossing, so the log of the second lets go of its facts, which a
+  // reader then reads from the record.
+  birth(&at, "x = 1\nc = chain('c')", Vec::new()).await;
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Say ok.".to_owned(), to: None, on: None };
+  let id = made(&life, prompt).await;
+  until(&mut events, done(&id)).await;
+  let (stood, told) = (views(&life).await, log_of(&life).await);
+  ended(life).await;
+  assert!(image.is_file(), "a life that keeps its record ends with its image");
+  let lines = fs::read(&record).expect("the record");
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the third life");
+  // The life stands the root once as it opens, as each later life does, which adds the moments of
+  // that stand alone.
+  let mut first = views(&life).await;
+  let Ok(Reply::Acts(acts)) = life.send(Command::AsOf { at: u64::MAX }).await else {
+    panic!("the acts of the life")
+  };
+  for (now, was) in first.iter_mut().zip(&stood) {
+    if let (Reply::Moments(now), Reply::Moments(was)) = (now, was) {
+      let added: Vec<u64> = now.iter().filter(|one| !was.contains(one)).copied().collect();
+      let stand =
+        acts.iter().find(|act| act.kind == Kind::Stand && added.first() == Some(&act.began));
+      let moments = stand.map(|act| [Some(act.began), act.ended].into_iter().flatten().collect());
+      assert_eq!(moments, Some(added), "the open adds the moments of its stand alone");
+      now.retain(|one| was.contains(one));
+    }
+  }
+  assert_eq!(first, stood, "the first screen of the life is the one it left");
+  let tip = until(&mut Box::pin(life.events(0)), |event| *event == *told[told.len() - 1].1).await;
+  // The stand of the open takes the log past the bound after which it drops each event of an act
+  // that a later event of that act replaced, so a reader from the first place reads that later
+  // event alone, as `Spent` says.
+  let act = |event: &Event| match event {
+    Event::Act(act) => Some(Arc::clone(&act.id)),
+    _ => None,
+  };
+  let replaced = |(at, event): &Logged| {
+    act(event).is_some_and(|id| {
+      told.iter().any(|(later, one)| later > at && act(one) == Some(Arc::clone(&id)))
+    })
+  };
+  let kept: Vec<Logged> =
+    told.iter().filter(|one| tip.contains(one) || !replaced(one)).cloned().collect();
+  assert_eq!(tip, kept, "a reader reads each event of the life before at its place");
+  // The open adds the facts of the stand of the root alone to the record.
+  let said = fs::read(&record).expect("the record");
+  let added = said.strip_prefix(lines.as_slice()).map(String::from_utf8_lossy);
+  let stand = |line: &str| {
+    serde_json::from_str::<Value>(line)
+      .is_ok_and(|entry| entry[0][1].as_str().is_some_and(|id| id.starts_with("stand")))
+  };
+  assert!(
+    added.as_deref().is_some_and(|added| added.lines().all(stand)),
+    "an open from an image says no fact but the stand of the root"
+  );
+  ended(life).await;
+}
+
+#[tokio::test]
+async fn a_life_that_opens_from_its_image_takes_again_each_act_in_flight() {
+  let at = place("image-flight");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let word = "b = bash('sleep 600')\np = prompt(str, 'Which one?', to=OPERATOR)\n\
+              w = wait(3600, p)\nr = prompt(str, 'Say late.')";
+  let id = made(&life, rung(word)).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let (w, b) = (act_of(&life, "w").await, act_of(&life, "b").await);
+  let (p, r) = (act_of(&life, "p").await, act_of(&life, "r").await);
+  // Each act is in flight once its ear said that it started: the wait, the command, the prompt to
+  // the operator, and the reply that the model of the second prompt owes.
+  let started = |log: &[Logged], id: &str| {
+    facts_of(log).iter().any(|fact| fact[0] == "started" && fact[1] == id)
+  };
+  let reply = |log: &[Logged]| {
+    let asked = facts_of(log).into_iter().rfind(|fact| fact[0] == "reply");
+    asked.and_then(|fact| fact[1].as_str().map(str::to_owned))
+  };
+  let flies = |log: &[Logged]| {
+    [&w, &b, &p].iter().all(|id| started(log, id)) && reply(log).is_some_and(|id| started(log, &id))
+  };
+  while !flies(&log) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  ended(life).await;
+  assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait has one deadline");
+  let life = Life::spawn(answering(&at, Some("close('late')"))).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  // The command, whose process went with the life before, is closed.
+  let mut log = until(&mut events, done(&b)).await;
+  let closed = facts_of(&log).into_iter().rfind(|fact| fact[0] == "done" && fact[1] == b.as_str());
+  let why = format!("{b} was interrupted: the life that ran it ended before it did");
+  assert_eq!(closed.map(|fact| fact[3].clone()), Some(json!({ "is": "Refused", "args": [why] })));
+  // The model of this life answers the reply that the model of the life before owed.
+  if !log.iter().any(|one| done(&r)(&one.1)) {
+    log.extend(until(&mut events, done(&r)).await);
+  }
+  let late = life.send(Command::Peek { id: r }).await;
+  assert!(matches!(&late, Ok(Reply::Value(value)) if *value == json!("late")), "{late:?}");
+  // The operator answers the prompt, which ends the wait on it: the ear of time took the wait
+  // again with the deadline that it had.
+  let answered = life.send(Command::Answer { id: p.clone(), line: "this".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "{answered:?}");
+  until(&mut events, done(&w)).await;
+  let this = life.send(Command::Peek { id: p }).await;
+  assert!(matches!(&this, Ok(Reply::Value(value)) if *value == json!("this")), "{this:?}");
+  ended(life).await;
+  assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait keeps its one deadline");
+  assert_eq!(recorded(&at, "started", &w).len(), 2, "each life took the wait one time");
+}
+
+/// A life that opens across a crossing holds open no act of the life before it that its carry did
+/// not make again: the reply that a model owed, its rung, and a word that waited, each ends as
+/// interrupted, while the prompt that the carry holds asks its model again.
+#[tokio::test]
+async fn a_life_across_a_crossing_ends_each_act_in_flight_that_it_does_not_hold() {
+  let at = place("cross-flight");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("r = prompt(str, 'Say late.')")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let waits = made(&life, rung("await wait(3600, __name__)")).await;
+  let r = act_of(&life, "r").await;
+  let asked = |log: &[Logged], kind: &str| facts_of(log).into_iter().rfind(|fact| fact[0] == kind);
+  let started = |log: &[Logged], id: &Value| {
+    facts_of(log).iter().any(|fact| fact[0] == "started" && fact[1] == *id)
+  };
+  let flies = |log: &[Logged]| {
+    ["reply", "wait"].iter().all(|kind| asked(log, kind).is_some_and(|fact| started(log, &fact[1])))
+  };
+  while !flies(&log) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  let (reply, wait) =
+    (asked(&log, "reply").expect("a reply"), asked(&log, "wait").expect("a wait"));
+  ended(life).await;
+  crossed(kept(&at)).await;
+  let life = Life::spawn(answering(&at, None)).expect("the life after the crossing");
+  let mut events = Box::pin(life.events(0));
+  let folded = async |id: &str| match life.send(Command::Folded { id: id.to_owned() }).await {
+    Ok(Reply::Acts(acts)) => acts.into_iter().next().expect("the act"),
+    other => panic!("no act {id}: {other:?}"),
+  };
+  for id in [&reply[1], &reply[2], &wait[1], &json!(waits)] {
+    let id = id.as_str().expect("a name");
+    let why = format!("{id} was interrupted: the life that ran it ended before it did");
+    let act = folded(id).await;
+    assert_eq!(act.phase, Phase::Done(json!({ "is": "Refused", "args": [why] })), "{act:?}");
+  }
+  assert!(!matches!(folded(&r).await.phase, Phase::Done(_)), "the carry holds the prompt");
+  // The root, which asked its model when the life before ended, asks it again.
+  let asks = |act: &Act| act.kind == Kind::Reply && *act.id != reply[1];
+  let again = |event: &Event| matches!(event, Event::Act(act) if asks(act));
+  until(&mut events, again).await;
+  ended(life).await;
+}
+
+/// A life that opens from an image that holds a command in flight runs no command: its process
+/// went with the life before, so the handover that waits for the commands of the life ends.
+#[tokio::test]
+async fn a_life_on_an_image_with_a_command_in_flight_runs_no_command_once_it_closed_it() {
+  let at = place("image-command");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("b = bash('sleep 600')")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let b = act_of(&life, "b").await;
+  while !facts_of(&log).iter().any(|fact| fact[0] == "started" && fact[1] == b.as_str()) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  assert!(!life.commands().is_empty(), "the first life runs its command");
+  ended(life).await;
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  until(&mut events, done(&b)).await;
+  let settled = timeout(Duration::from_secs(10), life.settled(&life.commands())).await;
+  assert!(settled.is_ok(), "a command that no process runs holds no handover");
+  assert!(life.commands().is_empty());
+  ended(life).await;
+}
+
+#[tokio::test]
+async fn a_life_on_an_image_that_its_record_passed_takes_again_the_acts_that_no_later_entry_ended()
+{
+  let at = place("image-tail");
+  let image = at.join("record.jsonl.image");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let word = "p = prompt(str, 'Which one?', to=OPERATOR)\nw = wait(3600, p)\n\
+              v = prompt(str, 'And then?', to=OPERATOR)";
+  let id = made(&life, rung(word)).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let (w, v, p) = (act_of(&life, "w").await, act_of(&life, "v").await, act_of(&life, "p").await);
+  let started = |log: &[Logged], id: &str| {
+    facts_of(log).iter().filter(|fact| fact[0] == "started" && fact[1] == id).count()
+  };
+  while [&w, &v, &p].iter().any(|id| started(&log, id) == 0) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  ended(life).await;
+  let first = fs::read(&image).expect("the image of the first life");
+  // The second life goes on from the image: the operator answers the first prompt, which ends
+  // the wait, and the second prompt stays in flight.
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  let answered = life.send(Command::Answer { id: p.clone(), line: "this".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "{answered:?}");
+  until(&mut events, done(&w)).await;
+  ended(life).await;
+  // The second life leaves no image, as a life that crashed: the image of the first one stands,
+  // and the record holds the entries of the second life after it.
+  fs::write(&image, first).expect("the image of the first life again");
+  let life = Life::spawn(answering(&at, None)).expect("the third life");
+  let mut events = Box::pin(life.events(0));
+  let mut log = Vec::new();
+  // The console of each life took the second prompt one time, and the third life tells the start
+  // of the second life again from the record.
+  while started(&log, &v) < 3 {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  let this = life.send(Command::Peek { id: p }).await;
+  assert!(matches!(&this, Ok(Reply::Value(value)) if *value == json!("this")), "{this:?}");
+  ended(life).await;
+  assert_eq!(recorded(&at, "started", &w).len(), 2, "no ear takes an act that the record ended");
+  assert_eq!(recorded(&at, "started", &v).len(), 3, "each life took the act that no entry ended");
+  assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait keeps its one deadline");
+}
+
+#[tokio::test]
+async fn a_life_whose_image_does_not_load_opens_by_its_record_after_its_past() {
+  // The key of the image still names the tip of the record, and its body is not the one it names.
+  opens_by_its_record_after_its_past("image-torn", |image| {
+    *image.last_mut().expect("a byte") ^= 1;
+  })
+  .await;
+}
+
+#[tokio::test]
+async fn a_life_ends_with_an_image_that_holds_each_state_of_an_act_once() {
+  let at = place("image-once");
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Say ok.".to_owned(), to: None, on: None };
+  let id = made(&life, prompt).await;
+  until(&mut events, done(&id)).await;
+  ended(life).await;
+  let image = fs::read(at.join("record.jsonl.image")).expect("the image");
+  let (_, host) = host_part(&image);
+  let kept: Value = serde_json::from_slice(&image[host..]).expect("the part of the host");
+  let mut states = Vec::new();
+  states_of(&kept, &id, &mut states);
+  let mut each = states.clone();
+  each.sort();
+  each.dedup();
+  assert!(states.iter().any(|one| one.contains("\"ok\"")), "the image holds the act done");
+  assert_eq!(states.len(), each.len(), "the log and the acts of the image share each state");
+}
+
+#[tokio::test]
+async fn a_life_writes_the_index_of_its_threads_before_its_image() {
+  let at = place("image-index");
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Say ok.".to_owned(), to: None, on: None };
+  let id = made(&life, prompt).await;
+  until(&mut events, done(&id)).await;
+  ended(life).await;
+  let written = |name: &str| {
+    let file = fs::metadata(at.join(name)).expect(name);
+    file.modified().expect("the time of a write")
+  };
+  let (index, image) = (written("record.jsonl.threads.json"), written("record.jsonl.image"));
+  assert!(index < image, "a daemon that ends after the image leaves the index of its threads");
+}
+
+/// The key of an image, and the place of the part of the host in it.
+fn host_part(image: &[u8]) -> (Value, usize) {
+  let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
+  let key: Value = serde_json::from_slice(&image[..end]).expect("the key");
+  let at = |field: &str| usize::try_from(key[field].as_u64().expect(field)).expect(field);
+  let host = end + 1 + at("session") + at("half");
+  (key, host)
+}
+
+/// Each object of a value that is a state of the act of an id, as JSON writes it.
+fn states_of(value: &Value, id: &str, states: &mut Vec<String>) {
+  match value {
+    Value::Object(object) => {
+      if object.get("id") == Some(&json!(id)) && object.contains_key("kind") {
+        states.push(value.to_string());
+      }
+      object.values().for_each(|one| states_of(one, id, states));
+    }
+    Value::Array(list) => list.iter().for_each(|one| states_of(one, id, states)),
+    _ => {}
+  }
+}
+
+#[tokio::test]
+async fn a_life_whose_image_holds_the_part_of_a_host_of_another_version_opens_by_its_record() {
+  // The key and the body agree, and the part of the host names another version of its meaning.
+  opens_by_its_record_after_its_past("image-host", |image| {
+    let (mut key, host) = host_part(image);
+    let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
+    let named = b"{\"version\":";
+    assert!(image[host..].starts_with(named), "the part of the host names its version first");
+    let version = host + named.len();
+    image[version] = if image[version] == b'0' { b'9' } else { b'0' };
+    key["body"] = json!(format!("{:x}", Sha256::digest(&image[end + 1..])));
+    let line = serde_json::to_vec(&key).expect("the key");
+    image[..line.len()].copy_from_slice(&line);
+    image[line.len()..end].fill(b' ');
+  })
+  .await;
+}
+
+/// A life whose image the change makes one that does not load opens by its record: it stands as
+/// the life before it stood, tells its past, then its birth, and adds to its record what an open
+/// by the record adds, once. It ends with an image that agrees.
+async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut Vec<u8>)) {
+  let at = place(name);
+  let image = at.join("record.jsonl.image");
+  birth(&at, "x = 1", Vec::new()).await;
+  let life = Life::spawn(kept(&at)).expect("the second life");
+  let stood = views(&life).await;
+  ended(life).await;
+  let births = || recorded_all(&at, "stand").len();
+  // What an open by the record adds to the record, with no image beside it.
+  fs::remove_file(&image).expect("the image of the second life");
+  let before = births();
+  ended(Life::spawn(kept(&at)).expect("the third life")).await;
+  let by_record = births() - before;
+  assert!(by_record > 0, "an open by the record stands each chain");
+  let mut changed = fs::read(&image).expect("the image");
+  change(&mut changed);
+  fs::write(&image, changed).expect("the image that does not load");
+  let before = births();
+  let life = Life::spawn(kept(&at)).expect("the fourth life");
+  assert_eq!(views(&life).await[..3], stood[..3], "the life stands on its record");
+  assert_eq!(births() - before, by_record, "the life opens by its record once, and no image");
+  // The life told its past, then its birth: the rung of the first life is done in its log.
+  let log = log_of(&life).await;
+  let past = log.iter().position(|one| matches!(*one.1, Event::Reborn(None)));
+  let rung =
+    log[..past.expect("a birth after the past")].iter().rev().find_map(|one| match &*one.1 {
+      Event::Act(act) if act.words.first() == Some(&json!("x = 1")) => Some(Act::done(act)),
+      _ => None,
+    });
+  assert_eq!(rung, Some(true), "the life tells its past before its birth");
+  ended(life).await;
+  let held = fs::read(&image).expect("the image of the life that opened by the record");
+  assert!(held.starts_with(b"{\"version\":"), "the life ends with an image that agrees");
+}
+
+#[tokio::test]
+async fn a_life_that_opens_from_its_image_shows_each_thread_as_the_life_before_it_did() {
+  let at = place("image-page");
+  // The model answers its first request with a word that waits on a second request, which it
+  // never answers, so the line of the word runs and its page says since when.
+  let asked = Arc::new(AtomicUsize::new(0));
+  let answer = Answer(Arc::new(move |_, _| {
+    let first = asked.fetch_add(1, Ordering::Relaxed) == 0;
+    Box::pin(async move {
+      if !first {
+        return future::pending().await;
+      }
+      let word = Object::string("await wait(3600, prompt(str, 'Say late.'))");
+      Ok(Object::tuple([Object::string("assistant"), word, Object::none(), Object::none()]))
+    })
+  }));
+  let life = Life::spawn(Opening { answer: Some(answer), ..kept(&at) }).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Wait.".to_owned(), to: None, on: None };
+  let thread = made(&life, prompt).await;
+  until(&mut events, |event| matches!(event, Event::Fact(fact) if fact[0] == "due")).await;
+  let page =
+    |thread: String| Command::Thread { thread, reach: Reach { before: None, limit: 20 }, at: None };
+  let before = life.send(page(thread.clone())).await.expect("the page of the thread");
+  ended(life).await;
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let after = life.send(page(thread)).await.expect("the page of the thread");
+  assert_eq!(after, before, "the line runs since the second that the life before saw it begin");
+  ended(life).await;
+}
+
+/// The record at a place as a build whose engine holds one more line wrote it: each fact made names
+/// that engine, under the digest of its texts, as an earlier build of the major names its own.
+fn elsewhere(at: &Path, line: &str) {
+  let record = at.join("record.jsonl");
+  let text = fs::read_to_string(&record).expect("the record");
+  let mut lines = Vec::new();
+  for one in text.lines() {
+    let mut entry: Value = serde_json::from_str(one).expect("an entry");
+    if entry[0][0] == "made" {
+      let engine = format!("{}\n{line}\n", entry[0][7].as_str().expect("the engine"));
+      entry[0][7] = Value::from(engine);
+      let mut hash = Sha256::new();
+      for text in [7, 8, 9].map(|at| entry[0][at].as_str().expect("a text").to_owned()) {
+        hash.update(text.as_bytes());
+        hash.update([0]);
+      }
+      entry[0][3] = Value::from(format!("{:x}", hash.finalize()));
+    }
+    lines.push(entry.to_string());
+  }
+  fs::write(&record, lines.join("\n") + "\n").expect("the record is written");
+  fs::remove_file(at.join("record.jsonl.image")).ok();
+}
+
+#[tokio::test]
+async fn a_life_on_an_earlier_engine_shows_then_moves_to_this_build_before_a_word_runs() {
+  let at = place("image-moved");
+  let first = Life::spawn(kept(&at)).expect("the first life");
+  let mut events = Box::pin(first.events(0));
+  let id = made(&first, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  ended(first).await;
+  elsewhere(&at, "crossed = True");
+  let life = Life::spawn(kept(&at)).expect("the life on the earlier engine");
+  // The word is said as the life opens, so it waits for the move and runs on this build.
+  let id = made(&life, rung("y = [x, globals().get('crossed')]")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let read = life.send(Command::Inspect { name: "y".to_owned(), on: None }).await;
+  let Ok(Reply::Inspected { repr, .. }) = read else { panic!("y is bound: {read:?}") };
+  assert_eq!(repr, "[1, None]", "the word runs on the engine of this build");
+  let builds = recorded_all(&at, "made");
+  assert_eq!(builds.len(), 2, "the move writes the fact made of this build alone");
+  assert_eq!(builds[1][3], Value::from(world::engine()), "the move names the engine of this build");
+  let id = made(&life, rung("t = str(turns(on='chain1'))")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let read = life.send(Command::Inspect { name: "t".to_owned(), on: None }).await;
+  let Ok(Reply::Inspected { repr, .. }) = read else { panic!("t is bound: {read:?}") };
+  assert!(repr.contains("#chain1 crossed"), "the move tells the root the engine that differs");
+  let record = fs::read_to_string(at.join("record.jsonl")).expect("the record");
+  let (moved, ran) =
+    (record.rfind("[[\"made\"").unwrap(), record.find("y = [x, globals()").unwrap());
+  assert!(moved < ran, "no word runs before the move");
+  ended(life).await;
+}
+
+#[tokio::test]
+async fn a_crossing_stands_in_the_record_alone_and_a_reader_of_the_past_reads_it_there() {
+  let at = place("image-checkpoint-once");
+  let first = Life::spawn(kept(&at)).expect("the first life");
+  let mut events = Box::pin(first.events(0));
+  let id = made(&first, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  ended(first).await;
+  // The life opens on an earlier engine and moves to this build, which writes its fact made.
+  elsewhere(&at, "crossed = True");
+  let life = Life::spawn(kept(&at)).expect("the life that moves");
+  let id = made(&life, rung("y = 2")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let keeps = |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "keep" && fact[3][0][0] == "made");
+  let read = log_of(&life).await;
+  assert!(read.iter().any(|one| keeps(&one.1)), "a reader of the past reads the keep of the move");
+  ended(life).await;
+  let image = fs::read(at.join("record.jsonl.image")).expect("the image");
+  let (_, host) = host_part(&image);
+  let copied = br#"[["checkpoint","#;
+  let held = image[host..].windows(copied.len()).any(|part| part == copied);
+  assert!(!held, "the part of the host holds no carry, which nothing keeps");
+}

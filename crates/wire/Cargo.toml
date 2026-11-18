@@ -1,0 +1,19 @@
+[package]
+name = "furb-wire"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "What crosses the wire of furb: the meaning of a life that each client shows, with no engine and no daemon."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The shapes travel as JSON, and the protocol gives their JSON Schema.
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+schemars = "1"
+thiserror = "2"
+furb-hack = { version = "0.1", path = "../hack" }

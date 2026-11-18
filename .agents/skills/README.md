@@ -1,0 +1,28 @@
+# The official extensions
+
+Each folder here is an extension that comes with furb and that each life runs, unless a config turns it off.
+[Extensions](../docs/skills.md) says what an extension is, how a life runs one, how to turn one off, and how to
+write your own.
+
+| Extension | What it gives a chain |
+| --- | --- |
+| [`catchup`](catchup) | What changed in the files that the chain read or wrote, told at each stand. |
+| [`memory`](memory) | The `AGENTS.md` or `CLAUDE.md` files of the project that apply to the files that the chain reads. |
+| [`skills`](skills) | The skills of the project and of the user, which `skills()` lists and `skill(name)` loads. |
+| [`compaction`](compaction) | `compact()`, `condense()` and `compacted()`, which jump a chain to a chain with the work that it still needs. |
+| [`naming`](naming) | `name_session()`, which names the session from the first message of the operator, and `rename_session(name)`, which says the name that the operator chose, on the root alone. |
+| [`furb-kit`](furb-kit) | How to make and use a kit, in the text of its skill, and `extend()`, which writes a kit of the project or of the session. |
+| [`web`](web) | `web_search(query)` and `web_fetch(url)`. |
+| [`mcp`](mcp) | The tools, resources and prompts of the servers of MCP, as `await github.create_issue(...)`. |
+| [`grant`](grant) | `grant(usd, share)`, a ceiling on a chain in dollars or in a share of the window. |
+
+Each folder holds these parts:
+
+- `SKILL.md`, the manifest: a skill, whose metadata names the word and the interface, and the life word and whether it
+  plays by default when the extension has them.
+- `<name>.py`, the word: the Python that each chain runs.
+- `<name>.pyi`, the contract: the laws of the extension, one sentence on each line.
+-  `test/`, the suite, with one test for each sentence of the contract. `uv run pytest -q .agents/skills/<name> --no-cov`
+  runs it.
+
+The parts of an extension that reach the disk or the network are ears of the crate, in `src/world/`.

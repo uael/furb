@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb-try · keep my list (the model…        ✓ Resolved      All projects ▾        This computer
+  ┃
+                                                opus/high      Resolved 1 ▸
+    1  found = 2                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+    2  close('The open takes **329 s**. Two stages h…+251     ▐ ● keep my list (the model…    now ▌
+                                                              ▐   FT furb-try                opus ▌
+  The open takes 329 s. Two stages hold most of it: 181 s     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  to send each entry to the ears of the host, and 104 s in
+  the boot.
+
+  • seed reads each chain once
+  • the image skips the boot
+
+                                                   python
+    1  open = boot + seed
+
+  See the trace.
+
+
+  │ • buy milk
+  │ • walk the dog
+  │ ▎a task ⏎ send    Clear
+
+  ┃
+  ┃ A reply opens this thread again
+  ┃
+  ┃  Message  Python    → keep my… ▾    opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb-try                      ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

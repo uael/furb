@@ -37,8 +37,9 @@ def kept(record: Path) -> list[tuple]:
 
 
 def entries(record: list[list[list[object]]]) -> list[tuple]:
-  """The entries of a record as the store of the crate gives them, each one fact, as the engine takes them."""
-  return [(tuple(one),) for (one,) in record]
+  """The entries of a record as the store of the crate gives them, each a fact, its place and whether the life rested,
+  as the engine takes them."""
+  return [(tuple(one), *at) for (one, *at) in record]
 
 
 def answered(entries: Sequence[tuple]) -> list[tuple]:
@@ -88,16 +89,16 @@ class Live:
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
   ears: dict[str, _monty.NativeEar] = field(default_factory=dict)
 
-  def opened(self, record: Path | None = None, *, keeps: bool = True, extensions: bool = True) -> list[tuple]:
+  def opened(self, record: Path | None = None, *, keeps: bool = True, skills: bool = True) -> list[tuple]:
     """The record a life opens on, and the ears of the crate held for it, as every host of the crate opens a life:
-    the provider, which stands on what this World names, then the extensions, the files, the commands, time, and
+    the provider, which stands on what this World names, then the skills, the files, the commands, time, and
     the store of the record when the life keeps, which holds its lease until the World ends. The life enables at its
-    tip the extensions that the configs turn on, unless `extensions` is false."""
+    tip the skills that the configs turn on, unless `skills` is false."""
     stored, ears = _monty.opened(
       directory=self.directory,
       record=None if record is None else str(record),
       keeps=keeps,
-      extensions=extensions,
+      skills=skills,
       actor=self.actor,
       roster=self.roster,
       answer=self.answer,

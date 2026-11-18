@@ -1,0 +1,943 @@
+"""boot, the life: everything that is said in it is said there."""
+
+from collections.abc import Generator
+
+import pytest
+
+from conftest import (
+  DOOR,
+  WORD,
+  WORLD,
+  Dead,
+  Sand,
+  World,
+  acts,
+  born,
+  chained,
+  fresh,
+  grant,
+  granting,
+  heads,
+  ids,
+  journaled,
+  keeping,
+  life,
+  lived,
+  opened,
+  pair,
+  paragraphs,
+  plain,
+  prompted,
+  ran,
+  relived,
+  said,
+  settle,
+  sown,
+  tip,
+  verbs,
+  viewed,
+  world_says,
+)
+from furb import engine
+from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, site, take
+
+
+def ours(log: list[tuple]) -> dict[str, tuple]:
+  """Every act of the life that the operator or an act made, under its name: the World asks its own questions again
+  only when it needs them."""
+  return {name: a for name, a in acts(log).items() if a[2] != WORLD}
+
+
+def stood(root: str) -> dict[str, tuple]:
+  """The act that a later life on the record of lived makes at its tip: the stand of boot."""
+  return {"stand2": ("stand", "stand2", OPERATOR, root)}
+
+
+def outside(label: str = "outside") -> str:
+  """A chain the outside makes under a site of its own, which neither the operator nor an act is."""
+  token = site.set("outside")
+  try:
+    return engine.chain(label)
+  finally:
+    site.reset(token)
+
+
+def watching(root: str) -> Generator[tuple | None, tuple]:
+  """An ear that the operator drives, which makes a command on the root when the operator says go there."""
+  while (yield)[3:] != ([f"#{root} go"],):
+    pass
+  engine.bash("echo seen", on=root)
+  while True:
+    yield
+
+
+async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
+  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables."""
+  _, _, root = await lived()
+  await verbs(root, "note")
+  heard: list[tuple] = []
+  its: list[tuple] = []
+  engine.drive(keeping(heard), "keeper")
+  told = engine.say("tell", root, [f"#{root} noted here"])
+  name = engine.act("note", root, lambda one: keeping(its, ("done", one, "one")), "one")
+  assert engine.get(name) == ("note", name, OPERATOR, root, "one") and engine.peek(name) == "one"
+  assert [a for a in heard if a[0] in ("tell", "done", "note")] == [told, engine.get(name), ("done", name, name, "one")]
+  # The ear of an act that says its own done is dropped at that done, so it never hears it.
+  assert told in engine.transcript(root) and its == []
+  second, over = await relived(sown(), [])
+  assert root == over and said(second, "note") == [] and engine.get(name) is None
+  engine.bash("echo more", on=over)
+  assert len(said(second, "bash")) == 1 and said(heard, "bash") == []
+
+
+async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leaves_on_unsaid() -> None:
+  """A verb from a rung takes the chain of the rung when the call leaves on unsaid."""
+  sand, log, _ = born()
+  two = engine.chain("two")
+  sand.script[two] = ["x = bash('echo hi')\nawait x\nclose(1)"]
+  assert await engine.prompt(int, "run it", on=two) == 1
+  assert [a[3] for a in said(log, "bash")] == [two]
+
+
+async def test_the_kind_of_an_act_is_the_verb_that_made_the_act_or_the_kind_an_ear_made_it_with() -> None:
+  """The kind of an act is the verb that made the act, or the kind an ear made it with."""
+  _, log, _ = await lived()
+  kinds = {"chain", "stand", "prompt", "rung", "reply", "run", "read", "bash", "merged", "wants"}
+  assert {engine.get(name)[0] for name in ids(log)} == kinds and engine.get("merged1")[2] == WORLD
+  assert [name for name in ids(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
+
+
+async def test_an_act_says_who_made_it() -> None:
+  """An act says who made it, and the one that made it says its own maker in turn, which is how the life knows every ancestor of an act."""
+  _, log, _ = await lived()
+  one, step, command = said(log, "prompt")[0], said(log, "rung")[0], said(log, "bash")[0]
+  assert (one[2], step[2], command[2]) == (OPERATOR, one[1], step[1])
+  assert engine.under(command[1], one[1]) and engine.under(command[1], OPERATOR)
+
+
+async def test_an_act_that_the_operator_made_has_the_operator_for_its_maker() -> None:
+  """An act that the operator made has the operator for its maker."""
+  _, _, root = born()
+  one = engine.bash("echo hi", on=root)
+  assert (root, one) == ("chain1", "bash1")
+  assert engine.get(root)[2] == engine.get(one)[2] == OPERATOR
+
+
+async def test_a_name_is_never_reused_in_the_record() -> None:
+  """A name is never reused in the record."""
+  sand, _, _ = await lived()
+  names = [e[0][1] for e in sand.record if engine.question(e[0])]
+  assert names and len(names) == len(set(names))
+
+
+async def test_a_later_life_gives_the_same_names() -> None:
+  """A later life gives the same names, since the same acts make them again."""
+  sand, first, root = await lived()
+  was = ours(first)
+  again, over = await relived(Sand(), list(sand.record))
+  assert ours(again) == {**was, **stood(root)} and over == root
+
+
+async def test_the_root_has_no_parent() -> None:
+  """The root has no parent."""
+  _, log, root = await lived()
+  assert said(log, "chain")[0][2] == OPERATOR
+  assert [name for name in ids(log) if name != root and engine.under(root, name)] == []
+
+
+async def test_a_question_goes_to_the_living_acts_of_the_engine_before_it_goes_to_the_world() -> None:
+  """A question goes to the living acts of the engine before it goes to the World, since the engine settles what it knows before the outside reads it, and asks the outside for nothing that the engine can answer itself."""
+  sand, log, root = await lived()
+  command = said(log, "bash")[0][1]
+  before = len([a for a in sand.calls if a[0] == "read"])
+  assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
+  assert len([a for a in sand.calls if a[0] == "read"]) == before
+  dead = Dead()
+  _, over = await relived(dead, list(sand.record))
+  assert engine.module(over)["k"] == 2
+  assert [a for a in dead.calls if a[0] == "read"] == []
+
+
+async def test_a_later_life_makes_a_door_again_from_the_word_of_the_rung_that_defined_it() -> None:
+  """A later life makes a door again from the word of the rung that defined it."""
+  sand, _, root = born(DOOR)
+  assert await engine.prompt(int, "a door", on=root) == 1
+  assert engine.read("note://a", on=root).content == "kept"
+  _, over = await relived(Sand(), list(sand.record))
+  assert engine.read("note://a", on=over).content == "kept"
+
+
+async def test_the_record_that_boot_is_given_enters_nothing_in_the_record() -> None:
+  """The record that boot is given enters nothing in the record, since the record is what boot is given."""
+  sand, _, root = await lived()
+  later = sown()
+  await relived(later, list(sand.record))
+  assert [e[0] for e in later.record] == tip("stand2", root)
+
+
+async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_made_the_act() -> None:
+  """An act takes its name when the act opens, and the name says what made the act."""
+  _, log, root = await lived()
+  command, step = said(log, "bash")[0], said(log, "rung")[0]
+  assert command[2] == step[1] and engine.under(command[1], step[1])
+  assert (
+    f"#{command[1]}\n{command[1]}_command = 'echo hi'\n{command[1]}: Act[Exit] = Act({command[1]!r})"
+    in paragraphs(engine.turns(on=root))
+  )
+
+
+async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_working_directories() -> None:
+  """The engine derives the transcripts, the turns, the globals and the working directories from the record."""
+  sand, _, root = await lived()
+  await engine.rung("cd('/deep')", on=root)
+  held = [x for x in ids(engine.transcript(root)) if engine.get(x)[2] != WORLD]
+  told = paragraphs(engine.turns(on=root))
+  _, over = await relived(sown(), list(sand.record))
+  assert [x for x in ids(engine.transcript(over)) if engine.get(x)[2] != WORLD] == [*held, "stand2"]
+  assert paragraphs(engine.turns(on=over)) == told
+  assert engine.module(over)["k"] == 2 and engine.cwd(on=over) == "/deep"
+
+
+async def test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds() -> None:
+  """A fact that the journal says again carries the speaker that the record holds, so each view of a later life gives the facts and the names that the first life gave, and the journal and each ear of the outside hear it under the name journal, since none of them makes it again, but a refusal of the life, which it says again under no site."""
+  sand, _, root = born()
+  word = (
+    "b = bash('echo hi')\nawait b\nseen = [x[:3] for x in transcript(of='world') if x[1] == b]\nwent = peek(b)\n"
+    "t = read('a.txt')\nawait wait(0.01, __name__)\nlast = bash('echo ' + str(len(seen)))\nawait last"
+  )
+  await engine.rung(word, on=root)
+  await settle()
+  live = viewed(root)
+  assert live["modules"][root]["seen"] == repr(
+    [("started", "bash1", WORLD), ("out", "bash1", WORLD), ("done", "bash1", WORLD)]
+  )
+  again, over = await relived(Sand(), list(sand.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert set(live["facts"]) <= set(later["facts"]) and live["modules"] == later["modules"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
+  copies = [a for a in again if a[1] == "bash1" and a[0] in ("started", "out", "done")]
+  assert [a[0] for a in copies] == ["started", "out", "done"] and {a[2] for a in copies} == {"journal"}
+  refused, _, root = born()
+  await engine.rung("nope = act('nope', '', None)", on=root)
+  later, _ = await relived(Sand(), list(refused.record))
+  assert [a[2] for a in later if a[:2] == ("done", "nope1")] == [""]
+
+
+async def test_what_the_module_holds_is_not_in_the_record() -> None:
+  """What the module holds is not in the record."""
+  sand, _, root = await lived()
+  assert engine.module(root)["k"] == 2
+  assert [e for e in sand.record if 2 in e[0][3:]] == []
+  assert [e for e in sand.record if e[0][0] == "module"] == []
+
+
+async def test_the_root_is_the_first_act_of_the_record() -> None:
+  """The root is the first act of the record."""
+  sand, _, root = await lived()
+  assert sand.record[0][0][:2] == ("chain", root)
+
+
+async def test_a_later_life_on_a_kept_record_makes_the_root_again_and_enters_no_second_root() -> None:
+  """A later life on a kept record makes the root again and enters no second root."""
+  sand, _, root = await lived()
+  later = Sand()
+  again, over = await relived(later, list(sand.record))
+  assert over == root and [a[1] for a in said(again, "chain")] == [root]
+  assert [e for e in later.record if e[0][0] == "chain"] == []
+
+
+async def test_the_engine_appends_after_the_last_entry_of_the_record_boot_was_given() -> None:
+  """The journal appends after the last entry of the record that it was given."""
+  sand, _, _ = await lived()
+  old = list(sand.record)
+  later = sown(record=list(old))
+  _, over = await relived(later, old)
+  later.script[over] = ["close(9)"]
+  assert await engine.prompt(int, "more", on=over) == 9
+  await settle()
+  assert later.record[: len(old)] == old and len(later.record) > len(old)
+
+
+async def test_what_the_word_of_a_rung_made_or_computed_a_later_life_makes_again_by_running_the_word() -> None:
+  """What the word of a rung made or computed, a later life makes again by running the word."""
+  sand, _, _ = await lived()
+  _, over = await relived(Dead(), list(sand.record))
+  assert engine.module(over)["k"] == 2 and engine.module(over)["t"] == Text("/w/a.txt", "one\ntwo\n")
+
+
+async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() -> None:
+  """The engine makes a chain from the record and in no other way, by running its rungs again."""
+  sand, log, root = await lived()
+  was = dict(engine.program(root))
+  again, over = await relived(Sand(), list(sand.record))
+  assert ran(again) == ran(log)
+  assert [one for one in ran(again) if ": Act[" not in one] == [WORD]
+  assert engine.program(over) == was
+
+
+async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
+  """The rungs of a chain run in record order."""
+  sand, _, root = born("a = 1\ndebug(t'go')", "b = a + 1\ndebug(t'go')", "close(b)")
+  assert await engine.prompt(int, "count", on=root) == 2
+  await settle()
+  again, _ = await relived(Sand(), list(sand.record))
+  bound = fresh(root, prompted("prompt1", "int", "count"), "#rung1 advance on prompt1")
+  told = [
+    "#rung1 debugged\nrung1_debug = 'go'\n\n#rung2 advance on prompt1",
+    "#rung2 debugged\nrung2_debug = 'go'\n\n#rung3 advance on prompt1",
+  ]
+  assert ran(again) == [bound, "a = 1\ndebug(t'go')", told[0], "b = a + 1\ndebug(t'go')", told[1], "close(b)"]
+
+
+async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_place() -> None:
+  """Each act a rung makes again is the act the record holds at that place, with its result."""
+  sand, log, _ = await lived()
+  command = said(log, "bash")[0][1]
+  again, _ = await relived(Sand(), list(sand.record))
+  assert [a[1] for a in said(again, "bash")] == [command]
+  got = engine.peek(command)
+  assert isinstance(got, Exit) and got.code == 0
+
+
+async def test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the_same_ids() -> None:
+  """A replay makes the same acts in the same order and gives them the same ids."""
+  sand, first, root = await lived()
+  was = ours(first)
+  again, _ = await relived(Sand(), list(sand.record))
+  assert ours(again) == {**was, **stood(root)}
+
+
+async def test_the_journal_answers_what_the_record_holds_an_answer_for() -> None:
+  """The journal answers what the record holds an answer for, so the outside is asked nothing it answered once."""
+  sand, _, _ = await lived()
+  later = Sand()
+  again, _ = await relived(later, list(sand.record))
+  assert [a[0] for a in later.calls] == ["stand"] and ran(again)[-1] == WORD
+  assert [a[2] for a in said(again, "done") if a[1].startswith("read")] == ["journal"]
+
+
+async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of_the_earlier_life() -> None:
+  """A later life on a kept record starts nothing and keeps the ids of the earlier life."""
+  sand, log, _ = await lived()
+  later = Sand()
+  again, _ = await relived(later, list(sand.record))
+  assert [a for a in said(again, "started") if a[2] == WORLD] == []
+  assert [a[0] for a in later.calls] == ["stand"]
+  assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]
+
+
+async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
+  """In a later life the rungs of every chain run again from the record that the World kept."""
+  sand, _, root = born()
+  two = engine.chain("two")
+  sand.script[root] = ["here = 1\nclose(1)", "close(None)"]
+  sand.script[two] = ["there = 2\nclose(2)", "close(None)"]
+  assert await engine.prompt(int, "one", on=root) == 1
+  assert await engine.prompt(int, "two", on=two) == 2
+  await settle()
+  again, _ = await relived(Sand(), list(sand.record))
+  assert sorted(ran(again)) == sorted(
+    [
+      fresh(root, prompted("prompt1", "int", "one"), "#rung1 advance on prompt1"),
+      "\n\n".join([opened(two, "two"), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
+      "here = 1\nclose(1)",
+      "there = 2\nclose(2)",
+    ]
+  )
+  assert engine.module(root)["here"] == 1 and engine.module(two)["there"] == 2
+
+
+async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world_for_nothing() -> None:
+  """The engine serves the doors of the file itself, and asks the World for nothing."""
+  sand, log, root = await lived()
+  command = said(log, "bash")[0][1]
+  before = len(sand.calls)
+  assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
+  assert engine.read(said(log, "prompt")[0][1], on=root).content == WORD
+  assert len(sand.calls) == before
+
+
+async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
+  """A later life reads the same text from a door."""
+  sand, log, root = await lived()
+  prompt = said(log, "prompt")[0][1]
+  was = engine.read(prompt, on=root)
+  _, over = await relived(Dead(), list(sand.record))
+  assert engine.read(prompt, on=over) == was
+  first, _, root = born(auto=False)
+  one = engine.bash("run", on=root)
+  await settle()
+  first.writes(one, "first\n", "stdout")
+  await settle()
+  second = Sand(auto=False, record=list(first.record))
+  _, over = await relived(second, list(first.record))
+  engine.wake(over)
+  await settle()
+  was = engine.read(f"{one}/stdout", on=over)
+  assert was == Text(f"{one}/stdout", "first\n") and isinstance(engine.peek(one), Refused)
+  _, again = await relived(Dead(), list(second.record))
+  assert engine.read(f"{one}/stdout", on=again) == was
+
+
+async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
+  """It is given the record, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
+  sand, log, _ = await lived()
+  assert [a[2] for a in said(log, "done") if a[1] == "reply1"] == [WORLD]
+  assert {WORLD, "kernel"} <= set(engine.listening())
+  again, _ = await relived(Sand(), list(sand.record))
+  assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]
+
+
+async def test_it_opens_the_root_the_first_act_of_any_record() -> None:
+  """It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back."""
+  sand, log, root = await lived()
+  assert root == "chain1" and said(log, "chain")[0][1] == root
+  again, over = await relived(Sand(), list(sand.record))
+  assert over == root and [a[1] for a in said(again, "chain")] == [root]
+
+
+async def test_what_the_record_holds_of_an_act_made_again_keeps_that_act_from_the_outside() -> None:
+  """What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too."""
+  sand, _, root = await lived()
+  twin = await chained("twin", root)
+  assert engine.module(twin)["k"] == 2
+  dead = Dead()
+  again, _ = await relived(dead, list(sand.record))
+  assert engine.module(root)["k"] == engine.module(twin)["k"] == 2
+  assert [(a[0], a[2]) for a in dead.calls] == [("stand", OPERATOR)]
+  assert [(a[0], a[2]) for a in again if a[1] in ("bash1", "read1") and a[0] in ("started", "done")] == [
+    ("done", "journal"),
+    ("started", "journal"),
+    ("done", "journal"),
+  ]
+
+
+async def test_the_record_a_life_was_opened_from_from_which_the_journal_answers() -> None:
+  """The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more."""
+  sand, log, _ = await lived()
+  later = sown()
+  again, _ = await relived(later, list(sand.record))
+  kept = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if e[0][0] == "out"]
+  assert [a[0] for a in later.calls] == ["stand"]
+  assert [(a[0], a[1], *a[3:]) for a in said(again, "out")] == kept
+  got = engine.peek(said(log, "bash")[0][1])
+  assert isinstance(got, Exit) and got.code == 0
+
+
+async def test_the_journal_the_part_of_the_life_that_keeps_every_act_that_the_life_makes() -> None:
+  """The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said and whose speaker is the hearer, or speaks while no ear hears, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
+  sand, log, _ = await lived()
+  assert {e[0][0] for e in sand.record} == {
+    "chain",
+    "stand",
+    "prompt",
+    "rung",
+    "run",
+    "reply",
+    "started",
+    "done",
+    "read",
+    "bash",
+    "merged",
+    "wants",
+    "out",
+  }
+  assert [e for e in sand.record if e[0][0] == "tell" or e[0][2] in (*acts(log), "journal")] == [
+    e for e in sand.record if engine.question(e[0]) and e[0][2] in acts(log)
+  ]
+  names = [e[0][1] for e in sand.record if engine.question(e[0])]
+  for i, e in enumerate(sand.record):
+    if not engine.question(e[0]):
+      assert names.index(e[0][1]) < len([one for one in sand.record[:i] if engine.question(one[0])])
+  quiet, log, root = born(auto=False)
+  child = outside()
+  step = engine.rung("x = bash('sleep 9')", on=root)
+  await settle()
+  asked = engine.prompt(int, "count", on=root)
+  await settle()
+  command, reply = said(log, "bash")[0][1], said(log, "reply")[0][1]
+  assert [e[0][:2] for e in quiet.record] == [
+    ("chain", "chain1"),
+    ("stand", "stand1"),
+    ("done", "stand1"),
+    ("chain", child),
+    ("rung", step),
+    ("run", "run1"),
+    ("run", "run2"),
+    ("bash", command),
+    ("started", command),
+    ("merged", "merged1"),
+    ("prompt", asked),
+    ("rung", "rung2"),
+    ("run", "run3"),
+    ("reply", reply),
+    ("started", reply),
+  ]
+  seen, log, root = born()
+  watcher = (
+    "def w():\n"
+    "  while (yield)[:2] != ('done', 'bash1'):\n"
+    "    pass\n"
+    "  yield 'tell', 'bash1', ['#bash1 seen']\n"
+    "  while True:\n"
+    "    yield\n"
+    "\n"
+    "drive(w(), 'watcher')\n"
+    "b = bash('echo hi')"
+  )
+  assert await engine.rung(watcher, on=root) is None
+  await settle()
+  assert [a[1:3] for a in said(log, "tell") if a[3] == ["#bash1 seen"]] == [("bash1", "watcher")]
+  assert [e for e in seen.record if e[0][2] == "watcher"] == []
+  again, over = await relived(Sand(), plain(seen.record))
+  assert [a[1:3] for a in said(again, "tell") if a[3] == ["#bash1 seen"]] == [("bash1", "watcher")]
+  assert paragraphs(engine.turns(on=over)).count("#bash1 seen") == 1
+
+
+async def test_a_read_the_operator_makes_is_kept_like_any_other_act_of_the_operator() -> None:
+  """A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place."""
+  sand, _, root = born()
+  engine.read("a.txt", on=root)
+  assert [e[0][:3] for e in sand.record][-2:] == [("read", "read1", OPERATOR), ("done", "read1", WORLD)]
+  with pytest.raises(Refused):
+    engine.read("gone.txt", on=root)
+  later = Sand(files={"/w/a.txt": "changed\n"})
+  again, _ = await relived(later, list(sand.record))
+  assert [a[1:3] for a in said(again, "read")] == [("read1", OPERATOR), ("read2", OPERATOR)]
+  assert [(a[0], a[4:]) for a in later.calls] == [("stand", ())]
+  assert engine.peek("read1") == Text("/w/a.txt", "one\ntwo\n") and isinstance(engine.peek("read2"), Refused)
+
+
+async def test_what_it_keeps_it_says() -> None:
+  """What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given."""
+  sand, log, root = await lived()
+  assert {a[2] for a in said(log, "keep")} == {"journal"}
+  _, over = await relived(Sand(), list(sand.record))
+  assert engine.module(over)["k"] == 2
+  dead = Dead()
+  await relived(dead, list(sand.record))
+  assert dead.record == []
+  third, once = await relived(Sand(), dead.record)
+  assert said(third, "bash") == [] and once == root
+
+
+async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
+  """Given at its birth what the World kept of an earlier life, the journal says each entry again at its place, once the life said as many facts as the place counts: a fact under the site of its speaker; an act whose maker is neither an act nor an ear that boot was given through its verb under the site of its maker, since that maker makes nothing again of what the record holds; an act whose maker is an ear that boot was given under the site of that ear, when that ear did not make it again by then, through the verb that binds its kind in the engine, so its ear is the verb's as when that ear made it, or else through act with no ear of its own, so a view of a later life holds it where the first life held it; and an act whose maker is an act not at all, since the word of that act makes it again there."""
+  sand, log, root = born()
+  step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
+  await settle()
+  wait = said(log, "wait")[0][1]
+  engine.pause(step)
+  world_says("done", wait, None)
+  await settle()
+  engine.wake(step)
+  assert await step == 7
+  child = outside()
+  await settle()
+
+  def order(heard: list[tuple]) -> list[tuple]:
+    """The pause and the wake of the rung and the done of its wait, in the order the life said them."""
+    return [(a[0], a[1]) for a in heard if a[1] in (step, wait) and a[0] in ("pause", "wake", "done")]
+
+  again, _ = await relived(Sand(), list(sand.record))
+  assert order(again) == order(log) == [("pause", step), ("done", wait), ("wake", step), ("done", step)]
+  assert [a[1] for a in again if engine.question(a) and a[2] == OPERATOR] == [root, "stand1", step, "stand2"]
+  assert [(a[1], a[2]) for a in said(again, "chain")] == [(root, OPERATOR), (child, "outside")]
+  assert said(again, "wait") == said(log, "wait") and [a for a in said(again, "started") if a[2] == WORLD] == []
+  assert engine.peek(step) == 7
+
+  def asking() -> Generator[tuple | None, tuple]:
+    """An ear that notes each command at the done that the World says of it, and not at a done of an earlier life."""
+    while True:
+      a = yield None
+      if a and a[0] == "done" and a[2] == WORLD and engine.question(("bash", a[1])):
+        engine.act("note", engine.scope(a[1]), None, a[1])
+
+  noting = sown()
+  _, root = life(noting, asker=asking())
+  assert (await engine.bash("echo hi", on=root)).code == 0
+  await settle()
+  noted = engine.transcript(root, "asker")
+  life(Sand(), list(noting.record), asker=asking())
+  await settle(300)
+  assert engine.transcript(root, "asker") == noted and [a[:2] for a in noted] == [("note", "note1")]
+  first, again = await bursts()
+  assert [a[1:5] for a in again] == [a[1:5] for a in first] and [a[2] for a in first] == ["player", "player", "rung1"]
+  assert {k: engine.module(again[0][3])[k] for k in "cd"} == {"c": 3, "d": 4}
+
+
+async def test_the_journal_says_the_whole_record_again_before_boot_returns() -> None:
+  """The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot."""
+  first, _, root = granting()
+  child = outside()
+  ceiling = grant(1.0, on=child)
+  command = engine.bash("echo one", on=root)
+  await settle()
+  second = sown()
+  heard, over = life(second, list(first.record))
+  assert [(a[1], a[3]) for a in said(heard, "grant")] == [(ceiling, child)]
+  assert isinstance(engine.peek(command), Exit)
+  mine = grant(2.0, on=over)
+  await settle()
+  assert mine not in (ceiling, command) and [e[0] for e in second.record[2:]] == [
+    ("grant", mine, OPERATOR, root, 2.0, None)
+  ]
+  assert [e[0] for e in second.record[:2]] == tip("stand2")
+  again, _ = await relived(sown(), [*first.record, *second.record])
+  assert [(a[1], a[3]) for a in said(again, "grant")] == [(ceiling, child), (mine, root)]
+
+
+async def test_the_journal_says_the_record_again_at_a_depth_that_no_count_of_its_entries_grows() -> None:
+  """The journal says the record again at a depth of the stack that no count of its entries grows, so a record of any length opens within the bound of frames of its interpreter."""
+  sand, _, root = born()
+  for _ in range(1500):
+    engine.clock(on=root)
+  again, over = await relived(sown(), list(sand.record))
+  assert over == root and len(said(again, "clock")) == 1500
+
+
+async def test_one_said_again_takes_the_name_it_had() -> None:
+  """One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken."""
+  sand, log, _ = await lived()
+  later = Sand()
+  _, over = await relived(later, list(sand.record))
+  later.script[over] = ["close(9)"]
+  one = engine.prompt(int, "more", on=over)
+  assert [a[1] for a in said(log, "prompt")] == ["prompt1"]
+  assert await one == 9 and one == "prompt2"
+  assert one not in ids(log)
+
+
+def renamed(record: list, names: dict[str, str]) -> list:
+  """A record with each name that names maps given its other name, wherever a fact holds it."""
+
+  def one(v: object) -> object:
+    if isinstance(v, str):
+      return names.get(v, v)
+    return type(v)(map(one, v)) if isinstance(v, (tuple, list)) else v
+
+  return [(one(e), *rest) for (e, *rest) in record]
+
+
+async def granted() -> tuple[list, str]:
+  """The record of a word that makes two grants and a command, as a later life is given it, and its rung."""
+  sand, _, root = granting()
+  step = engine.rung("g = grant(1.0)\nh = grant(2.0)\nx = bash('echo x')", on=root)
+  assert await step is None
+  await settle()
+  return plain(sand.record), step
+
+
+def fewer(record: list) -> list:
+  """The record of a life whose word made one grant more, grant1, before the two it makes, so a later life of the word
+  makes one grant less."""
+  record = renamed(record, {"grant1": "grant2", "grant2": "grant3"})
+  at = next(n for n, (e,) in enumerate(record) if e[:2] == ("grant", "grant2"))
+  return [*record[:at], (("grant", "grant1", *record[at][0][2:4], 0.5, None),), *record[at:]]
+
+
+async def test_in_a_later_life_an_act_takes_the_name_of_the_question_that_the_record_holds_at_its_place() -> None:
+  """In a later life an act takes the name of the question that the record holds at its place, which holds its kind, its maker, its chain and its words, or else it drifts."""
+  record, _ = await granted()
+  named = renamed(record, {"grant1": "grant5", "grant2": "grant4"})
+  _, root = await relived(Sand(), named)
+  assert [engine.module(root)[k] for k in "ghx"] == ["grant5", "grant4", "bash1"]
+  assert isinstance(engine.peek("bash1"), Exit)
+  more = [((*e[:4], 9.0, *e[5:]), *rest) if e[:2] == ("grant", "grant4") else (e, *rest) for (e, *rest) in named]
+  with pytest.raises(Drift, match=r"^grant4 drifts: the life made \('grant', 'grant4', 'rung2', 'chain1', 2.0, "):
+    life(Sand(), more)
+
+
+async def test_an_act_that_the_life_makes_past_the_tip_of_its_record_takes_the_number_after_the_highest_of_its_kind() -> (
+  None
+):
+  """An act that the life makes past the tip of its record takes the number after the highest of its kind in the record."""
+  record, _ = await granted()
+  _, root = await relived(Sand(), renamed(record, {"grant2": "grant7"}))
+  assert [engine.module(root)[k] for k in "gh"] == ["grant1", "grant7"]
+  assert grant(3.0, on=root) == "grant8"
+
+
+async def test_while_the_journal_says_the_record_again_it_keeps_nothing() -> None:
+  """While the journal says the record again it keeps nothing, since the record holds what it says, so a life whose replay drifts keeps nothing of what it made before the drift."""
+  record, _ = await granted()
+  later = Sand()
+  changed = [((*e[:4], "echo y", *e[5:]), *rest) if e[:2] == ("bash", "bash1") else (e, *rest) for (e, *rest) in record]
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
+    life(later, changed)
+  assert engine.get("grant2") is not None and later.record == []
+  kept = Sand()
+  _, root = await relived(kept, record)
+  assert [e[0] for e in kept.record] == tip("stand2", root)
+
+
+async def test_a_fact_that_the_life_says_at_the_place_of_an_entry_that_waits_or_past_it_is_a_drift() -> None:
+  """A fact that the life says at the place of an entry that waits, or past it, and that is not that entry, is a drift, so a word that makes one command less or one more drifts at the first fact where it differs."""
+  record, _ = await granted()
+  at = next(n for n, (e, *_) in enumerate(record) if e[:2] == ("grant", "grant2"))
+  with pytest.raises(Drift, match=r"^grant2 drifts: the life made \('grant', 'grant2', 'rung2', 'chain1', 1.0, "):
+    life(Sand(), [one for one in record if one[0][1] != "grant1"])
+  early = [(e, n - 1, *rest) if e[:2] == ("grant", "grant2") else (e, n, *rest) for (e, n, *rest) in record]
+  with pytest.raises(Drift, match=r"^grant2 drifts: the life made \('(?!grant)"):
+    life(Sand(), early)
+  assert at > 0
+
+
+async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:
+  """A boot is a life; a second boot is a second life, and the first is gone."""
+  _, first, root = await lived()
+  command = said(first, "bash")[0][1]
+  was = len(first)
+  second, over = life(Sand())
+  assert over == root
+  with pytest.raises(Refused, match=r"^nothing takes read$"):
+    engine.read(f"{command}/stdout", on=over)
+  engine.bash("echo more", on=over)
+  assert len(first) == was and len(said(second, "bash")) == 1
+
+
+async def test_the_name_operator_is_the_lifes_own() -> None:
+  """The name operator is the life's own, and boot refuses a generator of the outside under it."""
+  heard: list[tuple] = []
+  with pytest.raises(Refused, match=r"^operator hears$"):
+    engine.boot(journaled(), probe=keeping(heard), operator=pair())
+  assert heard == []
+  sand, _, root = await lived()
+  log, over = await relived(Sand(), list(sand.record))
+  assert over == root and said(log, "out") == [a for a in log if a[0] == "out" and a[2] == "journal"] != []
+
+
+def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_is_opened_in() -> None:
+  """A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything."""
+  woke: list[str] = []
+
+  def telling() -> Generator[tuple | None, tuple]:
+    """A generator of the outside that says it was brought to life."""
+    woke.append("born")
+    yield
+
+  with pytest.raises(RuntimeError, match="loop"):
+    engine.boot(journaled(), probe=telling())
+  assert woke == []
+
+
+async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is_said_again_through_its_verb() -> None:
+  """An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them."""
+  sand, log, root = born()
+  one = engine.bash("echo hi", show=HIDDEN, on=root)
+  assert (await one).code == 0
+  engine.chain("two", source=root, filter=take(root))
+  child = outside()
+  await settle()
+  assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{one}")] == [f"#{one}"]
+  again, over = await relived(Sand(), list(sand.record))
+  assert said(again, "bash") == said(log, "bash") and said(again, "chain") == said(log, "chain")
+  assert [name for name, a in acts(log).items() if a[2] == "outside"] == [child]
+  assert engine.read(f"{one}/stdout", on=over).content == "ran echo hi\n"
+  assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [f"#{one}"]
+  first, _, root = born()
+  engine.drive(watching(root), "watcher")
+  engine.say("tell", root, [f"#{root} go"])
+  await settle()
+  made = said([e[0] for e in first.record], "bash")
+  assert [a[1:4] for a in made] == [("bash1", "watcher", root)]
+  again, _ = await relived(Sand(), plain(first.record))
+  assert said(again, "bash") == made
+
+
+async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_globals_of_its_chain() -> None:
+  """A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one."""
+  sand, _, root = born()
+  word = "def remind(text, on=''):\n  def ear(id):\n    yield 'started', id\n    yield from idle(id)\n\n"
+  await engine.rung(word + "  return act('remind', on, ear, text)\n", on=root)
+  remind = engine.module(root)["remind"]
+  assert callable(remind)
+  note = remind("soon", on=root)
+  await settle()
+  second = Sand()
+  again, over = await relived(second, list(sand.record))
+  assert over == root and said(again, "remind") == [("remind", note, OPERATOR, root, "soon")]
+  with pytest.raises(Refused, match="no verb note on chain1"):
+    engine.act("note", root, idle, "one")
+
+
+async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is_made_again() -> None:
+  """The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them."""
+  sand, log, root = born("t = read('a.txt')\nawait wait(0, __name__)\nclose(t.content)", "close(None)")
+  one = engine.prompt(str, "read and wait", on=root)
+  assert await one == "one\ntwo\n"
+  await settle()
+  assert [e[0][:2] for e in sand.record if e[0][1] in ("read1", "wait1")] == [
+    ("read", "read1"),
+    ("done", "read1"),
+    ("wait", "wait1"),
+    ("started", "wait1"),
+    ("done", "wait1"),
+  ]
+  dead = Dead()
+  again, over = await relived(dead, list(sand.record))
+  assert engine.module(over)["t"] == Text("/w/a.txt", "one\ntwo\n")
+  assert engine.peek(said(again, "wait")[0][1]) is None and engine.peek(one) == "one\ntwo\n"
+  assert [a[0] for a in dead.calls] == ["stand"]
+  assert said(log, "wait")[0] == said(again, "wait")[0]
+  waited = said(again, "wait")[0]
+  done = [a for a in said(again, "done") if a[1] == waited[1]]
+  assert [a[2] for a in done] == ["journal"] and again.index(waited) < again.index(done[0])
+  assert [a for a in said(again, "started") if a[1] == waited[1]] == [("started", waited[1], "journal")]
+  first, _, root = born(auto=False)
+  run = engine.bash("run", on=root)
+  await settle()
+  second = Sand(auto=False, record=list(first.record))
+  _, woke = await relived(second, list(first.record))
+  engine.wake(woke)
+  await settle()
+  third, _ = await relived(Dead(), list(second.record))
+  starts = [i for i, a in enumerate(third) if a[:2] == ("started", run)]
+  wakes = [a for a in said(third, "wake") if a[2] == "journal"]
+  assert (
+    [third[i][2] for i in starts] == ["journal"] * 2
+    and len(wakes) == 1
+    and starts[0] < third.index(wakes[0]) < starts[1]
+  )
+
+
+async def test_what_the_record_shows_started_and_not_done_when_boot_returns_is_pending() -> None:
+  """What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says."""
+  first, log, root = granting("a = 1\ndebug(t'{a}')")
+  engine.prompt(int, "count", on=root)
+  await settle()
+  child = outside()
+  grant(1.0, on=child)
+  engine.bash("echo one", on=root)
+  await settle()
+  second = sown()
+  second.script[root] = ["b = bash('echo new')", "close(5)"]
+  heard, over = life(second, list(first.record))
+  await settle()
+  pending = [a for a in acts(log).values() if a[0] == "reply"][-1]
+  assert [a for a in second.calls if a[0] in ("bash", "reply")] == []
+  engine.wake(over)
+  await settle()
+  assert [a[1] for a in second.calls if a[0] in ("bash", "reply")][:2] == [pending[1], "bash2"]
+  assert [(a[1], a[2]) for a in said(heard, "bash")] == [("bash1", OPERATOR), ("bash2", pending[2])]
+
+
+class Deaf(Sand):
+  """A World in memory that takes no reply, so the life refuses each one, as it refuses an act that nothing takes."""
+
+  def hear(self, a: tuple) -> World:
+    """What the World in memory does with a fact, but a reply, which it lets pass."""
+    if a[0] == "reply":
+      return
+    yield from super().hear(a)
+
+
+async def test_a_first_answer_that_the_record_holds_with_no_maker_is_a_refusal_of_the_life() -> None:
+  """A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift."""
+  first = Deaf()
+  log, root = life(first)
+  engine.prompt(str, "first", on=root)
+  await settle()
+  two = engine.chain("two")
+  engine.prompt(str, "second", on=two)
+  await settle()
+  refusals = [e for (e, *_) in first.record if e[0] == "done" and e[1].startswith("reply")]
+  assert [(e[1], e[2], repr(e[3])) for e in refusals] == [
+    ("reply1", "", "Refused('nothing takes reply')"),
+    ("reply2", "", "Refused('nothing takes reply')"),
+  ]
+  assert [a[1:4] for a in said(log, "reply")] == [("reply1", "rung1", root), ("reply2", "rung2", two)]
+  later = Deaf()
+  again, _ = await relived(later, list(first.record))
+  assert [a[1:4] for a in said(again, "reply")] == [("reply1", "rung1", root), ("reply2", "rung2", two)]
+  assert [(a[1], a[2]) for a in said(again, "done") if a[1].startswith("reply")] == [("reply1", ""), ("reply2", "")]
+  assert [e for (e, *_) in later.record if e[1].startswith("reply")] == []
+  assert engine.paused(root)
+
+
+def speaker(*, first: bool) -> Generator[tuple | None, tuple]:
+  """An ear of the outside that says two notes on the chain of the go of the operator in one hearing; in a later life
+  it says nothing, since the record holds them."""
+  a = yield
+  while True:
+    if first and a[0] == "tell" and a[2] == OPERATOR and a[3] == ["#go"]:
+      yield "note", a[1], "a"
+      yield "note", a[1], "b"
+    a = yield
+
+
+def player() -> Generator[tuple | None, tuple]:
+  """An ear of the outside that plays a rung for each note that it hears, as the extensions play their words, and
+  none for a note that the journal says again, since the record holds the rungs."""
+  words = {"a": "await rung('c = 3')", "b": "d = 4"}
+  a = yield
+  while True:
+    if a[0] == "note" and a[2] != "journal":
+      engine.rung(words[a[3]], on=a[1])
+    a = yield
+
+
+async def bursts() -> tuple[list, list]:
+  """The rungs of a life whose outside says two notes, and the rungs of a later life on its record."""
+  sand = Sand()
+  log, root = life(sand, (), speaker=speaker(first=True), player=player())
+  engine.say("tell", root, ["#go"])
+  await settle(300)
+  record = plain(sand.record)
+  again, _ = life(Sand(), record, speaker=speaker(first=False), player=player())
+  await settle(300)
+  return said(log, "rung"), said(again, "rung")
+
+
+async def test_an_act_whose_maker_is_the_journal_as_seed_gives_one_stands_known_in_the_transcript_of_its_chain_with_no_verb_and_runs_nothing_and_the_journal_says_its_later_facts_at_their_place() -> (
+  None
+):
+  """An act whose maker is the journal, as the seed of a checkpoint gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place."""
+  sand = sown()
+  record = [
+    (("chain", "chain1", OPERATOR, "", "root", ""),),
+    (("bash", "bash4", "journal", "chain1"),),
+    (("started", "bash4", "journal"),),
+    (("done", "bash4", "journal", "kept"),),
+  ]
+  life(sand, record)
+  await settle()
+  assert engine.get("bash4") == ("bash", "bash4", "journal", "chain1")
+  assert [x[1] for x in engine.transcript("chain1", "bash")] == ["bash4"]
+  assert engine.peek("bash4") == "kept"
+  assert not [x for x in sand.calls if x[0] == "bash"]
+
+
+def ender(id: str) -> Generator[tuple | set[str] | None, tuple]:
+  """An ear that hears each rung before the chain of the rung does, and cancels the prompt of the rung, as a word on
+  another chain that closes that prompt, so the rung ends after the chain advanced it and before the chain asks its
+  reply."""
+  yield "started", id
+  while True:
+    a = yield {"rung"}
+    if a[0] == "rung" and a[1] == engine.get(a[1])[1] and engine.prompted(a[2]):
+      engine.cancel(a[2])
+
+
+def ending(on: str = "") -> str:
+  """The verb of the ear that cancels the prompt of each rung, which a later life says again."""
+  return engine.act("ending", on, ender)
+
+
+async def test_the_chain_asks_no_reply_for_the_advance_of_a_rung_that_ended_before_it_so_no_act_is_made_under_no_site(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """The chain asks no reply for the advance of a rung that ended before the reply, so the World pays no turn that no rung hears, no act is made under no site, and a later life makes none either."""
+  monkeypatch.setattr(engine, "ending", ending, raising=False)
+  first = Sand()
+  log, root = life(first)
+  ending(on=root)
+  other = engine.chain("other", on=root)
+  await settle()
+  engine.prompt(int, "count", on=other)
+  await settle()
+  assert [a for a in said(log, "reply") if a[2] == ""] == []
+  again, _ = await relived(Sand(), list(first.record))
+  assert [a for a in said(again, "reply") if a[2] == ""] == []
+  assert [a[1:4] for a in said(again, "reply")] == [a[1:4] for a in said(log, "reply")]

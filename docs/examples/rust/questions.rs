@@ -1,8 +1,7 @@
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 use std::{error::Error, io::Write};
 
 use furb::life::Life;
+use std::io;
 
 #[expect(
   clippy::disallowed_methods,
@@ -14,10 +13,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let deploy = life.prompt::<String>("Deploy version 2. Ask me before you deploy.")?;
   while let Some(question) = life.question(&deploy).await? {
     print!("{} ", question.message);
-    std::io::stdout().flush()?;
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
-    question.answer(&mut life, line.trim())?;
+    io::stdout().flush()?;
+    let mut reply = String::new();
+    io::stdin().read_line(&mut reply)?;
+    question.answer(&mut life, reply.trim())?;
   }
   println!("{}", life.wait(deploy).await?);
   Ok(())

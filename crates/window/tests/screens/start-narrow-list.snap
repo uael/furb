@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · Debug stuck TUI…  ✗ Failed      All projects ▾       studio offline
+  ┃
+  ┃ Debug stuck TUI after merge             ● TUI scope for the new…  ◆ Input
+  ┃ (the model works on it)                   FU furb                    opus
+  ┃                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+                            opus/high     ▐ ● Debug stuck TUI…       ✗ Failed ▌
+    ■  wrote nothing          stopped     ▐   FU furb                    opus ▌
+                                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+                                           Working 2
+
+                                              run the…    Working as of 09:12
+                                              FC furb-cloud@studio     opus ◌
+
+                                            ● which key sends…  ⠋ Working 11h
+                                              PH photowroom            opus ◌
+
+                                           Resting 3
+
+                                              remove the gate from the…  • 5h
+                                              FU furb                    opus
+
+                                              where does the time go      11h
+                                              FU furb                    opus
+  ┃
+  ┃ A reply opens this thread again           Ground the…        ‖ Paused 11h
+  ┃
+  ┃  Message  Python      opus   + ⌃N      Context
+  ┃                                        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ~…  ◆ 1 other thread asks   ⌃P find      No answer yet
+  ▶  ◆━━━━━━━━━━●         now  chains ▾

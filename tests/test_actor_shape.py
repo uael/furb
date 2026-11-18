@@ -1,0 +1,56 @@
+"""Actor, an actor the World offers."""
+
+from conftest import STANDS, born, paragraphs, said, settle
+from furb import engine
+from furb.engine import Refused
+
+
+async def test_an_actor_the_world_offers() -> None:
+  """An actor the World offers: the name of a model, the efforts it takes, the window it reads, its class, cheap or dear, and its place from 0 in the list of automatic work when that list names it, and a World may leave the class and the place unsaid."""
+  offers = [*STANDS[0], ["q", ["low"], 300000], ["c", [], 100000, "cheap"], ["d", [], 100000, "dear", 0]]
+  born(stands=[offers, "/w", "m/low"])
+  assert engine.standing()[0] == offers
+  assert [engine.offered(offers, to) for to in ("q/low", "m/low", "c")] == [300000, 400000, 100000]
+  _, _, root = born()
+  await engine.rung("stand()", on=root)
+  assert paragraphs(engine.turns(on=root))[-1] == (
+    "#stand2\nstand2_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand2_actor = 'm/low'"
+  )
+
+
+async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_the_file_names() -> None:
+  """The window that a roster entry leaves unsaid is the window that the file names."""
+  assert engine.WINDOW == 200000
+  shares = []
+  for roster in ([["plain", [], 0]], [["plain", [], 400000]]):
+    _, log, root = born("close(1)", stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
+    assert await engine.prompt(int, "count", on=root) == 1
+    shares += [engine.filled(a[1]) for a in said(log, "reply")]
+  assert shares == [100000 / engine.WINDOW, 100000 / 400000]
+
+
+async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:
+  """What a prompt names is one of these names and one effort of that range."""
+  _, log, root = born()
+  right = engine.prompt(int, "hi", to="m/high", on=root)
+  await settle()
+  assert engine.peek(right) is None and [a[4] for a in said(log, "reply")] == ["m/high"]
+  ghost = engine.prompt(int, "hi", to="ghost/low", on=root)
+  engine.cancel(right)
+  for _ in range(4):
+    await settle()
+  assert repr(engine.peek(ghost)) == repr(Refused("No model is ghost/low."))
+  assert [a[4] for a in said(log, "reply")] == ["m/high", "ghost/low"]
+
+
+async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
+  """An actor takes an effort of its own, and any actor takes the effort that is not named."""
+  sand, log, root = born()
+  for to in ("m/low", "m/high", "m", "n"):
+    sand.script[root] = ["close(1)"]
+    assert await engine.prompt(int, "hi", to=to, on=root) == 1
+  assert [a[4] for a in said(log, "reply")] == ["m/low", "m/high", "m", "n"]
+  wrong = engine.prompt(int, "hi", to="n/high", on=root)
+  await settle()
+  assert isinstance(engine.peek(wrong), Refused)

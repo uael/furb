@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · measure the open on three chains        Resolve     All projects ▾        This computer
+  ┃
+  ┃ measure the open on three chains                           Working 1
+  ┃ (the model delegates)                                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  ┃                                                           ▐ ● measure the open on…  ◐ Working ▌
+                                                opus/high     ▐   FU furb                 opus ↳2 ▌
+    1  bench = prompt(str, 'Run the bench of the repl…+42     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       └ await wait(600, chain)           ◐ Working  opus
+    2  boot = prompt(str, 'Read the boot of the host\…+44
+       └ Read the boot of the host        ⠋ Working  opus
+    3  lines = await prompt(str, 'Count the lines of…+52
+       └ 'README.md has 3 lines.'        ✓ Resolved  opus
+    ◐  await wait(600, bench)
+    …
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃ Reply to this thread
+  ┃
+  ┃  Message  Python    → measure… ▾    opus  high   + ⌃N      Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ◐ Working · ⎋ stop                          ⌃X ↓ agents      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

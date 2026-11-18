@@ -1,27 +1,31 @@
 //! The search of the web, which the provider answers for the actor of a chain: the native search of
 //! each provider that has one, the claude command line with its tool `WebSearch` alone, the web
 //! search of the Messages API of Anthropic and of the Responses API of `OpenAI` and of xAI, the
-//! grounding of Gemini in Google Search, and the search API of `DeepSeek`; else a free search. A
-//! search answers with text in Markdown, which ends with its sources.
+//! grounding of Gemini in Google Search, and the search API of `DeepSeek`. A search answers with
+//! text in Markdown, which ends with its sources. The provider leaves the search of an actor whose
+//! provider has none to the ears after it, as the process of the kit `web`, which asks a free
+//! search.
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
 use futures::{FutureExt, future::BoxFuture};
 use reqwest::StatusCode;
 use rig_core::http_client::ReqwestClient;
+use serde::{Deserialize, de::IgnoredAny};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
 use super::{
-  claude::Program,
+  claude::{Program, Token},
   clients::{Client, Reach},
 };
 use crate::{ear::spawned, world::child};
+use tokio::time;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
 
-/// Why a work of the network ended before it came to an answer.
+/// Why a search ended before it came to an answer.
 #[derive(Debug, thiserror::Error)]
 pub enum Cut {
   #[error("it took more than {} seconds", TIMEOUT.as_secs())]
@@ -30,17 +34,11 @@ pub enum Cut {
   Lost(String),
 }
 
-impl From<Cut> for String {
-  fn from(cut: Cut) -> Self {
-    cut.to_string()
-  }
-}
-
 /// Why a search gives no answer.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-  #[error("{0}")]
-  Command(String),
+  #[error(transparent)]
+  Command(#[from] Token),
   #[error("{program} {source}")]
   Start { program: String, source: child::Unborn },
   #[error(transparent)]
@@ -53,17 +51,13 @@ pub enum Error {
   Status { url: String, status: StatusCode, text: String },
   #[error("the search answered no JSON: {0}")]
   NotJson(serde_json::Error),
-  #[error("the free search answered no JSON: {0}")]
-  FreeNotJson(serde_json::Error),
   #[error("the search answered with no text: {0}")]
   NoText(Value),
-  #[error("{0}")]
-  Server(String),
   #[error(transparent)]
   Cut(#[from] Cut),
 }
 
-/// How long a search or a fetch may take.
+/// How long a search may take.
 const TIMEOUT: Duration = Duration::from_secs(300);
 
 /// What a model that searches for a query is told.
@@ -73,13 +67,12 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
 
-/// The work of a search or a fetch, as a task of the runtime of the ears, so that a client of HTTP
-/// and a process have the runtime they need, which ends after [`TIMEOUT`], and when what awaits it
-/// goes.
-pub(crate) fn timed<T: Send + 'static, E: From<Cut> + Send + 'static>(
-  work: impl Future<Output = Result<T, E>> + Send + 'static,
-) -> BoxFuture<'static, Result<T, E>> {
-  spawned(async move { tokio::time::timeout(TIMEOUT, work).await })
+/// The work of a search, as a task of the runtime of the ears, so that a client of HTTP and a
+/// process have the runtime they need, which ends after [`TIMEOUT`], and when what awaits it goes.
+fn timed(
+  work: impl Future<Output = Result<String, Error>> + Send + 'static,
+) -> BoxFuture<'static, Result<String, Error>> {
+  spawned(async move { time::timeout(TIMEOUT, work).await })
     .map(|got| match got {
       Ok(Ok(got)) => got,
       Ok(Err(_)) => Err(Cut::Late.into()),
@@ -114,7 +107,11 @@ pub(crate) fn sourced(text: &str, sources: &[(String, String)]) -> String {
   let mut lines: Vec<String> = Vec::new();
   for (title, url) in sources {
     let line = format!("- [{}]({url})", if title.is_empty() { url } else { title });
-    if !url.is_empty() && !lines.iter().any(|one| one.ends_with(&format!("({url})"))) {
+    let cites = |one: &String| {
+      let head = one.strip_suffix(')').and_then(|one| one.strip_suffix(url.as_str()));
+      head.is_some_and(|head| head.ends_with('('))
+    };
+    if !url.is_empty() && !lines.iter().any(cites) {
       lines.push(line);
     }
   }
@@ -133,7 +130,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
     let (program, model) = (program.clone(), model.clone());
     timed(async move {
       let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
-      let mut command = program.base_command(&first).map_err(Error::Command)?;
+      let mut command = program.base_command(&first, true)?;
       command.args([
         "--no-session-persistence",
         "--allowedTools",
@@ -182,8 +179,9 @@ pub(super) fn native(client: Client, reach: &Reach) -> Option<Searches> {
   Some(Arc::new(move |query| timed(native.asked(reach.clone(), query))))
 }
 
-/// The API of a native search: the Messages API of Anthropic, the Responses API at its default address, the
-/// generation of Gemini grounded in Google Search, and the search API of `DeepSeek`.
+/// The API of a native search: the Messages API of Anthropic, the Responses API at its default
+/// address, the generation of Gemini grounded in Google Search, and the search API of `DeepSeek`,
+/// each at the address that the client of the model asks.
 #[derive(Clone, Copy)]
 enum Native {
   Anthropic,
@@ -198,7 +196,7 @@ impl Native {
     let api = |default: &str| reach.api.clone().unwrap_or_else(|| default.to_owned());
     let bearer = format!("Bearer {}", reach.key);
     let got = match self {
-      Native::Anthropic => {
+      Self::Anthropic => {
         let api = api("https://api.anthropic.com");
         let url = format!("{}/v1/messages", api.trim_end_matches('/').trim_end_matches("/v1"));
         let key: (&str, &str) =
@@ -212,7 +210,7 @@ impl Native {
         });
         posted(&url, &[key, ("anthropic-version", "2023-06-01")], &body).await?
       }
-      Native::Responses(default) => {
+      Self::Responses(default) => {
         let url = format!("{}/responses", api(default).trim_end_matches('/'));
         let body = json!({
           "model": reach.id,
@@ -222,11 +220,10 @@ impl Native {
         });
         posted(&url, &[("authorization", &bearer)], &body).await?
       }
-      Native::Gemini => {
-        let url = format!(
-          "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
-          reach.id
-        );
+      Self::Gemini => {
+        let api = api("https://generativelanguage.googleapis.com");
+        let url =
+          format!("{}/v1beta/models/{}:generateContent", api.trim_end_matches('/'), reach.id);
         let body = json!({
           "systemInstruction": {"parts": [{"text": BRIEF}]},
           "contents": [{"role": "user", "parts": [{"text": query}]}],
@@ -234,7 +231,7 @@ impl Native {
         });
         posted(&url, &[("x-goog-api-key", &reach.key)], &body).await?
       }
-      Native::Deepseek => {
+      Self::Deepseek => {
         let api = api("https://api.deepseek.com");
         let root = api.trim_end_matches('/').trim_end_matches("/v1").trim_end_matches("/anthropic");
         let body = json!({"query": query, "count": 10, "need_content": false});
@@ -243,10 +240,10 @@ impl Native {
     };
     let got: Value = serde_json::from_str(&got).map_err(Error::NotJson)?;
     let answer = match self {
-      Native::Anthropic => anthropic(&got),
-      Native::Responses(_) => responses(&got),
-      Native::Gemini => gemini(&got),
-      Native::Deepseek => Some(deepseek(&got)),
+      Self::Anthropic => anthropic(&got),
+      Self::Responses(_) => responses(&got),
+      Self::Gemini => gemini(&got),
+      Self::Deepseek => Some(deepseek(&got)),
     };
     answer.ok_or(Error::NoText(got))
   }
@@ -266,37 +263,130 @@ fn items<'a>(value: &'a Value, key: &str) -> &'a [Value] {
 /// searches.
 fn anthropic(got: &Value) -> Option<String> {
   let (mut texts, mut cited, mut found) = (String::new(), Vec::new(), Vec::new());
-  for block in items(got, "content") {
-    match block.get("type").and_then(Value::as_str) {
-      Some("text") => {
-        texts.push_str(&text(block, "text"));
-        let citations = items(block, "citations").iter();
-        cited.extend(citations.map(|one| (text(one, "title"), text(one, "url"))));
+  for block in Messages::deserialize(got).ok()?.content {
+    match block {
+      Block::Text { text, citations } => {
+        texts.push_str(&text);
+        cited.extend(citations.into_iter().map(Source::pair));
       }
-      Some("web_search_tool_result") => {
-        let results = items(block, "content").iter();
-        found.extend(results.map(|one| (text(one, "title"), text(one, "url"))));
+      Block::WebSearchToolResult { content: Results::Found(results) } => {
+        found.extend(results.into_iter().map(Source::pair));
       }
-      _ => {}
+      Block::WebSearchToolResult { content: Results::Failed(_) } | Block::Other => {}
     }
   }
   (!texts.trim().is_empty())
     .then(|| sourced(&texts, if cited.is_empty() { &found } else { &cited }))
 }
 
+/// A response of the Messages API, as far as a search reads it.
+#[derive(Deserialize)]
+struct Messages {
+  #[serde(default)]
+  content: Vec<Block>,
+}
+
+/// A block of a response of the Messages API: a text with the sources it cites, the results of a
+/// search, or a block that a search does not read.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Block {
+  Text {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    citations: Vec<Source>,
+  },
+  WebSearchToolResult {
+    content: Results,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// What a search of the Messages API found: its results, or the error of a search that failed.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Results {
+  Found(Vec<Source>),
+  Failed(IgnoredAny),
+}
+
+/// A page that an answer cites or that a search found, by its title and its address.
+#[derive(Deserialize)]
+struct Source {
+  #[serde(default)]
+  title: Option<String>,
+  #[serde(default)]
+  url: Option<String>,
+}
+
+impl Source {
+  /// The title and the address, each empty when the API gives none or null.
+  fn pair(self) -> (String, String) {
+    (self.title.unwrap_or_default(), self.url.unwrap_or_default())
+  }
+}
+
 /// The answer of a response of the Responses API: the text of its messages, then the sources it cites.
 fn responses(got: &Value) -> Option<String> {
   let (mut texts, mut cited) = (Vec::new(), Vec::new());
-  for item in items(got, "output").iter().filter(|one| text(one, "type") == "message") {
-    for part in items(item, "content").iter().filter(|one| text(one, "type") == "output_text") {
-      texts.push(text(part, "text"));
-      let citations =
-        items(part, "annotations").iter().filter(|one| text(one, "type") == "url_citation");
-      cited.extend(citations.map(|one| (text(one, "title"), text(one, "url"))));
+  for item in Responses::deserialize(got).ok()?.output {
+    let Item::Message { content } = item else { continue };
+    for part in content {
+      let Part::OutputText { text, annotations } = part else { continue };
+      texts.push(text);
+      let citations = annotations.into_iter().filter_map(|one| match one {
+        Annotation::UrlCitation(source) => Some(source.pair()),
+        Annotation::Other => None,
+      });
+      cited.extend(citations);
     }
   }
   let texts = texts.join("\n\n");
   (!texts.trim().is_empty()).then(|| sourced(&texts, &cited))
+}
+
+/// A response of the Responses API, as far as a search reads it.
+#[derive(Deserialize)]
+struct Responses {
+  #[serde(default)]
+  output: Vec<Item>,
+}
+
+/// An item of the output of the Responses API: a message, or an item that a search does not read.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Item {
+  Message {
+    #[serde(default)]
+    content: Vec<Part>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// A part of a message of the Responses API: its text with its annotations, or another part.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Part {
+  OutputText {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    annotations: Vec<Annotation>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// An annotation of a text of the Responses API: the page that it cites, or another annotation.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Annotation {
+  UrlCitation(Source),
+  #[serde(other)]
+  Other,
 }
 
 /// The answer of a generation of Gemini: the text of its first candidate, then the pages that grounded it.
@@ -329,65 +419,3 @@ fn deepseek(got: &Value) -> String {
     .collect();
   if lines.is_empty() { "No result.".to_owned() } else { lines.join("\n") }
 }
-
-/// The free search, which needs no key: the server of Parallel for agents, which answers the
-/// protocol of MCP.
-const FREE: &str = "https://search.parallel.ai/mcp";
-
-/// The most of the excerpts of one result of the free search that an answer holds, in characters.
-const EXCERPT: usize = 1500;
-
-/// The free search, which asks the tool `web_search` of [`FREE`] for the query.
-pub(crate) fn free() -> Searches {
-  Arc::new(|query| {
-    timed(async move {
-      let arguments = json!({"objective": query, "search_queries": [query]});
-      let call = json!({"name": "web_search", "arguments": arguments});
-      let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call});
-      let got = posted(FREE, &[("accept", "application/json, text/event-stream")], &body).await?;
-      found(&got)
-    })
-  })
-}
-
-/// The answer of the free search, from what its server answered: each result under its title and
-/// its address, with its excerpts cut at [`EXCERPT`] characters; or why it gives none. A server of
-/// MCP answers in JSON, or in a stream of events whose data is that JSON.
-fn found(got: &str) -> Result<String, Error> {
-  let data: String = if got.trim_start().starts_with('{') {
-    got.to_owned()
-  } else {
-    got.lines().filter_map(|line| line.strip_prefix("data:")).map(str::trim).collect()
-  };
-  let reply: Value = serde_json::from_str(&data).map_err(Error::FreeNotJson)?;
-  if let Some(error) = reply.get("error") {
-    let said = error.get("message").and_then(Value::as_str);
-    return Err(Error::Server(said.map_or_else(|| error.to_string(), str::to_owned)));
-  }
-  let result = &reply["result"];
-  let parts = result["content"].as_array().map_or(&[][..], Vec::as_slice);
-  let said: String = parts.iter().filter_map(|one| one["text"].as_str()).collect();
-  if result["isError"] == true {
-    return Err(Error::Server(said));
-  }
-  let Ok(listed) = serde_json::from_str::<Value>(&said) else { return Ok(said) };
-  let results = listed["results"].as_array().map_or(&[][..], Vec::as_slice);
-  let answers: Vec<String> = results
-    .iter()
-    .map(|one| {
-      let (url, title) =
-        (one["url"].as_str().unwrap_or_default(), one["title"].as_str().unwrap_or_default());
-      let excerpts = one["excerpts"].as_array().map_or(&[][..], Vec::as_slice);
-      let excerpts: Vec<&str> = excerpts.iter().filter_map(Value::as_str).collect();
-      let excerpts = excerpts.join("\n\n");
-      let cut: String = excerpts.chars().take(EXCERPT).collect();
-      let more = if cut.len() < excerpts.len() { "…" } else { "" };
-      format!("## [{}]({url})\n\n{}{more}", if title.is_empty() { url } else { title }, cut.trim())
-    })
-    .collect();
-  Ok(if answers.is_empty() { "No result.".to_owned() } else { answers.join("\n\n") })
-}
-
-#[cfg(test)]
-#[path = "search.test.rs"]
-mod test;

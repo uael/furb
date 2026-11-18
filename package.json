@@ -2,33 +2,22 @@
   "name": "furb-workspace",
   "private": true,
   "workspaces": [
-    "bind/typescript",
-    "tui",
+    "crates/typescript",
     "docs/examples"
   ],
   "scripts": {
-    "build": "bun run bind/typescript/build.ts",
-    "tui": "bun run tui/src/cli.ts",
-    "demo": "bun run tui/src/cli.ts --demo",
-    "screenshots": "bun run tui/script/screenshots.ts",
-    "animation": "bun run tui/script/animation.ts",
-    "docs": "bun run tui/script/docs.ts",
+    "build": "bun run crates/typescript/build.ts",
     "check": "tsc --noEmit",
-    "test": "bun run tui/script/test.ts",
-    "bench": "bun run tui/script/bench.ts",
-    "protocol": "bun run bind/typescript/script/protocol.ts",
-    "format": "biome format --write bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json"
+    "test": "bun run crates/typescript/script/test.ts",
+    "protocol": "FURB_BLESS=1 cargo test -q -p furb-host --test suite protocol::the_schema_on_disk_is_the_schema_of_the_protocol && bun run crates/typescript/script/protocol.ts && cargo xtask protocol",
+    "format": "biome format --write crates/typescript docs/examples package.json tsconfig.json biome.json",
+    "lint": "biome check crates/typescript docs/examples package.json tsconfig.json biome.json --error-on-warnings"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
     "@napi-rs/cli": "^3.10.5",
-    "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "latest",
-    "@types/upng-js": "2.1.5",
-    "gifenc": "1.0.3",
     "json-schema-to-typescript": "16.0.0",
-    "typescript": "~5.9.3",
-    "upng-js": "2.1.0"
+    "typescript": "~5.9.3"
   }
 }

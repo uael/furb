@@ -1,5 +1,4 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
-
 use std::{
   fmt, fs,
   io::{self, ErrorKind},
@@ -13,12 +12,14 @@ use super::{
   here, images, resolved,
   scratch::{Beneath, beneath},
 };
+use std::path;
 
 /// The scheme of the paths of the config directory of the user.
 pub const CONFIG: &str = "config://";
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
+  skill::Places,
   value::{Fault, Given, Object, Text},
 };
 
@@ -27,16 +28,17 @@ use crate::{
 /// after a folder and no walk below it, and a write with the text as it stands after, but a write
 /// of a door of a command, which the ear of the commands answers, each resolved against the working
 /// directory of the chain, or with the refusal. The path of a cd, a read or a write that is `~` or
-/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user, one of
-/// `scratch://` against the scratch directory of the life, and one of `config://` against the
-/// config directory of the user, in neither of which a chain stands. A file whose every line ends
-/// with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of
-/// an act of the life is a door that no ear of the engine served, and never a file, so the ear
+/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user of the places,
+/// one of `scratch://` against the scratch directory of the life, and one of `config://` against
+/// the config directory of the places, in neither of which a chain stands. A file whose every line
+/// ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name
+/// of an act of the life is a door that no ear of the engine served, and never a file, so the ear
 /// refuses it with the chain of that act. The path of each text, of each refusal and of each cd
 /// that it gives is as [`tilded`] writes it. A write puts the whole text in place in one step, as
 /// `stored` says, so no reader sees a torn file. A read of an image keeps it in the directory of
 /// the images of the life, the gallery, as `seen` says.
-pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box<dyn Ear> {
+pub fn files(scratch: Scratch, places: Places, gallery: Option<PathBuf>) -> Box<dyn Ear> {
+  let files = Files { scratch, places, gallery };
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -51,10 +53,8 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
         continue;
       }
       let answer = match a.kind() {
-        "cd" => moved(&mut co, &a).await.map(Object::string),
-        _ => {
-          served(&mut co, &a, &scratch, &config, gallery.as_deref()).await.map(|text| text.object())
-        }
+        "cd" => moved(&mut co, &a, files.places.home.as_deref()).await.map(Object::string),
+        _ => files.served(&mut co, &a).await.map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
@@ -64,71 +64,75 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
 
 /// The directory a cd came to: its path placed against the working directory of the chain, when a directory stands
 /// there, as [`tilded`] writes it.
-async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
+async fn moved(co: &mut Co, a: &Fact, home: Option<&Path>) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-  let path = native(&path, cfg!(windows));
-  if let Some(scheme) =
-    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
-  {
+  let path = native(&path);
+  if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one))) {
     return Err(Fault::refused(format!(
       "A chain cannot stand in {path}, since {scheme} has no path to stand in."
     )));
   }
-  let at = placed(&here(co, a.on()).await?, &path)?;
-  let shown = tilded(&at, std::env::home_dir().as_deref());
+  let at = placed(&here(co, a.on(), home).await?, &path, home)?;
+  let shown = tilded(&at, home);
   if !at.is_dir() {
     return Err(Fault::refused(format!("There is no directory at {shown}.")));
   }
   Ok(shown)
 }
 
-/// What a read or a write came to.
-async fn served(
-  co: &mut Co,
-  a: &Fact,
-  scratch: &Scratch,
-  config: &Path,
-  gallery: Option<&Path>,
-) -> Result<Text, Fault> {
-  let (path, content) = if a.kind() == "read" {
-    (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None)
-  } else {
-    let text =
-      a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
-    (text.path, Some(text.content))
-  };
-  let path = native(&path, cfg!(windows));
-  if let Some(path) = path.strip_prefix(SCRATCH) {
-    return scratch.served(path, content, gallery);
+/// What the ear of the files serves: the scratch directory, the places of the life, and the gallery
+/// of its images.
+struct Files {
+  scratch: Scratch,
+  places: Places,
+  gallery: Option<PathBuf>,
+}
+
+impl Files {
+  /// What a read or a write came to.
+  async fn served(&self, co: &mut Co, a: &Fact) -> Result<Text, Fault> {
+    let Self { scratch, places, gallery } = self;
+    let gallery = gallery.as_deref();
+    let (path, content) = if a.kind() == "read" {
+      (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None)
+    } else {
+      let text =
+        a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
+      (text.path, Some(text.content))
+    };
+    let path = native(&path);
+    if let Some(path) = path.strip_prefix(SCRATCH) {
+      return scratch.served(path, content, gallery);
+    }
+    if let Some(path) = path.strip_prefix(CONFIG) {
+      let dir = Beneath { root: &places.config, scheme: CONFIG, place: "the config directory" };
+      return beneath(dir, path, content, gallery, || Ok(()));
+    }
+    if let Some(scheme) = [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(scheme_of(one)))
+    {
+      return Err(Fault::refused(format!(
+        "{path} is no path of {scheme}, which starts with two slashes."
+      )));
+    }
+    if path.contains("://") {
+      return Err(Fault::refused(format!("No file at {path}.")));
+    }
+    let head = path.split('/').next().unwrap_or_default();
+    if !co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().is_none() {
+      let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
+      let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
+      return Err(Fault::refused(format!(
+        "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
+        a.kind()
+      )));
+    }
+    let home = places.home.as_deref();
+    let at = placed(&here(co, a.on(), home).await?, &path, home)?;
+    if let Some(content) = content {
+      filed(&at, content, at.display())?;
+    }
+    text(&at, tilded(&at, home), gallery)
   }
-  if let Some(path) = path.strip_prefix(CONFIG) {
-    let dir = Beneath { root: config, scheme: CONFIG, place: "the config directory" };
-    return beneath(dir, path, content, gallery, || Ok(()));
-  }
-  if let Some(scheme) =
-    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
-  {
-    return Err(Fault::refused(format!(
-      "{path} is no path of {scheme}, which starts with two slashes."
-    )));
-  }
-  if path.contains("://") {
-    return Err(Fault::refused(format!("No file at {path}.")));
-  }
-  let head = path.split('/').next().unwrap_or_default();
-  if !co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().is_none() {
-    let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
-    let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
-    return Err(Fault::refused(format!(
-      "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
-      a.kind()
-    )));
-  }
-  let at = placed(&here(co, a.on()).await?, &path)?;
-  if let Some(content) = content {
-    filed(&at, content, at.display())?;
-  }
-  text(&at, tilded(&at, std::env::home_dir().as_deref()), gallery)
 }
 
 /// The content of a write put at a path, with the folders above it made, in one write as
@@ -139,10 +143,17 @@ pub(super) fn filed(at: &Path, content: String, name: impl fmt::Display) -> Resu
     .map_err(|no| failed(&no.source, &name))
 }
 
+/// The scheme of a path of a scheme, as `scratch:` of `scratch://`, which a path that names its
+/// folder alone starts with too.
+fn scheme_of(full: &str) -> &str {
+  full.strip_suffix("//").unwrap_or(full)
+}
+
 /// Whether bytes end each of their lines with CRLF: they hold a line break, and a CR comes before each one.
 fn crlf(bytes: &[u8]) -> bool {
   let mut breaks = memchr::memchr_iter(b'\n', bytes).peekable();
-  breaks.peek().is_some() && breaks.all(|at| at > 0 && bytes[at - 1] == b'\r')
+  breaks.peek().is_some()
+    && breaks.all(|at| at.checked_sub(1).and_then(|at| bytes.get(at)) == Some(&b'\r'))
 }
 
 /// The content of a write as the file at a path takes it: with CRLF at the end of each line when every line of the
@@ -158,8 +169,8 @@ fn ended(at: &Path, content: String) -> String {
 /// A path as Windows names it, from the form of the sh of Git for Windows, which names `C:\\x` as `/c/x` and the
 /// scratch directory, its temporary directory, as `/tmp`: on Windows, `/c` and `/c/x` are `C:/` and `C:/x`, and `/tmp`
 /// and `/tmp/x` are `scratch://` and `scratch://x`. Any other path, and every path on another machine, stands as it is.
-pub(super) fn native(path: &str, windows: bool) -> String {
-  if !windows {
+pub(super) fn native(path: &str) -> String {
+  if !cfg!(windows) {
     return path.to_owned();
   }
   if let Some(rest) =
@@ -168,18 +179,18 @@ pub(super) fn native(path: &str, windows: bool) -> String {
     return format!("{SCRATCH}{}", rest.trim_start_matches('/'));
   }
   match path.as_bytes() {
-    [b'/', drive, rest @ ..]
-      if drive.is_ascii_alphabetic() && (rest.is_empty() || rest[0] == b'/') =>
-    {
-      format!("{}:/{}", char::from(*drive).to_ascii_uppercase(), path[2..].trim_start_matches('/'))
+    [b'/', drive, rest @ ..] if drive.is_ascii_alphabetic() && matches!(rest, [] | [b'/', ..]) => {
+      let rest = path.get(2..).unwrap_or_default().trim_start_matches('/');
+      format!("{}:/{rest}", char::from(*drive).to_ascii_uppercase())
     }
     _ => path.to_owned(),
   }
 }
 
-/// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
-pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  text(at, tilded(at, std::env::home_dir().as_deref()), None)
+/// The text at a path, named from a home: a file of utf-8 of any size, since the engine bounds
+/// what a read tells.
+pub(crate) fn read(at: &Path, home: Option<&Path>) -> Result<Text, Fault> {
+  text(at, tilded(at, home), None)
 }
 
 /// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
@@ -253,15 +264,15 @@ pub(crate) fn tilded(path: &Path, home: Option<&Path>) -> String {
   let home = home.filter(|home| home.parent().is_some());
   match home.and_then(|home| path.strip_prefix(home).ok()) {
     Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    Some(rest) => format!("~{}{}", path::MAIN_SEPARATOR, rest.display()),
     None => path.display().to_string(),
   }
 }
 
 /// The place of a path of the machine that a chain names: against the home of the user, as [`homed`] says, or else
 /// against the directory.
-pub(crate) fn placed(directory: &Path, path: &str) -> Result<PathBuf, Fault> {
-  homed(path, std::env::home_dir()).unwrap_or_else(|| Ok(resolved(directory, path)))
+pub(crate) fn placed(directory: &Path, path: &str, home: Option<&Path>) -> Result<PathBuf, Fault> {
+  homed(path, home.map(Path::to_path_buf)).unwrap_or_else(|| Ok(resolved(directory, path)))
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.

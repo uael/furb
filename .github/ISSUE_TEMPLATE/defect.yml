@@ -48,7 +48,7 @@ body:
       description: Where you met the defect.
       multiple: true
       options:
-        - The TUI
+        - The window
         - The command line, furb
         - The Python package
         - The TypeScript package

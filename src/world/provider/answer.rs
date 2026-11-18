@@ -1,15 +1,18 @@
 //! The call of a model for a reply, and the turn that its answer gives.
-
-use std::{collections::HashSet, time::Duration};
+use std::{
+  collections::HashSet,
+  time::{Duration, SystemTime},
+};
 
 use futures::{Stream, StreamExt, stream};
 use jiff::{Timestamp, Zoned};
 use rig_core::{
   completion::{CompletionError, CompletionRequest, CompletionResponse, FinishReason},
   message::{AssistantContent, Message, Reasoning},
-  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
+  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse, UnknownPayload},
 };
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch as holding};
 
 use super::{
@@ -17,14 +20,18 @@ use super::{
   hearer::{Came, Replied, Retried, released, reply_gone},
   messages::CUT,
   model::{Answer, Asked, Model, Streams},
-  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Retry, SIGN_POLL, passing},
+  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Limit, Retry, SIGN_POLL, limited, passing},
   thinking::merged,
   watch,
 };
+use crate::value;
 use crate::{
-  value::{Object, ObjectRef, entry},
+  value::{Object, ObjectRef, entry, items},
   wire,
 };
+use std::future;
+use std::mem;
+use tokio::time;
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response
 /// holds it whole, with the raw record of its end, where a model says what the turn cost. A model
@@ -35,7 +42,7 @@ pub(super) async fn streamed(
   streams: Streams,
   asked: Asked,
 ) -> Result<CompletionResponse, CompletionError> {
-  let Asked { request, told, thought: budget, .. } = asked;
+  let Asked { request, told, billed, thought: budget, .. } = asked;
   let mut stream = streams(request.clone()).await?;
   // A thought whose parts streamed is told already, and a thought that came whole is told as it
   // comes.
@@ -59,6 +66,11 @@ pub(super) async fn streamed(
       }
       StreamedAssistantContent::Reasoning { reasoning, id } if !thought.contains(&id) => {
         told("", &reasoning.display_text());
+      }
+      StreamedAssistantContent::Unknown(part) => {
+        if let Some(bill) = Bill::heard(&part) {
+          billed(bill);
+        }
       }
       _ => {}
     }
@@ -102,6 +114,10 @@ pub(super) fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
 /// the settings of its budget, which turn its thought off, so it writes its word at once. The turn
 /// holds that thought, under the id [`CUT`], and the word, and what the model wrote counts each
 /// part of that thought.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "the turn takes the streams of the model, the request, the settings of the budget, the thought and the count of its parts that it gives back, and where it tells what it writes, and no type of the provider holds them together"
+)]
 pub(super) async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,
@@ -172,8 +188,8 @@ const UNCLOSED: &str = "wrote a line of three backticks alone at the end of its 
 
 /// A word less the line of three backticks alone at its end, which a model writes out of the habit
 /// of a fence that no line opened. A word gets nothing when its last line is not that fence, when
-/// its first line opens a fence, which the gate refuses whole, when a quote stands open before that
-/// line, whose text the line may end, or when nothing stands before that line.
+/// its first line opens a fence, which is no python as a whole, when a quote stands open before
+/// that line, whose text the line may end, or when nothing stands before that line.
 pub(super) fn unclosed(text: &str) -> Option<String> {
   let (word, last) = text.trim_end().rsplit_once('\n')?;
   let opens = word.trim_start().starts_with("```");
@@ -206,19 +222,19 @@ pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
       Ok((model, asked)) => waits.attempted(&model, &asked, again).await,
       Err(no) => Err(no),
     };
-    let (got, dropped) = match got {
-      Ok((turn, dropped)) => (Ok(turn), dropped),
-      Err(no) => (Err(no), None),
+    let (got, dropped, account) = match got {
+      Ok(Served { turn, dropped, account }) => (Ok(turn), dropped, account),
+      Err(no) => (Err(no), None, None),
     };
     let Waits { id, tells, .. } = waits;
     // The stream holds the receiver, so a send that fails means the stream is going.
     // The stream then gives the reply itself.
-    tells.send(Replied::Came(Came { id, got, dropped })).err().map(|no| no.0)
+    tells.send(Replied::Came(Came { id, got, dropped, account })).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before
   // it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
-  let came = stream::once(came).filter_map(std::future::ready);
+  let came = stream::once(came).filter_map(future::ready);
   stream::select(told, came)
 }
 
@@ -257,21 +273,23 @@ impl Waits {
     model: &Model,
     asked: &Asked,
     again: bool,
-  ) -> Result<(Object, Option<String>), CompletionError> {
+  ) -> Result<Served, CompletionError> {
     if again {
       released(&mut self.hold).await?;
     }
     loop {
       let no = match (model.answers)(asked.clone()).await {
         Ok(Answer::Response(response)) => return turn(model, &response),
-        Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
+        Ok(Answer::Turn(turn)) => {
+          return hosted(turn.as_ref()).map(|turn| Served { turn, dropped: None, account: None });
+        }
         Err(no) => no,
       };
       let (retry, limit) = self.retry(no)?;
       let wait = retry.wait;
       let retried = Retried { id: self.id.clone(), retry, limit };
       self.tells.send(Replied::Retried(retried)).map_err(reply_gone)?;
-      tokio::time::sleep(wait).await;
+      time::sleep(wait).await;
       released(&mut self.hold).await?;
     }
   }
@@ -280,8 +298,8 @@ impl Waits {
   /// the first wait of a usage limit and of a failed sign in; or the failure, which ends the call.
   fn retry(&mut self, no: CompletionError) -> Result<(Retry, bool), CompletionError> {
     let most = self.backoff.most;
-    if let Some(claude::Error::Limit { until }) = claude::error(&no) {
-      let now = Zoned::now();
+    let now = Zoned::now();
+    if let Some(Limit { until }) = limited(&no, SystemTime::from(now.timestamp())) {
       let reset = until
         .and_then(|at| Timestamp::try_from(at).ok())
         .map(|at| at.to_zoned(now.time_zone().clone()));
@@ -296,12 +314,15 @@ impl Waits {
         reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
       let why = format!("usage limit{until}");
       let retry = Retry { attempt: self.attempt + 1, most, wait, why };
-      return Ok((retry, !std::mem::replace(&mut self.limited, true)));
+      return Ok((retry, !mem::replace(&mut self.limited, true)));
     }
-    if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
+    if let Some(
+      claude::Error::SignedOut(_) | claude::Error::NoToken(_) | claude::Error::Exhausted,
+    ) = claude::error(&no)
+    {
       let why = "signed out, sign in again".to_owned();
       let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
-      return Ok((retry, !std::mem::replace(&mut self.signed, true)));
+      return Ok((retry, !mem::replace(&mut self.signed, true)));
     }
     let Some(why) = passing(&no).filter(|_| self.attempt < most) else { return Err(no) };
     self.attempt += 1;
@@ -310,10 +331,19 @@ impl Waits {
   }
 }
 
+/// What a call of a model gave: its turn, the note of the marks that the turn lost, and the name of
+/// the account that served it when the provider names one, which is never a token. The name stands
+/// beside the turn and not in its usage, whose items are numbers, the last of them the cost.
+pub(super) struct Served {
+  pub(super) turn: Object,
+  pub(super) dropped: Option<String>,
+  pub(super) account: Option<String>,
+}
+
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the
 /// blocks it gave.
 ///
-/// A model speaks python alone, so prose around the code stays in the word, for the gate to refuse,
+/// A model speaks python alone, so prose around the code stays in the word, whose run raises on it,
 /// but for the marks of a fence, of a tool call or of a break of HTML around it, which
 /// [`watch::bare`] drops with the name that it gives a first binding of no name, and a line of
 /// three backticks alone at its end, which [`unclosed`] drops, since they hold no code that runs
@@ -328,7 +358,7 @@ impl Waits {
 pub(super) fn turn(
   model: &Model,
   response: &CompletionResponse,
-) -> Result<(Object, Option<String>), CompletionError> {
+) -> Result<Served, CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
     None => Some(format!("the stream of {} stopped before its end", model.name)),
@@ -368,12 +398,11 @@ pub(super) fn turn(
   let failed = |why: String| CompletionError::ResponseError(why);
   let blocks = serde_json::to_value(&choice).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
-  let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
-  let usage =
-    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
+  let usage = Bill::usage(Some(&Bill { input, output, read, wrote, dollars }));
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
-  Ok((turn, dropped))
+  let account = response.raw.get("account").and_then(Value::as_str).map(str::to_owned);
+  Ok(Served { turn, dropped, account })
 }
 
 /// These blocks with the word as their one text, at the place of their first text.
@@ -390,19 +419,71 @@ pub(super) fn worded(choice: Vec<AssistantContent>, word: &str) -> Vec<Assistant
   worded
 }
 
-/// The turn of a reply that ended at the first statement of its word that cannot be python: the
-/// word as far as that statement, as the turn of a model that wrote nothing more. It counts
-/// nothing, since the usage of a stream comes with its end.
-pub(super) fn cut(word: &str) -> Result<Object, CompletionError> {
+/// The turn of a reply that ended before its stream did, as at the first statement of its word that
+/// cannot be python: the word as far as that statement, as the turn of a model that wrote nothing
+/// more, with the usage of what its request read.
+pub(super) fn cut(word: &str, usage: Object) -> Result<Object, CompletionError> {
   let word = word.trim();
   let failed = |why: String| CompletionError::ResponseError(why);
   let blocks =
     serde_json::to_value([AssistantContent::text(word)]).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
-  let zero = || Object::int(0);
-  let usage = Object::tuple([zero(), zero(), zero(), zero(), Object::float(0.0)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(word), usage, blocks]))
 }
+
+/// This turn with these dollars more in its usage, which it pays for requests that came to no turn
+/// of their own.
+pub(super) fn paying(turn: Object, owed: f64) -> Object {
+  let said = turn.as_ref();
+  if owed <= 0.0 || items(said).is_none() {
+    return turn;
+  }
+  let usage = entry(&said, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_float()) {
+      (4, Some(dollars)) => Object::float(dollars + owed),
+      _ => one.to_owned(),
+    });
+    Object::tuple(each)
+  });
+  let Some(usage) = usage else { return turn };
+  let at = |at: usize| entry(&said, at).map_or_else(Object::none, |one| one.to_owned());
+  Object::tuple([at(0), at(1), usage, at(3)])
+}
+
+/// What a request read and wrote as far as its stream told, and its dollars, in the form of the
+/// usage of a turn: what it read is every token of its input, the cache among them. A provider
+/// tells it as a part of its stream that rig carries as is, so the reader of a stream that it
+/// ends before its end, which no response follows, pays that request.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub(super) struct Bill {
+  pub(super) input: u64,
+  pub(super) output: u64,
+  pub(super) read: u64,
+  pub(super) wrote: u64,
+  pub(super) dollars: f64,
+}
+
+impl Bill {
+  /// The part of a stream that tells this bill.
+  pub(super) fn part(self) -> UnknownPayload {
+    UnknownPayload::new(json!({ BILL: self }))
+  }
+
+  /// The bill that a part of a stream tells, if it tells one.
+  pub(super) fn heard(part: &UnknownPayload) -> Option<Self> {
+    serde_json::from_value(part.value().get(BILL)?.clone()).ok()
+  }
+
+  /// The usage of a turn that says this bill, which is nothing when the stream told none.
+  pub(super) fn usage(bill: Option<&Self>) -> Object {
+    let Self { input, output, read, wrote, dollars } = bill.copied().unwrap_or_default();
+    let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
+    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)])
+  }
+}
+
+/// The key of the part of a stream that tells a [`Bill`].
+const BILL: &str = "bill";
 
 /// How many characters of the end of a cut turn its refusal shows.
 const END: usize = 400;
@@ -429,7 +510,7 @@ pub(super) fn wrote(model: &Model, response: &CompletionResponse) -> String {
   }
   let last: Vec<char> =
     if text.trim().is_empty() { &thought } else { &text }.trim_end().chars().collect();
-  let end: String = last[last.len().saturating_sub(END)..].iter().collect();
+  let end: String = last.iter().skip(last.len().saturating_sub(END)).collect();
   let (thought, text) = (thought.chars().count(), text.chars().count());
   let tokens = response.usage.output_tokens;
   format!(
@@ -475,7 +556,7 @@ fn untagged(choice: Vec<AssistantContent>) -> Vec<AssistantContent> {
 }
 
 /// A count of tokens as a float, which holds it whole up to `u32::MAX`, more than a turn counts.
-fn counted(tokens: u64) -> f64 {
+pub(super) fn counted(tokens: u64) -> f64 {
   f64::from(u32::try_from(tokens).unwrap_or(u32::MAX))
 }
 
@@ -484,7 +565,7 @@ fn counted(tokens: u64) -> f64 {
 pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
   let part = |at: usize| entry(&turn, at).map_or_else(Object::none, |one| one.to_owned());
   let (role, python) = (entry(&turn, 0), entry(&turn, 1));
-  let whole = turn.items().is_some_and(|items| items.len() == 4)
+  let whole = items(turn).is_some_and(|held| held.len() == 4)
     && role.and_then(|one| one.as_str()) == Some("assistant")
     && python.is_some_and(|one| one.as_str().is_some());
   if !whole {
@@ -494,8 +575,8 @@ pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
     );
     return Err(CompletionError::ResponseError(why));
   }
-  let usage = entry(&turn, 2).and_then(|one| one.items()).map(|usage| {
-    let each = usage.into_iter().enumerate().map(|(at, one)| match (at, one.as_int()) {
+  let usage = entry(&turn, 2).and_then(items).map(|usage| {
+    let each = usage.enumerate().map(|(at, one)| match (at, one.as_int()) {
       (4, Some(whole)) => Object::float(
         i32::try_from(whole)
           .map_or(if whole < 0 { f64::from(i32::MIN) } else { f64::from(i32::MAX) }, f64::from),
@@ -523,15 +604,9 @@ pub(super) fn uuid_from(
   })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  let digits = crate::value::hex(&bytes);
-  Ok(format!(
-    "{}-{}-{}-{}-{}",
-    &digits[..8],
-    &digits[8..12],
-    &digits[12..16],
-    &digits[16..20],
-    &digits[20..]
-  ))
+  let digits = value::hex(&bytes);
+  let part = |from: usize, to: usize| digits.get(from..to).unwrap_or_default();
+  Ok(format!("{}-{}-{}-{}-{}", part(0, 8), part(8, 12), part(12, 16), part(16, 20), part(20, 32)))
 }
 
 /// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.

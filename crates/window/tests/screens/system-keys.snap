@@ -1,0 +1,34 @@
+---
+source: crates/window/tests/suite/screens.rs
+assertion_line: 34
+---
+  ● furb · which keys does the form take           Resolve     All projects ▾        This computer
+  ┃
+  ┃ which keys does the form take                              Needs you 1
+                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+    Each key                                                  ▐ ● which keys does the…    ◆ Input ▌
+    ▌Search a key                                 1 / 45      ▐   FU furb                    opus ▌
+                                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    Go                                                    ┃
+    ▌Ctrl+P              go to anything, or run a…        ┃
+     Ctrl+X ? or F1      each key                         ┃
+     F5                  reload on the newest build       ┃
+     Alt+A or Ctrl+X A   the next thread that needs…
+     Alt+↓ or Ctrl+X J   the next card
+     Alt+↑ or Ctrl+X K   the card before
+     Ctrl+X L or Ctrl+\  show or hide the list
+
+    The thread
+     Ctrl+N              a new thread, and back to…
+     End                 jump to the latest
+     PgUp                a page up
+     PgDn                a page down
+     Alt+[ or Ctrl+X [   the message before in the…
+     Alt+] or Ctrl+X ]   the next message in the…
+     Esc Esc             stop the work of the thread
+
+    ↑↓ move · Enter run · Esc close
+                                                               Context
+  ┃                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse      No answer yet
+  ▶  ◆━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━●         now  chains ▾

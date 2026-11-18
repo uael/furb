@@ -1,0 +1,92 @@
+# cargo-nextest runs the Rust tests: `cargo nextest run --workspace`, which `cargo xtask test rust` runs. Each test
+# runs in a process of its own, so a test that leans on what another test left in its process fails on its own.
+
+experimental = ["setup-scripts"]
+
+[profile.default]
+# The slowest test takes about 15 s on a loaded machine. One that passes 15 s is named as slow, and one that passes
+# 60 s hangs: the runner ends it and it fails, where a wait with no end held the whole run before.
+slow-timeout = { period = "15s", terminate-after = 4 }
+# A run names each test that failed, at once and again at its end, and goes on to the end of the suite.
+fail-fast = false
+failure-output = "immediate-final"
+
+# The longest tests start first, so none of them starts late and holds the end of the run alone: the tests that
+# run a test alone in a child, that open a life past its tail, that kill a daemon, that walk a window or capture
+# it, that measure memory, and the replay of the engine past its bound. On 11-17 they ended last, and a run took 53
+# s with them first where it took 61 to 90 s, at the same CPU time.
+[[profile.default.overrides]]
+filter = "test(/^(apart|rebirth|walk|kills|capture|memory)::/) | test(/a_replay_takes_the_answer_of_each_question/)"
+priority = 100
+
+# A test that runs other tests each alone in a child of its own waits for the longest of them, which counts its work
+# and bounds each of its own waits, so its own error names the wait that failed. The runner ends it only past what a
+# loaded machine reaches: under a load of 84 to 121 its child backlog_alone took 52 to 60 s, near the bound of the
+# other tests.
+[[profile.default.overrides]]
+filter = "test(/^apart::/)"
+slow-timeout = { period = "15s", terminate-after = 12 }
+
+# A capture walks a scenario in tmux at three sizes, and bounds each of its own waits, for a screen and for its
+# daemon, by its patience of 30 s, so its own error names the wait that failed. The runner ends it only past the sum
+# of those bounds, which a loaded machine reaches before the bound of each other test.
+[[profile.default.overrides]]
+filter = "package(furb-frames) & test(/^capture::/)"
+slow-timeout = { period = "15s", terminate-after = 12 }
+
+# An archive of the tests, which the gates build once for each system and run on another runner, holds the examples
+# too: a test of the examples runs each one as a user runs it, from the folder of the profile above the test. The gates
+# build for the triple of the machine, in a folder of that name.
+[profile.default.archive]
+include = [
+  { path = "debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "x86_64-unknown-linux-gnu/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "aarch64-apple-darwin/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+  { path = "x86_64-pc-windows-msvc/debug/examples", relative-to = "target", depth = 1, on-missing = "ignore" },
+]
+
+# A life of a test on a fake claude writes the turns that its command line resumes in the config dir of claude, which
+# is the one of the person unless CLAUDE_CONFIG_DIR names another: each test run gives its tests a folder of its own,
+# under the target of the tree, which goes with it.
+[scripts.setup.claude]
+command = [
+  "sh",
+  "-c",
+  'mkdir -p target/claude && echo "CLAUDE_CONFIG_DIR=$(mktemp -d "$PWD/target/claude/run-XXXXXX")" >> "$NEXTEST_ENV"',
+]
+
+# A daemon of a test with no data folder of its own reads the one of the person, where each session with no project
+# stands: each test run gives its tests a data folder of its own too.
+[scripts.setup.data]
+command = [
+  "sh",
+  "-c",
+  'mkdir -p target/data && echo "XDG_DATA_HOME=$(mktemp -d "$PWD/target/data/run-XXXXXX")" >> "$NEXTEST_ENV"',
+]
+
+# A life of a test keeps its scratch directory and what its claude command line said in the cache of furb, which is the
+# one of the person unless XDG_CACHE_HOME names another: each tree gives its tests a cache of its own in /tmp, under a
+# short name that holds a hash of the root, as the tests of TypeScript name theirs, since a socket that a command makes
+# in a scratch directory takes 104 bytes of path at the most. The hook of the tests names the same folder, and reads
+# there each scratch directory that a run left.
+[scripts.setup.cache]
+command = [
+  "sh",
+  "-c",
+  'cache="/tmp/furb-cache-$(pwd -P | tr -d "\n" | shasum -a 256 | cut -c1-8)" && mkdir -p "$cache" && echo "XDG_CACHE_HOME=$cache" >> "$NEXTEST_ENV"',
+]
+
+[[profile.default.scripts]]
+platform = "cfg(unix)"
+filter = "all()"
+setup = ["claude", "data", "cache"]
+
+# The gates run the tests on a runner of 3 or 4 cores, where a tree has 14: a test past 60 s there is not a hang.
+[profile.ci]
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+# The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
+# so a flake never hides behind a retry. `cargo nextest run --profile census`.
+[profile.census]
+retries = 2
+flaky-result = "fail"

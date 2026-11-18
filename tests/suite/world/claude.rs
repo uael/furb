@@ -1,0 +1,1366 @@
+//! The claude command line as a model of rig, driven against a command line that answers from a
+//! script, which `fake-claude.sh` says.
+
+use std::{
+  env, fs,
+  os::unix::fs::PermissionsExt,
+  process::{self, Command},
+  slice, thread,
+  time::{Duration, SystemTime},
+};
+
+use futures::{
+  StreamExt,
+  future::{Either, select},
+};
+use rig_core::{
+  completion,
+  completion::{CompletionError, CompletionModel, CompletionRequest},
+  message::{AssistantContent, Message, Reasoning, Text, UserContent},
+  streaming::StreamedAssistantContent,
+};
+use serde_json::{Value, json};
+use tokio::time;
+
+use crate::{
+  child::{child, here, ran},
+  claude::{Yard, after, gone},
+  drive::{on_reactor, pause},
+  yard::Yard as Base,
+};
+use furb::world::claude::{Account, Claude, Completion, Source, Switch, refresh};
+
+/// A message of the user.
+fn user(text: &str) -> Message {
+  Message::User { content: vec![UserContent::Text(Text::new(text))] }
+}
+
+/// A request of these messages, with a system prompt and settings.
+fn request(system: &str, messages: &[Message], settings: Value) -> CompletionRequest {
+  CompletionRequest {
+    model: None,
+    preamble: Some(system.to_owned()),
+    chat_history: messages.to_vec(),
+    documents: Vec::new(),
+    tools: Vec::new(),
+    temperature: None,
+    max_tokens: None,
+    tool_choice: None,
+    additional_params: Some(settings),
+    output_schema: None,
+    record_telemetry_content: false,
+  }
+}
+
+/// One whole turn of a model.
+fn asked(
+  model: &Completion,
+  messages: &[Message],
+  settings: Value,
+) -> Result<completion::CompletionResponse, CompletionError> {
+  on_reactor(model.completion(request("ENGINE ONLY", messages, settings)))
+}
+
+#[test]
+fn a_turn_starts_the_command_line_for_a_pure_completion_and_says_its_blocks_and_its_usage() {
+  let yard = Yard::new("flags");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got =
+    asked(&model, &[user("first")], json!({"effort": "xhigh", "session": "chain"})).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+  assert_eq!((spent.cache_creation_input_tokens, spent.total_tokens), (3, 38));
+  assert_eq!(got.raw, json!({"cost": 0.01}));
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1);
+  let args = yard.args(&pids[0]);
+  assert_eq!(args[..5], ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
+  for flag in
+    ["--verbose", "--include-partial-messages", "--strict-mcp-config", "--disable-slash-commands"]
+  {
+    assert!(args.iter().any(|one| one == flag), "{flag} in {args:?}");
+  }
+  assert_eq!(after(&args, "--model").as_deref(), Some("sonnet"));
+  assert!(!args.iter().any(|one| one == "--system-prompt"), "{args:?}");
+  let prompt = after(&args, "--system-prompt-file").unwrap();
+  assert_eq!(fs::read_to_string(prompt).unwrap(), "ENGINE ONLY");
+  assert_eq!(after(&args, "--effort").as_deref(), Some("xhigh"));
+  assert_eq!(after(&args, "--tools").as_deref(), Some(""));
+  assert_eq!(after(&args, "--setting-sources").as_deref(), Some(""));
+  assert_eq!(after(&args, "--session-id").map(|one| one.len()), Some(36));
+  let environment = fs::read_to_string(format!("/proc/{}/environ", pids[0])).unwrap_or_default();
+  if !environment.is_empty() {
+    assert!(environment.contains("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"));
+  }
+}
+
+#[test]
+fn a_command_prefix_reaches_each_process_of_a_conversation_once_before_its_flags() {
+  let yard = Yard::new("prefix");
+  let prefix = ["run", "two words", "--again"];
+  let words = prefix.map(str::to_owned).to_vec();
+  let stall = Some(Duration::from_millis(10_000));
+  let claude = Claude::with_accounts(
+    Some(yard.at.join("claude")),
+    words,
+    Vec::new(),
+    Switch::default(),
+    stall,
+  );
+  let model = claude.completion_model("sonnet");
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, json!({"effort": "low", "session": "chain"})).unwrap();
+  messages.push(Message::Assistant { id: None, content: one.choice });
+  messages.push(user("second"));
+  asked(&model, &messages, json!({"effort": "high", "session": "chain"})).unwrap();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2, "a new effort starts a new process");
+  for pid in &pids {
+    let args = yard.args(pid);
+    assert_eq!(args[..3], prefix);
+    let flags = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"];
+    assert_eq!(args[3..8], flags);
+    for word in prefix {
+      assert_eq!(args.iter().filter(|one| one.as_str() == word).count(), 1, "{word} in {args:?}");
+    }
+  }
+}
+
+#[test]
+fn a_turn_waits_for_a_program_that_an_update_took_away() {
+  let yard = Yard::new("update");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  yard.away();
+  let back = thread::scope(|scope| {
+    scope.spawn(|| {
+      pause(Duration::from_millis(300));
+      yard.back();
+    });
+    asked(&model, &[user("first")], json!({"session": "chain"}))
+  });
+  assert_eq!(back.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
+}
+
+#[test]
+fn a_prefix_that_found_no_claude_fails_as_a_missing_program_and_the_next_turn_begins_the_conversation()
+ {
+  let yard = Yard::new("vanish");
+  let prefix = yard.prefix();
+  let claude = Claude::with_accounts(
+    Some(prefix.clone()),
+    Vec::new(),
+    Vec::new(),
+    Switch::default(),
+    Some(Duration::from_secs(10)),
+  );
+  let model = claude.completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  yard.away();
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  let said = no.to_string();
+  let why = said
+    .strip_prefix("RequestError: No program to run: ")
+    .unwrap_or_else(|| panic!("a missing program: {no}"));
+  assert!(why.starts_with(&format!("{} ", prefix.display())), "{why}");
+  assert!(why.ends_with(": Error: 'claude' was not found on PATH."), "{why}");
+  yard.back();
+  let got = asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1);
+  let args = yard.args(&pids[0]);
+  assert!(
+    after(&args, "--session-id").is_some(),
+    "the command line holds no conversation to resume: {args:?}"
+  );
+}
+
+#[test]
+fn a_turn_of_many_requests_says_the_usage_of_its_last_request() {
+  let yard = Yard::new("loop");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("LOOP")], json!({"session": "chain"})).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+  assert_eq!((spent.cache_creation_input_tokens, spent.total_tokens), (3, 38));
+}
+
+#[test]
+fn a_message_settled_after_its_delta_leaves_the_tokens_out_that_the_delta_said() {
+  let yard = Yard::new("late");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("LATE")], json!({"session": "chain"})).unwrap();
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+}
+
+#[test]
+fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_heard() {
+  let yard = Yard::new("next");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, settings.clone()).unwrap();
+  messages.push(Message::Assistant { id: None, content: one.choice });
+  messages.push(user("second"));
+  let two = asked(&model, &messages, settings.clone()).unwrap();
+  assert_eq!(two.choice, [AssistantContent::text("close(\"reply 2\")")]);
+  let cost = two.raw["cost"].as_f64().unwrap_or_default();
+  assert!((cost - 0.01).abs() < 1e-9, "each turn pays its own part: {cost}");
+  assert_eq!(yard.pids().len(), 1, "the conversation kept its process");
+  let heard = yard.heard();
+  assert_eq!(heard.len(), 2);
+  assert!(heard[1].contains("second") && !heard[1].contains("first"), "{}", heard[1]);
+  // The same request again is a turn that failed and is asked again: its last message goes once
+  // more.
+  asked(&model, &messages, settings.clone()).unwrap();
+  assert!(yard.heard()[2].contains("second") && !yard.heard()[2].contains("first"));
+  // A request that continues nothing the conversation heard begins a new one.
+  asked(&model, &[user("other")], settings).unwrap();
+  let pids = yard.pids();
+  let session = |pid: &str| after(&yard.args(pid), "--session-id");
+  assert_eq!(pids.len(), 2);
+  assert_ne!(session(&pids[0]), session(&pids[1]));
+}
+
+#[test]
+fn a_turn_asked_again_after_it_failed_resumes_its_conversation_once_and_then_begins_anew() {
+  let yard = Yard::new("again");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  for _ in 0..3 {
+    asked(&model, &[user("FAIL")], json!({"session": "chain"})).unwrap_err();
+  }
+  let pids = yard.pids();
+  let args: Vec<_> = pids.iter().map(|pid| yard.args(pid)).collect();
+  let first = after(&args[0], "--session-id");
+  assert_eq!(after(&args[1], "--resume"), first, "the second try resumes the conversation");
+  assert!(after(&args[2], "--session-id").is_some_and(|one| Some(&one) != first.as_ref()));
+}
+
+#[test]
+fn a_turn_given_again_with_its_last_message_grown_after_it_failed_sends_what_it_gained_on_its_conversation()
+ {
+  let yard = Yard::new("grown");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  asked(&model, &[user("first"), answer.clone(), user("second FAIL")], settings.clone())
+    .unwrap_err();
+  let grown = [user("first"), answer, user("second FAIL\n\n# third")];
+  let got = asked(&model, &grown, settings).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "# third"}]));
+}
+
+#[test]
+fn a_turn_dropped_after_the_command_line_heard_it_leaves_the_next_turn_to_send_only_what_it_gained()
+{
+  let yard = Yard::new("droppedheard");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let dropped = [user("first"), answer.clone(), user("second WAIT")];
+  let turn = model.completion(request("ENGINE ONLY", &dropped, settings.clone()));
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), turn))) = raced else {
+    panic!("the turn was still in flight when the fake heard its line")
+  };
+  drop(turn);
+  let grown = [user("first"), answer, user("second WAIT\n\nthird")];
+  asked(&model, &grown, settings).unwrap();
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third"}]));
+}
+
+#[test]
+fn a_turn_given_again_grown_that_comes_to_no_reply_again_begins_a_new_conversation_at_the_next_turn()
+ {
+  let yard = Yard::new("regrown");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let turn =
+    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
+  turn("second FAIL").unwrap_err();
+  turn("second FAIL\n\nthird FAIL").unwrap_err();
+  turn("second FAIL\n\nthird FAIL\n\nfourth").unwrap_err();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 3);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the grown message goes once");
+  let anew = after(&yard.args(&pids[2]), "--resume");
+  assert!(anew.is_some() && anew != first, "the next time, a new conversation begins");
+  let heard = yard.heard();
+  assert!(heard[2].contains("third FAIL") && !heard[2].contains("second"), "{}", heard[2]);
+  assert!(heard[3].contains("fourth") && !heard[3].contains("first"), "{}", heard[3]);
+}
+
+#[test]
+fn a_new_conversation_resumes_the_turns_before_its_last_message_from_a_conversation_that_holds_the_role_of_each()
+ {
+  let yard = Yard::new("seeded");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let said = Message::assistant("read(\"x\")");
+  asked(&model, &[user("first"), said, user("second")], json!({"session": "chain"})).unwrap();
+  let id =
+    after(&yard.args(&yard.pids()[0]), "--resume").expect("the process resumes a conversation");
+  let heard = yard.heard();
+  assert!(heard[0].contains("second") && !heard[0].contains("first"), "{}", heard[0]);
+  assert!(!heard[0].contains("earlier turn"), "{}", heard[0]);
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let entries: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str(one).unwrap())
+    .collect();
+  let roles: Vec<_> =
+    entries.iter().map(|one| one["message"]["role"].as_str().unwrap_or_default()).collect();
+  assert_eq!(roles, ["user", "assistant"]);
+  assert_eq!(entries[1]["message"]["content"][0]["text"], "read(\"x\")");
+  assert_eq!(entries[1]["parentUuid"], entries[0]["uuid"]);
+}
+
+#[test]
+fn a_turn_after_a_prefix_resumes_the_thought_of_the_reply_before_it_whole_with_its_signature() {
+  let yard = Yard::new("thought-kept");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let session = json!({"session": "chain"});
+  asked(&model, &[user("first")], session.clone()).unwrap();
+  let signed = Reasoning::new_with_signature("a long thought", Some("sig".to_owned()));
+  let cut = Reasoning::new("a thought with no signature");
+  let content = vec![
+    AssistantContent::Reasoning(signed),
+    AssistantContent::Reasoning(cut),
+    AssistantContent::text("read(\"x\")"),
+  ];
+  let reply = Message::Assistant { id: None, content };
+  asked(&model, &[user("summary"), reply, user("next")], session).unwrap();
+  let id =
+    after(&yard.args(&yard.pids()[1]), "--resume").expect("the process resumes a conversation");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let entries: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str(one).unwrap())
+    .collect();
+  let thought = json!({"type": "thinking", "thinking": "a long thought", "signature": "sig"});
+  let expected = json!([thought, {"type": "text", "text": "read(\"x\")"}]);
+  assert_eq!(entries[1]["message"]["content"], expected);
+}
+
+#[test]
+fn a_conversation_that_replaces_another_resumes_the_turns_that_they_share_as_the_command_line_held_them()
+ {
+  let yard = Yard::new("held");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let low = json!({"session": "chain", "effort": "low"});
+  asked(&model, &[user("first THINK")], low.clone()).unwrap();
+  // The chain gives the reply back as the word that ran, with no thought.
+  let ran = Message::assistant("close(\"reply 1\")");
+  let second = asked(&model, &[user("first THINK"), ran.clone(), user("second")], low).unwrap();
+  fs::write(yard.at.join("lost"), "1").unwrap();
+  let replied = Message::Assistant { id: None, content: second.choice };
+  let turns = [user("first THINK"), ran, user("second"), replied, user("third")];
+  asked(&model, &turns, json!({"session": "chain", "effort": "high"})).unwrap();
+  let pids = yard.pids();
+  let last = pids.last().expect("a process rebuilt the lost conversation");
+  let id = after(&yard.args(last), "--resume").expect("the process resumes a conversation");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let contents: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str::<Value>(one).unwrap()["message"]["content"].clone())
+    .collect();
+  assert_eq!(contents.len(), 4, "{contents:?}");
+  let thought = json!({"type": "thinking", "thinking": "hmm", "signature": "sig"});
+  assert_eq!(contents[1], json!([thought, {"type": "text", "text": "close(\"reply 1\")"}]));
+  assert_eq!(contents[2][0]["text"], "[earlier turn: you]\n", "{}", contents[2]);
+  assert_eq!(contents[2][1]["text"], "close(\"reply 1\")", "{}", contents[2]);
+}
+
+/// A model of the fake that keeps its conversations in a config dir of the yard, whose command line
+/// loses the conversation that a process resumes as many times as `lost` says.
+fn losing(yard: &Yard, lost: &str) -> Completion {
+  fs::write(yard.at.join("lost"), lost).expect("the fake loses its conversations");
+  let accounts =
+    vec![Account { name: "a".to_owned(), source: Source::ConfigDir(yard.at.join("dir")) }];
+  yard.claude_as(accounts, Switch::Failover).completion_model("sonnet")
+}
+
+#[test]
+fn a_conversation_that_the_command_line_lost_is_rebuilt_once_from_the_turns_of_the_request() {
+  let yard = Yard::new("lost");
+  let model = losing(&yard, "1");
+  let turns = [user("first"), Message::assistant("read(\"x\")"), user("second")];
+  let got = asked(&model, &turns, json!({"session": "chain"})).expect("the rebuilt one answers");
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2, "one process lost its conversation, and one rebuilt it");
+  let lost = after(&yard.args(&pids[0]), "--resume");
+  let rebuilt = after(&yard.args(&pids[1]), "--resume");
+  assert!(lost.is_some() && rebuilt.is_some() && lost != rebuilt, "{lost:?} {rebuilt:?}");
+  let heard = yard.heard();
+  assert_eq!(heard.len(), 1, "the process that lost its conversation read nothing");
+  assert!(heard[0].contains("second") && !heard[0].contains("first"), "{}", heard[0]);
+}
+
+#[test]
+fn a_conversation_lost_again_after_its_rebuild_ends_the_turn_with_a_failure_that_says_so() {
+  let yard = Yard::new("lost-twice");
+  let model = losing(&yard, "2");
+  let turns = [user("first"), Message::assistant("read(\"x\")"), user("second")];
+  let no = asked(&model, &turns, json!({"session": "chain"})).unwrap_err().to_string();
+  assert!(
+    no.contains("rebuilt from the 3 messages") && no.contains("No conversation found"),
+    "{no}"
+  );
+  assert_eq!(yard.pids().len(), 2, "the rebuild goes once");
+}
+
+#[test]
+fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversations_the_least_used_one_goes()
+ {
+  let yard = Yard::new("pool");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |at: usize, messages: &[Message]| {
+    asked(&model, messages, json!({"session": format!("s{at}")})).expect("a turn")
+  };
+  let reply = turn(0, &[user("first")]);
+  (1..=8).for_each(|at| drop(turn(at, &[user("first")])));
+  let first = yard.pids().remove(0);
+  assert!(gone(&first), "past eight warm processes the least used one ends");
+  (9..=64).for_each(|at| drop(turn(at, &[user("first")])));
+  let answer = Message::Assistant { id: None, content: reply.choice };
+  turn(0, &[user("first"), answer, user("second")]);
+  let again = yard.args(yard.pids().last().expect("a process"));
+  let id = after(&yard.args(&first), "--session-id");
+  assert_ne!(after(&again, "--resume"), id, "past 64 held conversations the least used one went");
+}
+
+#[test]
+fn a_new_effort_ends_the_process_of_the_conversation_and_the_next_process_resumes_it_at_that_effort()
+ {
+  let yard = Yard::new("efforts");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |messages: &[Message], effort: &str| {
+    asked(&model, messages, json!({"effort": effort, "session": "chain"})).unwrap()
+  };
+  let mut messages = vec![user("first")];
+  let one = turn(&messages, "high");
+  messages.extend([Message::Assistant { id: None, content: one.choice }, user("second")]);
+  let two = turn(&messages, "low");
+  messages.extend([Message::Assistant { id: None, content: two.choice }, user("third")]);
+  turn(&messages, "high");
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 3);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  for (pid, effort) in pids[1..].iter().zip(["low", "high"]) {
+    let args = yard.args(pid);
+    assert_eq!(after(&args, "--resume"), first, "the same conversation goes on");
+    assert!(!args.iter().any(|one| one == "--fork-session"), "{args:?}");
+    assert_eq!(after(&args, "--effort").as_deref(), Some(effort));
+  }
+  assert!(gone(&pids[0]) && gone(&pids[1]), "one process of the chain stands at a time");
+  let heard = yard.heard();
+  assert!(heard[2].contains("third") && !heard[2].contains("second"), "{}", heard[2]);
+}
+
+#[test]
+fn a_most_of_thought_that_a_turn_names_is_the_max_thinking_tokens_of_its_process_and_a_new_most_ends_the_process()
+ {
+  let yard = Yard::new("thinking");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, json!({"session": "chain"})).unwrap();
+  messages.extend([Message::Assistant { id: None, content: one.choice }, user("second")]);
+  asked(&model, &messages, json!({"session": "chain", "max_thinking_tokens": 0})).unwrap();
+  let pids = yard.pids();
+  let thinking: Vec<String> = pids
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("thinking.{pid}"))).unwrap_or_default())
+    .collect();
+  let inherited = env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
+  assert_eq!(thinking, [inherited, "0".to_owned()], "a turn that names no most inherits it");
+  assert!(gone(&pids[0]), "a new most ends the process");
+}
+
+#[test]
+fn an_effort_that_the_command_line_does_not_take_is_refused_before_any_process_starts() {
+  let yard = Yard::new("effort");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let no = asked(&model, &[user("first")], json!({"effort": "huge"})).unwrap_err();
+  let why = "sonnet spends one of low, medium, high, xhigh, max on a turn, never huge.";
+  assert!(no.to_string().contains(why), "{no}");
+  assert_eq!(yard.pids(), Vec::<String>::new());
+}
+
+#[test]
+fn a_result_is_the_text_of_a_reply_that_streamed_no_block_and_fails_the_turn_when_it_says_an_error()
+{
+  let yard = Yard::new("result");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("BARE")], json!({})).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(1)")]);
+  let no = asked(&model, &[user("ERROR")], json!({})).unwrap_err();
+  assert!(no.to_string().contains("the model is overloaded"), "{no}");
+  let no = asked(&model, &[user("DETAIL")], json!({})).unwrap_err();
+  let why = "Claude reported an error (subtype error_during_execution, api_error_status 401): Invalid API key; Please run /login.";
+  assert!(no.to_string().contains(why), "{no}");
+}
+
+#[test]
+fn a_line_longer_than_a_reader_takes_fails_its_turn() {
+  let yard = Yard::new("long");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let no = asked(&model, &[user("LONG")], json!({})).unwrap_err();
+  assert!(no.to_string().contains("Claude wrote a line over 33554432 bytes."), "{no}");
+}
+
+#[test]
+fn a_conversation_that_grows_out_of_another_forks_it() {
+  let yard = Yard::new("fork");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, json!({"session": "parent"})).unwrap();
+  messages.push(Message::Assistant { id: None, content: one.choice });
+  messages.push(user("second"));
+  asked(&model, &messages, json!({"session": "child"})).unwrap();
+  let pids = yard.pids();
+  let parent = after(&yard.args(&pids[0]), "--session-id").unwrap_or_default();
+  let args = yard.args(&pids[1]);
+  assert_eq!(after(&args, "--resume"), Some(parent));
+  assert!(args.iter().any(|one| one == "--fork-session"));
+  assert!(!yard.heard()[1].contains("first"), "the fork holds what its parent heard");
+}
+
+#[test]
+fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_block_more() {
+  let yard = Yard::new("fork-marks");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let opened = |n: usize| user(&format!("#chain{n}\nchain{n}: Act[object]"));
+  let mut messages = vec![user("#read1"), Message::assistant("stand()"), opened(1)];
+  for (at, session) in ["origin", "fork", "fork-of-fork"].into_iter().enumerate() {
+    if at > 0 {
+      messages.push(opened(at + 1));
+    }
+    let one = asked(&model, &messages, json!({"session": session})).unwrap();
+    messages.push(Message::Assistant { id: None, content: one.choice });
+  }
+  // The origin resumes the turns before its last message from a conversation that furb writes,
+  // whose turn before the stand holds the mark; a fork resumes its parent, and the command line
+  // adds the marks of its system prompts and of the end of the request: so furb marks one block
+  // at most in a lineage.
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let written: usize = fs::read_dir(projects[0].path())
+    .unwrap()
+    .flatten()
+    .map(|one| fs::read_to_string(one.path()).unwrap().matches("cache_control").count())
+    .sum();
+  let marks: Vec<usize> =
+    yard.heard().iter().map(|line| line.matches("cache_control").count()).collect();
+  assert_eq!((written, marks), (1, vec![0, 0, 0]));
+}
+
+#[test]
+fn a_new_conversation_marks_for_the_cache_the_last_block_of_the_turn_before_its_stand() {
+  let yard = Yard::new("stand-mark");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let read = Message::User {
+    content: vec![UserContent::text("#read1"), UserContent::text("<s:doctrine>...</s:doctrine>")],
+  };
+  let stand = Message::assistant("stand()\ncd('/x')");
+  let messages =
+    [user("chain()"), Message::assistant("read('d')"), read, stand, user("#chain1"), user("go")];
+  asked(&model, &messages, json!({"session": "chain"})).unwrap();
+  let id = after(&yard.args(&yard.pids()[0]), "--resume").expect("the process resumes");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let marked: Vec<(usize, usize)> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .enumerate()
+    .flat_map(|(at, one)| {
+      let entry: Value = serde_json::from_str(one).unwrap();
+      let blocks = entry["message"]["content"].as_array().cloned().unwrap_or_default();
+      let marked = blocks.iter().enumerate().filter(|(_, one)| one.get("cache_control").is_some());
+      marked.map(|(block, _)| (at, block)).collect::<Vec<_>>()
+    })
+    .collect();
+  assert_eq!(marked, [(2, 1)]);
+}
+
+#[test]
+fn a_turn_that_its_reader_drops_tells_the_reader_what_its_request_read_and_the_next_pays_its_own() {
+  let yard = Yard::new("unpaid");
+  fs::write(yard.at.join("hold"), "stream").unwrap();
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let session = json!({"session": "chain"});
+  let bills = on_reactor(async {
+    let mut stream = model.stream(request("ENGINE ONLY", &[user("HOLD")], session.clone())).await?;
+    // The reader drops the turn at its first text, as the provider cuts it at a statement that
+    // cannot be python.
+    let mut bills = Vec::new();
+    while let Some(part) = stream.next().await {
+      match part? {
+        StreamedAssistantContent::Unknown(part) => bills.extend(part.value().get("bill").cloned()),
+        StreamedAssistantContent::Text(_) => break,
+        _ => {}
+      }
+    }
+    Ok::<_, CompletionError>(bills)
+  })
+  .unwrap();
+  // The held request read 1000 tokens fresh and wrote 2000 to the cache for an hour, at 2 and 4
+  // dollars for a million tokens of claude-sonnet-5-5.
+  let bill = json!({"input": 3000, "output": 0, "read": 0, "wrote": 2000, "dollars": 0.01});
+  assert_eq!(bills, [bill]);
+  fs::remove_file(yard.at.join("hold")).unwrap();
+  // The result of the next turn says 0.01, which is all that turn pays.
+  let got = asked(&model, &[user("second")], session).unwrap();
+  let cost = got.raw["cost"].as_f64().unwrap_or_default();
+  assert!((cost - 0.01).abs() < 1e-9, "{cost}");
+}
+
+#[test]
+fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
+  let yard = Yard::new("thought");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let (texts, choice) = on_reactor(async {
+    let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
+    let mut texts = Vec::new();
+    while let Some(one) = stream.next().await {
+      if let StreamedAssistantContent::Text(text) = one? {
+        texts.push(text.text);
+      }
+    }
+    Ok::<_, CompletionError>((texts, stream.choice))
+  })
+  .unwrap();
+  assert_eq!(texts, ["close(", "\"reply 1\")"]);
+  let thought = Reasoning::new_with_signature("hmm", Some("sig".to_owned()));
+  let expected =
+    [AssistantContent::Reasoning(thought), AssistantContent::text("close(\"reply 1\")")];
+  assert_eq!(choice, expected);
+  let whole = asked(&model, &[user("THINK")], json!({})).unwrap();
+  assert_eq!(whole.choice, expected);
+}
+
+#[test]
+fn a_thought_that_the_api_redacted_settles_as_its_data_in_the_turn() {
+  let yard = Yard::new("redacted");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let whole = asked(&model, &[user("REDACT")], json!({})).unwrap();
+  let expected = [
+    AssistantContent::Reasoning(Reasoning::redacted("opaque")),
+    AssistantContent::text("close(\"reply 1\")"),
+  ];
+  assert_eq!(whole.choice, expected);
+}
+
+#[test]
+fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
+  let yard = Yard::new("exits");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let no = asked(&model, &[user("FAIL")], json!({})).unwrap_err();
+  assert!(no.to_string().contains("Claude exited (2): deliberate failure"), "{no}");
+}
+
+#[test]
+fn a_program_that_appears_after_a_delay_starts_its_turn() {
+  let yard = Yard::new("appears");
+  let later = yard.at.join("later");
+  let model = Claude::with(Some(later.clone()), Some(Duration::from_millis(10_000)))
+    .completion_model("sonnet");
+  let source = yard.at.join("claude");
+  let placed = thread::spawn(move || {
+    pause(Duration::from_millis(300));
+    fs::rename(source, later).expect("the program appears");
+  });
+  let got = asked(&model, &[user("hi")], json!({}));
+  placed.join().expect("the program was placed");
+  assert!(got.is_ok(), "{:?}", got.err());
+  assert_eq!(yard.pids().len(), 1);
+}
+
+#[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_while_it_ends_fails_its_turn() {
+  let yard = Yard::new("loud-end");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = model.completion(request("ENGINE ONLY", &[user("LOUD")], json!({})));
+  let no = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
+  let no = no.expect("the turn ends").unwrap_err();
+  assert!(no.to_string().contains("Claude exited (3): eee"), "{no}");
+}
+
+#[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_input() {
+  let yard = Yard::new("loud-start");
+  fs::write(yard.at.join("loud"), "").expect("the cue of the fake");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let long = "a".repeat(262_144);
+  let turn = model.completion(request("ENGINE ONLY", &[user(&long)], json!({})));
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
+  assert!(got.expect("the turn ends").is_ok(), "the turn is answered");
+}
+
+#[test]
+fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
+  let yard = Yard::new("stall");
+  fs::write(yard.at.join("odd"), "").expect("the cue of the fake");
+  // The stall bounds the write of the input too, so it is long enough for the fake to start.
+  let model = yard.claude(3_000).completion_model("sonnet");
+  // The fake writes its odd line before it reads, and the turn writes more than a pipe holds, so
+  // the write ends, and the stall of the stream starts, only once the odd line waits in the pipe,
+  // however slow the fake is.
+  let long = format!("WAIT {}", "a".repeat(262_144));
+  let no = asked(&model, &[user(&long)], json!({"session": "stall"})).unwrap_err();
+  let why = "Claude made no progress for 3s. The last line it wrote was no line of json";
+  assert!(no.to_string().contains(why), "{no}");
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the turn ended");
+}
+
+/// One turn of a model that answers no request, bounded by ten seconds.
+fn ended(model: &Completion, text: &str) -> Result<CompletionError, String> {
+  let turn = model.completion(request("ENGINE ONLY", &[user(text)], json!({})));
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
+  match got {
+    Ok(Err(no)) => Ok(no),
+    Ok(Ok(response)) => Err(format!("the turn was answered: {:?}", response.choice)),
+    Err(_) => Err("the turn did not end in ten seconds".to_owned()),
+  }
+}
+
+#[test]
+fn a_process_that_takes_no_input_fails_its_turn_at_its_stall_and_ends() {
+  let yard = Yard::new("deaf");
+  fs::write(yard.at.join("deaf"), "").expect("the cue of the fake");
+  // The stall is long enough for the fake to start and write its id.
+  let model = yard.claude(3_000).completion_model("sonnet");
+  // The turn writes more than a pipe holds, so it waits for the process to take its input.
+  let no = ended(&model, &"a".repeat(262_144)).unwrap();
+  assert!(no.to_string().contains("Claude made no progress for 3s."), "{no}");
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the turn ended");
+}
+
+#[test]
+fn a_process_that_closes_its_stdout_and_lives_on_fails_its_turn_at_its_stall_and_ends() {
+  let yard = Yard::new("mute");
+  let model = yard.claude(300).completion_model("sonnet");
+  let no = ended(&model, "MUTE").unwrap();
+  assert!(no.to_string().contains("Claude made no progress for 0.3s."), "{no}");
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the turn ended");
+}
+
+#[test]
+fn a_process_that_ends_while_a_process_it_started_holds_its_stdout_fails_its_turn_at_once() {
+  let yard = Yard::new("orphan");
+  let model = yard.claude(60_000).completion_model("sonnet");
+  let no = ended(&model, "ORPHAN");
+  let orphan = fs::read_to_string(yard.at.join("orphan")).unwrap_or_default();
+  Command::new("kill").arg(orphan.trim()).status().expect("kill runs");
+  let no = no.unwrap();
+  assert!(no.to_string().contains("Claude exited (4): orphan left"), "{no}");
+}
+
+#[test]
+fn a_turn_that_is_dropped_ends_its_process() {
+  let yard = Yard::new("dropped");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = model.completion(request("ENGINE ONLY", &[user("WAIT")], json!({})));
+  // The turn drops when the fake heard its line, after it wrote its id, however long it took to
+  // start.
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), turn))) = raced else {
+    panic!("the turn was still in flight when the fake heard its line")
+  };
+  drop(turn);
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the dropped turn ended");
+}
+
+#[test]
+fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversation_to_the_next_turn()
+ {
+  let yard = Yard::new("handed");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let first = model.completion(request("ENGINE ONLY", &[user("WAIT")], settings.clone()));
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(first), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), first))) = raced else {
+    panic!("the first turn was still in flight when the fake heard its line")
+  };
+  let second = model.completion(request("ENGINE ONLY", &[user("second")], settings.clone()));
+  let mut second = Box::pin(second);
+  let waited = on_reactor(async { time::timeout(Duration::from_millis(200), &mut second).await });
+  assert!(waited.is_err(), "the second turn waits for the conversation that the first one holds");
+  drop(first);
+  // The keeper hands the conversation to the second turn, which is dropped before it takes it, as a
+  // reply that is cancelled.
+  pause(Duration::from_millis(200));
+  drop(second);
+  let third = model.completion(request("ENGINE ONLY", &[user("third")], settings));
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), third).await });
+  let Ok(got) = got else { panic!("the third turn waited for a conversation that no turn holds") };
+  got.unwrap();
+}
+
+/// The models of a yard: what the scripted command line says of them, and how many times it was
+/// asked.
+fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
+  on_reactor(claude.models())
+    .iter()
+    .map(|one| {
+      (one.name().to_owned(), one.window(), one.efforts().into_iter().map(str::to_owned).collect())
+    })
+    .collect()
+}
+
+#[test]
+fn the_models_are_what_the_command_line_says_of_its_aliases_its_windows_and_its_efforts_with_no_model_prompt()
+ {
+  let yard = Yard::new("discover");
+  fs::write(
+    yard.at.join("models"),
+    "haiku 1000000 low,high\nnova 333000 low,turbo\nplain 5000 -\n",
+  )
+  .unwrap();
+  let got = said(&yard.claude(10_000));
+  let both = |a: &[&str]| a.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>();
+  assert_eq!(
+    got,
+    [
+      ("claude-cli:haiku".to_owned(), 1_000_000, both(&["low", "high"])),
+      ("claude-cli:nova".to_owned(), 333_000, both(&["low", "turbo"])),
+      ("claude-cli:plain".to_owned(), 5_000, both(&[])),
+    ]
+  );
+  assert!(yard.pids().is_empty() && yard.heard().is_empty());
+  assert!(!yard.at.join("count").exists());
+}
+
+#[test]
+fn the_models_are_asked_again_after_a_refresh() {
+  let yard = Yard::new("refresh");
+  fs::write(yard.at.join("models"), "nova 100 low\n").unwrap();
+  let claude = yard.claude(10_000);
+  assert_eq!(said(&claude)[0].1, 100);
+  fs::write(yard.at.join("models"), "nova 200 low\n").unwrap();
+  refresh(Some(&yard.at.join("claude")));
+  assert_eq!(said(&claude)[0].1, 200);
+}
+
+#[test]
+fn a_discovery_asks_with_the_traffic_of_the_command_line_on_so_it_lists_each_model_that_it_names() {
+  let yard = Yard::new("traffic");
+  fs::write(
+    yard.at.join("models"),
+    "opus 750000 low\nfable 850000 low\nsonnet 300000 low\nhaiku 850000 low\n",
+  )
+  .unwrap();
+  // What the real command line lists with its traffic off: fable only as `claude-fable-5-1[1m]`.
+  fs::write(
+    yard.at.join("offline"),
+    include_str!("../../../src/world/provider/claude/offline-models.json"),
+  )
+  .unwrap();
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:fable", "claude-cli:sonnet", "claude-cli:haiku"]
+  );
+}
+
+#[test]
+fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
+  let yard = Yard::new("fixed");
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"]
+  );
+  assert_eq!(got[2].1, 200_000);
+  assert_eq!(yard.pids(), Vec::<String>::new());
+}
+
+#[test]
+fn an_effort_that_the_command_line_reported_is_taken_on_a_turn() {
+  let yard = Yard::new("reported");
+  fs::write(yard.at.join("models"), "nova 100 low,turbo\n").unwrap();
+  let claude = yard.claude(10_000);
+  assert_eq!(said(&claude).len(), 1);
+  let model = claude.completion_model("nova");
+  let got = asked(&model, &[user("first")], json!({"effort": "turbo"}));
+  assert!(got.is_ok(), "{got:?}");
+  assert_eq!(after(&yard.args(&yard.pids()[0]), "--effort").as_deref(), Some("turbo"));
+}
+
+/// The moment when the usage limit that a failed turn says ends, which it must say.
+fn reset(no: &CompletionError) -> SystemTime {
+  let said = no.to_string();
+  let until = said.strip_prefix("RequestError: Claude AI usage limit reached until ");
+  let at = until.and_then(|one| one.parse::<jiff::Timestamp>().ok());
+  at.map_or_else(|| panic!("a limit with a reset: {no}"), SystemTime::from)
+}
+
+/// What a failed turn says of the account it switched from and to, which it must have switched.
+fn switched(no: &CompletionError) -> String {
+  let said = no.to_string();
+  let why = said.strip_prefix("RequestError: Switched account ").map(str::to_owned);
+  why.unwrap_or_else(|| panic!("a switched account: {no}"))
+}
+
+/// The accounts of a test, each with a token file in the yard that holds `tok-` and its name.
+fn listed(yard: &Yard, names: &[&str]) -> Vec<Account> {
+  let account = |name: &&str| {
+    let file = yard.at.join(format!("{name}.token"));
+    fs::write(&file, format!("tok-{name}\n")).expect("a token file");
+    Account { name: (*name).to_owned(), source: Source::TokenFile(file) }
+  };
+  names.iter().map(account).collect()
+}
+
+#[test]
+fn a_usage_limit_parks_its_account_and_the_turn_that_asks_again_runs_as_the_next_one() {
+  let yard = Yard::new("accounts-limit");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Failover);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its usage limit");
+  let got = asked(&model, &[user("first")], settings.clone()).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let more = [user("first"), Message::Assistant { id: None, content: got.choice }, user("second")];
+  asked(&model, &more, settings).unwrap();
+  assert_eq!(
+    yard.tokens(),
+    ["tok-a", "tok-b"],
+    "the conversation stays on the account it moved to"
+  );
+}
+
+#[test]
+fn a_reply_names_its_account_and_a_stand_with_the_order_swapped_makes_the_other_one_first() {
+  let yard = Yard::new("accounts-order");
+  let accounts = listed(&yard, &["a", "b"]);
+  let model = yard.claude_as(accounts.clone(), Switch::Failover).completion_model("sonnet");
+  let got = asked(&model, &[user("first")], json!({"session": "one"})).unwrap();
+  assert_eq!(got.raw["account"], json!("a"), "the first account serves, and the reply names it");
+  // The stand reads the config again, which builds the command line with the order swapped.
+  let swapped = vec![accounts[1].clone(), accounts[0].clone()];
+  let model = yard.claude_as(swapped, Switch::Failover).completion_model("sonnet");
+  let got = asked(&model, &[user("first")], json!({"session": "two"})).unwrap();
+  assert_eq!(got.raw["account"], json!("b"), "the next reply uses the new first account");
+  // A limit on that first account moves the next reply to the second one.
+  fs::write(yard.at.join("limited.tok-b"), "600").unwrap();
+  let no = asked(&model, &[user("first")], json!({"session": "three"})).unwrap_err();
+  assert_eq!(switched(&no), "from b to a: its usage limit");
+  let got = asked(&model, &[user("first")], json!({"session": "three"})).unwrap();
+  assert_eq!(got.raw["account"], json!("a"));
+  assert!(!got.raw.to_string().contains("tok-"), "a reply never holds a token");
+}
+
+#[test]
+fn a_failed_sign_in_parks_its_account_until_the_command_line_stands_again() {
+  let yard = Yard::new("accounts-signed-out");
+  let accounts = listed(&yard, &["a", "b"]);
+  fs::write(yard.at.join("signedout.tok-a"), "").unwrap();
+  let model = yard.claude_as(accounts.clone(), Switch::Failover).completion_model("sonnet");
+  let no = asked(&model, &[user("first")], json!({"session": "one"})).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its sign in failed");
+  fs::remove_file(yard.at.join("signedout.tok-a")).unwrap();
+  asked(&model, &[user("first")], json!({"session": "two"})).unwrap();
+  let again = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  asked(&again, &[user("first")], json!({"session": "three"})).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b", "tok-a"]);
+}
+
+#[test]
+fn every_account_parked_waits_for_the_first_reset_as_the_command_line_says_it() {
+  let yard = Yard::new("accounts-parked");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Failover);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  fs::write(yard.at.join("limited.tok-b"), "900").unwrap();
+  let settings = json!({"session": "chain"});
+  let first = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&first), "from a to b: its usage limit");
+  let second = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  let wait = reset(&second).duration_since(SystemTime::now()).map_or(0, |one| one.as_secs());
+  assert!((500..=610).contains(&wait), "the first reset is the one of a: {wait}");
+  let third = asked(&model, &[user("first")], settings).unwrap_err();
+  assert_eq!(third.to_string(), second.to_string());
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b"], "no process starts while every account waits");
+}
+
+#[test]
+fn spread_gives_each_new_conversation_the_account_that_served_least_recently() {
+  let yard = Yard::new("accounts-spread");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Spread);
+  let model = claude.completion_model("sonnet");
+  let one = asked(&model, &[user("x")], json!({"session": "s1"})).unwrap();
+  asked(&model, &[user("x")], json!({"session": "s2"})).unwrap();
+  asked(&model, &[user("x")], json!({"session": "s3"})).unwrap();
+  let more = [user("x"), Message::Assistant { id: None, content: one.choice }, user("y")];
+  asked(&model, &more, json!({"session": "s1"})).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b", "tok-a"], "a conversation stays on its account");
+}
+
+#[test]
+fn an_account_whose_token_cannot_be_read_starts_no_process_and_counts_as_signed_out() {
+  let yard = Yard::new("accounts-no-token");
+  let mut accounts = listed(&yard, &["b"]);
+  let missing = yard.at.join("missing.token");
+  accounts.insert(0, Account { name: "a".to_owned(), source: Source::TokenFile(missing) });
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its sign in failed");
+  assert!(yard.pids().is_empty(), "no process ran as the account with no token");
+  asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(yard.tokens(), ["tok-b"]);
+}
+
+#[test]
+fn a_single_account_is_never_parked_and_its_limit_stays_the_wait_of_the_provider() {
+  let yard = Yard::new("accounts-single");
+  let model = yard.claude_as(listed(&yard, &["a"]), Switch::Failover).completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  for _ in 0..2 {
+    let no = asked(&model, &[user("first")], json!({"session": "chain"})).unwrap_err();
+    reset(&no);
+  }
+  assert_eq!(yard.tokens(), ["tok-a", "tok-a"]);
+}
+
+#[test]
+fn an_account_of_a_config_dir_runs_there_and_without_a_token_of_the_environment() {
+  let yard = Yard::new("accounts-dir");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let pid = &yard.pids()[0];
+  let held = fs::read_to_string(yard.at.join(format!("configdir.{pid}"))).unwrap();
+  assert_eq!(held, dir.display().to_string());
+  assert_eq!(yard.tokens(), ["unset"]);
+}
+
+#[test]
+fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
+  let yard = Yard::new("accounts-signed");
+  let script = yard.at.join("status");
+  let says = "#!/bin/sh\nif [ \"$CLAUDE_CODE_OAUTH_TOKEN\" = tok-b ]; then echo '{\"loggedIn\": true}'; \
+    else echo '{\"loggedIn\": false}'; exit 1; fi\n";
+  fs::write(&script, says).unwrap();
+  fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+  let claude = |names: &[&str]| {
+    let accounts = listed(&yard, names);
+    Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
+  };
+  assert!(on_reactor(claude(&["a", "b"]).signed()));
+  assert!(!on_reactor(claude(&["a"]).signed()));
+}
+
+#[test]
+fn the_block_before_the_turn_stand_in_a_conversation_is_marked_for_the_cache_once() {
+  let yard = Yard::new("marked");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |blocks: &[&str]| Message::User {
+    content: blocks.iter().map(|one| UserContent::text(*one)).collect(),
+  };
+  let first =
+    turn(&["#read1", "[earlier turn: you]\n", "stand()\ncd('/x')", "#chain1\nchain1: Act[object]"]);
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, slice::from_ref(&first), settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let later = turn(&["#read9", "[earlier turn: you]\n", "stand()"]);
+  asked(&model, &[first, answer, later], settings).unwrap();
+  let marks = |line: &str| -> Vec<bool> {
+    let line: Value = serde_json::from_str(line).unwrap();
+    let blocks = line["message"]["content"].as_array().cloned().unwrap_or_default();
+    blocks.iter().map(|one| one["cache_control"]["type"] == "ephemeral").collect()
+  };
+  let heard = yard.heard();
+  assert_eq!(marks(&heard[0]), [true, false, false, false], "{heard:?}");
+  assert!(!marks(&heard[1]).contains(&true), "a conversation marks one block at most: {heard:?}");
+}
+
+#[test]
+fn no_request_of_the_command_line_puts_a_mark_of_an_hour_after_one_of_minutes() {
+  let yard = Yard::new("ttl");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let blocks = vec![
+    UserContent::text("#read1"),
+    UserContent::text("[earlier turn: you]\n"),
+    UserContent::text("stand()"),
+  ];
+  let turn = Message::User { content: blocks };
+  asked(&model, &[turn], json!({"session": "chain"})).unwrap();
+  let line: Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  let ours: Vec<String> = line["message"]["content"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .filter_map(|one| one["cache_control"]["ttl"].as_str().map(str::to_owned))
+    .collect();
+  assert_eq!(ours.len(), 1, "{line}");
+  let ttl = fs::read_to_string(yard.at.join(format!("ttl.{}", yard.pids()[0]))).unwrap();
+  let [main, helper, messages] = ttl.split(' ').collect::<Vec<_>>()[..] else { panic!("{ttl}") };
+  // The command line marks its system prompt and its last message with the life of the source of
+  // the request: its turns, which run an hour on a subscription within its limits and else five
+  // minutes, and its helpers, as its compaction, which run five minutes, each unless pinned.
+  let lives = |pin: &str, unpinned: &[&'static str]| match pin {
+    "unset" => unpinned.iter().map(|one| (*one).to_owned()).collect(),
+    one => vec![one.to_owned()],
+  };
+  for source in [lives(main, &["1h", "5m"]), lives(helper, &["5m"])] {
+    for life in source {
+      let last = if messages == "5m" { "5m".to_owned() } else { life.clone() };
+      let request: Vec<&str> = [life.as_str()]
+        .into_iter()
+        .chain(ours.iter().map(String::as_str))
+        .chain([last.as_str()])
+        .collect();
+      let after = request.windows(2).find(|two| two == &["5m", "1h"]);
+      assert!(after.is_none(), "a request of the command line marks {request:?}");
+    }
+  }
+}
+
+#[test]
+fn a_turn_is_written_as_composed_by_the_client_and_its_process_loads_no_claude_md() {
+  let yard = Yard::new("composed");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first @file /compact")], json!({"session": "chain"})).unwrap();
+  let line: Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  assert_eq!(line["client_composed"], json!(true));
+  let mds = fs::read_to_string(yard.at.join(format!("mds.{}", yard.pids()[0]))).unwrap();
+  assert_eq!(mds, "1");
+}
+
+#[test]
+fn a_process_records_no_snapshot_of_the_system_prompt_when_its_command_line_lists_the_flag() {
+  let yard = Yard::new("snapshot");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let args = yard.args(&yard.pids()[0]);
+  assert_eq!(after(&args, "--system-prompt-snapshot").as_deref(), Some("off"));
+}
+
+#[test]
+fn a_process_gets_no_flag_that_its_command_line_does_not_list() {
+  let yard = Yard::new("nosnapshot");
+  fs::write(yard.at.join("nosnapshot"), "").unwrap();
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let args = yard.args(&yard.pids()[0]);
+  assert!(!args.iter().any(|one| one == "--system-prompt-snapshot"), "{args:?}");
+}
+
+#[test]
+fn a_missing_token_and_every_account_signed_out_are_failures_of_their_own_with_the_words_that_a_person_reads()
+ {
+  let yard = Yard::new("words");
+  let unset = "FURB_TOKEN_THAT_NO_TEST_SETS";
+  let empty = Account { name: "a".to_owned(), source: Source::TokenEnv(unset.to_owned()) };
+  let model = yard.claude_as(vec![empty], Switch::Failover).completion_model("sonnet");
+  let no = asked(&model, &[user("first")], json!({"session": "one"})).unwrap_err();
+  assert_eq!(
+    no.to_string(),
+    format!(
+      "RequestError: The account a has no token: its token variable {unset} is empty or not set"
+    )
+  );
+  let accounts = listed(&yard, &["b", "c"]);
+  fs::write(yard.at.join("signedout.tok-b"), "").unwrap();
+  fs::write(yard.at.join("signedout.tok-c"), "").unwrap();
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  // The first turn parks b and the second meets c signed out, so the third finds none signed in.
+  for _ in 0..2 {
+    drop(asked(&model, &[user("first")], json!({"session": "two"})).unwrap_err());
+  }
+  let no = asked(&model, &[user("first")], json!({"session": "two"})).unwrap_err();
+  assert_eq!(
+    no.to_string(),
+    "RequestError: Every account of the claude command line is signed out. Sign one in, then run /reload."
+  );
+}
+
+#[test]
+fn spread_counts_no_account_when_a_switch_names_the_next_one() {
+  let yard = Yard::new("accounts-look");
+  let claude = yard.claude_as(listed(&yard, &["a", "b", "c"]), Switch::Spread);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its usage limit");
+  asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b"], "the turn runs on the account that it named");
+}
+
+/// The variable that the command line of a test takes its token from.
+const VARIABLE: &str = "FURB_TEST_TOKEN";
+
+#[test]
+fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_credential() {
+  if child().is_none() {
+    let at = Base::new(format!("furb-claude-credentials-{}", process::id()));
+    let vars = [
+      ("CLAUDE_CODE_OAUTH_TOKEN", "tok-env"),
+      ("ANTHROPIC_API_KEY", "key-env"),
+      ("CLAUDE_CONFIG_DIR", "dir-env"),
+      (VARIABLE, "  tok-var "),
+    ];
+    return ran(here!(), &at, &vars);
+  }
+  let yard = Yard::new("credentials");
+  // A command line that says the key of the environment that it runs with, then runs the fake.
+  let keyed = yard.at.join("keyed");
+  let script = "#!/bin/sh\nprintf '%s' \"${ANTHROPIC_API_KEY-unset}\" > \"$0.$$\"\n\
+                exec \"$(dirname \"$0\")/claude\" \"$@\"\n";
+  fs::write(&keyed, script).unwrap();
+  fs::set_permissions(&keyed, fs::Permissions::from_mode(0o755)).unwrap();
+  let file = yard.at.join("token");
+  fs::write(&file, "  tok-file \n").unwrap();
+  let dir = yard.at.join("dir");
+  let sources = [
+    Some(Source::TokenFile(file)),
+    Some(Source::TokenEnv(VARIABLE.to_owned())),
+    Some(Source::ConfigDir(dir.clone())),
+    None,
+  ];
+  for (n, source) in sources.into_iter().enumerate() {
+    let accounts = source.map(|source| Account { name: "a".to_owned(), source });
+    let claude = Claude::with_accounts(
+      Some(keyed.clone()),
+      Vec::new(),
+      accounts.into_iter().collect(),
+      Switch::Failover,
+      None,
+    );
+    asked(
+      &claude.completion_model("sonnet"),
+      &[user("first")],
+      json!({"session": format!("s{n}")}),
+    )
+    .unwrap();
+  }
+  let keys: Vec<String> = yard
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("keyed.{pid}"))).unwrap())
+    .collect();
+  assert_eq!(yard.tokens(), ["tok-file", "tok-var", "unset", "tok-env"]);
+  assert_eq!(
+    keys,
+    ["unset", "unset", "unset", "key-env"],
+    "no account leaves the environment as it is"
+  );
+  let dirs: Vec<String> = yard
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("configdir.{pid}"))).unwrap())
+    .collect();
+  assert_eq!(dirs, ["dir-env", "dir-env", &dir.display().to_string(), "dir-env"]);
+}
+
+#[test]
+fn an_account_with_no_token_fails_its_turn_with_why_and_starts_no_process() {
+  let yard = Yard::new("accounts-why");
+  let (missing, empty) = (yard.at.join("missing"), yard.at.join("empty"));
+  fs::write(&empty, "\n").unwrap();
+  let why = |source: Source| {
+    let accounts = vec![Account { name: "a".to_owned(), source }];
+    let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+    asked(&model, &[user("first")], json!({"session": "chain"})).unwrap_err().to_string()
+  };
+  let unread = why(Source::TokenFile(missing.clone()));
+  let said =
+    format!("The account a has no token: its token file {} cannot be read: ", missing.display());
+  assert!(unread.contains(&said), "{unread}");
+  let said = format!("The account a has no token: its token file {} is empty", empty.display());
+  assert!(why(Source::TokenFile(empty)).contains(&said));
+  let said =
+    "The account a has no token: its token variable FURB_NO_SUCH_TOKEN is empty or not set";
+  assert!(why(Source::TokenEnv("FURB_NO_SUCH_TOKEN".to_owned())).contains(said));
+  assert!(yard.pids().is_empty(), "no process starts with no token");
+}
+
+#[test]
+fn an_event_of_a_kind_that_is_not_read_is_ignored() {
+  let yard = Yard::new("events-other");
+  let events = [
+    json!({"type": "system", "subtype": "init"}),
+    json!({"session_id": "a"}),
+    json!({"type": "stream_event", "event": {"type": "ping"}}),
+  ];
+  let lines = events.iter().fold(String::new(), |all, one| format!("{all}{one}\n"));
+  fs::write(yard.at.join("events"), lines).unwrap();
+  let got = asked(&yard.claude(10_000).completion_model("sonnet"), &[user("first")], json!({}));
+  assert_eq!(got.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
+}
+
+#[test]
+fn a_delta_that_lacks_the_text_it_gives_is_refused() {
+  let yard = Yard::new("events-lacking");
+  let delta = json!({"type": "stream_event", "event": {
+    "type": "content_block_delta", "index": 0, "delta": {"type": "text_delta"}}});
+  fs::write(yard.at.join("events"), format!("{delta}\n")).unwrap();
+  let no = asked(&yard.claude(10_000).completion_model("sonnet"), &[user("first")], json!({}));
+  let said = "ProviderError: Claude sent an event its protocol forbids: missing field `text`";
+  assert_eq!(no.unwrap_err().to_string(), said);
+}

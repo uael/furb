@@ -1,7 +1,11 @@
 # The bar of the Rust of furb, beside the lints of Cargo.toml, which the skill rust says.
 too-many-lines-threshold = 60
+too-many-arguments-threshold = 4
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+# A panic is how a test fails, so a test indexes and panics as it reads.
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
 disallowed-methods = [
   { path = "std::thread::sleep", reason = "an ear awaits; a poll with sleep hides a hang" },
   { path = "futures::executor::block_on", reason = "never block the life or the reactor" },
@@ -10,4 +14,14 @@ disallowed-methods = [
   { path = "tokio::task::LocalSet::block_on", reason = "never block the life or the reactor" },
   { path = "std::thread::park_timeout", reason = "an ear awaits; a park on a timer hides a hang" },
   { path = "std::process::Child::try_wait", reason = "await tokio::process::Child::wait under a timeout" },
+  { path = "monty_types::ObjectRef::items", reason = "it lists the items at each call: value::items reads them in place" },
+  { path = "monty_types::ObjectRef::pairs", reason = "it lists the pairs at each call: value::pairs reads them in place" },
+]
+absolute-paths-max-segments = 2
+# The names of products that a doc comment writes as they are, beside the names that clippy knows.
+doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW", "DeepSWE"]
+# One owner for each state: a part that seems to share one sends a message, moves the value or
+# borrows it, as rule 9 of the skill rust says.
+disallowed-types = [
+  { path = "std::cell::RefCell", reason = "give the state one owner, as rule 9 of the skill rust says" },
 ]

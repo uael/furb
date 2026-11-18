@@ -7,12 +7,14 @@
 //! - [`CHECKPOINT_SCHEMA`] is the schema of the data of a checkpoint, which its field `schema`
 //!   names.
 //!
-//! A schema is `major.minor`. Within a major a schema only adds: a minor adds a kind of fact or a
-//! field. Each reader skips each kind of fact and each field that it does not know, so it opens a
-//! schema of each minor of its major, a later one too, and a build opens a record that a later
-//! build of the major made. A reader refuses only a schema of another major, and the refusal names
-//! both. A record or a checkpoint of a build before the schemas names none, and reads as its major
-//! 1.
+//! A schema is `major.minor`. Within a major a schema only adds: a minor adds a kind of fact, a
+//! field, or a word of an entry after whether the life rested, which the engine of the segment that
+//! holds the entry reads. Each reader skips each kind of fact and each field that it does not know,
+//! and gives each word of an entry to the engine as it stands, so it opens a schema of each minor
+//! of its major, a later one too, and a build opens a record that a later build of the major made.
+//! A reader refuses a schema of a later major, and the refusal names both. A life refuses a record
+//! from before the stable cut, an earlier major than the one of [`RECORD_SCHEMA`], and a reader of
+//! a record reads it.
 
 use std::fmt;
 
@@ -28,15 +30,25 @@ pub struct Schema {
   pub minor: i64,
 }
 
-/// The schema of the record that this build writes and reads.
-/// The minor 1 keeps the question of each act that the life makes, so a reader rebuilds each chain
-/// and each prompt that a word made; a reader of the minor 0 tells them as the other questions.
-pub const RECORD_SCHEMA: Schema = Schema { major: 1, minor: 1 };
+/// The schema of the record that this build writes and reads. Its major 3 is the stable cut, where
+/// the replay stands in the engine and a record keeps no checkpoint: from it each record replays
+/// with no drift on each later build of the major. A record of an earlier major, or of a build
+/// before the schemas, comes from a build before the cut, which the promise does not hold: no life
+/// opens it, as [`Schema::opens`] says, and a reader of a record reads it. The minor 1 holds, in
+/// the entry of each fact, the count of the facts that waited for their ears as the life said it,
+/// by which the replay says each answer of an ear of the outside where the life said it. The minor
+/// 2 holds the word of each rung that plays an extension as a text, which the engine runs in the
+/// module of the extensions of its chain; the ear of the extensions gives a segment of an earlier
+/// minor, whose engine takes no text, the word as a str, as it did.
+pub const RECORD_SCHEMA: Schema = Schema { major: 3, minor: 2 };
 
-/// The schema of the data of the checkpoint that this build writes and reads. The data of the major
-/// 1 also holds `again`, each word that ran on a chain, which `seed` names as cut, so a build reads
-/// it too, as [`Schema::opens_checkpoint`] says.
-pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 0 };
+/// The schema of the data of the checkpoint that this build writes and reads. The minor 1 holds
+/// `systems`, the system prompt of each chain that reads an engine that the next life does not run;
+/// a reader of the minor 0 skips it, and gives each chain the engine that the life runs. The minor
+/// 2 holds `extensions` in a chain, the module of the extensions of that chain; a reader of the
+/// minor 1 skips it, and binds the words of the extensions in the module of the chain, which its
+/// definitions still hold.
+pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 2 };
 
 /// Why a build does not read what a schema names.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -54,6 +66,16 @@ pub enum SchemaError {
     theirs: Schema,
     /// The schema that this build writes.
     ours: Schema,
+  },
+  /// What holds the schema comes from a build before the stable cut, an earlier major than the
+  /// one that this build writes, which the promise does not hold.
+  #[error(
+    "the {of} comes from a build before the stable cut of the schema of the record, which the \
+     promise does not hold: no life opens it, and a window reads its facts"
+  )]
+  BeforeCut {
+    /// What holds the schema: the record or the checkpoint.
+    of: &'static str,
   },
   /// The schema names no version of the form `major.minor`.
   #[error("the {of} names its schema as {held}, which is no version of the form major.minor")]
@@ -84,38 +106,27 @@ impl Schema {
     Object::string(self.to_string())
   }
 
-  /// The schema that a value names: `major.minor`, or an int, the major alone, as the checkpoint of
-  /// a build before the minors names it.
+  /// The schema that a value names: `major.minor`.
   #[must_use]
   pub fn read(held: ObjectRef<'_>) -> Option<Self> {
-    if let Some(major) = held.as_int() {
-      return Some(Self { major, minor: 0 });
-    }
     let (major, minor) = held.as_str()?.split_once('.')?;
     Some(Self { major: major.parse().ok()?, minor: minor.parse().ok()? })
   }
 
-  /// Whether this build opens the data of a checkpoint that names a schema: one of each minor of
-  /// the major of [`CHECKPOINT_SCHEMA`], or of the major 1, whose `again` `seed` names as cut.
-  pub fn opens_checkpoint(held: Option<ObjectRef<'_>>) -> Result<(), SchemaError> {
-    let older = held.and_then(Self::read).is_some_and(|one| one.major == 1);
-    if older { Ok(()) } else { CHECKPOINT_SCHEMA.opens("checkpoint", held) }
-  }
-
-  /// Whether this build, which writes this schema, opens what holds the schema that a value names:
-  /// a schema of each minor of the same major. A value that names no schema, as one of a build
-  /// before the schemas, opens too.
+  /// Whether a life of this build, which writes this schema, opens what holds the schema that a
+  /// value names: a schema of each minor of the same major. A value of an earlier major, or one
+  /// that names no schema, as a build before the schemas wrote, comes from before the stable cut.
   pub fn opens(self, of: &'static str, held: Option<ObjectRef<'_>>) -> Result<(), SchemaError> {
-    let Some(held) = held.filter(|one| one.type_name() != "NoneType") else { return Ok(()) };
+    let held =
+      held.filter(|one| one.type_name() != "NoneType").ok_or(SchemaError::BeforeCut { of })?;
     let theirs =
       Self::read(held).ok_or_else(|| SchemaError::Unread { of, held: held.py_repr() })?;
+    if theirs.major < self.major {
+      return Err(SchemaError::BeforeCut { of });
+    }
     if theirs.major != self.major {
       return Err(SchemaError::Major { of, theirs, ours: self });
     }
     Ok(())
   }
 }
-
-#[cfg(test)]
-#[path = "schema.test.rs"]
-mod test;

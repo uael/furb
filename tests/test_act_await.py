@@ -1,0 +1,228 @@
+"""Act.__await__, to await an act for what it comes to."""
+
+import asyncio
+from asyncio import CancelledError
+from dataclasses import replace
+
+import pytest
+
+from conftest import born, heads, paragraphs, plain, posed, relived, said, settle, slow, stalled
+from furb import engine
+from furb.engine import Exit, Refused, Text
+
+
+async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes() -> None:
+  """To await an act gives the value of the act when the act completes."""
+  _, _, root = born()
+  one = engine.bash("echo hi", on=root)
+  assert (await one).code == 0
+
+
+async def test_an_act_is_awaited_from_any_chain() -> None:
+  """An act is awaited from any chain."""
+  sand, _, root = born("x = bash('echo hi')\nawait x\nclose(x)")
+  which = await engine.prompt(str, "start one", on=root)
+  two = engine.chain("two")
+  sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
+  assert await engine.prompt(int, "await it", on=two) == 0
+
+
+async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
+  """A rung that awaits an act reads the result of the act."""
+  _, _, root = born("x = bash('echo hi')\nout = await x\nclose([out.code, out.stdout.content])")
+  assert await engine.prompt(list, "run it", on=root) == [0, "ran echo hi\n"]
+
+
+async def test_a_rung_awaits_an_act_or_a_future_of_the_loop_of_its_word_and_nothing_else() -> None:
+  """A rung awaits an act, or a future of the loop of its word, and nothing else."""
+  _, log, root, one, _, command = await stalled()
+  assert [a[4] for a in said(log, "wants")] == [command]
+  engine.cancel(one)
+  with pytest.raises(Refused, match="a rung awaits an act, and 1 is none"):
+    await engine.rung("class Nothing:\n  def __await__(self):\n    yield 1\n\nawait Nothing()", on=root)
+  word = "import asyncio\nready = asyncio.get_running_loop().create_future()\nready.set_result(2)\n"
+  assert await engine.rung(word + "close(await ready)", on=root) == 2
+
+
+async def test_a_word_runs_coroutines_at_once_as_tasks_in_an_order_that_the_record_alone_sets() -> None:
+  """A word runs coroutines at once as tasks, with asyncio.gather and asyncio.create_task, which await acts as the word does, in an order that the record alone sets, and its run is done once the word and each of its tasks are over."""
+  word = (
+    "import asyncio\n"
+    "async def step(command):\n"
+    "  await bash(command)\n"
+    "  return command\n"
+    "later = asyncio.create_task(step('three'))\n"
+    "both = await asyncio.gather(step('one'), step('two'), bash('four'))\n"
+    "debug(t'{both[:2]}')"
+  )
+  sand, log, root = born(word, auto=False)
+  engine.prompt(list, "go", on=root)
+  await settle()
+  commands = {a[4]: a[1] for a in said(log, "bash")}
+  # An argument of gather is made at the call, and each task runs from the next turn of the loop, in its order.
+  assert list(commands) == ["four", "three", "one", "two"]
+  # Each task waits through a wants of the run of its own, so the chain knows each act that the word awaits.
+  assert [a[4] for a in said(log, "wants")] == [commands[x] for x in ("three", "one", "two", "four")]
+  for command in ["two", "four", "one"]:
+    sand.exits(commands[command], 0)
+    await settle()
+  (run,) = [a[1] for a in said(log, "run") if "gather" in a[5]]
+  assert "['one', 'two']" in paragraphs(engine.turns(on=root))[-1] and engine.peek(run, ...) is ...
+  sand.exits(commands["three"], 0)
+  await settle()
+  assert engine.peek(run, ...) is None
+  before = engine.turns(on=root)
+  again, _ = await relived(replace(sand, record=[], calls=[]), plain(sand.record))
+  assert engine.turns(on=root) == before and engine.peek(run, ...) is None
+  assert [a[1:] for a in again if a[0] == "wants"] == [a[1:] for a in log if a[0] == "wants"]
+  watch = "import asyncio\nasync def watch():\n  await bash('slow')\nt = asyncio.create_task(watch())"
+  sand, log, root = born(watch, "close(1)", auto=False)
+  one = engine.prompt(int, "watch", on=root)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), [a[1] for a in said(log, "wants")]) == (1, [said(log, "wants")[0][1]])
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await one == 1
+
+
+async def test_a_task_that_raises_or_that_is_cancelled_raises_that_exception_or_cancellederror_where_it_is_awaited() -> (
+  None
+):
+  """A task that raises, or that is cancelled, raises that exception, or CancelledError, where it is awaited, as in CPython."""
+  word = (
+    "import asyncio\n"
+    "async def fails():\n"
+    "  raise ValueError('no')\n"
+    "async def waits():\n"
+    "  return (await bash('slow')).code\n"
+    "async def gives():\n"
+    "  return 1\n"
+    "try:\n"
+    "  await asyncio.gather(gives(), fails())\n"
+    "except ValueError as no:\n"
+    "  raised = str(no)\n"
+    "task = asyncio.create_task(waits())\n"
+    "task.cancel()\n"
+    "try:\n"
+    "  await task\n"
+    "except asyncio.CancelledError:\n"
+    "  close(raised)"
+  )
+  _, log, root = born(word, auto=False)
+  asked = engine.prompt(str, "go", on=root)
+  await settle()
+  assert engine.peek(asked) == "no" and said(log, "bash") == []
+
+
+async def test_to_await_an_act_raises_the_exception_that_the_act_completed_with() -> None:
+  """To await an act raises the exception that the act completed with."""
+  _, _, _, one = await posed()
+  engine.close(ValueError("boom"), one)
+  with pytest.raises(ValueError, match="boom"):
+    await one
+
+
+async def test_to_await_a_cancelled_act_raises_cancellederror() -> None:
+  """To await a cancelled act raises CancelledError."""
+  _, _, _, one = slow()
+  engine.cancel(one)
+  with pytest.raises(CancelledError):
+    await one
+
+
+async def test_a_word_that_awaits_a_command_whose_code_is_not_one_that_it_accepts_raises_refused() -> None:
+  """A word that awaits a command whose code is not one that the command accepts raises Refused where it waited, and the command keeps its Exit, which peek gives."""
+  sand, log, root = born("x = bash('false')\nawait x\nclose(1)", "close(2)", auto=False)
+  asked = engine.prompt(int, "run it", on=root)
+  await settle()
+  one = said(log, "bash")[0][1]
+  sand.exits(one, 1)
+  assert await asked == 2
+  await settle()
+  assert f"#rung1 raised\nrung1_raised = Refused('{one} exited 1')" in paragraphs(engine.turns(on=root))
+  assert engine.peek(one) == Exit(1, Text(f"{one}/stdout"), Text(f"{one}/stderr"))
+
+
+async def test_the_operator_is_given_the_exit_of_a_command_whatever_its_code() -> None:
+  """The operator, which awaits from outside a run, is given the Exit of a command whatever its code, since the codes that a command accepts rule the word that awaits it."""
+  sand, _, root = born(auto=False)
+  one = engine.bash("false", on=root)
+  await settle()
+  sand.exits(one, 1)
+  assert (await one).code == 1
+
+
+async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> None:
+  """A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further, and so does the operator."""
+  _, log, root = born("sub = chain('sub')\nawait sub\nclose(1)", "close(2)")
+  assert await engine.prompt(int, "fork", on=root) == 2
+  await settle()
+  assert heads(engine.turns(on=root)) == [
+    "#chain1",
+    "#prompt1",
+    "#rung1 advance on prompt1",
+    "#rung1 raised",
+    "#rung2 advance on prompt1",
+  ]
+  assert "#rung1 raised\nrung1_raised = Refused('chain2 never settles')" in paragraphs(engine.turns(on=root))
+  assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
+  with pytest.raises(Refused, match="chain2 never settles"):
+    await asyncio.wait_for(engine.Act("chain2"), 1)
+
+
+async def test_a_word_that_awaits_a_name_of_no_act_of_the_life_raises_refused_where_it_waited() -> None:
+  """A word that awaits a name of no act of the life raises Refused where it waited, since no done can settle it, and so does the operator."""
+  _, log, root = born("await Act('nothing1')\nclose(1)", "close(2)")
+  assert await engine.prompt(int, "wait", on=root) == 2
+  await settle()
+  assert "#rung1 raised\nrung1_raised = Refused('nothing1 never settles')" in paragraphs(engine.turns(on=root))
+  assert said(log, "wants") == []
+  with pytest.raises(Refused, match="nothing1 never settles"):
+    await asyncio.wait_for(engine.Act("nothing1"), 1)
+
+
+async def test_the_awaiter_of_the_prompt_raises_that_exception() -> None:
+  """The awaiter of the prompt raises that exception."""
+  _, log, root = born(
+    "p = prompt(int, 'ask them', to=OPERATOR)\ntry:\n  await p\nexcept ValueError as no:\n  close(str(no))"
+  )
+  one = engine.prompt(str, "delegate", on=root)
+  await settle()
+  theirs = said(log, "prompt")[-1][1]
+  engine.close(ValueError("boom"), theirs)
+  await settle()
+  assert (await one) == "boom"
+
+
+async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
+  """A run that awaits it hands it to whoever steps the run, since the engine owns the order of every run; the operator, which the engine does not step, waits on its own loop."""
+  sand, log, root = born("x = bash('echo hi')\nclose((await x).code)")
+  assert await engine.prompt(int, "run it", on=root) == 0
+  command = said(log, "bash")[0]
+  assert [(a[4], engine.get(a[2])[4]) for a in said(log, "wants")] == [(command[1], command[2])]
+  mine = engine.bash("echo again", on=root)
+  assert (await mine).code == 0 and [a[4] for a in said(log, "wants")] == [command[1]]
+  sand.auto = False
+  slow = engine.bash("slow", on=root)
+  with pytest.raises(TimeoutError):
+    await asyncio.wait_for(slow, 0.01)
+  sand.exits(slow, 0)
+  assert engine.peek(slow) == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))
+
+
+@pytest.mark.parametrize("word", ["await Act(acting())", "await Act(transcript('', 'run')[-1][1])"])
+async def test_a_word_cannot_await_its_own_completion(word: str) -> None:
+  """A word that awaits its own rung or its own run raises Refused where it waited, since its completion depends on that word ending."""
+  sand, log, root = born(word, "close(2)")
+  task = engine.prompt(int, "finish", on=root)
+  await settle()
+  assert engine.peek(task, ...) == 2
+  assert paragraphs(engine.turns(on=root))[3] == (
+    "#rung1 raised\nrung1_raised = Refused('rung1 cannot await its own completion through "
+    + ("rung1" if word == "await Act(acting())" else "run2")
+    + "')"
+  )
+  assert said(log, "wants") == []
+  before = engine.turns(on=root)
+  await relived(sand, plain(sand.record))
+  assert engine.turns(on=root) == before and engine.peek(task, ...) == 2

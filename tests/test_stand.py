@@ -1,0 +1,146 @@
+"""stand, the question of what the chains stand on."""
+
+import pytest
+
+from conftest import (
+  LATER,
+  STANDS,
+  Sand,
+  World,
+  born,
+  chained,
+  life,
+  of,
+  paragraphs,
+  relived,
+  said,
+  settle,
+  stood,
+  world_says,
+)
+from furb import engine
+from furb.engine import OPERATOR, Refused
+from test_chain import TAUGHT_FILES
+
+
+async def test_stand_asks_the_world_what_the_chains_stand_on_and_gives_the_answer() -> None:
+  """stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life."""
+  sand, _, root = born()
+  assert [(a[1], a[2], a[3]) for a in said(sand.calls, "stand")] == [("stand1", OPERATOR, root)]
+  sand.stands = LATER
+  assert await engine.stand(engine.ROOT) == LATER and engine.standing() == LATER
+  await settle()
+  later = Sand()
+  await relived(later, list(sand.record))
+  assert [(a[1], a[2], a[3]) for a in said(later.calls, "stand")] == [("stand3", OPERATOR, root)]
+
+
+class Slow(Sand):
+  """A World that answers each stand after the first later, as when it reads its settings again."""
+
+  slow = False
+
+  def hear(self, a: tuple) -> World:
+    match a:
+      case ("stand", qid, *_) if self.slow:
+        yield "started", qid
+      case _:
+        yield from self.hear_of_sand(a)
+
+  def hear_of_sand(self, a: tuple) -> World:
+    return Sand.hear(self, a)
+
+
+async def test_the_world_may_answer_a_stand_later() -> None:
+  """The World may answer a stand later, as when it reads its settings again, and no chain waits for that answer."""
+  sand = Slow()
+  life(sand)
+  two = await chained("two")
+  sand.script[two] = ["close(7)"]
+  sand.slow = True
+  stand = engine.stand(engine.ROOT)
+  assert not engine.over(stand)
+  assert await engine.prompt(int, "count", on=two) == 7
+  assert not engine.over(stand) and engine.standing() == STANDS
+  sand.stands = LATER
+  world_says("done", stand, sand.standing())
+  assert await stand == LATER and engine.standing() == LATER
+
+
+async def test_only_a_stand_on_the_root_changes_the_standing() -> None:
+  """Only a stand on the root changes the standing, since the standing has one home."""
+  sand, _, root = born()
+  two = engine.chain("two")
+  sand.stands = LATER
+  assert await engine.stand(on=two) == LATER
+  assert engine.standing() == STANDS and engine.module(two)["actor"] == engine.module(root)["actor"] == "m/low"
+  assert (
+    await engine.stand(engine.ROOT) == LATER and engine.module(two)["actor"] == engine.module(root)["actor"] == "o/low"
+  )
+
+
+async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() -> None:
+  """A stand from inside an act that the World answers at once tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own."""
+  taught = [*STANDS, "/w/DOCTRINE.md", [["one", "/w/one.py", "", False]]]
+  _, log, root = born(stands=taught, files={"/w/DOCTRINE.md": "Read first.\n", "/w/one.py": "x = 41\n"})
+  two = await chained("two")
+  was = paragraphs(engine.turns(on=root))
+  step = engine.rung("got = await stand()", on=two)
+  assert await step is None
+  (asked,) = [a[1] for a in said(log, "stand") if a[2] == step]
+  # The root played its stand, stand2, first in its setup, which chain two holds and plays as its own, so the stand of
+  # the word is stand3.
+  assert asked == "stand3" and engine.module(two)["got"] == taught
+  assert of(engine.turns(on=two), asked) == [stood(asked)]
+  assert stood(asked) == (
+    "#stand3\nstand3_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand3_actor = 'm/low'"
+  )
+  assert [a for a in engine.transcript(two) if a[0] == "tell" and a[1] == asked] == [
+    ("tell", asked, step, [stood(asked)])
+  ]
+  assert paragraphs(engine.turns(on=root)) == was
+
+
+async def test_a_stand_from_outside_an_act_tells_nothing() -> None:
+  """A stand from outside an act tells nothing, so the stand that boot makes tells nothing."""
+  sand, log, root = born()
+  assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == "stand1"] == []
+  was = engine.transcript(root)
+  sand.stands = LATER
+  assert await engine.stand(engine.ROOT) == LATER
+  assert said(log, "stand")[-1][1] == "stand2"
+  assert [a for a in engine.transcript(root) if a[0] == "tell"] == [a for a in was if a[0] == "tell"]
+
+
+async def test_a_stand_that_names_no_chain_is_on_the_chain_of_the_act_that_makes_it() -> None:
+  """A stand that names no chain is on the chain of the act that makes it, as every verb, so the operator names the root, as boot does."""
+  _, log, root = born()
+  two = await chained("two")
+  await engine.rung("stand()", on=two)
+  with pytest.raises(Refused, match=r"^no chain for stand$"):
+    engine.stand()
+  engine.stand(engine.ROOT)
+  assert [(a[1], a[3]) for a in said(log, "stand")] == [("stand1", root), ("stand2", two), ("stand3", root)]
+  assert engine.get("stand2")[2] == said(log, "rung")[-1][1]
+
+
+async def test_a_stand_appends_to_each_chain_and_changes_no_turn_before_it() -> None:
+  """A stand appends to each chain and changes no turn before it, whether it gives another roster, another directory or another actor, so the model of a chain reads its last request again as the start of its next one."""
+  taught = [STANDS[0], "/w", STANDS[2], "/w/DOCTRINE.md", []]
+  sand, _, root = born(stands=taught, files=TAUGHT_FILES)
+  chains = [root, await chained("two"), await chained("side", root, 300)]
+  assert await engine.rung("k = 1", on=root) is None
+  await settle()
+  roster = [[*STANDS[0], ["p", ["low"], 100000]], *taught[1:]]
+  folder = [roster[0], "/z", *taught[2:]]
+  actor = [*folder[:2], "n/low", *taught[3:]]
+  for standing, word in ((roster, "stand()"), (folder, "stand()\ncd('/z')"), (actor, "stand()")):
+    was = [engine.turns(on=one) for one in chains]
+    sand.stands = standing
+    engine.stand(engine.ROOT)
+    await settle(300)
+    for one, before in zip(chains, was, strict=True):
+      now = engine.turns(on=one)
+      assert now[: len(before)] == before
+      assert [turn[1] for turn in now[len(before) :] if turn[0] == "assistant"] == [word]

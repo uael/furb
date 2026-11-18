@@ -2,39 +2,49 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  path::PathBuf,
   sync::{Arc, PoisonError, RwLock},
 };
 
 use futures::{FutureExt, stream};
+use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
-use tokio::sync::{mpsc, watch as holding};
+use serde::{Deserialize, Serialize};
+use tokio::{
+  sync::{mpsc, watch as holding},
+  time,
+};
 
 use super::{
-  Advertised, Provider, Refresh, Retries, Search, Settings, Told, Writes,
-  answer::{Answering, answered, cut},
+  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Systems, Told, Unrefreshed,
+  Writes,
+  answer::{Answering, Bill, answered, cut, paying},
   images::Images,
-  model::{Ask, Model, requested, standing},
-  retry::{Backoff, OVERFLOW, Retry, failure, overflows, recoverable},
-  search::free,
+  model::{Ask, Model, Tells, requested, standing},
+  retry::{Backoff, Retry, failure, overflows, recoverable},
+  search::Error as Unsearched,
   thinking::{Thinking, thinks},
   watch::{self, Watch},
-  word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
+  word::{AFTER, RAN, STOPPED, ending, kept, unpython, unquoted, writing},
 };
+use crate::fact;
+use crate::skill;
+use crate::value;
 use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Object, entry, items},
 };
+use std::fmt;
+use std::mem;
 
 /// The ear of the provider as it hears a life: what the provider stands on, which a refresh
 /// changes, the replies that it took, and the stands and the searches that it answers.
 pub(super) struct Hearer {
   life: String,
   directory: String,
-  config: Option<PathBuf>,
-  extensions: Option<Vec<Advertised>>,
+  places: Option<skill::Places>,
+  skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: String,
   thinking: Thinking,
@@ -44,29 +54,42 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  members: super::Members,
+  mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
+  /// The system prompt of each chain that read another engine first.
+  systems: Systems,
   native: Search,
   replies: Replies,
-  /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
-  /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
-  /// program of a model, as the claude command line, a second time.
-  stood: bool,
   /// The stand that the ear answers next with the standing, and whether a word made it.
   stands: Option<(String, bool)>,
+}
+
+/// What the ear of the provider keeps of the stands that it heard.
+#[derive(Default, Serialize, Deserialize)]
+pub(super) struct Stood {
+  /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
+  /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
+  /// program of a model, as the claude command line, a second time. An open by an image loads
+  /// them too, so the image keeps no such stand.
+  #[serde(skip)]
+  first: bool,
   /// The chains that the ear told which names left the catalog.
   lacked: HashSet<String>,
 }
 
+/// How many times the ear wakes a chain that it paused, each after the backoff of its next attempt,
+/// before it leaves the chain paused for a person.
+pub(super) const WOKEN: u32 = 3;
+
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String) -> Hearer {
+  pub(super) fn new(provider: Provider, life: String) -> Self {
     let native = provider.search();
     let Provider {
       directory,
-      config,
-      extensions,
+      places,
+      skills,
       models,
       actor,
       thinking,
@@ -76,9 +99,10 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      members,
+      mode,
       system,
+      systems,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
       models
@@ -87,11 +111,11 @@ impl Hearer {
         .first()
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
-    Hearer {
+    Self {
       life,
       directory,
-      config,
-      extensions,
+      places,
+      skills,
       models,
       actor,
       thinking,
@@ -101,14 +125,13 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      members,
+      mode,
       system,
+      systems,
       native,
       replies: Replies::default(),
-      stood: false,
       stands: None,
-      lacked: HashSet::new(),
     }
   }
 
@@ -119,7 +142,12 @@ impl Hearer {
       RAN => self.ran(co, a).await,
       "done" => self.done(a),
       "search" if a.question() => self.search(co, a),
-      "pause" | "wake" => self.held(co).await,
+      "pause" | "wake" => {
+        self.held(co).await;
+        if a.kind() == "pause" {
+          self.sleep(co, a.about()).await;
+        }
+      }
       _ => {}
     }
     Ok(())
@@ -130,12 +158,13 @@ impl Hearer {
   /// asks no command line.
   fn stand(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
-    if self.held {
+    if self.mode == Mode::Held {
       say(co, Fact::says("started", &about, []));
       return;
     }
-    let word = crate::fact::named(a.by(), "rung");
-    let first = !std::mem::replace(&mut self.stood, true);
+    let word = fact::named(a.by(), "rung");
+    // What the ear keeps of the stands that it heard, which the image of a life holds.
+    let first = co.kept::<Stood>().is_ok_and(|stood| !mem::replace(&mut stood.first, true));
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -145,13 +174,14 @@ impl Hearer {
       co.take(
         a.about(),
         stream::once(read.map(move |got| {
-          let got = got.map_err(|no| no.to_string()).and_then(|got| got);
+          let got = got.map_err(Unrefreshed::from).and_then(|got| got);
           Replied::Refreshed { about, got }
         })),
       );
       return;
     }
-    if !self.gone.is_empty() && self.lacked.insert(a.on().to_owned()) {
+    let lacked = |stood: &mut Stood| stood.lacked.insert(a.on().to_owned());
+    if !self.gone.is_empty() && co.kept::<Stood>().is_ok_and(lacked) {
       told(co, a.on(), &departed(&about, &self.gone));
     }
     self.stands = Some((about, word));
@@ -163,7 +193,7 @@ impl Hearer {
     &mut self,
     co: &mut Co<Replied>,
     about: String,
-    got: Result<Settings, String>,
+    got: Result<Settings, Unrefreshed>,
   ) {
     match got {
       Ok((fresh, default, budget)) => {
@@ -176,7 +206,7 @@ impl Hearer {
         self.thinking = budget;
         self.stands = Some((about, false));
       }
-      Err(why) => say(co, Fact::says("done", &about, [Fault::refused(why).object()])),
+      Err(why) => say(co, Fact::says("done", &about, [Fault::refused(why.to_string()).object()])),
     }
   }
 
@@ -186,12 +216,20 @@ impl Hearer {
   /// and asks again at once, on the models that stand now.
   pub(super) async fn answer(&mut self, co: &mut Co<Replied>) -> Result<(), Fault> {
     let Some((about, word)) = self.stands.take() else { return Ok(()) };
+    let here;
+    let places = if let Some(one) = &self.places {
+      one
+    } else {
+      here = skill::Places::here();
+      &here
+    };
     let given = standing(
       &self.models.read().unwrap_or_else(PoisonError::into_inner),
       &self.directory,
       &self.actor,
-      self.extensions.as_deref(),
-      &self.config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
+      self.skills.as_deref(),
+      &self.members.get(),
+      places,
     );
     say(co, Fact::says("done", &about, [given]));
     if word {
@@ -221,7 +259,9 @@ impl Hearer {
     let about = a.about().to_owned();
     say(co, Fact::says("started", &about, []));
     let chain = a.on().to_owned();
-    let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    // An actor that is no name, as a list that a word bound, is refused under its repr.
+    let actor = a.word(1).map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned));
+    let actor = actor.unwrap_or_default();
     let asking = Asking { about: &about, chain: &chain, actor: &actor, again: false };
     let call = self.asking(co, asking).await?;
     let again = self.replies.mute.get(&chain) == Some(&actor);
@@ -236,15 +276,18 @@ impl Hearer {
   async fn asking(&mut self, co: &mut Co<Replied>, asking: Asking<'_>) -> Result<Call, Fault> {
     let Asking { about, chain, actor, again } = asking;
     let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
+    let system = self.system_of(co, chain).await?;
     let (tells, told) = mpsc::unbounded_channel();
     let wrote = written(about, &tells);
     let key = format!("{}/{chain}", self.life);
     let asked = {
       let held = self.models.read().unwrap_or_else(PoisonError::into_inner);
-      let asked =
-        Ask { system: &self.system, actor, chain, turns: turns.as_ref(), conversation: &key };
+      let asked = Ask { system: &system, actor, chain, turns: turns.as_ref(), conversation: &key };
       requested(&held, asked, &mut self.images, wrote).map(|one| thinks(one, self.thinking))
     };
+    for uri in self.images.lost() {
+      self::told(co, chain, &format!("#{about} lost an image\n{about}_image = '{uri}'"));
+    }
     let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
     let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
     let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
@@ -252,12 +295,31 @@ impl Hearer {
     let id = about.to_owned();
     let backoff = self.backoff;
     co.take(about, answered(Answering { id, asked, backoff, tells, told, hold: holds, again }));
-    Ok(Call { watch: streams.then(Watch::default), hold })
+    Ok(Call { watch: streams.then(Watch::default), hold, bill: None })
+  }
+
+  /// The system prompt of a chain, as [`Systems`] says: a life that holds no other engine reads
+  /// no source of the chain.
+  async fn system_of(&self, co: &mut Co<Replied>, chain: &str) -> Result<Arc<str>, Fault> {
+    if self.systems.0.is_empty() {
+      return Ok(Arc::clone(&self.system));
+    }
+    let mut lineage = vec![chain.to_owned()];
+    loop {
+      let last = lineage.last().map(|one| Object::string(one.as_str()));
+      let act = co.call("get", last.into_iter().collect(), vec![]).await?;
+      let source = entry(&act.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
+      match source.filter(|one| !one.is_empty()) {
+        Some(source) => lineage.push(source),
+        None => break,
+      }
+    }
+    let read = self.systems.of(lineage.iter().map(String::as_str));
+    Ok(read.map_or_else(|| Arc::clone(&self.system), Arc::from))
   }
 
   /// What the model of a reply that still stands writes, told to the host under the rung it writes
-  /// for, and each new part of its word that the gate finds nothing against, said as a writing of
-  /// that rung.
+  /// for, and each new part of its word, said as a writing of that rung.
   pub(super) async fn wrote(&mut self, co: &mut Co<Replied>, wrote: Wrote) {
     let Wrote { id, text, thinking } = wrote;
     let Some(reply) = self.replies.taken.get_mut(&id) else { return };
@@ -265,7 +327,7 @@ impl Hearer {
     if let Some(writes) = &self.writes {
       writes(&reply.rung, &reply.chain, &text, &thinking);
     }
-    let (chain, rung) = (reply.chain.clone(), reply.rung.clone());
+    let rung = reply.rung.clone();
     let Some(watch) = reply.call.watch.as_mut() else { return };
     let Some(end) = watch.wrote(&text).filter(|_| !text.is_empty()) else { return };
     // The statements before the last line at the left edge, as python: each quote in them bound
@@ -275,41 +337,48 @@ impl Hearer {
       return;
     }
     let Some(word) = unquoted(co, &read).await else { return };
-    let (line, why) = match judged(co, &chain, &word).await {
-      Found::Refused(line, why) => (line, why),
-      Found::Unsettled => return,
-      Found::Nothing => {
-        // The word holds no fault so far, so its new statements run now, as the turn holds them:
-        // from its first line that is not blank. A statement whose clause starts at the end, as
-        // an `else`, waits.
-        let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
-          Some(line) => {
-            let held: String = word.split_inclusive('\n').take(line - 1).collect();
-            (held, watch.start(line))
-          }
-          None if watch.clause(end) => return,
-          None => (word, end),
-        };
-        let given = word.trim_start();
-        let Some((part, before)) = watch.part(given) else { return };
-        if writing(co, &rung, part, before).await {
-          watch.gave(given, end);
-        } else if watch.ran().is_none() {
-          // A word whose first part a pause held is given whole, so no later part of it is given.
-          watch.untaken();
+    let Some(line) = watch::broken(&word) else {
+      // The word holds no statement that cannot be python so far, so its new statements run now,
+      // as the turn holds them: from its first line that is not blank, once monty calls them
+      // complete. A statement whose clause starts at the end, as an `else`, waits, and so does a
+      // word that monty calls incomplete or invalid.
+      let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
+        Some(line) => {
+          let held: String = word.split_inclusive('\n').take(line - 1).collect();
+          (held, watch.start(line))
         }
+        None if watch.clause(end) => return,
+        None => (word, end),
+      };
+      if watch::complete(&word) != ReplContinuationMode::Complete {
         return;
       }
+      let given = word.trim_start();
+      let Some((part, before)) = watch.part(given) else { return };
+      if writing(co, &rung, part, before).await {
+        watch.gave(given, end);
+      } else if watch.ran().is_none() {
+        // A word whose first part a pause held is given whole, so no later part of it is given.
+        watch.untaken();
+      }
+      return;
     };
-    // The word as far as the statement that cannot be python, or that the gate refuses for good,
-    // is the turn of the reply, so the gate refuses it and the chain tells why; and once a part of
-    // the word ran, the turn is the word that ran, which the chain runs as it ran, and the chain
-    // is told why before it. The model wrote no more of it that counts, and its call ends with the
-    // reply.
+    // The word as far as the statement that cannot be python is the turn of the reply, so its run
+    // raises there and the chain tells why; and once a part of the word ran, the turn is the word
+    // that ran, which the chain runs as it ran, and the chain is told why before it. The model
+    // wrote no more of it that counts, and its call ends with the reply.
     let ran = watch.ran().map(str::to_owned);
-    let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else { return };
-    let note = ran.map(|ran| (AFTER, [("findings", afterward(&why)), ("ran", ending(&ran))]));
+    let word = ran.as_deref().unwrap_or_else(|| watch.through(line));
+    let Ok(turn) = cut(word, Bill::usage(reply.call.bill.as_ref())) else { return };
+    let note = ran.map(|ran| (AFTER, [("why", unpython(line)), ("ran", ending(&ran))]));
     self.replies.end(co, &id, Ending { turn, note }).await;
+  }
+
+  /// What the request of the call of a reply that still stands read so far.
+  pub(super) fn billed(&mut self, id: &str, bill: Bill) {
+    if let Some(reply) = self.replies.taken.get_mut(id) {
+      reply.call.bill = Some(bill);
+    }
   }
 
   /// A retry of the call of the model of a reply that still stands, told to the host under its
@@ -318,14 +387,18 @@ impl Hearer {
     let Retried { id, retry, limit } = retried;
     let Some(reply) = self.replies.taken.get_mut(&id) else { return };
     // A model asked again writes another word, and a part of this one ran, so the reply ends with
-    // the word that ran, and the model is not asked again.
+    // the word that ran, and the model is not asked again. The call failed, so the provider gives
+    // The reply pays the request of the call that failed.
     if let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran).map(str::to_owned)
-      && let Ok(turn) = cut(&ran)
+      && let Ok(turn) = cut(&ran, Bill::usage(reply.call.bill.as_ref()))
     {
       let note = Some((STOPPED, [("why", retry.why.clone()), ("ran", ending(&ran))]));
       return self.replies.end(co, &id, Ending { turn, note }).await;
     }
     reply.waits = true;
+    // The next turn of the chain pays the request of the call that failed.
+    let failed = reply.call.bill.take().map_or(0.0, |bill| bill.dollars);
+    owe(&mut self.replies.owed, &reply.chain, failed);
     if let Some(watch) = reply.call.watch.as_mut() {
       watch.forget();
     }
@@ -352,22 +425,47 @@ impl Hearer {
     }
   }
 
+  /// The backoff of a chain that a pause of the provider holds. The record says how many wakes the
+  /// provider gave the chain since its last turn, so a life that opens on a record goes on with
+  /// the count, and a pause of a person alone starts no backoff.
+  async fn sleep(&mut self, co: &mut Co<Replied>, chain: &str) {
+    if self.mode == Mode::Inspecting {
+      return;
+    }
+    let Some(woken) = owed(co, chain).await else { return };
+    let wait = self.backoff.wait(woken + 2);
+    let chain = chain.to_owned();
+    co.work(stream::once(spawned(time::sleep(wait)).map(move |_| Replied::Woken { chain })));
+  }
+
+  /// The end of the backoff of a chain that the ear paused: the ear wakes it, with a fact that the
+  /// record keeps, while no person paused or woke it since and a pause still holds it.
+  pub(super) async fn woke(&mut self, co: &mut Co<Replied>, chain: &str) {
+    if owed(co, chain).await.is_none() {
+      return;
+    }
+    let paused = co.call("paused", vec![Object::string(chain)], vec![]).await;
+    if paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false) {
+      told(co, chain, &format!("#{chain} woke by the provider after its backoff"));
+      say(co, Fact::says("wake", chain, []));
+    }
+  }
+
   /// What the model of a reply that still stands came to.
   pub(super) async fn came(&mut self, co: &mut Co<Replied>, came: Came) {
-    let Came { id, got, dropped } = came;
+    let Came { id, got, dropped, account } = came;
     let Some(reply) = self.replies.taken.get(&id) else { return };
     let Some(got) = kept(co, reply, got).await else { return };
     // The word that runs is not all the text that the model wrote, so the chain is told what went,
     // before it.
     let wrapped = reply.call.watch.as_ref().and_then(Watch::note);
     if let Some(dropped) = dropped.or(wrapped) {
-      told(co, &reply.chain, &format!("#{} {dropped}", reply.rung));
+      told(co, &reply.rung, &format!("#{} {dropped}", reply.rung));
     }
     let recoverable = got.as_ref().is_err_and(recoverable);
-    let got = got.map_err(|no| {
-      let over = if overflows(&no) { format!("{OVERFLOW}: ") } else { String::new() };
-      format!("{} answered nothing: {over}{}", reply.actor, failure(&no))
-    });
+    let overflow = got.as_ref().err().is_some_and(overflows);
+    let got = got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
+    let chain = reply.chain.clone();
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {
@@ -378,7 +476,20 @@ impl Hearer {
         told(co, &reply.chain, &note);
       }
     }
-    let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
+    // The account is a fact of its own before the turn that it served, which no reader of a usage
+    // meets.
+    if let (Ok(_), Some(account)) = (&got, &account) {
+      say(co, Fact::says("account", &id, [Object::string(account)]));
+    }
+    let got = got
+      .map_err(|why| {
+        if overflow {
+          Fault::new("Overflow", vec![Object::string(why)])
+        } else {
+          Fault::refused(why)
+        }
+      })
+      .map_or_else(|fault| fault.object(), |turn| self.replies.paying(&chain, turn));
     say(co, Fact::says("done", &id, [got]));
   }
 
@@ -390,7 +501,10 @@ impl Hearer {
     }
     let mine = self.replies.taken.iter().find(|(_, reply)| reply.rung == a.about());
     let Some((id, reply)) = mine else { return };
-    let Some(Ok(turn)) = reply.call.watch.as_ref().and_then(Watch::ran).map(cut) else { return };
+    let ran = reply.call.watch.as_ref().and_then(Watch::ran);
+    let Some(Ok(turn)) = ran.map(|ran| cut(ran, Bill::usage(reply.call.bill.as_ref()))) else {
+      return;
+    };
     let id = id.clone();
     self.replies.end(co, &id, Ending { turn, note: None }).await;
   }
@@ -399,42 +513,44 @@ impl Hearer {
   /// refusals on the chain with a turn, or adds to it with a refusal, which is what the ear says
   /// when it says no turn; a done that a control said leaves the row as it is.
   fn done(&mut self, a: &Fact) {
-    let Some(Reply { chain, actor, .. }) = self.replies.taken.remove(a.about()) else { return };
+    let Some(Reply { chain, actor, call, .. }) = self.replies.taken.remove(a.about()) else {
+      return;
+    };
+    // A reply that comes to no turn of the ear leaves what its call read to the next turn of its
+    // chain.
+    if a.by() != a.about() || !turned(a) {
+      let read = call.bill.map_or(0.0, |bill| bill.dollars);
+      owe(&mut self.replies.owed, &chain, read);
+    }
     if a.by() == a.about() {
       return;
     }
-    let turned = a
-      .word(0)
-      .and_then(|one| one.items())
-      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
-    if turned {
+    if turned(a) {
       self.replies.mute.remove(&chain);
     } else {
       self.replies.mute.insert(chain, actor);
     }
   }
 
-  /// A search of the web: the native search of the provider of its actor, else the free search,
-  /// as a work of the ear, so every chain of the life goes on meanwhile. A life that inspects
-  /// searches nothing.
+  /// A search of the web by the native search of the provider of its actor, as a work of the ear,
+  /// so every chain of the life goes on meanwhile. The ear does not take the search of an actor
+  /// whose provider has none, which the ears after it answer. A life that inspects searches
+  /// nothing.
   fn search(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-    if self.inspecting {
+    if self.mode != Mode::Live {
       let no = "a life that inspects searches nothing";
       say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
       return;
     }
+    let Some(search) = (self.native)(&actor) else { return };
     say(co, Fact::says("started", &about, []));
-    let search = (self.native)(&actor).unwrap_or_else(free);
     let id = about.clone();
     let asked = async move {
       let got = search(query.clone()).await;
-      Replied::Searched {
-        id,
-        got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
-      }
+      Replied::Searched { id, got: got.map(|answer| value::Text::new(query, answer)) }
     };
     co.take(&about, stream::once(asked));
   }
@@ -453,12 +569,46 @@ impl Hearer {
   }
 }
 
+/// Whether a fact is a done that ended a reply with a turn of the model.
+fn turned(a: &Fact) -> bool {
+  a.kind() == "done"
+    && a.word(0).is_some_and(|turn| {
+      items(turn).is_some_and(|held| held.len() == 4)
+        && entry(&turn, 0).and_then(|one| one.as_str()) == Some("assistant")
+    })
+}
+
+/// The facts of a chain that a speaker said, in order, from the record.
+async fn said_by(co: &mut Co<Replied>, chain: &str, by: &str) -> Vec<Fact> {
+  let of = [chain, by].map(Object::string).to_vec();
+  let Ok(got) = co.call("transcript", of, vec![]).await else { return Vec::new() };
+  items(got.as_ref()).into_iter().flatten().filter_map(Fact::of).collect()
+}
+
+/// How many wakes the provider gave a chain since its last turn, while the last pause or wake of
+/// the chain is a pause of the provider and [`WOKEN`] bounds the count: the record holds both.
+async fn owed(co: &mut Co<Replied>, chain: &str) -> Option<u32> {
+  let control = |one: &Fact| matches!(one.kind(), "pause" | "wake") && one.about() == chain;
+  let last = said_by(co, chain, "pause").await.into_iter().rfind(|one| control(one))?;
+  if last.kind() != "pause" || last.by() != "provider" {
+    return None;
+  }
+  let mine = said_by(co, chain, "provider").await;
+  let since = mine.iter().rev().take_while(|one| !turned(one));
+  let woken = since.filter(|one| control(one) && one.kind() == "wake").count();
+  u32::try_from(woken).ok().filter(|woken| *woken < WOKEN)
+}
+
 /// The replies that the ear took and that still stand, by id, and the actor whose last reply on
 /// each chain the ear refused.
 #[derive(Default)]
 struct Replies {
   taken: HashMap<String, Reply>,
   mute: HashMap<String, String>,
+  /// What the requests of each chain read that no turn paid: each call of a reply that failed and
+  /// was made again, and each reply that came to no turn of the ear, as one that a cancel ended.
+  /// The next turn of the chain pays it.
+  owed: HashMap<String, f64>,
 }
 
 impl Replies {
@@ -469,12 +619,18 @@ impl Replies {
     let Some(Reply { chain, rung, call, .. }) = self.taken.remove(id) else { return };
     self.mute.remove(&chain);
     if let Some(note) = call.watch.as_ref().and_then(Watch::note) {
-      told(co, &chain, &format!("#{rung} {note}"));
+      told(co, &rung, &format!("#{rung} {note}"));
     }
     if let Some((what, fields)) = ending.note {
-      noted(co, &chain, &rung, what, &fields).await;
+      noted(co, &rung, what, &fields).await;
     }
-    say(co, Fact::says("done", id, [ending.turn]));
+    let turn = self.paying(&chain, ending.turn);
+    say(co, Fact::says("done", id, [turn]));
+  }
+
+  /// This turn of a chain, which pays what the chain owes.
+  fn paying(&mut self, chain: &str, turn: Object) -> Object {
+    paying(turn, self.owed.remove(chain).unwrap_or_default())
   }
 }
 
@@ -515,11 +671,14 @@ pub(super) struct Call {
   /// Whether a pause holds the reply, which holds the next call of its model: a call that runs
   /// returns, and a call that waits to be made again waits for the wake.
   hold: holding::Sender<bool>,
+  /// What the request of the call read as far as its stream told, which the reply pays when it
+  /// ends before its stream does.
+  pub(super) bill: Option<Bill>,
 }
 
 /// What a search came to: its text, or why it gives none.
-pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<crate::value::Text, String>) {
-  let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
+pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<value::Text, Unsearched>) {
+  let got = got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| one.object());
   say(co, Fact::says("done", id, [got]));
 }
 
@@ -530,7 +689,7 @@ pub(super) async fn released(hold: &mut holding::Receiver<bool>) -> Result<(), C
 }
 
 /// The failure of a call of a model whose reply went: no one reads what it would give.
-pub(super) fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
+pub(super) fn reply_gone(why: impl fmt::Display) -> CompletionError {
   CompletionError::ProviderError(format!(
     "the reply went before its call of the model ended: {why}"
   ))
@@ -543,10 +702,22 @@ pub(super) fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
 /// word, which [`unclosed`](super::answer::unclosed) drops.
 pub(super) enum Replied {
   Wrote(Wrote),
+  /// What the request of the call of a reply read so far: the id of the reply, and its bill.
+  Billed(String, Bill),
   Retried(Retried),
   Came(Came),
-  Refreshed { about: String, got: Result<Settings, String> },
-  Searched { id: String, got: Result<crate::value::Text, String> },
+  Refreshed {
+    about: String,
+    got: Result<Settings, Unrefreshed>,
+  },
+  Searched {
+    id: String,
+    got: Result<value::Text, Unsearched>,
+  },
+  /// The end of the backoff of a chain that the ear paused.
+  Woken {
+    chain: String,
+  },
 }
 
 /// A part that the model of a reply wrote: the id of the reply, and what the part added to its
@@ -566,16 +737,17 @@ pub(super) struct Retried {
 }
 
 /// What the call of the model of a reply came to: the id of the reply, its turn or why it gives
-/// none, and the marks that its turn lost.
+/// none, the marks that its turn lost, and the account that served it.
 pub(super) struct Came {
   pub(super) id: String,
   pub(super) got: Result<Object, CompletionError>,
   pub(super) dropped: Option<String>,
+  pub(super) account: Option<String>,
 }
 
-/// A note told to a chain.
-pub(super) fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
-  say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
+/// A note told about a chain, or about a rung of it, whose thread reads it as a fact of its own.
+pub(super) fn told(co: &mut Co<Replied>, about: &str, note: &str) {
+  say(co, Fact::says("tell", about, [Object::list([Object::string(note)])]));
 }
 
 /// The note that tells a chain which names of the roster and of the actor left the catalog, as a
@@ -586,31 +758,37 @@ fn departed(about: &str, names: &[String]) -> String {
   format!("#{about} names left the catalog\n{about}_left = [{list}]")
 }
 
-/// A note of the chain about the turn of a rung: its header, then each text that the gate or the
+/// A note of the chain about the turn of a rung: its header, then each text that the watch or the
 /// call gave, which the engine binds under the rung as it binds a value of an act, so the turn that
 /// holds the note stays python. A text after the header as a line of its own is no python, and the
 /// run of the turn would raise a `SyntaxError`.
-pub(super) async fn noted(
-  co: &mut Co<Replied>,
-  chain: &str,
-  rung: &str,
-  what: &str,
-  fields: &[(&str, String)],
-) {
+pub(super) async fn noted(co: &mut Co<Replied>, rung: &str, what: &str, fields: &[(&str, String)]) {
   let words = vec![Object::string(rung), Object::string(what)];
   let fields = fields.iter().map(|(word, text)| (*word, Object::string(text))).collect();
   let got = co.call("headed", words, fields).await;
   let note = got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned));
-  told(co, chain, &note.unwrap_or_else(|| format!("#{rung} {what}")));
+  told(co, rung, &note.unwrap_or_else(|| format!("#{rung} {what}")));
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads
-/// the word.
-pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
+/// the word, and keeps the bill of its request. A reply that went has no reader for what its model
+/// still tells.
+pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tells {
+  let (them, by) = (tells.clone(), id.to_owned());
+  let billed = Arc::new(move |bill| drop(them.send(Replied::Billed(by.clone(), bill))));
   let (id, tells) = (id.to_owned(), tells.clone());
-  Arc::new(move |text, thinking| {
+  let told: Told = Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
-    // A reply that went has no reader for what its model still writes.
     drop(tells.send(Replied::Wrote(Wrote { id: id.clone(), text, thinking })));
-  })
+  });
+  Tells { told, billed }
+}
+
+/// What a chain owes for the calls of its model, grown by an amount: the map copies the name of a
+/// chain only the first time that it holds it.
+fn owe(owed: &mut HashMap<String, f64>, chain: &str, amount: f64) {
+  match owed.get_mut(chain) {
+    Some(one) => *one += amount,
+    None => drop(owed.insert(chain.to_owned(), amount)),
+  }
 }

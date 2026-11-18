@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
   Lease, Store, entry_of,
-  error::{At, StoreError},
+  error::{At, StoreError, Unread},
   leased, now,
 };
 
@@ -34,8 +34,13 @@ pub struct Sqlite {
 impl Sqlite {
   /// The database of SQLite at a path, under its lease, or the refusal when another process holds it.
   pub fn open(path: impl AsRef<Path>) -> Result<Self, Fault> {
+    let path = path.as_ref();
+    Self::under(path, leased(path)?)
+  }
+
+  /// The database of SQLite at a path, under a lease of it that the caller holds.
+  pub(crate) fn under(path: impl AsRef<Path>, lease: Lease) -> Result<Self, Fault> {
     let path = path.as_ref().to_path_buf();
-    let lease = leased(&path)?;
     let db = Connection::open(&path).map_err(StoreError::sqlite(&path))?;
     db.execute_batch(&format!("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; {TABLE};"))
       .map_err(StoreError::sqlite(&path))?;
@@ -90,18 +95,19 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
   }
 }
 
-/// Each entry of the database, in the order of its rows, each the fact it kept in a list of one, as boot takes them.
+/// Each entry of the database, in the order of its rows, each the fact it kept, its place, whether
+/// the life rested and the count of the facts that waited, in a list, as boot takes them.
 fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
   let mut asked =
     db.prepare("SELECT n, entry FROM entries ORDER BY n").map_err(StoreError::sqlite(path))?;
   let mut rows = asked.query([]).map_err(StoreError::sqlite(path))?;
   while let Some(row) = rows.next().map_err(StoreError::sqlite(path))? {
     let n = row.get::<_, i64>(0).map_err(StoreError::sqlite(path))?;
-    let invalid = || StoreError::Invalid { path: path.to_path_buf(), at: At::Row(n) };
-    let Ok(text) = row.get::<_, String>(1) else { return Err(invalid()) };
-    let Ok(held) = serde_json::from_str::<Vec<&RawValue>>(&text) else { return Err(invalid()) };
-    let [fact] = held.as_slice() else { return Err(invalid()) };
-    take(entry_of(fact).ok_or_else(invalid)?);
+    let invalid = |why| StoreError::Invalid { path: path.to_path_buf(), at: At::Row(n), why };
+    let Ok(text) = row.get::<_, String>(1) else { return Err(invalid(Unread::List)) };
+    let held =
+      serde_json::from_str::<Vec<&RawValue>>(&text).map_err(|_no| invalid(Unread::List))?;
+    take(entry_of(&held).map_err(invalid)?);
   }
   Ok(())
 }

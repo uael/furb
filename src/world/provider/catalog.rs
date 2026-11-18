@@ -2,12 +2,12 @@
 //! efforts, its price, its class, and whether it takes an image.
 //!
 //! The crate carries a snapshot of the catalog, cut down to the providers that pi-ai serves, which
-//! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does
-//! not list, from the data of pi-ai. A life reads the models of a provider from the caches of furb
-//! when they hold them newer than the snapshot, and a life updates the caches in the background
-//! when they are a day old, so no life waits on the network and a life with no network reads the
-//! snapshot. [`update`] says how a source is fetched and kept. The claude command line is the
-//! provider `claude-cli`, whose models are opus, sonnet, haiku and fable.
+//! `cargo xtask catalog` makes again from models.dev and, for the two providers that models.dev
+//! does not list, from the data of pi-ai. A life reads the models of a provider from the caches of
+//! furb when they hold them newer than the snapshot, and a life updates the caches in the
+//! background when they are a day old, so no life waits on the network and a life with no network
+//! reads the snapshot. [`update`] says how a source is fetched and kept. The claude command line is
+//! the provider `claude-cli`, whose models are opus, sonnet, haiku and fable.
 //!
 //! The snapshot gives each model its class, cheap or dear. It lists the families that a program of
 //! their own serves, the claude command line and Codex, with the class of each of their models
@@ -29,17 +29,16 @@
 //! of the local server only when the catalog offers no other model.
 //!
 //! [`local`]: super::local
-
 mod config;
 mod error;
 mod update;
 
-pub use error::Error;
+pub use error::{Error, Unreached};
 pub use update::{Source, Status, keep_fresh, status, updated};
 
 use std::{
   collections::{HashMap, HashSet},
-  env, fs,
+  env, fs, io,
   path::{Path, PathBuf},
   sync::{Arc, Mutex, OnceLock, PoisonError},
   time::Duration,
@@ -57,6 +56,7 @@ use super::{
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
+use crate::ear;
 use crate::world::{
   cache,
   disk::{self, Access},
@@ -65,12 +65,24 @@ use crate::world::{
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+/// An actor as its words say it: its model, and the level after its last slash when that word is
+/// one of [`LEVELS`]. A slash before any other word is a part of the name of the model, as in the
+/// id of a model of a local server. A caller that knows a model whose whole name is the actor
+/// reads that model first, as [`Catalog`], the names of a local model and the maker of an act in
+/// the view do.
+pub fn leveled(actor: &str) -> (&str, Option<&str>) {
+  match actor.rsplit_once('/') {
+    Some((model, level)) if LEVELS.contains(&level) => (model, Some(level)),
+    _ => (actor, None),
+  }
+}
+
 /// The level of an actor that names none.
 pub const LEVEL: &str = "high";
 
 /// The doctrine of furb, which says how a model works in furb and holds no law: `DOCTRINE.md` at the root of the
 /// repository. A chain reads it as a file, in the first turn of its actor, at the path that [`doctrine`] gives.
-pub const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
+const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
 
 /// The path of the doctrine that a chain in a directory reads: `.furb/DOCTRINE.md` of that directory when it holds
 /// one, as a doctrine of the project; else, in dev mode, the `DOCTRINE.md` of the checkout of git that this furb was
@@ -138,6 +150,9 @@ pub(super) struct Listed {
   models: IndexMap<String, Listing>,
   #[serde(skip)]
   key: Option<String>,
+  /// Whether a config named the address, which then reaches each client in place of its own.
+  #[serde(skip)]
+  named: bool,
 }
 
 /// One provider as the cache holds it, which is the catalog of models.dev whole: its models alone count.
@@ -227,8 +242,8 @@ struct Offer {
 }
 
 impl Offer {
-  fn new(model: Model, offered: bool) -> Offer {
-    Offer { model, offered }
+  fn new(model: Model, offered: bool) -> Self {
+    Self { model, offered }
   }
 }
 
@@ -237,6 +252,13 @@ struct Entry {
   name: String,
   env: Vec<String>,
   enabled: bool,
+}
+
+/// The settings of a provider that a true or a false is given over: an object keeps its fields and
+/// takes the flag as its field `enabled`, so a provider that is off keeps its settings, which each
+/// writer of the configs keeps.
+pub(crate) fn switched(settings: &mut Map<String, Value>, on: bool) {
+  settings.insert("enabled".to_owned(), Value::Bool(on));
 }
 
 /// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
@@ -280,29 +302,32 @@ pub struct Local {
 }
 
 impl Catalog {
-  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, the claude command
-  /// line when it finds one, and the local server that the environment of the process names, one for the process, so
-  /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
-  /// life, when the host has called [`keep_fresh`].
-  pub fn load() -> Catalog {
-    blocking(Catalog::loaded())
+  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers,
+  /// the claude command line when it finds one, the one at a path in the place of the one of this
+  /// machine when a path is given, so a life that names its command line asks no other, and the
+  /// local server that the environment of the process names, one for the process, so what it
+  /// listed holds for every catalog after. A cache a day old is refreshed in the background, for
+  /// the next life, when the host has called [`keep_fresh`].
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn load(bin: Option<PathBuf>) -> io::Result<Self> {
+    blocking(Self::loaded(bin))
   }
 
   /// The catalog of this machine, as [`Catalog::load`] gives it, for a caller that awaits.
-  pub async fn loaded() -> Catalog {
+  pub async fn loaded(bin: Option<PathBuf>) -> Self {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join(update::MODELS));
     let listed = listed(cached.as_ref());
-    let claude = match Claude::found() {
+    let claude = match bin.map(|bin| Claude::with(Some(bin), None)).or_else(Claude::found) {
       Some(claude) => {
         let models = claude.models().await;
         Some((claude, models))
       }
       None => None,
     };
-    let mut catalog = Catalog::of(&listed, claude, server, env);
+    let mut catalog = Self::of(&listed, claude, server, env);
     catalog.providers.push(Entry {
       name: super::codex::NAME.to_owned(),
       env: Vec::new(),
@@ -314,14 +339,14 @@ impl Catalog {
   /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
   /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
   /// given, or when it finds no program.
-  #[must_use]
-  pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> io::Result<Self> {
     blocking(self.discovered(bin, stall))
   }
 
   /// The catalog with the claude command line, as [`Catalog::claude`] gives it, for a caller that
   /// awaits.
-  pub async fn discovered(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+  pub async fn discovered(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
     let claude = Claude::with(Some(bin), stall);
     let found = Some(claude.clone());
@@ -330,7 +355,7 @@ impl Catalog {
     let mut models: Vec<_> =
       claude.models().await.into_iter().map(|model| Offer::new(model, true)).collect();
     models.extend(network);
-    Catalog { models, claude: found, ..self }
+    Self { models, claude: found, ..self }
   }
 
   /// The catalog of the claude command line, which it offers when it found the program, of these providers, each model
@@ -341,7 +366,7 @@ impl Catalog {
     claude: Option<(Claude, Vec<Model>)>,
     local: Option<Arc<Server>>,
     env: impl Fn(&str) -> Option<String>,
-  ) -> Catalog {
+  ) -> Self {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
     let (kept, claude) = match claude {
@@ -360,17 +385,18 @@ impl Catalog {
         models.push(Offer::new(model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
+    Self { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
   }
 
   /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
   /// asks for what it lists.
-  pub fn setup(&self) -> Setup {
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn setup(&self) -> io::Result<Setup> {
     blocking(self.checked())
   }
 
   /// What a first run checks, as [`Catalog::setup`] gives it, for a caller that awaits.
-  pub async fn checked(&self) -> Setup {
+  async fn checked(&self) -> Setup {
     let offered = |provider: &str| {
       let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
       self.models.iter().filter(|one| one.offered && of(&one.model)).count()
@@ -414,7 +440,8 @@ impl Catalog {
 
   /// Every model the catalog offers, by its name: those of the claude command line, then those of the network, then
   /// those of the local server, so the first is the default actor.
-  pub fn offered(&self) -> Vec<Model> {
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn offered(&self) -> io::Result<Vec<Model>> {
     blocking(self.offers())
   }
 
@@ -428,7 +455,8 @@ impl Catalog {
   /// The model a name names: its name, `provider:id`, or an id that one model alone holds, among the models of the
   /// claude command line and of the network, and then, for a name of the provider local or of a provider that the
   /// catalog does not know, among those of the local server.
-  pub fn find(&self, name: &str) -> Option<Model> {
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn find(&self, name: &str) -> io::Result<Option<Model>> {
     blocking(self.seek(name))
   }
 
@@ -465,30 +493,30 @@ impl Catalog {
   /// The model and the level an actor names: a model alone, or a model and a level after a slash, among the models of
   /// the claude command line and of the network first, and then among those of the local server.
   async fn actor<'a>(&self, actor: &'a str) -> Option<(Model, Option<&'a str>)> {
-    let split = actor.rsplit_once('/');
+    let (name, level) = leveled(actor);
     {
       let known = self.known();
       if let Some(model) = named(&known, actor) {
         return Some((model.clone(), None));
       }
-      if let Some((name, level)) = split
+      if level.is_some()
         && let Some(model) = named(&known, name)
       {
-        return Some((model.clone(), Some(level)));
+        return Some((model.clone(), level));
       }
     }
     if let Some(model) = self.served(actor).await {
       return Some((model, None));
     }
-    // A model of the local server is named by its id, so a word after its slash is a level of effort or no name of it.
-    let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
+    let level = level?;
     Some((self.served(name).await?, Some(level)))
   }
 
   /// What the catalog still holds of the roster and the actor that a host names, as [`Kept`] says.
   /// A name that no model of the catalog answers to is dropped from the roster and from the actor,
   /// and named in `left`, in the order the host named them, each once.
-  pub fn keep(&self, names: Option<&[String]>, actor: Option<&str>) -> Kept {
+  /// It gives why the system gave it no runtime to wait on.
+  pub fn keep(&self, names: Option<&[String]>, actor: Option<&str>) -> io::Result<Kept> {
     blocking(self.keeping(names, actor))
   }
 
@@ -525,7 +553,7 @@ impl Catalog {
     names: Option<&[String]>,
     actor: Option<&str>,
   ) -> Result<(Vec<Model>, Option<String>), Unknown> {
-    blocking(self.rostered(names, actor))
+    blocking(self.rostered(names, actor))?
   }
 
   /// The models of a roster and its default actor, as [`Catalog::roster`] gives them, for a caller
@@ -578,28 +606,27 @@ impl Catalog {
     }
   }
 
-  /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
-  /// function of the host answers in place of the models when it gives one, and whose model thinks at most the tokens
-  /// in one turn that the environment gives, else the config of the project in the directory, else 32768.
+  /// The provider of the roster that the catalog keeps of what a host named, on a directory, with
+  /// the default actor of the roster, whose models a function of the host answers in place of the
+  /// models when it gives one, and whose model thinks at most the tokens in one turn that the
+  /// environment gives, else the config of the project in the directory, else 32768.
   pub fn provider(
     &self,
     directory: impl Into<String>,
-    names: Option<&[String]>,
-    actor: Option<&str>,
+    kept: &Kept,
     host: Option<Hosted>,
   ) -> Result<Provider, Unknown> {
-    blocking(self.provided(directory.into(), names, actor, host))
+    blocking(self.provided(directory.into(), kept, host))?
   }
 
   /// The provider of a roster, as [`Catalog::provider`] gives it, for a caller that awaits.
   pub async fn provided(
     &self,
     directory: String,
-    names: Option<&[String]>,
-    actor: Option<&str>,
+    kept: &Kept,
     host: Option<Hosted>,
   ) -> Result<Provider, Unknown> {
-    let (models, actor) = self.rostered(names, actor).await?;
+    let (models, actor) = self.rostered(kept.names.as_deref(), kept.actor.as_deref()).await?;
     let models = match host {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
@@ -611,15 +638,15 @@ impl Catalog {
 
 /// The one door to the catalog for a caller off the runtime of the ears, as the boot of a life
 /// on its blocking thread and the doors of the bindings are: it waits there for a question of
-/// the catalog that awaits. It panics on a thread of that runtime, so an ear awaits the question
-/// itself.
+/// the catalog that awaits, or gives why the system gave it no runtime. It panics on a thread of
+/// that runtime, so an ear awaits the question itself.
 #[expect(
   clippy::disallowed_methods,
   reason = "debt: the one bridge from the sync doors of the bindings and of the boot of a life to the catalog that \
             awaits, until the design of the host (#983) makes those doors async"
 )]
-pub(crate) fn blocking<T>(work: impl Future<Output = T>) -> T {
-  crate::ear::runtime().block_on(work)
+pub(crate) fn blocking<T>(work: impl Future<Output = T>) -> io::Result<T> {
+  Ok(ear::runtime()?.block_on(work))
 }
 
 /// The roster and the actor that a catalog still holds of what a host named, and the names that
@@ -631,9 +658,12 @@ pub struct Kept {
   pub left: Vec<String>,
 }
 
-/// Why a name is no model of the catalog: the reason that its server gives, or none to give.
+/// Why a name is no model of the catalog: the reason that its server gives, none to give, or why
+/// the catalog could not be read.
 #[derive(Debug, thiserror::Error)]
 pub enum Unknown {
+  #[error("No model can be read: {0}.")]
+  Unread(#[from] io::Error),
   #[error("No model is {name}: {why}.")]
   Why { name: String, why: String },
   #[error("No model is {name}. Name one as provider:id.")]
@@ -662,7 +692,7 @@ pub fn clamp<'a>(efforts: &[&'a str], level: &str) -> Option<&'a str> {
   let Some(at) = LEVELS.iter().position(|one| *one == level) else {
     return efforts.first().copied();
   };
-  let mut near = LEVELS[at..].iter().chain(LEVELS[..at].iter().rev());
+  let mut near = LEVELS.iter().skip(at).chain(LEVELS.iter().take(at).rev());
   near.find_map(|one| efforts.iter().find(|taken| *taken == one).copied())
 }
 
@@ -788,8 +818,8 @@ struct Credential {
 }
 
 impl Credential {
-  fn bare(key: String) -> Credential {
-    Credential { key, bearer: false }
+  fn bare(key: String) -> Self {
+    Self { key, bearer: false }
   }
 }
 
@@ -798,7 +828,7 @@ impl Listed {
   /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
   /// credentials of an application where its client finds them, under the application data on Windows and under
   /// the home elsewhere.
-  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<Credential, String> {
+  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<Credential, Unreached> {
     if let Some(key) = &self.key {
       return Ok(Credential::bare(key.clone()));
     }
@@ -818,15 +848,17 @@ impl Listed {
       }
       (Client::Vertex, None) if adc() => Ok(Credential::bare(String::new())),
       (_, Some((name, key))) => Ok(Credential { key, bearer: self.bearer.contains(name) }),
-      (_, None) => {
-        Err(format!("no credential of it stands in the environment: set {}", self.env.join(" or ")))
-      }
+      (_, None) => Err(Unreached::NoCredential { env: self.env.clone() }),
     }
   }
 
   /// Where a model of the provider is asked, with its credential: its address, with each place filled from the
   /// environment, the name that Azure knows it by, and the project and the location of Google; or why the
   /// environment does not say it.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "where a model is asked takes its id, its listing, its client, the credential of its provider and the environment, each from another part of the catalog"
+  )]
   fn reach(
     &self,
     id: &str,
@@ -834,7 +866,7 @@ impl Listed {
     client: Client,
     credential: Credential,
     env: &impl Fn(&str) -> Option<String>,
-  ) -> Result<Reach, String> {
+  ) -> Result<Reach, Unreached> {
     let own = listing.provider.as_ref().and_then(|own| own.api.clone());
     let based = env("AZURE_OPENAI_BASE_URL").filter(|_| client == Client::Azure);
     let api = match based {
@@ -852,28 +884,29 @@ impl Listed {
     let project = match client {
       Client::Vertex => {
         let project = env("GOOGLE_CLOUD_PROJECT").or_else(|| env("GCLOUD_PROJECT"));
-        let project = project
-          .ok_or("no project of Google stands in the environment: set GOOGLE_CLOUD_PROJECT")?;
+        let project = project.ok_or(Unreached::NoProject)?;
         Some((project, env("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|| "global".to_owned())))
       }
       _ => None,
     };
     let version = env("AZURE_OPENAI_API_VERSION").filter(|_| client == Client::Azure);
     let id = deployed.unwrap_or_else(|| id.to_owned());
-    Ok(Reach { key: credential.key, bearer: credential.bearer, api, id, version, project })
+    let named = self.named;
+    Ok(Reach { key: credential.key, bearer: credential.bearer, api, named, id, version, project })
   }
 
   /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place
   /// before the name itself; or the first name that the environment does not hold. Each place is filled once, after
   /// the value of the place before it, so a value that names a place stands as it is.
-  fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, String> {
+  fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, Unreached> {
     let (mut filled, mut from) = (api.to_owned(), 0);
-    while let Some(at) = filled[from..].find("${").map(|at| from + at) {
-      let Some(end) = filled[at..].find('}').map(|end| at + end) else { break };
-      let name = filled[at + 2..end].to_owned();
+    while let Some(at) = filled.get(from..).and_then(|rest| rest.find("${")).map(|at| from + at) {
+      let Some(end) = filled.get(at..).and_then(|rest| rest.find('}')).map(|end| at + end) else {
+        break;
+      };
+      let name = filled.get(at + 2..end).unwrap_or_default().to_owned();
       let value = self.aliases.get(&name).and_then(|alias| env(alias)).or_else(|| env(&name));
-      let value =
-        value.ok_or_else(|| format!("its address needs {name}: set it in the environment"))?;
+      let value = value.ok_or_else(|| Unreached::Unfilled { name: name.clone() })?;
       filled.replace_range(at..=end, &value);
       from = at + value.len();
     }
@@ -886,13 +919,13 @@ impl Client {
   /// Anthropic does, and GitHub Copilot and the other models of Amazon read none.
   fn dialect(self, id: &str) -> Dialect {
     match self {
-      Client::Anthropic => Dialect::Anthropic,
-      Client::Bedrock if id.contains("anthropic.") => Dialect::Anthropic,
-      Client::Openai | Client::Xai => Dialect::Responses,
-      Client::Gemini | Client::Vertex => Dialect::Gemini,
-      Client::Openrouter => Dialect::OpenRouter,
-      Client::Pi => Dialect::Pi,
-      Client::Bedrock | Client::Copilot => Dialect::Silent,
+      Self::Anthropic => Dialect::Anthropic,
+      Self::Bedrock if id.contains("anthropic.") => Dialect::Anthropic,
+      Self::Openai | Self::Xai => Dialect::Responses,
+      Self::Gemini | Self::Vertex => Dialect::Gemini,
+      Self::Openrouter => Dialect::OpenRouter,
+      Self::Pi => Dialect::Pi,
+      Self::Bedrock | Self::Copilot => Dialect::Silent,
       _ => Dialect::Chat,
     }
   }
@@ -900,12 +933,16 @@ impl Client {
 
 /// A model of a provider of the network. A model of Anthropic, of Amazon or of pi-ai counts what it read of the cache
 /// apart, and is told the most it writes.
+#[expect(
+  clippy::too_many_arguments,
+  reason = "a model of the network takes its provider, its id, its listing, its client and where it is asked, each from another part of the catalog"
+)]
 fn model(
   provider: &str,
   id: &str,
   listing: &Listing,
   client: Client,
-  reach: Result<Reach, String>,
+  reach: Result<Reach, Unreached>,
 ) -> Model {
   let dialect = client.dialect(id);
   let mut model = reached(format!("{provider}:{id}"), listing.limit.context, client, reach);
@@ -940,7 +977,7 @@ pub(super) fn reached(
   name: String,
   window: u64,
   client: Client,
-  reach: Result<Reach, String>,
+  reach: Result<Reach, Unreached>,
 ) -> Model {
   let made: Arc<OnceLock<Result<Streams, clients::Error>>> = Arc::default();
   let search = reach.as_ref().ok().and_then(|one| search::native(client, one));
@@ -984,7 +1021,10 @@ fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
 
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
 /// of the snapshot or newer. The last day that a model of a list changed says how new the list is.
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
+#[expect(
+  clippy::expect_used,
+  reason = "the snapshot is a file of the build, which each test of `world::offered` parses whole"
+)]
 pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, Listed> {
   let entries: IndexMap<String, Value> = serde_json::from_str(snapshot)
     .expect("the snapshot of the catalog is the JSON of its providers");
@@ -1024,16 +1064,32 @@ impl Listed {
 /// The class that the snapshot gives a model of a family that a program of its own serves, by the
 /// name of the family, as `claude-cli` or `codex`, and the name of the model in it, and nothing for
 /// a model that it does not list.
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 pub(super) fn family(name: &str, model: &str) -> Option<Class> {
-  static FAMILIES: OnceLock<HashMap<String, Cached>> = OnceLock::new();
-  let families = FAMILIES.get_or_init(|| {
+  snapshot().get(name)?.models.get(model)?.class
+}
+
+/// The price that the snapshot gives a model of a provider, in dollars for a million tokens: what
+/// it reads fresh, what it writes, what it reads from the cache and what it writes to it.
+pub(super) fn priced(name: &str, model: &str) -> Option<[f64; 4]> {
+  let cost = snapshot().get(name)?.models.get(model)?.cost.as_ref()?;
+  Some([cost.input, cost.output, cost.cache_read, cost.cache_write])
+}
+
+/// The models of each provider and of each family of the snapshot, by its name.
+#[expect(
+  clippy::expect_used,
+  reason = "the snapshot is a file of the build, which each test of `world::offered` parses whole"
+)]
+fn snapshot() -> &'static HashMap<String, Cached> {
+  static PROVIDERS: OnceLock<HashMap<String, Cached>> = OnceLock::new();
+  PROVIDERS.get_or_init(|| {
     let entries: HashMap<String, Value> = serde_json::from_str(SNAPSHOT)
       .expect("the snapshot of the catalog is the JSON of its providers");
-    let families = entries.into_iter().filter(|(_, one)| one.get("rig").is_none());
-    families.filter_map(|(name, one)| Some((name, serde_json::from_value(one).ok()?))).collect()
-  });
-  families.get(name)?.models.get(model)?.class
+    entries
+      .into_iter()
+      .filter_map(|(name, one)| Some((name, serde_json::from_value(one).ok()?)))
+      .collect()
+  })
 }
 
 #[cfg(test)]

@@ -1,0 +1,170 @@
+"""Run the tests that the files of a change reach, and leave the whole set to the gates.
+
+The hook of pytest and the hook of the Rust tests call it with the files that a run by hand names, at the stage manual: no
+commit and no push runs them. A file of the engine, of its Kernel, of the crate that the suite builds, of a manifest or
+of the harness reaches every test, so the whole suite runs. A test file reaches itself, a file of an extension reaches
+the tests of that extension, and a script reaches the test of its own beside the tests of the other scripts. A file of a
+crate reaches the tests of that crate, and a manifest of cargo reaches the workspace. A run with --all-files gives every
+file, so it reaches the whole set.
+
+Usage: python3 script/hooks/reach.py pytest|cargo <file>...
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# What the whole suite reads: the engine and its door, the crate and its build, the harness of the suite and the
+# manifests. A change of one of them reaches every test.
+WHOLE = re.compile(
+  r"(src/|build/|build\.rs$|crates/python/|docs/examples/python/"
+  r"|pyproject\.toml$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|uv\.lock$|\.furb/config\.json$)"
+)
+# The harness of each suite, as files that git holds, so that `cargo xtask paths` checks each name.
+HARNESS = {
+  "tests/conftest.py",
+  "tests/outside/conftest.py",
+  "tests/outside/doubles.py",
+  ".agents/skills/conftest.py",
+  ".furb/skills/conftest.py",
+}
+HOOK = {"script/hooks/pre-commit": "tests/outside/test_hook_script.py"}
+CONTRACT = re.compile(r"(tests/(?!outside/)|\.agents/skills/[^/]+/test/|\.furb/skills/[^/]+/test/)")
+TEST = re.compile(r"(tests|\.agents/skills/[^/]+/test|\.furb/skills(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
+SKILL = re.compile(r"((?:\.furb|\.agents)/skills/[^/]+)/")
+SCRIPT = re.compile(r"(?:script/(?:hooks/)?|crates/xtask/python/)([^/]+)\.(?:py|sh)$")
+
+
+def naming(name: str, stem: str) -> list[str]:
+  """Each test file that names a script, by its file or as a module that it imports."""
+  marks = (name, f"import {stem}", f"from {stem} ", f"script.{stem}", f"python.{stem}", f'"{stem}"')
+  tests = [
+    *ROOT.glob("tests/**/test_*.py"),
+    *ROOT.glob("script/hooks/test_*.py"),
+    *ROOT.glob(".furb/skills/**/test_*.py"),
+  ]
+  return [
+    one.relative_to(ROOT).as_posix() for one in tests if any(mark in one.read_text(encoding="utf-8") for mark in marks)
+  ]
+
+
+def suite(files: list[str]) -> list[str] | None:
+  """The test paths that the files reach, or None for the whole suite."""
+  found: list[str] = []
+  for path in files:
+    if WHOLE.match(path) or path in HARNESS or (path.startswith("tests/") and not TEST.match(path)):
+      return None
+    if TEST.match(path):
+      found.append(path)
+      # A test of a contract is held by the hygiene laws, which check each sentence of the contract against its test.
+      if CONTRACT.match(path):
+        found.append("tests/test_hygiene.py")
+    elif path in HOOK:
+      found.append(HOOK[path])
+    elif hit := SKILL.match(path):
+      tests = ROOT / hit[1] / "test"
+      # The words of the project have tests of their own beside them, and the contract of an official one has its laws.
+      found.append("tests/test_hygiene.py")
+      if hit[1].startswith(".furb/"):
+        found.append(".furb/skills")
+      if tests.is_dir():
+        found.append(tests.relative_to(ROOT).as_posix())
+    elif hit := SCRIPT.match(path):
+      found += naming(Path(path).name, hit[1])
+  return sorted({one for one in found if (ROOT / one).exists()})
+
+
+# The crate of each folder, and the root crate for each other file of the crate.
+CRATES = {
+  "crates/client/": "furb-client",
+  "crates/wire/": "furb-wire",
+  "crates/host/": "furb-host",
+  "crates/cli/": "furb-cli",
+  "crates/window/": "furb-window",
+  "crates/frames/": "furb-frames",
+  "crates/xtask/": "xtask",
+}
+
+
+def crates(files: list[str]) -> list[str] | None:
+  """The packages of cargo that the files reach, or None for the workspace."""
+  found: set[str] = set()
+  for path in files:
+    if re.match(r"(Cargo\.(toml|lock)|rust-toolchain\.toml)$", path):
+      return None
+    found.add(next((name for folder, name in CRATES.items() if path.startswith(folder)), "furb"))
+  return sorted(found)
+
+
+def command(kind: str, files: list[str]) -> list[str] | None:
+  """The command that runs the tests that the files reach, or None when they reach none."""
+  if kind == "pytest":
+    reached = suite(files)
+    if reached == []:
+      return None
+    # The coverage of the whole suite is the wall of the gates: a part of the suite cannot reach it. The sync builds the
+    # wheels before the run, so the run syncs nothing.
+    return ["uv", "run", "--no-sync", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
+  packages = crates(files)
+  chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
+  # Cargo refuses a feature of furb in a run of no package that depends on furb, as xtask alone.
+  features = [] if packages == ["xtask"] else ["--features", "furb/typescript"]
+  return ["cargo", "nextest", "run", *chosen, *features]
+
+
+def cache() -> Path:
+  """The cache of furb that the tests of the crates read in place of the one of the machine, which the setup of the runner
+  of `.config/nextest.toml` names too: in the temporary folder, under a short name that holds a hash of the root, as the
+  tests of TypeScript name it, since a socket that a command makes in a scratch directory under it takes 104 bytes of
+  path at the most."""
+  folder = Path(tempfile.gettempdir() if os.name == "nt" else "/tmp")  # noqa: S108
+  return folder / f"furb-cache-{hashlib.sha256(str(ROOT).encode()).hexdigest()[:8]}"
+
+
+def scratches(cache: Path) -> set[str]:
+  """The scratch directories of the records in a cache of furb."""
+  folder = cache / "furb" / "scratch"
+  return {one.name for one in folder.iterdir() if one.is_dir()} if folder.is_dir() else set()
+
+
+def private(run: list[str]) -> int:
+  """The run of the tests of the crates on the cache of the tests, and the scratch directories that it left there: a
+  life of a test that ends removes its scratch directory, and one that a test cut keeps it."""
+  held = cache()
+  before = scratches(held)
+  code = subprocess.run(run, env={**os.environ, "XDG_CACHE_HOME": str(held)}, check=False).returncode  # noqa: S603
+  left = sorted(scratches(held) - before)
+  if left:
+    sys.stderr.write("a test left a scratch directory in the cache:\n" + "".join(f"  {one}\n" for one in left))
+  return code or int(bool(left))
+
+
+def main(args: list[str]) -> int:
+  run = command(args[0], args[1:])
+  if run is None:
+    return 0
+  sys.stdout.write(" ".join(run) + "\n")
+  sys.stdout.flush()
+  # The build is no part of the limit of time: a run after a change of a crate builds it, its tests and the wheels that
+  # the suite of python imports, which takes minutes of CPU, and the limit holds the run of the tests alone. The sync is
+  # the one that uv run makes.
+  build = [*run, "--no-run"] if args[0] == "cargo" else ["uv", "sync", "--inexact"]
+  if built := subprocess.run(build, check=False).returncode:  # noqa: S603
+    return built
+  run = ["cargo", "xtask", "budget", args[0], "--", *run]
+  if args[0] == "cargo":
+    return private(run)
+  os.execvp(run[0], run)  # noqa: S606
+  return 1
+
+
+if __name__ == "__main__":
+  sys.exit(main(sys.argv[1:]))

@@ -7,13 +7,13 @@ use std::{
   net::TcpListener,
   path::{Path, PathBuf},
   sync::{Mutex, MutexGuard, OnceLock, PoisonError},
-  time::{Duration, SystemTime, UNIX_EPOCH},
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rig_core::http_client::ReqwestClient;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use tokio::{
@@ -23,16 +23,31 @@ use tokio::{
 
 use crate::{
   ear::runtime,
-  extension::Places,
+  skill::Places,
   world::disk::{self, Access},
 };
+use serde::de;
+use std::env;
+use std::io;
+use tokio::net;
+use tokio::task;
+use tokio::time;
 
 /// The provider of models paid for by a `ChatGPT` subscription.
 pub const NAME: &str = "codex";
-pub(super) const API: &str = "https://chatgpt.com/backend-api/codex";
+const API: &str = "https://chatgpt.com/backend-api/codex";
 const AUTH: &str = "https://auth.openai.com";
+/// The address of a host that stands in for `OpenAI`, as one that a capture of the window serves:
+/// the sign-in at its root and the API of Codex under `/backend-api/codex`.
+const STAND_IN: &str = "FURB_OPENAI_URL";
 const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT: &str = "http://localhost:1455/auth/callback";
+/// The page where a person enters the code of a sign-in from a device, and the callback that the
+/// code of such a sign-in names, as the codex command line names them.
+const DEVICE: &str = "/codex/device";
+const DEVICE_REDIRECT: &str = "/deviceauth/callback";
+/// How long a code of a sign-in from a device holds.
+const DEVICE_WAIT: Duration = Duration::from_mins(15);
 const CLIENT_VERSION: &str = "0.163.0";
 const AGAIN: &str = "Sign in to Codex again from Providers.";
 
@@ -41,9 +56,11 @@ const AGAIN: &str = "Sign in to Codex again from Providers.";
 pub enum SignIn {
   #[default]
   Disconnected,
-  /// The browser address to open while the sign-in waits for its callback.
+  /// The browser address to open while the sign-in waits for its callback, and the code to enter
+  /// there for a sign-in from a device.
   Waiting {
     url: String,
+    code: Option<String>,
   },
   Connecting,
   Connected,
@@ -69,7 +86,15 @@ impl SignIn {
   /// The browser address, while the sign-in waits.
   pub fn url(&self) -> Option<&str> {
     match self {
-      Self::Waiting { url } => Some(url),
+      Self::Waiting { url, .. } => Some(url),
+      _ => None,
+    }
+  }
+
+  /// The code to enter on the page of the address, while a sign-in from a device waits.
+  pub fn code(&self) -> Option<&str> {
+    match self {
+      Self::Waiting { code, .. } => code.as_deref(),
       _ => None,
     }
   }
@@ -100,7 +125,7 @@ pub enum AuthError {
   #[error("The credential has no directory")]
   NoDirectory,
   #[error("{0}")]
-  Io(#[from] std::io::Error),
+  Io(#[from] io::Error),
   #[error("{0}")]
   Json(#[from] serde_json::Error),
   #[error("{0}")]
@@ -108,7 +133,7 @@ pub enum AuthError {
   #[error("{0}")]
   Write(#[from] disk::Error),
   #[error("{0}")]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
   #[error("{0}")]
   Url(#[from] url::ParseError),
   #[error("{0}")]
@@ -134,13 +159,17 @@ pub enum AuthError {
   #[error("This ChatGPT account offers no model to furb")]
   NoModels,
   #[error("Another OpenAI sign-in uses port 1455. Finish it, then try again.")]
-  PortBusy(#[source] std::io::Error),
+  PortBusy(#[source] io::Error),
   #[error("Sign-in canceled")]
   Canceled,
   #[error("OpenAI sign-in was canceled or timed out")]
   Ended,
   #[error("OpenAI sign-in was refused")]
   Declined,
+  #[error(
+    "OpenAI offers no sign-in with a code here. Sign in from a browser on the machine of furb."
+  )]
+  NoDevice,
 }
 
 fn advice(status: u16) -> &'static str {
@@ -201,18 +230,29 @@ struct Listed {
   models: Vec<Listing>,
 }
 
-/// A sign-in that runs, with the way to cancel it. It outlives the call that began it: the
-/// host asks for the state in later calls, with no object of its own to hold it between them.
+/// The sign-in of a folder, with the way to cancel it. It outlives the call that began it: the
+/// host asks for the state in later calls, with no object of its own to hold it between them. Its
+/// state lives in the watch alone, which each writer sends to and each reader borrows from, so a
+/// host that subscribes sees each change at once and polls nothing.
 struct Flow {
-  status: SignIn,
+  state: watch::Sender<SignIn>,
   canceled: watch::Sender<bool>,
 }
 
-/// What a browser sign-in waits with: its port, its state and its verifier.
-struct Pending {
-  listener: TcpListener,
-  state: String,
-  verifier: String,
+fn fresh(state: SignIn) -> Flow {
+  Flow { state: watch::channel(state).0, canceled: watch::channel(false).0 }
+}
+
+/// The new state of the sign-in of a folder, which each subscriber sees.
+fn publish(path: &Path, state: SignIn) {
+  flows().entry(path.to_owned()).or_insert_with(|| fresh(state.clone())).state.send_replace(state);
+}
+
+/// What a sign-in waits with: in the browser of this machine, its port, its state and its
+/// verifier; from a device, nothing until `OpenAI` gives its code.
+enum Pending {
+  Browser { listener: TcpListener, state: String, verifier: String },
+  Device,
 }
 
 fn now() -> u64 {
@@ -229,7 +269,7 @@ fn flows() -> MutexGuard<'static, HashMap<PathBuf, Flow>> {
   FLOWS.get_or_init(Mutex::default).lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+fn read<T: de::DeserializeOwned>(path: &Path) -> Option<T> {
   serde_json::from_slice(&fs::read(path).ok()?).ok()
 }
 
@@ -257,21 +297,22 @@ fn claims(token: &str) -> Option<Value> {
 }
 
 fn account(access: &str) -> Option<String> {
-  claims(access)?["https://api.openai.com/auth"]["chatgpt_account_id"].as_str().map(str::to_owned)
+  let claims = claims(access)?;
+  claims.get("https://api.openai.com/auth")?.get("chatgpt_account_id")?.as_str().map(str::to_owned)
 }
 
 fn borrowed() -> Option<Credential> {
-  let home = std::env::var_os("CODEX_HOME").map(PathBuf::from).or_else(|| {
-    std::env::var_os("HOME")
-      .or_else(|| std::env::var_os("USERPROFILE"))
+  let home = env::var_os("CODEX_HOME").map(PathBuf::from).or_else(|| {
+    env::var_os("HOME")
+      .or_else(|| env::var_os("USERPROFILE"))
       .map(|one| PathBuf::from(one).join(".codex"))
   })?;
   let value: Value = read(&home.join("auth.json"))?;
-  if value["auth_mode"].as_str()? != "chatgpt" {
+  if value.get("auth_mode")?.as_str()? != "chatgpt" {
     return None;
   }
-  let access = value["tokens"]["access_token"].as_str()?.to_owned();
-  let expires = claims(&access)?["exp"].as_u64()?.saturating_mul(1000);
+  let access = value.get("tokens")?.get("access_token")?.as_str()?.to_owned();
+  let expires = claims(&access)?.get("exp")?.as_u64()?.saturating_mul(1000);
   if expires <= now() + 60_000 {
     return None;
   }
@@ -290,10 +331,11 @@ fn usable(path: &Path) -> Option<Credential> {
 /// The current sign-in state. This view starts no sign-in and makes no request.
 pub fn status(config: Option<&Path>) -> SignIn {
   let path = directory(config);
-  if let Some(flow) = flows().get(&path)
-    && flow.status != SignIn::Connected
-  {
-    return flow.status.clone();
+  if let Some(flow) = flows().get(&path) {
+    let state = flow.state.borrow().clone();
+    if !matches!(state, SignIn::Connected | SignIn::Disconnected) {
+      return state;
+    }
   }
   let connected = usable(&path).is_some_and(|one| {
     read::<Catalog>(&path.join("codex.models.json"))
@@ -302,11 +344,29 @@ pub fn status(config: Option<&Path>) -> SignIn {
   if connected { SignIn::Connected } else { SignIn::Disconnected }
 }
 
+/// The state of the sign-in of a folder as it changes: the current state at once, then each change
+/// that a writer of the sign-in makes, so a host tells its windows with no poll.
+pub fn subscribe(config: Option<&Path>) -> watch::Receiver<SignIn> {
+  let current = status(config);
+  let mut all = flows();
+  let flow = all.entry(directory(config)).or_insert_with(|| fresh(current.clone()));
+  // A state that no writer set, as the account that connects or disconnects, is read from the disk.
+  flow.state.send_if_modified(|state| {
+    let settled = matches!(state, SignIn::Connected | SignIn::Disconnected) && *state != current;
+    if settled {
+      *state = current;
+    }
+    settled
+  });
+  flow.state.subscribe()
+}
+
 /// Cancel a sign-in that has not finished. Saved credentials stay available.
 pub fn cancel(config: Option<&Path>) {
-  if let Some(flow) = flows().get_mut(&directory(config)).filter(|flow| flow.status.running()) {
+  let all = flows();
+  if let Some(flow) = all.get(&directory(config)).filter(|flow| flow.state.borrow().running()) {
     flow.canceled.send_replace(true);
-    flow.status = SignIn::Canceled;
+    flow.state.send_replace(SignIn::Canceled);
   }
 }
 
@@ -314,14 +374,12 @@ fn update(path: &Path, canceled: &watch::Receiver<bool>, status: SignIn) {
   if *canceled.borrow() {
     return;
   }
-  if let Some(flow) = flows().get_mut(path) {
-    flow.status = status;
-  }
+  publish(path, status);
 }
 
 pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
   let path = directory(config);
-  if flows().get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_))) {
+  if flows().get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_))) {
     return Vec::new();
   }
   let Some(credential) = held(&path) else { return Vec::new() };
@@ -331,14 +389,10 @@ pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
 }
 
 pub(super) fn needs_login(path: &Path) {
-  let mut all = flows();
-  if all.get(path).is_some_and(|flow| flow.status.running()) {
+  if flows().get(path).is_some_and(|flow| flow.state.borrow().running()) {
     return;
   }
-  all.insert(
-    path.to_owned(),
-    Flow { status: SignIn::NeedsLogin(AGAIN.to_owned()), canceled: watch::channel(false).0 },
-  );
+  publish(path, SignIn::NeedsLogin(AGAIN.to_owned()));
 }
 
 pub(super) fn failed(path: &Path, failure: &AuthError) {
@@ -361,7 +415,7 @@ pub fn refresh(config: Option<&Path>) -> Result<SignIn, AuthError> {
   if fresh && !matches!(status, SignIn::Failed(_)) {
     return Ok(SignIn::Connected);
   }
-  begin(config)
+  begin(config, false)
 }
 
 pub(super) async fn credential(path: &Path) -> Result<Credential, AuthError> {
@@ -371,7 +425,7 @@ pub(super) async fn credential(path: &Path) -> Result<Credential, AuthError> {
   }
   fs::create_dir_all(path)?;
   let path_of_lock = path.join("codex.lock");
-  let _lock = tokio::task::spawn_blocking(move || -> Result<File, AuthError> {
+  let _lock = task::spawn_blocking(move || -> Result<File, AuthError> {
     let file = File::options().create(true).truncate(false).write(true).open(path_of_lock)?;
     file.lock()?;
     Ok(file)
@@ -417,7 +471,7 @@ async fn token(fields: &[(&str, &str)]) -> Result<Token, AuthError> {
     .extend_pairs(fields.iter().copied())
     .finish();
   let response = ReqwestClient::new()
-    .post(format!("{AUTH}/oauth/token"))
+    .post(format!("{}/oauth/token", issuer()))
     .timeout(Duration::from_secs(20))
     .header("content-type", "application/x-www-form-urlencoded")
     .body(body)
@@ -431,7 +485,7 @@ async fn token(fields: &[(&str, &str)]) -> Result<Token, AuthError> {
 
 async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
   let response = ReqwestClient::new()
-    .get(format!("{API}/models?client_version={CLIENT_VERSION}"))
+    .get(format!("{}/models?client_version={CLIENT_VERSION}", api()))
     .bearer_auth(&credential.access)
     .header("chatgpt-account-id", &credential.account)
     .header("originator", "furb")
@@ -461,26 +515,38 @@ async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
 }
 
 /// Start a `ChatGPT` sign-in, or connect with an existing sign-in. The browser address is returned
-/// to the host.
-pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
+/// to the host. A sign-in from a device, for a person who is not at this machine, needs no port
+/// here: `OpenAI` gives a code that he enters on a page in the browser of any device, which the
+/// state shows once it came.
+pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let retry;
   {
     let all = flows();
-    if let Some(flow) = all.get(&path).filter(|one| one.status.running()) {
-      return Ok(flow.status.clone());
+    if let Some(flow) = all.get(&path).filter(|one| one.state.borrow().running()) {
+      return Ok(flow.state.borrow().clone());
     }
-    retry = all.get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_)));
+    retry =
+      all.get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_)));
   }
+  let runtime = runtime().inspect_err(|no| publish(&path, SignIn::Failed(no.to_string())))?;
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
+  } else if device {
+    (SignIn::Connecting, Some(Pending::Device))
   } else {
-    let (url, pending) = authorize()?;
-    (SignIn::Waiting { url }, Some(pending))
+    let (url, pending) =
+      authorize().inspect_err(|failure| publish(&path, SignIn::Failed(failure.to_string())))?;
+    (SignIn::Waiting { url, code: None }, Some(pending))
   };
-  flows().insert(path.clone(), Flow { status: status.clone(), canceled: stop });
-  runtime().spawn(finish(path, pending, canceled));
+  {
+    let mut all = flows();
+    let flow = all.entry(path.clone()).or_insert_with(|| fresh(status.clone()));
+    flow.canceled = stop;
+    flow.state.send_replace(status.clone());
+  }
+  runtime.spawn(finish(path, pending, canceled));
   Ok(status)
 }
 
@@ -491,7 +557,7 @@ fn authorize() -> Result<(String, Pending), AuthError> {
   let verifier = random()?;
   let state = random()?;
   let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-  let mut url = url::Url::parse(&format!("{AUTH}/oauth/authorize"))?;
+  let mut url = url::Url::parse(&format!("{}/oauth/authorize", issuer()))?;
   url.query_pairs_mut().extend_pairs([
     ("response_type", "code"),
     ("client_id", CLIENT),
@@ -504,7 +570,7 @@ fn authorize() -> Result<(String, Pending), AuthError> {
     ("codex_cli_simplified_flow", "true"),
     ("originator", "furb"),
   ]);
-  Ok((url.to_string(), Pending { listener, state, verifier }))
+  Ok((url.to_string(), Pending::Browser { listener, state, verifier }))
 }
 
 async fn finish(path: PathBuf, pending: Option<Pending>, canceled: watch::Receiver<bool>) {
@@ -522,14 +588,23 @@ async fn signed(
   canceled: &watch::Receiver<bool>,
 ) -> Result<(), AuthError> {
   let credential = match pending {
-    Some(Pending { listener, state, verifier }) => {
-      let code = callback_code(listener, &state, canceled.clone()).await?;
+    Some(pending) => {
+      let (code, verifier, redirect) = match pending {
+        Pending::Browser { listener, state, verifier } => {
+          (callback_code(listener, &state, canceled.clone()).await?, verifier, REDIRECT.to_owned())
+        }
+        Pending::Device => {
+          let issuer = issuer();
+          let device = device_code(&issuer, path, canceled).await?;
+          (device.authorization_code, device.code_verifier, format!("{issuer}{DEVICE_REDIRECT}"))
+        }
+      };
       let token = token(&[
         ("grant_type", "authorization_code"),
         ("client_id", CLIENT),
         ("code", &code),
         ("code_verifier", &verifier),
-        ("redirect_uri", REDIRECT),
+        ("redirect_uri", &redirect),
       ])
       .await?;
       let credential = token.credential(None)?;
@@ -551,21 +626,22 @@ async fn callback_code(
   state: &str,
   mut canceled: watch::Receiver<bool>,
 ) -> Result<String, AuthError> {
-  let listener = tokio::net::TcpListener::from_std(listener)?;
+  let listener = net::TcpListener::from_std(listener)?;
   let heard = async {
     loop {
       let (mut stream, _) = listener.accept().await?;
       let mut bytes = [0; 8192];
       let mut count = 0;
-      while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
-        let read = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut bytes[count..]));
+      while !bytes.get(..count).unwrap_or_default().windows(4).any(|part| part == b"\r\n\r\n") {
+        let Some(free) = bytes.get_mut(count..).filter(|free| !free.is_empty()) else { break };
+        let read = time::timeout(Duration::from_secs(2), stream.read(free));
         match read.await {
           Ok(Ok(0)) | Err(_) => break,
           Ok(Ok(read)) => count += read,
           Ok(Err(no)) => return Err(AuthError::from(no)),
         }
       }
-      let text = String::from_utf8_lossy(&bytes[..count]);
+      let text = String::from_utf8_lossy(bytes.get(..count).unwrap_or_default());
       let target = text
         .lines()
         .next()
@@ -599,11 +675,92 @@ async fn callback_code(
     }
   };
   tokio::select! {
-    got = tokio::time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
+    got = time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
     _ = canceled.wait_for(|one| *one) => Err(AuthError::Ended),
   }
 }
 
-#[cfg(test)]
-#[path = "auth.test.rs"]
-mod test;
+/// What `OpenAI` gives for a sign-in from a device: its id, the code that the person enters, and
+/// the seconds to wait between two asks of its end, which it gives as text.
+#[derive(Deserialize)]
+struct Given {
+  device_auth_id: String,
+  #[serde(alias = "usercode")]
+  user_code: String,
+  #[serde(default, deserialize_with = "seconds")]
+  interval: u64,
+}
+
+/// The code of a sign-in from a device once the person entered it, with the verifier of its
+/// exchange.
+#[derive(Deserialize)]
+struct Authorized {
+  authorization_code: String,
+  code_verifier: String,
+}
+
+fn seconds<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+  String::deserialize(deserializer)?.trim().parse().map_err(de::Error::custom)
+}
+
+/// A sign-in from a device at an issuer: the code that it gives, told as the state of the sign-in
+/// of the folder, then an ask of its end at the pace that it names, until the person entered the
+/// code, the sign-in is canceled or the code ends.
+async fn device_code(
+  issuer: &str,
+  path: &Path,
+  canceled: &watch::Receiver<bool>,
+) -> Result<Authorized, AuthError> {
+  let api = format!("{issuer}/api/accounts/deviceauth");
+  let response = posted(&format!("{api}/usercode"), &json!({ "client_id": CLIENT })).await?;
+  match response.status().as_u16() {
+    404 => return Err(AuthError::NoDevice),
+    status if !response.status().is_success() => return Err(AuthError::Rejected { status }),
+    _ => {}
+  }
+  let given: Given =
+    serde_json::from_slice(&response.bytes().await?).map_err(AuthError::InvalidToken)?;
+  let code = Some(given.user_code.clone());
+  update(path, canceled, SignIn::Waiting { url: format!("{issuer}{DEVICE}"), code });
+  let asked = json!({ "device_auth_id": given.device_auth_id, "user_code": given.user_code });
+  // A server that names no pace is asked once a second, not as fast as the network goes.
+  let pace = Duration::from_secs(given.interval.max(1));
+  let start = Instant::now();
+  let mut canceled = canceled.clone();
+  loop {
+    let response = posted(&format!("{api}/token"), &asked).await?;
+    let status = response.status().as_u16();
+    if response.status().is_success() {
+      return serde_json::from_slice(&response.bytes().await?).map_err(AuthError::InvalidToken);
+    }
+    // The code waits for the person while the server answers 403 or 404.
+    if !matches!(status, 403 | 404) {
+      return Err(AuthError::Rejected { status });
+    }
+    let left = DEVICE_WAIT.saturating_sub(start.elapsed());
+    if left.is_zero() {
+      return Err(AuthError::Ended);
+    }
+    tokio::select! {
+      () = time::sleep(pace.min(left)) => {}
+      _ = canceled.wait_for(|one| *one) => return Err(AuthError::Ended),
+    }
+  }
+}
+
+/// The issuer of the sign-in: `OpenAI`, or the host that stands in for it.
+fn issuer() -> String {
+  env::var(STAND_IN).unwrap_or_else(|_| AUTH.to_owned())
+}
+
+/// The API of Codex: that of `OpenAI`, or that of the host that stands in for it.
+pub(super) fn api() -> String {
+  env::var(STAND_IN).map_or_else(|_| API.to_owned(), |one| format!("{one}/backend-api/codex"))
+}
+
+/// A JSON body posted to an address of the sign-in.
+async fn posted(url: &str, body: &Value) -> Result<reqwest::Response, AuthError> {
+  let request = ReqwestClient::new().post(url).timeout(Duration::from_secs(20));
+  let request = request.header("content-type", "application/json").body(body.to_string());
+  Ok(request.send().await?)
+}

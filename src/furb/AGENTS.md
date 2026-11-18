@@ -20,10 +20,10 @@ meanings. The entry of such a name here gives only its form in the engine.
 - share: the part of a window that one model response used.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default actor
   and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World writes
-  for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain tells no
-  standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory, and each
-  chain whose standing names a doctrine plays both on itself, just before its open and again when a later life stands on
-  another standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
+  for a model; its one home is the transcript of the chain that the root goes on as, where the done of the last stand
+  holds it. A chain tells no standing of its own: a stand that a word makes tells the roster and the actor, and a cd
+  tells the directory; the root plays both on itself in its setup, and a chain whose standing names a doctrine plays both again when a later stand
+  gives another standing, and at its birth when the stand of the setup that it holds gave another one. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
   of a chain that ran no cd.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life, and which tells nothing then. A stand that a word makes tells its answer in a paragraph
@@ -34,19 +34,25 @@ meanings. The entry of such a name here gives only its form in the engine.
   of its own.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- catch-up: what the official extension catchup does on each chain at each stand, which `extensions/catchup/catchup.pyi`
+- catch-up: what the official extension catchup does for each chain at each stand, which `.agents/skills/catchup/catchup.pyi`
   says.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
   prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
+- checkpointer: the module of the outside, `checkpoint.py`, that gathers the data of a carry and seeds the next engine
+  from it, on the names of the engine; the sandbox loads it as it loads the Kernel, and the fact made holds its text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
-  an act that is not done, and says the run done with what the word gave.
-- gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
-  runs that word; what it reads with is its own. It reads the word after the program of its chain, and it finds
-  nothing when the word may run.
-- boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
-  transcript, and gives the root.
+  an act that is not done, and says the run done with what the word gave. It is the loop of asyncio of each word
+  while it steps it, so the tasks that asyncio.gather and asyncio.create_task make are its own: it steps them in the
+  order that the facts come, each job of the run that waits for an act waits through a wants of the run, and the run is
+  done once the word and each of its tasks are over. It refuses, where the word waited, an await that cannot settle:
+  of what is neither an act nor a future of that loop, of a chain, of a name of no act, and of the rung or the run of
+  the word itself.
+- boot: the life, given the journal and the generators of the outside, which binds say, act, drive, get, peek,
+  transcript, numbered, offers and lives, binds numbered, offers, drive and lives again to what the journal gives, and
+  gives the root. It brings the ear of the journal to life last, so the journal says its record again before boot
+  makes the root that the record does not hold and stands the life.
 - bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator;
   it keeps what each ear waits for, and gives each fact to the ears that wait for it.
 - fact: a tuple of its kind, the act it is about, who said it, and its words.
@@ -87,10 +93,26 @@ meanings. The entry of such a name here gives only its form in the engine.
   new list of them at each call, and the view of a kind or of a speaker gives the facts on the chain of that kind
   or that it said, which boot keeps as they are said.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
-- prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
-  says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
+- module of the extensions: the dict that the module of a chain holds under `__extensions__`, which `module` of the
+  engine makes at its first use as a copy of the names of the engine, and in which the Kernel runs the word of a rung of
+  a text, as the ear of the extensions and the setup make one for each word of an extension. A name of the engine that
+  a word of the chain binds, as `picked`, never reaches it, so no binding of a model breaks an ear of an extension. The
+  Kernel binds in the module of the chain each other name that a step binds there, and the checkpointer carries it as
+  the extensions of the chain.
+- prefix: the fact that carries what a chain with a source holds of the reading of its origin, which the chain says at
+  its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
+- cut: the fact that names what the model of a chain reads from it on: the facts that it keeps, then each fact said on
+  the chain after it. It takes nothing from the transcript, so a chain only grows; the seed of a carry says one.
+- jump: the act by which a chain goes on as another chain, which the chain makes at rest with itself as its source,
+  less the acts that each jump drops; a compaction is a jump.
+- jumped: the table of the chains that jumped, each to the chain that it went on as. scope follows it, so each name
+  of a chain that jumped names the chain that it went on as, but its reading and its transcript, which own reads.
+- reading: what the model of a chain reads: the facts that its last cut kept, then each fact said on the chain after
+  that cut, or the whole transcript of a chain that holds no cut; the turns, a fork and each scan at a fact read it.
+  The reading of a chain that jumped is its own, as its model read it.
 - carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
-  another record or from a checkpoint; a chain with a source holds it whole.
+  another record or from a carry; a chain with a source holds it whole in its setup, and after it as its filter keeps
+  its name, so a compaction drops it as any other turn.
 - note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
@@ -106,11 +128,18 @@ meanings. The entry of such a name here gives only its form in the engine.
 - message: the text a prompt carries.
 - shape: the python type of a response, which a prompt carries by its name.
 - response: what a prompt completes with.
-- acknowledgment: the prompt of nothing a chain makes when an act a rung made is done, or the chain of a prompt that
-  a rung made pauses, and no reply has shown it, on the thread that made that rung, so it opens that thread again.
+- end notice: the prompt of nothing that a chain of an earlier build made on a thread that was over when an act
+  that a rung of that thread made failed. A chain makes none now, since a thread closes only once no command, wait or
+  prompt under it runs, and the view of the crate still reads those prompts in an older record.
+- due: the state of an open thread that a model answers once a new fact for it came that no reply read, as a notice
+  on it, the end of an act of it that no word awaits, or the answer of a question on it; the chain makes one rung of
+  a due thread, and asks it one reply.
+- barren: a step that raises, that makes nothing and changes no name of its module, or that repeats a word of its
+  thread; the third in a row rests its thread until a fact makes it due.
 - thread: a prompt and the prompts on it, in order, each of which names the one before it as its on; a prompt of
-  None on a thread that is open is a message of it, and any other prompt on it is answered in steps, and opens it
-  again when it closed.
+  None on a thread that is open is a notice of it, and any other prompt on it is a question, as a message of a
+  person that waits for its answer: its own rung answers it in steps, the thread goes on after the answer, and no
+  word closes the thread while it waits.
 - rung: the run of one word on a chain, and the verb that makes it: with a word its caller wrote, or with no word,
   for a turn of a model.
 - reply: the act a chain makes, under the site of a rung, to ask the model of that rung for its word, which the
@@ -122,13 +151,13 @@ meanings. The entry of such a name here gives only its form in the engine.
   stand in its own call while the part prompts a chain that asks the World for a reply.
 - ran: the fact the Kernel says, as a rung, once the part of a writing of that rung is over, with what the part
   raised, which the World hears to end a reply at a part that raised.
-- wants: the act a run makes when its word waits for an act that is not done, which the rung takes and answers
-  with what that act came to.
+- wants: the act a run makes when its word or a task of it waits for an act that is not done, which takes itself as
+  it is made, and which the Kernel says done, as that wants, with what that act came to once no pause covers the rung.
 - step: one turn of a model and the run of its word, which is one rung.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
-  its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
-  of its runs since its last module, as python, which the gate reads a word after.
+  its rungs, which its door shows, and the program of a chain is the words of its runs since its last module, as
+  python.
 - replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
   origin and how a write of a door edits the program of a ladder.
 - donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares
@@ -153,39 +182,45 @@ meanings. The entry of such a name here gives only its form in the engine.
 - crafted rung: a rung with a word and an actor, a turn of that actor that its caller wrote; the crafted rungs of a
   chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
   within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
-- setup: the turns that the engine crafts on the root of a new record at its first stand, after the bare turn
-  `chain()`, from the standing alone, in `seeded()` of `engine.py`: the World gives in the standing, after the path of
-  the doctrine, each extension that the life runs as `[name, file, life word, root alone]`, and the root, when it holds
-  no reply, makes crafted rungs of its default actor: the read of the doctrine, the turn
-  `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, in the order of the life,
-  whose rung tells the code of the file alone in the turn after it and runs that code in the module of the root, the
-  file being the copy of the word in `words/<name>/` of the config directory, then one turn of their life words, which read the
-  place against the directory of the standing, as every chain that ran no cd, then the fact setup,
-  `("setup", "chain1", "chain1")`, then the same turns for the extensions of the root alone. No ear makes a rung of the
-  setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Then
-  the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with that word and
-  its default actor, just before its open, as each chain with no source does at its birth, after the setup that it
-  holds. The reads of the files come first, so their turns are the same text whatever the place and the actors, then
-  the life words, so their turns are the same text in one place whatever the actors, and a provider caches them across
-  records. The engine makes each of these rungs at once, so the root plays its stand after the last of them and tells
-  its open after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup
-  of the root as its prefix, with the same names, less the acts that the World, the operator or the root itself made
-  after the fact setup, as the stand of the root, and each act under one, and runs its words again, so every chain
-  shares one prefix, which the provider ends with a block that it marks for the cache. The fact teach,
-  `("teach", "chain1", "extensions", actor, doctrine, count)`, which the World says when the engine seeded the root,
-  before the count of enables, tells the ear of the extensions that the setup holds them, so it plays them on no chain.
-  A standing that gives no extensions, as that of a World that names no doctrine, as the World of the suite, seeds no
-  setup: the root tells its open at its first stand, the extensions play as rungs of the ear, and its chains run no
-  cd, so the World resolves their paths against the directory of the standing. A later life replays the setup from
-  the standing that the record holds.
+- setup: the turns that the engine crafts on the root of a new record at its first stand, after the bare turn `chain()`,
+  from the standing alone, in `setup()` of `chain` in `engine.py`: the World gives in the standing, after the path of
+  the doctrine, each extension that the life runs as `[name, file, life word, root alone]`, the file being the copy of
+  the word in `words/<name>/<digest>/` of the config directory, under the start of its sha256. The root makes crafted
+  rungs of its default actor, in this order: the turn `debug(t"{standing()[4]=}")`, the read of the doctrine, the turn
+  `rung(read('<file>', HIDDEN))` of each extension of every chain that has a file, whose rung tells the code of the file
+  alone in the turn after it and runs that code in the module of the extensions of the root, then one turn `stand()` and
+  `cd('<the directory of the standing>')`, then the life word of each of those extensions, then the fact setup,
+  `("setup", "chain1", "chain1")`, which the root says once those rungs ran, then the files and the life words of the
+  extensions of the root alone, then its open, just before its first prompt. The order is measured: the turns before the
+  stand are the same text in each directory and for each roster and actor, so a provider can cache them across records,
+  and the life words, as the memory of a folder, run after the cd that names their folder. No ear makes a rung of the
+  setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Each
+  chain with no source holds the facts of the root from `chain()` to the fact setup that are about the root or an act
+  under it as its prefix, with the same names, and runs its words again, so every chain shares one prefix, which the
+  provider ends with a block that it marks for the cache; a chain born on another standing than the one of that stand
+  plays its own turn `stand()` before its open. The ear of the extensions reads the bare paragraph `chain()` of the root
+  at the first stand to know that the engine seeds it, and says the fact teach, `("teach", "chain1", "extensions",
+  actor, doctrine, count)`, before the count of enables, so it plays the extensions on no chain. A standing that names
+  no doctrine, as that of the World of the suite, seeds no setup: the root tells its open at its first stand, the
+  extensions play as rungs of the ear, and its chains run no cd, so the World resolves their paths against the directory
+  of the standing. A later life replays the setup from the standing that the record holds. A life that goes on from a
+  carry holds the fact teach and the enables in the turns of its root, where the ear of the extensions reads them, so it
+  teaches and enables nothing again. An enable that the journal says again plays no rung: the record holds each rung
+  that it played, which the life plays again at its place.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
   CancelledError.
 - paused: the state of an act while a pause over it stands with no wake after it.
-- grant: an act that puts a ceiling on a chain: dollars, a share of the window, or both.
+- grant: the act of the official extension grant, which the engine does not hold, that puts a ceiling on a chain:
+  dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- journal: the ear of the life that hears everything and says a keep for each entry of the record.
+- journal: the name under which boot says the record again and keeps each entry: `play` says each entry at its
+  place, a fact under the site of its speaker, an act that an ear of the outside or the operator made through the verb
+  that binds its kind, else through act, and each ear of the outside hears a fact said again under the name journal,
+  as `lives` gives it; `keep` says the keep of each entry that the life says past its tip. `feed` gives boot the
+  entries that follow the tip of a life that stands, as the entries after an image of the life, which it says again
+  by the same code.
 - record: the entries the journal keeps, in the order they were said.
 - scratch directory: the directory of the machine that the World keeps for a record, which every chain of the record
   shares, which a path of scratch:// names and a command reads as TMPDIR; the opening of a life takes it, and makes
@@ -198,12 +233,12 @@ meanings. The entry of such a name here gives only its form in the engine.
   wait, a prompt to the operator or a reply, which the life holds with no fact until a wake that the life says; the
   opening of a life that does work, in `src/life.rs`, says that wake at the tip for each act that no pause holds and no
   crash loop parked, so a resume goes on from the state of the tip.
-- extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
-  gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
-  questions that its word defines.
+- extension: python that extends the engine from a rung of a text, which runs in the module of the extensions of its
+  chain: its word, which defines its names, and, for one that a host gives a life, its life word, which starts its work;
+  an official one may have an ear of the World that answers the questions that its word defines.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and, for
   an extension that plays on the root alone, root, which the record keeps, and, for a skill that a chain plays, the
-  program of the process of the folder that it played the skill from, by which the daemon starts that process and no
+  program of the process of the folder that it played the skill from, by which the life starts that process and no
   other of the same name; the World says it at the tip, and when a
   write of the config of the project lands that turns on an extension by its path, and it plays the extension as a rung
   on every chain there is where it plays when it hears the fact, and after it on each chain at its birth where it plays,
@@ -213,27 +248,31 @@ meanings. The entry of such a name here gives only its form in the engine.
   on. That fact reloads the extension: each chain that has the extension plays the definitions of the new word, its
   imports, functions, classes, types and names in capitals, and each name of state that it assigns, as
   `name = globals().setdefault("name", value)`, so a new name takes its value, each name that the chain holds keeps its
-  value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
-  the TUI, plays no word: no turn of its file in a setup, and no rung on a chain.
+  value, and the life word does not run again. An extension whose word is blank plays no word: no turn of its file in
+  a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
-  as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it
-  counts, and the store says it again at the root of the first life that goes on from the checkpoint. A life of any
-  build of the major replays that segment word by word on the texts that the fact holds, and goes on with them, and
-  a drift is a defect.
-- checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
-  its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
-  chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
-  it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
-  and no word of a verb by its place. `gathered`, a function of the engine, holds its shape and gives it. `seed` makes
-  from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
-  opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
-  stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open
-  prompt opens paused, and its prompt asks its model again at a wake. A name of the module whose value the record
-  cannot hold is lost, and the chain is told.
+  as it hears the root of a new record at its birth. A crossing, of the open of a life that ran another engine and
+  keeps its record, writes the fact made of its build alone, which starts a segment. A life of any build of the major
+  replays each segment word by word on the texts that its fact made holds, and a drift is a defect.
+- carry: the entry `checkpoint` by which an open carries the state of a segment, at its end, to the engine of the next
+  segment, which no record keeps: plain data with a version of its own shape, `schema`, apart from the version of the
+  record. It holds each
+  chain that lives with its label, its source, its turns, the definitions of each word, its plain values and whether
+  it is paused, each act that a value names with its answer, each open prompt, each chain that jumped with the chain that it went on as, and the names that each kind took,
+  and no word of a verb by its place. `gathered` of the checkpointer that the next fact made names holds its shape and
+  gives it. Its `seed` makes from that data the entries that the next engine boots on, before the next segment, so the
+  engine that opens it, and not the one that ran the segment before, says how its own journal makes each chain again. Each name of the past
+  stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open
+  prompt opens paused while its seed binds it, then wakes unless a pause stood over it at the tip, so an open prompt asks its model again
+  at once. A name of the module whose value the record
+  cannot hold is lost, and the chain is told. Its `systems`, which the crate writes, holds each chain whose model
+  reads as its system prompt an engine that the next life does not run, under that engine, minified; a crossing adds
+  each chain there and ends the turns of each with one tell, `#chainN crossed`, which binds the lines of the minified
+  engine that differ as `chainN_diff`, so a chain only grows.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
-  whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
-  the extensions run as one turn of the default actor, after the turns of their files.
+  whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life word of
+  each extension runs as a turn of the default actor, after the turn of the stand.
 
 ## Laws no test holds
 
@@ -252,13 +291,13 @@ meanings. The entry of such a name here gives only its form in the engine.
   rebinds names, and it tells notes of its own, from a door or from a rebound verb.
 - The engine has no registry, no plugin surface, no permission and no REPL: the record shows who made each act.
 - Within a chain, a rung binds, passes and returns any python value, plain or not.
-- When its share of the window is high, a model opens a chain with a source and a take that is not inside.
+- When its share of the window is high, a model opens a chain with a source, which keeps its whole prefix.
 - Compaction is not in the core.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
   engine.py holds no sentence and no comment.
-- engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World, the
-  Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
+- engine.py depends only on the python interpreter, on the journal and on the ears of the outside that boot is given,
+  the World and the Kernel among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
   exit, the name of an act, and the two exceptions.
 - The verbs and Text carry their signatures, typed, since a model reads them, but a parameter whose default says its
@@ -270,14 +309,13 @@ meanings. The entry of such a name here gives only its form in the engine.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words. A record holds the engine and the Kernel that made each segment, and a
-  life of any build of the major replays the segment after its last checkpoint word by word on them, to the exact
-  state of its tip, and goes on with them.
+  life of any build of the major replays each segment word by word on them, to the exact state of its tip, and goes on
+  with those of its last segment.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
-  words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
-  chain of such a prompt.
-- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal says first that the prompt passes the window of the model, so the life word of the extension compaction, `fitted()`, cuts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
+  asks a model for, with the message of the prompt each advances, of the prompts that it refuses, and of the done of
+  an act that one of its rungs made on another chain, or of the pause of the chain of such a prompt.
+- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal is an `Overflow`, a `Refused` of its own kind, so `fitted()`, in the life word of the extension compaction, compacts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
   of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo

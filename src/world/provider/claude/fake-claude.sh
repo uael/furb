@@ -5,8 +5,8 @@
 # all. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all, and else a close of
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
 # gets no answer, a line that holds LONG gets a line longer than a reader takes, a line that holds ERROR gets a result
-# that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
-# thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
+# that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds DEEP gets a long signed thought, a signed thought with no text and a redacted thought before its text, a line that holds THINK gets a
+# thought before the text, a line that holds PONDER gets a thought that never ends, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
 # text whole. A line that holds LOOP gets a message that calls a tool before the last one, as a turn of many
 # requests does, and a result whose usage is the sum of the two. A line that holds MUTE closes the stdout and lives
@@ -14,9 +14,12 @@
 # holds the stdout and the stderr open, writes the id of that process in the file orphan beside it, says so on the
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
-# any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
-# it, each turn costs the dollars that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or
-# unset. It writes the CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
+# any input, and when the file deaf stands beside it, it reads no input and lives on. When the file events stands
+# beside it, it writes its lines before its answer to each line of input. When the file cost stands beside
+# it, each turn costs the dollars that it holds, when the file usage stands beside it, each request says the
+# usage that it holds, and when the file thought stands beside it, a line that holds THINK thinks the text that it
+# holds, which no quote and no backslash may hold. It writes the MAX_THINKING_TOKENS of each process beside it too, or unset. It writes the
+# CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
 # configdir.N, or unset. When the file limited.TOKEN stands beside it, each turn of a process whose token is TOKEN gets
 # a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
 # stands beside it, a result that says the account is signed out. When the file lost stands beside it, a process
@@ -36,16 +39,21 @@ if [ -f "$here/orphan" ]; then sleep 600 </dev/null >/dev/null 2>&1 & fi
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
 # beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
 # answers from them; else it answers each request with an error, as a command line that has no discovery does.
+# When the file offline stands too, a process that has CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC set answers initialize
+# with its content, as the real command line lists other models with its traffic off. While the file slow stands
+# beside it, it answers no request.
 if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
   echo "$$" >> "$here/discoveries"
+  while [ -f "$here/slow" ]; do sleep 0.05; done
   while IFS= read -r line; do
     id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
     body=
     if [ -f "$here/models" ]; then
       case $line in
         *'"initialize"'*)
+          if [ -n "${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC-}" ] && [ -f "$here/offline" ]; then body=$(cat "$here/offline"); else
           list=$(awk '{n = split($3, e, ","); l = ""; if ($3 != "-") for (i = 1; i <= n; i++) l = l (i > 1 ? "," : "") "\"" e[i] "\""; printf "%s{\"value\":\"%s\",\"supportsEffort\":%s,\"supportedEffortLevels\":[%s]}", (NR > 1 ? "," : ""), $1, ($3 == "-" ? "false" : "true"), l}' "$here/models")
-          body="{\"models\":[{\"value\":\"default\",\"supportsEffort\":true},$list]}" ;;
+          body="{\"models\":[{\"value\":\"default\",\"supportsEffort\":true},$list]}"; fi ;;
         *set_model*) printf '%s' "$line" | sed 's/.*"model":"\([^"]*\)".*/\1/' > "$here/model"; body='{}' ;;
         *get_context_usage*)
           body=$(awk -v m="$(cat "$here/model")" '$1 == m {printf "{\"maxTokens\":%s,\"model\":\"resolved-%s\"}", $2, m}' "$here/models") ;;
@@ -100,6 +108,7 @@ fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"
+  if [ -f "$here/events" ]; then cat "$here/events"; fi
   if [ -f "$here/limited.$who" ]; then
     echo "{\"type\":\"result\",\"is_error\":true,\"result\":\"Claude AI usage limit reached|$(( $(date +%s) + $(cat "$here/limited.$who") ))\"}"
     continue
@@ -111,6 +120,13 @@ while IFS= read -r line; do
   case $line in
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
+    # A line that holds PONDER gets a thought that never ends, so its model only thinks, and it
+    # takes no turn of the count, as WAIT.
+    *PONDER*)
+      say '{"type":"message_start"}'
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
+      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The boot reads the record.\nThen it stands the image of the life."}}'
+      continue ;;
     *LOUD*) exec 1>&-; head -c 262144 /dev/zero | tr '\0' e >&2; exit 3 ;;
     *MUTE*) exec 1>&-; exec sleep 60 ;;
     *ORPHAN*) sleep 60 & echo $! > "$here/orphan"; echo "orphan left" >&2; exit 4 ;;
@@ -125,12 +141,13 @@ while IFS= read -r line; do
       fi ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
     # While the file hold stands beside it, a line that holds HOLD gets no answer, and when hold holds stream, the
-    # first part of a text before the silence. It says held and its id on the lifeline then.
+    # first part of a text
+    # before the silence, after a start of its message that names its model and says what it read. It says held and its id on the lifeline then.
     *HOLD*)
       if [ -f "$here/hold" ]; then
         if [ "$(cat "$here/hold")" = stream ]; then
           at=0
-          say '{"type":"message_start"}'
+          say '{"type":"message_start","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":2000}}}'
           say '{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}'
           part '"close("'
         fi
@@ -141,7 +158,9 @@ while IFS= read -r line; do
   n=$((n + 1))
   count=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
   echo "$count" > "$here/count"
-  used="{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  spent='{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}'
+  if [ -f "$here/usage" ]; then spent=$(cat "$here/usage"); fi
+  used=$spent
   case $line in
     *LOOP*)
       say '{"type":"message_start"}'
@@ -152,11 +171,38 @@ while IFS= read -r line; do
   at=0
   case $line in
     *THINK*)
+      thought=hmm
+      if [ -f "$here/thought" ]; then thought=$(cat "$here/thought"); fi
       say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}'
+      say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"$thought\"}}"
       say '{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}'
       say '{"type":"content_block_stop","index":0}'
-      settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
+      settle "{\"type\":\"thinking\",\"thinking\":\"$thought\",\"signature\":\"sig\"}"
+      at=1 ;;
+    # A line that holds DEEP gets a long signed thought in parts, a signed thought whose display the
+    # API omitted, with no text, as the real command line gives one, then a thought that the API
+    # redacted, before its word.
+    *DEEP*)
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
+      thought=$(awk 'BEGIN { for (i = 1; i <= 4000; i++) printf "step %d of a long thought. ", i }')
+      { printf '%s' "$thought" | fold -w 20000; echo; } | while IFS= read -r piece; do
+        say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"$piece\"}}"
+      done
+      sign=$(awk 'BEGIN { for (i = 1; i <= 512; i++) printf "%x", i % 16 }')
+      say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"$sign\"}}"
+      say '{"type":"content_block_stop","index":0}'
+      say '{"type":"content_block_start","index":1,"content_block":{"type":"thinking","thinking":""}}'
+      say "{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"omitted-$sign\"}}"
+      say '{"type":"content_block_stop","index":1}'
+      say '{"type":"content_block_start","index":2,"content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      say '{"type":"content_block_stop","index":2}'
+      settle "{\"type\":\"thinking\",\"thinking\":\"$thought\",\"signature\":\"$sign\"},{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"omitted-$sign\"},{\"type\":\"redacted_thinking\",\"data\":\"opaque\"}"
+      at=3 ;;
+    # A line that holds REDACT gets a thought that the API redacted before its word.
+    *REDACT*)
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      say '{"type":"content_block_stop","index":0}'
+      settle '{"type":"redacted_thinking","data":"opaque"}'
       at=1 ;;
   esac
   say "{\"type\":\"content_block_start\",\"index\":$at,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
@@ -164,13 +210,21 @@ while IFS= read -r line; do
     word=$(cat "$here/word.$count")
     part "$word"
   else
-    word="\"close(\\\"reply $n\\\")\""
+    # A turn that holds an image says so in its reply, so the model is seen to get it.
+    seen="reply $n"
+    case $line in *'"type":"image"'*) seen="an image, reply $n" ;; esac
+    word="\"close(\\\"$seen\\\")\""
     case $line in *GAP*) ;; *) part '"close("' ;; esac
-    part "\"\\\"reply $n\\\")\""
+    part "\"\\\"$seen\\\")\""
   fi
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
+  # As the real command line, the message settles with the usage of its start, which counts one
+  # token out, and the delta at its end says what it spent in all.
+  settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  say "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":$spent}"
+  # A line that holds LATE gets a message settled again after its delta, with the usage of its start.
+  case $line in *LATE*) settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}" ;; esac
   say '{"type":"message_stop"}'
-  settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
   paid="0.0$n"
   if [ -f "$here/cost" ]; then paid=$(awk "BEGIN { print $n * $(cat "$here/cost") }"); fi
   printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":$paid,\"usage\":$used}"

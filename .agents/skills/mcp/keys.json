@@ -1,0 +1,11 @@
+{
+  "properties": {
+    "tokens": {
+      "type": "string",
+      "enum": ["keychain", "file"],
+      "default": "keychain",
+      "description": "Where the tokens of a login to a server stand: the Keychain on macOS, or a file of the config folder that only the user reads, as on every other system. A Mac that a person reaches over SSH, whose Keychain is locked, takes the file.",
+      "scope": "user"
+    }
+  }
+}

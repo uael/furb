@@ -1,7 +1,7 @@
 name: publish
 
-# A tag vX.Y.Z publishes the version X.Y.Z of furb to each registry: to crates.io the crates furb, furb-host and then
-# furb-cli, once no dependency of any stands on git, which crates.io refuses; to npm the package furb and the package of its
+# A tag vX.Y.Z publishes the version X.Y.Z of furb to each registry: to crates.io the crates furb-wire, furb, furb-host
+# and then furb-cli, once no dependency of any stands on git, which crates.io refuses; to npm the package furb and the package of its
 # engine for each system that it runs on; and to PyPI furb, the engine, furb-cli, the command furb, which is a program
 # of rust, and furb-monty, the crate built for python. The tag comes from a merge of the pull request of
 # release-please, which release.yml starts this on, or from the owner. Each registry is told to trust this workflow of
@@ -29,28 +29,38 @@ on:
       - .github/workflows/publish.yml
       - Cargo.toml
       - pyproject.toml
-      - bind/python/pyproject.toml
-      - cli/Cargo.toml
-      - cli/pyproject.toml
-      - bind/typescript/package.json
-      - bind/typescript/build.ts
-      - bind/typescript/npm/**
-      - script/prove-crate.sh
+      - crates/python/pyproject.toml
+      - crates/cli/Cargo.toml
+      - crates/cli/pyproject.toml
+      - crates/typescript/package.json
+      - crates/typescript/build.ts
+      - crates/typescript/Cargo.toml
+      - crates/typescript/build.rs
+      - crates/typescript/lib.rs
+      - crates/typescript/npm/**
+      - crates/xtask/src/prove.rs
       - script/prove-npm.sh
+      - crates/xtask/src/promise.rs
+      - docs/promise.md
   pull_request:
     branches: [main]
     paths:
       - .github/workflows/publish.yml
       - Cargo.toml
       - pyproject.toml
-      - bind/python/pyproject.toml
-      - cli/Cargo.toml
-      - cli/pyproject.toml
-      - bind/typescript/package.json
-      - bind/typescript/build.ts
-      - bind/typescript/npm/**
-      - script/prove-crate.sh
+      - crates/python/pyproject.toml
+      - crates/cli/Cargo.toml
+      - crates/cli/pyproject.toml
+      - crates/typescript/package.json
+      - crates/typescript/build.ts
+      - crates/typescript/Cargo.toml
+      - crates/typescript/build.rs
+      - crates/typescript/lib.rs
+      - crates/typescript/npm/**
+      - crates/xtask/src/prove.rs
       - script/prove-npm.sh
+      - crates/xtask/src/promise.rs
+      - docs/promise.md
   workflow_dispatch:
 
 # One run for one ref: a push that follows another on a branch or a pull request ends the run before it, so a rehearsal
@@ -82,12 +92,16 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
+          # uv keeps no cache, as no-cache of pyproject.toml says: with the cache of the action on, its post step fails.
+          enable-cache: false
       - run: uv python install
       # A tag publishes the version that it names, and no other.
       - if: github.ref_type == 'tag'
         run: |
           test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv build
+      # The source of a release ships the page of its promise.
+      - run: tar -tzf dist/furb-*.tar.gz | grep -q '/docs/promise.md$'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: furb
@@ -101,10 +115,12 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
-        # The extension is built for one interpreter, and the program for none.
+        # The extension is built for one interpreter, and the program for none. The symbols of the program are a third
+        # of it, and no user of the wheel reads them: the wheel of a release alone drops them, so the wheel that uv
+        # builds in a tree is the program that cargo builds there, and no sync puts another at its path.
         crate:
-          - { name: furb-monty, path: bind/python, args: --interpreter python3.14 }
-          - { name: furb-cli, path: cli, args: "" }
+          - { name: furb-monty, path: crates/python, args: --interpreter python3.14 }
+          - { name: furb-cli, path: crates/cli, args: --strip }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,8 +148,8 @@ jobs:
       fail-fast: false
       matrix:
         crate:
-          - { name: furb-monty, path: bind/python }
-          - { name: furb-cli, path: cli }
+          - { name: furb-monty, path: crates/python }
+          - { name: furb-cli, path: crates/cli }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -192,11 +208,14 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-hakari@0.9.39
       # A tag publishes the version that it names, and no other.
       - if: github.ref_type == 'tag'
         run: |
           test "v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "furb") | .version')" = "$GITHUB_REF_NAME"
-      - run: sh script/prove-crate.sh "$RUNNER_TEMP/proof"
+      - run: cargo xtask prove-crate "$RUNNER_TEMP/proof"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: crates
@@ -209,6 +228,10 @@ jobs:
     name: the engine of npm for ${{ matrix.system }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # The step clear deletes the cache of rust that this job replaces.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -223,9 +246,16 @@ jobs:
       # Before the setup, so the key of the cache of rust names the target.
       - if: matrix.target
         run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+      # A key for each system, since the two engines for macOS share a job and a system, and a release build of a
+      # system is a cache of 600 to 950 MB: with no clear, each change of a manifest stacked a new cache of the five
+      # beside the old ones, and the store past its 10 GB ended the caches that the gates restore.
+      # A pull request saves no release build: no run of the gates reads it, and the five of them held 3.6 GB of the
+      # 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
+          key: ${{ matrix.system }}
+          saved: ${{ github.event_name != 'pull_request' }}
       - if: matrix.target
         run: rustup target add "${{ matrix.target }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -233,13 +263,16 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun run build --release
-      - run: test -f "bind/typescript/furb.${{ matrix.system }}.node"
+      - run: test -f "crates/typescript/furb.${{ matrix.system }}.node"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: engine-${{ matrix.system }}
           path: |
-            bind/typescript/furb.${{ matrix.system }}.node
-            bind/typescript/index.cjs
+            crates/typescript/furb.${{ matrix.system }}.node
+            crates/typescript/index.cjs
+      - uses: ./.github/actions/clear
+        with:
+          key: ${{ matrix.system }}
 
   npm:
     name: npm pack
@@ -258,7 +291,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - if: github.ref_type == 'tag'
         run: |
-          test "v$(node -p 'require("./bind/typescript/package.json").version')" = "$GITHUB_REF_NAME"
+          test "v$(node -p 'require("./crates/typescript/package.json").version')" = "$GITHUB_REF_NAME"
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -267,19 +300,19 @@ jobs:
       # Each build wrote the same loader, so the loader of one serves the package. A pull request builds no engine for
       # macOS, and its pack leaves those two packages without their engine.
       - run: |
-          cp engines/engine-linux-x64-gnu/index.cjs bind/typescript/index.cjs
+          cp engines/engine-linux-x64-gnu/index.cjs crates/typescript/index.cjs
           for system in linux-x64-gnu linux-arm64-gnu darwin-arm64 darwin-x64 win32-x64-msvc; do
             if [ -d "engines/engine-$system" ]; then
-              cp "engines/engine-$system/furb.$system.node" "bind/typescript/npm/$system/"
+              cp "engines/engine-$system/furb.$system.node" "crates/typescript/npm/$system/"
             elif [ "$GITHUB_EVENT_NAME" != pull_request ]; then
               echo "No engine for $system." >&2
               exit 1
             fi
           done
-      - run: bun x --no-install tsc -p bind/typescript/tsconfig.json
+      - run: bun x --no-install tsc -p crates/typescript/tsconfig.json
       - run: |
           mkdir packs
-          for folder in bind/typescript bind/typescript/npm/*; do
+          for folder in crates/typescript crates/typescript/npm/*; do
             cp LICENSE "$folder/LICENSE"
             (cd "$folder" && npm pack --pack-destination "$GITHUB_WORKSPACE/packs")
           done
@@ -317,10 +350,28 @@ jobs:
           path: packs
       - run: sh script/prove-npm.sh packs
 
+  # The promise of docs/promise.md binds from 1.0.0: within a major, each life opens and resumes with no drift. Each
+  # proof that the page names runs here, and no job publishes while one of them fails.
+  promise:
+    name: the proofs of the promise
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # A pull request saves no cache of this job, which no run of the gates reads.
+      - uses: ./.github/actions/setup
+        with:
+          saved: ${{ github.event_name != 'pull_request' }}
+      - run: cargo xtask promise
+        env:
+          UV_NO_SYNC: "1"
+
   publish:
     name: publish to PyPI
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
@@ -336,13 +387,15 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
+          # uv keeps no cache, as no-cache of pyproject.toml says: with the cache of the action on, its post step fails.
+          enable-cache: false
       # A run again after a failure skips each file that PyPI holds.
       - run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/
 
   crates-io:
     name: publish to crates.io
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: crates-io
@@ -359,12 +412,15 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
-      # crates.io takes no crate that stands on git. While a dependency of furb, furb-host or furb-cli stands on git, as monty
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-hakari@0.9.39
+      # crates.io takes no crate that stands on git. While a dependency of furb-wire, furb, furb-host or furb-cli stands on git, as monty
       # does until it stands on crates.io with what furb needs, the job publishes nothing there and says why.
       - id: git
         run: |
           found=$(cargo metadata --no-deps --locked --format-version 1 | jq -r '.packages[]
-            | select(.name == "furb" or .name == "furb-host" or .name == "furb-cli") | .name as $crate | .dependencies[]
+            | select(.name == "furb-wire" or .name == "furb" or .name == "furb-host" or .name == "furb-cli") | .name as $crate | .dependencies[]
             | select((.source // "") | startswith("git+")) | "\($crate) depends on \(.name) from \(.source)"')
           if [ -n "$found" ]; then
             echo "::notice title=crates.io waits::crates.io takes no crate that stands on git, so nothing goes there: $(echo "$found" | paste -sd ';' -)"
@@ -375,25 +431,25 @@ jobs:
       - if: steps.git.outputs.ready == 'true' && env.FIRST != 'true'
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
-      # cargo publishes furb, furb-host and furb-cli in turn, each after the one before stands in the index. A run again after a failure skips each
-      # crate that crates.io holds at this version.
+      # cargo publishes furb-wire, furb, furb-host and furb-cli in turn, each after the one before stands in the index. A run again after a failure skips each
+      # crate that crates.io holds at this version. cargo hakari publishes each with no dependency on furb-hack, which crates.io never holds.
       - if: steps.git.outputs.ready == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
         run: |
           version=${GITHUB_REF_NAME#v}
-          for crate in furb furb-host furb-cli; do
+          for crate in furb-wire furb furb-host furb-cli; do
             if curl -sf -A "furb release (github.com/uael/furb)" "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
               echo "crates.io holds $crate $version"
             else
-              cargo publish --locked -p "$crate"
+              cargo hakari publish -p "$crate" -- --locked
             fi
           done
 
   npm-publish:
     name: publish to npm
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm

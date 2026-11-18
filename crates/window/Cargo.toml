@@ -1,0 +1,76 @@
+[package]
+name = "furb-window"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The window of furb: a thin view of the daemon of a machine, drawn in the terminal with OpenTUI."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+# No registry takes a crate that stands on git, as this one stands on OpenTUI.
+publish = false
+
+# The program holds no test of its own, and the library no example in its docs, so cargo builds no test program for
+# either.
+[[bin]]
+name = "furb-window"
+path = "src/main.rs"
+test = false
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The cache of furb, where the daemon of the machine listens, and the program furb on PATH.
+furb = { path = "../.." }
+# What each machine told, and what to ask it next, with no drawing.
+furb-client = { path = "../client" }
+# The protocol of the daemon and the transport of the machine.
+furb-host = { path = "../host" }
+# The terminal: the widgets, the event loop and the headless app of the tests. One commit, since the crates are not
+# published, and the native library is the one that build.rs makes from the same commit. Its tasks run on tokio, and
+# tree-sitter colors the code of its widgets.
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72", features = ["tokio", "tree-sitter"] }
+# The connection to the daemon, on the runtime of the tasks of the app, and the process of the daemon that it starts.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "fs", "net"] }
+# The frames of the protocol, one line of JSON each.
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# The hour of a card that the window did not confirm, in the zone of the machine.
+jiff = "0.2"
+# The characters of a text as the renderer splits it, each of which the renderer measures.
+unicode-segmentation = "1.13"
+# The grammar of python, which colors the code of a thread on each whole statement and the diff of a review.
+tree-sitter-python = "0.25"
+# The prose of a model, which is markdown.
+pulldown-cmark = { version = "0.13", default-features = false }
+# The home folder with no link in it, as the folder of a process reads, with no prefix of Windows.
+dunce = "1"
+furb-hack = { version = "0.1", path = "../hack" }
+
+# furb with the features that the workspace turns on, so a build of this package alone makes the program that a build
+# of the workspace makes from the same sources: a window takes a new program at its path as a new build. Windows takes
+# furb as it is, since the build of napi looks for the library of node there.
+[target.'cfg(not(windows))'.dependencies]
+furb = { path = "../..", features = ["typescript"] }
+
+[target.'cfg(windows)'.dependencies]
+# The flags of a process that outlives the console of the window.
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
+
+[build-dependencies]
+# The answer of `cargo metadata`, which says where cargo keeps the commit of OpenTUI.
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# The captures of the screens, each a snapshot in tests/screens. Its colors would take a feature of windows-sys
+# that the crate furb does not, and so build furb and each crate under it a second time for the tests on Windows.
+insta = { version = "1.48", default-features = false }
+# The list of the projects of the daemon of a test.
+serde_json = "1"
