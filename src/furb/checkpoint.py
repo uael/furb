@@ -144,25 +144,32 @@ def gathered(names, define, floor):
     names[x] for x in ("transcript", "module", "program", "standing", "listening", "Refused")
   )
 
-  def literal(v, into=None):
+  def literal(v, into=None, out=None):
+    # Whether eval makes v again, with its text added to out in parts when out is given. A test of a fact makes no
+    # text: the turns of the chains hold each text that the life read, and monty makes the repr of a large text by
+    # doubling a buffer, whose blocks the allocator of the system keeps.
     isinstance(v, str) and get(v) and into is not None and into.add(v)
     if isinstance(v, names["Act"]):
-      return f"Act({str(v)!r})" * (into is not None)
-    if isinstance(v, BaseException):
-      return literal(v.args) and repr(v)
-    if v is None or isinstance(v, (int, float, str, names["Text"], names["Exit"])):
-      return repr(v) * (not (isinstance(v, float) and v - v))
+      out is None or out.append(f"Act({str(v)!r})")
+      return into is not None
+    if isinstance(v, BaseException) or v is None or isinstance(v, (int, float, str, names["Text"], names["Exit"])):
+      plain = literal(v.args) if isinstance(v, BaseException) else not (isinstance(v, float) and v - v)
+      plain and out is not None and out.append(repr(v))
+      return plain
     if not isinstance(v, (dict, list, tuple, set)):
-      return ""
-    pairs = v.items() if isinstance(v, dict) else [(y,) for y in v]
-    s = [": ".join(made) if all(made := [literal(y, into) for y in pair]) else "" for pair in pairs]
+      return False
+    if isinstance(v, set) and not v:
+      out is None or out.append("set()")
+      return True
     ends = "[]" if isinstance(v, list) else "()" if isinstance(v, tuple) else "{}"
-    whole = (
-      "set()"
-      if isinstance(v, set) and not v
-      else ends[0] + ", ".join(s) + "," * (ends == "()" and len(s) == 1) + ends[1]
-    )
-    return whole if all(s) else ""
+    out is None or out.append(ends[0])
+    for n, pair in enumerate(v.items() if isinstance(v, dict) else ((y,) for y in v)):
+      for m, y in enumerate(pair):
+        out is None or out.append(": " if m else ", " if n else "")
+        if not literal(y, into, out):
+          return False
+    out is None or out.append("," * (ends == "()" and len(v) == 1) + ends[1])
+    return True
 
   def number(called):
     return int(re.sub(r"^\D+", "", called) or 0)
@@ -184,7 +191,7 @@ def gathered(names, define, floor):
     for key, value in held.items():
       if not (key.startswith("__") or callable(value) or names.get(key, got) is value):
         try:
-          text = literal(value, found := set())
+          text = "".join(parts) if literal(value, found := set(), parts := []) else ""
         except RecursionError:
           text = ""
         if text:

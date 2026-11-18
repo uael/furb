@@ -1,5 +1,9 @@
 """gathered, the data of a checkpoint of a life."""
 
+import builtins
+
+import pytest
+
 from conftest import HELD, HELD_FILES, STANDS, born, definitions, life, paragraphs, settle, sown, world_says
 from furb import checkpoint, engine
 from furb.engine import LARGEST, OPERATOR, Refused, Text
@@ -317,6 +321,27 @@ async def test_every_other_value_is_lost_and_the_rest_of_the_checkpoint_is_gathe
   lost = {"gone", "many", "once", "keyed", "deep", "listed", "paired", "nan", "inf"} | wrong
   assert lost <= set(one["lost"]) and not lost & one["values"].keys()
   assert one["values"]["kept"] == "1"
+
+
+async def test_gathered_writes_as_text_only_the_values_of_each_chain_so_a_turn_or_an_act_that_holds_a_text_that_the_life_read_costs_the_gather_no_copy_of_that_text(
+  monkeypatch: pytest.MonkeyPatch, engine_of: str
+) -> None:
+  """gathered writes as text only the values of each chain, so a turn or an act that holds a text that the life read costs the gather no copy of that text."""
+  large = "y" * (LARGEST // 2)
+  _, _, root = born(files={"/w/large.txt": large})
+  await engine.rung("size = len(read('/w/large.txt').content)", on=root)
+  await settle()
+  made: list[str] = []
+  monkeypatch.setattr(checkpoint, "repr", lambda v: made.append(builtins.repr(v)) or made[-1], raising=False)
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  [one] = data["chains"]
+  read = [x for x in data["acts"] if x["kind"] == "read"]
+  assert [str(x["value"].content) for x in read] == [large]
+  assert [x for x in one["turns"] if x[0] == "done" and getattr(x[3], "content", None) == large]
+  assert one["values"]["size"] == str(len(large))
+  # Only the checkpointer of this interpreter makes each repr where the test counts it: monty runs the same text in
+  # its sandbox, whose repr the test cannot count.
+  assert sum(map(len, made)) < len(large) if engine_of == "python" else made == []
 
 
 async def test_jumped_holds_each_chain_that_jumped_with_its_maker_its_parent_its_label_its_source_and_the_chain_that_it_went_on_as_and_chains_holds_none_of_them_so_a_later_life_makes_it_again_as_the_chain_that_it_was() -> (

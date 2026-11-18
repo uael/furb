@@ -268,9 +268,12 @@ struct Kept {
   carry: Object,
 }
 
-/// The digest of entries, as JSON.
+/// The digest of entries, as JSON, hashed as JSON writes it, with no copy of that text: the entries
+/// up to a crossing are most of a large record.
 fn digest(entries: &[Object]) -> Option<String> {
-  Some(format!("{:x}", Sha256::digest(serde_json::to_vec(entries).ok()?)))
+  let mut hash = Sha256::new();
+  serde_json::to_writer(&mut hash, entries).ok()?;
+  Some(format!("{:x}", hash.finalize()))
 }
 
 /// The carry kept beside the record at a path, with the place of its crossing, when its key agrees
