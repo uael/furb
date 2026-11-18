@@ -83,7 +83,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
   await settle()
   shut = said(log, "close")[0]
   assert shut[:3] == ("close", ghost, root) and len(shut) == 4
-  assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
+  assert isinstance(shut[3], Refused) and str(shut[3]) == "No model is ghost."
   ceiling = grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)

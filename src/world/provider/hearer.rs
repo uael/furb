@@ -259,7 +259,9 @@ impl Hearer {
     let about = a.about().to_owned();
     say(co, Fact::says("started", &about, []));
     let chain = a.on().to_owned();
-    let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    // An actor that is no name, as a list that a word bound, is refused under its repr.
+    let actor = a.word(1).map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned));
+    let actor = actor.unwrap_or_default();
     let asking = Asking { about: &about, chain: &chain, actor: &actor, again: false };
     let call = self.asking(co, asking).await?;
     let again = self.replies.mute.get(&chain) == Some(&actor);

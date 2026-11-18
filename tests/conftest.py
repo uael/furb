@@ -265,6 +265,20 @@ class Sand:
         self.calls.append(a)
       yield from self.hear(a)
 
+  def reply(self, about: str, on: str, to: object) -> World:
+    """The answer of a reply: the next word of the script of its chain, or the refusal of an actor that the roster
+    does not offer, as the provider of the crate refuses it."""
+    roster = self.stands[0] if isinstance(self.stands, list) else []
+    if to not in [one for x in roster for one in (x[0], *[f"{x[0]}/{effort}" for effort in x[1]])]:
+      yield "done", about, Refused(f"No model is {to}.")
+      return
+    self.turns[about] = engine.turns(on=on)
+    on = on if on in self.script else next((k for k in self.script if engine.scope(k) == on), on)
+    if self.script.get(on):
+      word = self.script[on].pop(0)
+      turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
+      self.loop.call_soon(partial(engine.say, "done", about, turn))
+
   def door(self, path: str, content: str) -> Refused | None:
     """The refusal of a write of a door of a command, or nothing when the stdin of the command takes it: only the stdin
     of a command whose stdin is None takes a write, while the command is not over and until a write of nothing
@@ -359,14 +373,9 @@ class Sand:
       ):
         self.files[full := self.placed(on, path)] = content
         yield "done", qid, Text(self.shown(full), content)
-      case ("reply", about, _, on, _):
+      case ("reply", about, _, on, to):
         yield "started", about
-        self.turns[about] = engine.turns(on=on)
-        on = on if on in self.script else next((k for k in self.script if engine.scope(k) == on), on)
-        if self.script.get(on):
-          word = self.script[on].pop(0)
-          turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
-          self.loop.call_soon(partial(engine.say, "done", about, turn))
+        yield from self.reply(about, on, to)
       case ("cancel" | "close", *_):
         for one in [x for x in self.outs if engine.covers(a, x)]:
           self.outs.pop(one)

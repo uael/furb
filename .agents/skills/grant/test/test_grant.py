@@ -166,8 +166,10 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   assert heads(engine.turns(on=root)) == [f"#{root}", WORD.split("\n")[0]]
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  assert isinstance(engine.peek(ghost), Refused) and said(log, "reply") == []
-  assert paragraphs(engine.turns(on=root))[1:] == [WORD, prompted(ghost, "int", "hi")]
+  assert isinstance(engine.peek(ghost), Refused) and [a[4] for a in said(log, "reply")] == ["ghost"]
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == ghost]
+  shown = [WORD, prompted(ghost, "int", "hi"), f"#{step} advance on {ghost}"]
+  assert paragraphs(engine.turns(on=root))[1:] == [*shown, f"#{step} raised\n{step}_raised = {engine.peek(ghost)!r}"]
 
 
 async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_it_that_stands() -> None:

@@ -130,6 +130,17 @@ async def test_a_rung_with_no_word_and_no_actor_takes_the_default_actor_of_its_c
   assert engine.filled(asked[1]) == 0.2
 
 
+async def test_a_rung_whose_reply_is_refused_ends_with_that_refusal_and_tells_that_it_raised() -> None:
+  """A rung whose reply is refused ends with that refusal, binds it under raised and tells that it raised, as a rung whose word raised does, so the model reads why at its next ask."""
+  _, _, root = born("close(str(raised))")
+  why = Refused("No model is ghost.")
+  refused = engine.rung(to="ghost", on=root)
+  await settle()
+  assert repr(engine.peek(refused)) == repr(why) and repr(engine.module(root)["raised"]) == repr(why)
+  assert await engine.prompt(str, "why", on=root) == str(why)
+  assert f"#{refused} raised\n{refused}_raised = {why!r}" in paragraphs(engine.turns(on=root))
+
+
 async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> None:
   """The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message."""
   _, log, root = born()

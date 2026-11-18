@@ -211,7 +211,7 @@ async def test_a_prompt_to_an_actor_its_roster_does_not_hold_it_closes_with_the_
     one = engine.prompt(int, "hi", to=to, on=root)
     await settle()
     got = engine.peek(one)
-    assert isinstance(got, Refused) and str(got) == f"{to} no actor"
+    assert isinstance(got, Refused) and str(got) == f"No model is {to}."
 
 
 async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> None:
@@ -227,13 +227,44 @@ async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> 
   assert [a[3] for a in said(log, "bash")] == [side]
 
 
-async def test_the_engine_refuses_a_prompt_to_an_actor_outside_the_roster() -> None:
-  """The engine refuses a prompt to an actor outside the roster."""
+async def test_a_step_whose_word_never_ran_is_a_barren_step_that_raised() -> None:
+  """A step whose word never ran, as a step whose reply was refused, is a barren step that raised, and a thread is due once for each fact, so a thread that asks the default actor of its chain while no roster offers it, as a value that a word bound to actor, gets at most three refused replies for each new fact and never a loop of rungs, and a later binding of actor and a new fact ask again; a prompt that names its actor closes with the first such refusal, since each later rung of it asks the same actor."""
+  for bound in (["m", "low"], "ghost", None):
+    _, log, root = born(f"actor = {bound!r}", "close(str(raised))")
+    one = engine.prompt(str, "count", on=root)
+    for _ in range(4):
+      await settle()
+    why = f"No model is {bound!r}." if not isinstance(bound, str) else f"No model is {bound}."
+    assert [repr(engine.peek(a[1])) for a in said(log, "reply")][1:] == [repr(Refused(why))] * 3
+    assert not engine.over(one)
+    engine.prompt(None, "and now?", on=one)
+    for _ in range(4):
+      await settle()
+    assert len(said(log, "reply")) == 7 and not engine.over(one)
+    await engine.rung("actor = 'm/low'", on=root)
+    engine.prompt(None, "go on", on=one)
+    assert await asyncio.wait_for(engine.Act(one), 2) == why
+  _, log, root = born()
+  named = engine.prompt(str, "count", to="ghost", on=root)
+  for _ in range(4):
+    await settle()
+  assert len(said(log, "reply")) == 1 and repr(engine.peek(named)) == repr(Refused("No model is ghost."))
+  _, log, root = born("x = 1", "close(1)", cost=("many", 0, 0, 0, 0.0))
+  engine.prompt(int, "count", on=root)
+  for _ in range(6):
+    await settle()
+  refused = [str(engine.peek(a[1])) for a in said(log, "rung")[1:]]
+  assert refused == ["chain1 raised TypeError(\"unsupported operand type(s) for /: 'str' and 'int'\")"] * 3
+
+
+async def test_the_engine_asks_the_reply_of_each_rung_whatever_its_actor() -> None:
+  """The engine asks the reply of each rung whatever its actor, and the World refuses the reply to an actor outside the roster, so that refusal is the one done of that reply."""
   _, log, root = born()
   one = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  got = engine.peek(one)
-  assert isinstance(got, Refused) and str(got) == "ghost no actor" and said(log, "reply") == []
+  reply = said(log, "reply")[0]
+  assert reply[4] == "ghost" and repr(engine.peek(reply[1])) == repr(Refused("No model is ghost."))
+  assert repr(engine.peek(one)) == repr(engine.peek(reply[1]))
 
 
 async def test_the_chain_holds_the_control_it_says_itself() -> None:
@@ -2360,14 +2391,6 @@ async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears
     await settle()
     return sand, log, root, asked, [repr(x) for x in log[at:] if x[0] != "keep" and x[1] not in (reply, rung)]
 
-  async def strayed(to: object) -> tuple[str, list[str]]:
-    _, log, root = born("close(3)")
-    await engine.rung(f"r = rung(to={to!r})", on=root)
-    await settle()
-    at = len(log)
-    assert await asyncio.wait_for(engine.prompt(int, "n", on=root), 2) == 3
-    return repr(engine.peek(engine.module(root)["r"])), [repr(x) for x in log[at:] if x[0] != "keep"]
-
   class Raw(Sand):
     def standing(self) -> list | Refused:
       return self.stands
@@ -2386,13 +2409,9 @@ async def test_the_ear_of_a_chain_that_raises_refuses_the_act_it_heard_and_hears
 
   assert await stood(TAUGHT, [TAUGHT[0], None, *TAUGHT[2:]]) == await stood(TAUGHT)
   assert (await stood([*TAUGHT[:4], 5]))[0] == (await stood(TAUGHT))[0]
-  why, then = await strayed(5)
-  assert why == repr(Refused("chain1 raised TypeError(\"unsupported operand type(s) for +: 'int' and 'str'\")"))
-  assert (await strayed("nobody"))[1] == then
-  sand, log, root, prompt, after = await asked(("assistant", 5, (0, 0, 0, 0, 0.0), []))
+  sand, log, root, prompt, _ = await asked(("assistant", 5, (0, 0, 0, 0, 0.0), []))
   assert engine.module(root)["why"] == raised
   assert repr(engine.peek(said(log, "reply")[0][2])) == repr(Refused(replied)) and engine.peek(prompt) == 3
-  assert (*(await asked(Refused(replied)))[4:],) == (after,)
   assert engine.read(prompt, on=root).content == word
   assert await asyncio.wait_for(engine.rung("close(2)", on=root), 2) == 2
   _, over = await relived(Sand(), plain(sand.record))

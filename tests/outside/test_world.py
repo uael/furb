@@ -67,7 +67,7 @@ async def test_the_world_drops_a_model_that_the_catalog_knows_no_model_by(yard: 
   live = world(yard, scripted([]))
   live.roster = ["nothing"]
   root = life(live)
-  with pytest.raises(Refused, match="nothing no actor"):
+  with pytest.raises(Refused, match="No model is nothing"):
     await engine.prompt(int, "count", to="nothing", on=root)
 
 

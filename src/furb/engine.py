@@ -229,9 +229,11 @@ def rung(word="", retells="", to="", on="") -> Act:
       yield "ready", id, word
     while True:
       match (yield mine):
-        case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id and not word:
-          yield ("done", id, value) if isinstance(value, BaseException) else ("ready", id, value[1])
-        case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
+        case ("done", about, _, [_, said, *_]) if question(("reply", about)) and get(about)[2] == id and not word:
+          yield "ready", id, said
+        case ("done", about, _, value) if (
+          question(("run", about)) or (question(("reply", about)) and not word)
+        ) and id in get(about)[2:5:2]:
           if isinstance(value, CancelledError):
             if retells:
               value = None
@@ -461,7 +463,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             )
           )
           written.append(word)
-          if not barren[p] // 3 and (broke or waited or "tell" in acted or p not in held.values()):
+          if broke and "ready" not in acted and get(p)[6]:
+            close(a[3], p)
+          elif not barren[p] // 3 and (broke or waited or "tell" in acted or p not in held.values()):
             due.add(p)
         match a:
           case ("jump", leap, _, _, list(out), str()):
@@ -546,11 +550,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")
         ):
           maker, to = get(step := got)[2::4]
-          if offered(last[0], to) is None:
-            close(Refused(to + " no actor"), maker * prompted(maker) or step)
-          else:
-            note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=[*awaited] or None)
+          note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=[*awaited] or None)
         for lone in [x for x in due if not (over(x) or paused(x) or x in {get(y)[2] for y in waiting})]:
+          due.discard(lone)
           with site.set(lone):
             waiting[rung(to=get(lone)[6])] = ""
       except Exception as fault:
