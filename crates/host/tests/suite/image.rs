@@ -21,7 +21,7 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
-  view::{Act, Kind, Reach},
+  view::{Act, Kind, Phase, Reach},
   world,
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
@@ -30,7 +30,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::time::timeout;
 
-use crate::life::{Logged, birth, done, facts_of, kept, made, place, rung, until};
+use crate::life::{Logged, birth, crossed, done, facts_of, kept, made, place, rung, until};
 
 /// A life that keeps its record, whose model closes each request with a word, or answers none when
 /// it is given no word, so each reply stays in flight.
@@ -227,6 +227,52 @@ async fn a_life_that_opens_from_its_image_takes_again_each_act_in_flight() {
   ended(life).await;
   assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait keeps its one deadline");
   assert_eq!(recorded(&at, "started", &w).len(), 2, "each life took the wait one time");
+}
+
+/// A life that opens across a crossing holds open no act of the life before it that its carry did
+/// not make again: the reply that a model owed, its rung, and a word that waited, each ends as
+/// interrupted, while the prompt that the carry holds asks its model again.
+#[tokio::test]
+async fn a_life_across_a_crossing_ends_each_act_in_flight_that_it_does_not_hold() {
+  let at = place("cross-flight");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("r = prompt(str, 'Say late.')")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let waits = made(&life, rung("await wait(3600, __name__)")).await;
+  let r = act_of(&life, "r").await;
+  let asked = |log: &[Logged], kind: &str| facts_of(log).into_iter().rfind(|fact| fact[0] == kind);
+  let started = |log: &[Logged], id: &Value| {
+    facts_of(log).iter().any(|fact| fact[0] == "started" && fact[1] == *id)
+  };
+  let flies = |log: &[Logged]| {
+    ["reply", "wait"].iter().all(|kind| asked(log, kind).is_some_and(|fact| started(log, &fact[1])))
+  };
+  while !flies(&log) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  let (reply, wait) =
+    (asked(&log, "reply").expect("a reply"), asked(&log, "wait").expect("a wait"));
+  ended(life).await;
+  crossed(kept(&at)).await;
+  let life = Life::spawn(answering(&at, None)).expect("the life after the crossing");
+  let mut events = Box::pin(life.events(0));
+  let folded = async |id: &str| match life.send(Command::Folded { id: id.to_owned() }).await {
+    Ok(Reply::Acts(acts)) => acts.into_iter().next().expect("the act"),
+    other => panic!("no act {id}: {other:?}"),
+  };
+  for id in [&reply[1], &reply[2], &wait[1], &json!(waits)] {
+    let id = id.as_str().expect("a name");
+    let why = format!("{id} was interrupted: the life that ran it ended before it did");
+    let act = folded(id).await;
+    assert_eq!(act.phase, Phase::Done(json!({ "is": "Refused", "args": [why] })), "{act:?}");
+  }
+  assert!(!matches!(folded(&r).await.phase, Phase::Done(_)), "the carry holds the prompt");
+  // The root, which asked its model when the life before ended, asks it again.
+  let asks = |act: &Act| act.kind == Kind::Reply && *act.id != reply[1];
+  let again = |event: &Event| matches!(event, Event::Act(act) if asks(act));
+  until(&mut events, again).await;
+  ended(life).await;
 }
 
 /// A life that opens from an image that holds a command in flight runs no command: its process

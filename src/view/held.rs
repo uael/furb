@@ -356,10 +356,22 @@ impl Held {
     self.open().filter(|act| act.kind == Kind::Bash).map(|act| Arc::clone(&act.id)).collect()
   }
 
-  /// Each run of a word that is not done, in the order the acts were first told.
-  pub fn running(&self) -> impl Iterator<Item = &Arc<Act>> {
-    let running = |act: &&Arc<Act>| act.kind == Kind::Run && !act.done();
-    self.live.iter().filter_map(|at| self.acts.get(*at)).filter(running)
+  /// Each act that is not done and that the life does not hold, as `holds` says of each name,
+  /// ended as interrupted at a place: an act of a life before a crossing that its carry did not
+  /// make again, as a reply that a model owed, which no later fact ends. The first error of
+  /// `holds` ends the read.
+  pub fn unheld<E>(
+    &self,
+    mut holds: impl FnMut(&str) -> Result<bool, E>,
+    at: u64,
+  ) -> Result<Vec<Act>, E> {
+    let mut ended = Vec::new();
+    for act in self.open() {
+      if !holds(&act.id)? {
+        ended.push(act.clone().interrupted(at));
+      }
+    }
+    Ok(ended)
   }
 
   /// The acts as they stood just after a moment, in the order they began.

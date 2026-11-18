@@ -7,7 +7,7 @@ use serde::{
   Deserialize, Deserializer, Serialize,
   de::{self, Visitor},
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{page::Viewed, state::State};
 
@@ -369,6 +369,17 @@ impl Act {
   /// Whether the act is done.
   pub fn done(&self) -> bool {
     matches!(self.phase, Phase::Done(_))
+  }
+
+  /// The act as the end of the life that held it left it, at a place: done with the refusal that
+  /// says it was interrupted, which no view shows as a failure, and with no run that goes on.
+  #[must_use]
+  pub fn interrupted(mut self, at: u64) -> Self {
+    let why = interruption(&self.id);
+    self.phase = Phase::Done(json!({ "is": "Refused", "args": [why] }));
+    self.ended.get_or_insert(at);
+    self.run.take_if(|run| *run == RunState::Running);
+    self
   }
 
   /// What the act came to, once it is done.

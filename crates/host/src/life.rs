@@ -42,7 +42,7 @@ use furb::{
     images, skills,
   },
 };
-use furb_wire::{ChainTrack, FollowUp, act::interruption, card::Skill};
+use furb_wire::{ChainTrack, FollowUp, card::Skill};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::to_raw_value};
@@ -695,9 +695,6 @@ impl Life {
   fn opened(&mut self, told: Vec<Event>, born: bool, progress: &Progress) {
     self.kept.births.clear();
     let start = self.kept.log.len();
-    if born {
-      self.cut();
-    }
     let (mut opening, of) = (born, told.len() as u64);
     (progress.0)(Stage::Log, 0, of);
     for (at, event) in (1..).zip(told) {
@@ -723,20 +720,26 @@ impl Life {
     self.kept.gone.opened.push(told);
   }
 
-  /// Each run of a word that a reader holds open, told as ended by the end of the life that ran
-  /// it: a birth on a carry comes after a crossing, and no word of the life before it runs on, so
-  /// the carry cut each run, though no fold of this birth knows it.
-  fn cut(&mut self) {
-    let cut = |one: &Arc<Act>| {
-      let mut act = Act::clone(one);
-      act.phase = Phase::Done(json!({"is": "Refused", "args": [interruption(&act.id)]}));
-      act.ended.get_or_insert(self.kept.time);
-      act
-    };
-    let ended: Vec<Act> = self.kept.held.running().map(cut).collect();
+  /// Each act that a reader holds open and that the engine does not hold, told as ended by the end
+  /// of the life that held it: the life before a crossing, whose carry made again only what this
+  /// life holds, so no later fact ends the rest. A life that crossed nothing, as one on the image
+  /// of a life on the same texts, holds each act that its readers hold open, so an act that it
+  /// does not hold there is a defect, which the operator is told.
+  fn unheld(&mut self, engine: &mut Engine, crossed: bool) -> Result<(), Fault> {
+    let ended =
+      self.kept.held.unheld(|id| Ok::<_, Fault>(engine.get(id)?.is_some()), self.kept.time)?;
+    if !crossed && !ended.is_empty() {
+      let names: Vec<&str> = ended.iter().map(|act| &*act.id).collect();
+      self.put(Event::Notice(format!(
+        "The view held acts open that this life does not hold, which a crossing left open: {}. \
+         They end as interrupted.",
+        names.join(", ")
+      )));
+    }
     for act in ended {
       self.put(Event::Act(Arc::new(act)));
     }
+    Ok(())
   }
 
   /// The life stands where the life of its image stood, on what that life kept: no open told a
@@ -1323,13 +1326,18 @@ async fn lives(
       life.opened(birth, born, &progress);
     }
   }
-  let engine = match record.as_deref().filter(|_| engine.crosses()) {
-    Some(_) => match moved(engine, again, lease, life, told, journal, &progress).await {
+  let crosses = record.is_some() && engine.crosses();
+  let mut engine = if crosses {
+    match moved(engine, again, lease, life, told, journal, &progress).await {
       Ok(engine) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: true },
-    },
-    None => engine,
+    }
+  } else {
+    engine
   };
+  if let Err(fault) = life.unheld(&mut engine, born || crosses) {
+    return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: true };
+  }
   let (fault, asked) = driven(engine, life, received, record.as_deref()).await;
   End { fault: fault.map(|one| one.to_string()), asked, stood: true }
 }
