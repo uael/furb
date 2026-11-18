@@ -634,7 +634,11 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
   stood(&mut engine).unwrap();
   assert_eq!(closed(&mut engine, left).as_ref().as_int(), Some(1), "a later stand tells nothing");
   let refused = "try:\n  await prompt(int, 'which', to='claude-cli:gone')\nexcept Refused as no:\n  close(str(no))";
-  assert_eq!(closed(&mut engine, refused).py_repr(), "'claude-cli:gone no actor'");
+  assert_eq!(
+    closed(&mut engine, refused).py_repr(),
+    "'claude-cli:gone answered nothing: ProviderError: No model is claude-cli:gone.'",
+    "the World refuses the reply to an actor that the roster does not offer"
+  );
 }
 
 #[test]

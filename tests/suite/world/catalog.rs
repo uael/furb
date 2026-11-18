@@ -446,15 +446,19 @@ pub(super) fn replied(engine: &mut Engine) -> String {
   done(engine).unwrap_or_default()
 }
 
-/// Whether the root ran a word that holds this text.
+/// Whether the root ran a word that holds this text as a line of its code. A run of what a rung
+/// told holds the paragraph of a refusal, which quotes the end of the word that a model wrote, so
+/// a quote of the text is no line that ran.
 fn ran_word(engine: &mut Engine, text: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: Some(root), of: None, at: None })
     .expect("the root has a transcript");
   let holds = |one: &Fact| {
-    (0..4)
-      .any(|at| one.word(at).and_then(|word| word.as_str()).is_some_and(|word| word.contains(text)))
+    (0..4).any(|at| {
+      let word = one.word(at).and_then(|word| word.as_str());
+      word.is_some_and(|word| word.lines().any(|line| line.trim() == text))
+    })
   };
   facts.iter().any(|one| one.kind() == "run" && holds(one))
 }
