@@ -145,6 +145,7 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `.agents/skills/compaction/compaction.pyi chosen: the parameter to goes`: as CHOOSER.
 - `.agents/skills/compaction/compaction.pyi condense: the parameter to goes`: as CHOOSER.
 - `.agents/skills/memory/memory.pyi Memory: the alias goes`: memory reads its files with reads in the word.
+- `.agents/skills/catchup/catchup.pyi catchup: its type of return changes from Act to Act | None`: catchup plays on the root alone, and one act catches each chain up; catchup() on another chain, as the carry of a record of an earlier build plays it on each chain, makes no act.
 - `.agents/skills/ouroboros/ouroboros.pyi LORE: the const goes`: the kit ouroboros was rewritten.
 - `.agents/skills/ouroboros/ouroboros.pyi ouroboros: the def goes`: as LORE.
 - `.agents/skills/ouroboros/ouroboros.pyi extend: the parameter tui goes`: the old window, which loaded the part that this parameter wrote, is removed; a kit of the session names its view with view.

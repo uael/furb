@@ -37,11 +37,12 @@ A skill that plays, plays on every chain of the life, and one whose manifest say
 alone and on a chain whose source had it. The index, `skills://`, marks `on` each skill that plays on the chain that
 reads it.
 
-- **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
-  reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
-  that changed, or their count when more than 40 changed, `gone` for a file that it can no longer read, and the hours
-  since the life before when they are more than one. Its life word is `catchup()`. A chain where nothing changed hears
-  nothing.
+- **`catchup`** keeps each chain up to date with the machine. It plays on the root alone. At each stand, as when a
+  later life opens on a record, it reads again each file that each chain read or wrote, and tells that chain in one
+  paragraph headed caught up the lines that changed, or their count when more than 40 changed, `gone` for a file that
+  it can no longer read, and the hours since the life before when they are more than one. A file whose last text on a
+  chain is the text that it read again on a chain before is read once. Its life word is `catchup()`. A chain where
+  nothing changed hears nothing.
 - **`memory`** tells a chain the memory files of its project. The memory of a folder is its `AGENTS.md`, or its
   `CLAUDE.md` when it has no `AGENTS.md`, then its `AGENTS.local.md`, or its `CLAUDE.local.md` when it has no
   `AGENTS.local.md`. A local file holds what is true on one machine alone, and git ignores it. When a chain starts, it

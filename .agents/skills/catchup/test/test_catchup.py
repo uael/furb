@@ -1,4 +1,4 @@
-"""catchup, the catch-up of a chain."""
+"""catchup, the catch-up of the life."""
 
 from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown
 from furb import engine
@@ -10,19 +10,22 @@ BUDGET = number(CATCHUP, "BUDGET")
 
 
 async def test_the_life_word_of_the_skill_is_catchup() -> None:
-  """The life word of the extension is catchup(), and the extension plays on every chain, so every chain catches up from its birth."""
-  assert CATCHUP["life"] == "catchup()" and not CATCHUP["root"]
+  """The life word of the extension is catchup(), and the extension plays on the root alone, so one act catches each chain up, and catchup() on another chain makes no act."""
+  assert CATCHUP["life"] == "catchup()" and CATCHUP["root"]
   sand, log, root = await caught_up()
   two = await chained("two")
-  assert [a[3] for a in said(log, "catchup")] == [root, two]
+  await engine.rung(f"made = catchup('{two}')", on=root)
+  went = await engine.jump(on=root)
+  await settle()
+  assert [a[3] for a in said(log, "catchup")] == [root] and engine.module(went)["made"] is None
   engine.read("a.txt", on=two)
   sand.files["/w/a.txt"] = "one\nthree\n"
   engine.stand(engine.ROOT)
   assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
 
 
-async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -> None:
-  """On the root it reads the clock as it starts and at each stand, once the done of the stand reached it, so the record holds a reading of the clock at the tip of every life."""
+async def test_it_reads_the_clock_as_it_starts_and_at_each_stand() -> None:
+  """It reads the clock as it starts and at each stand, once the done of the stand reached it, so the record holds a reading of the clock at the tip of every life."""
   sand, log, root = await caught_up()
   two = await chained("two")
   (watcher,) = [a[1] for a in said(log, "catchup") if a[3] == root]
@@ -37,34 +40,42 @@ async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -
   assert [a for a in engine.transcript(two) if a[0] == "clock"] == []
 
 
-async def test_the_catch_up_of_a_chain() -> None:
-  """The catch-up of a chain: an act on the chain that never completes, and that catches the chain up at each stand: it reads again, with a hidden show, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme, a door, and a folder that a read names with / at its end, and it tells what changed in one paragraph headed caught up, about the chain."""
-  sand, log, root = await caught_up(files={"/w/a.txt": "one\ntwo\n", "x://y": "y\n", "/w/d/": "a.txt"})
+async def test_the_catch_up_of_the_life() -> None:
+  """The catch-up of the life: an act on the root that never completes, and that catches each chain up at each stand: on each chain but one that jumped, it reads again, with a hidden show on that chain, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme, a door, and a folder that a read names with / at its end, and it tells what changed in one paragraph headed caught up, about the chain."""
+  sand, log, root = await caught_up(
+    files={"/w/a.txt": "one\ntwo\n", "/w/c.txt": "c\n", "x://y": "y\n", "/w/d/": "a.txt"}
+  )
   two = await chained("two")
+  gone = await chained("gone")
+  engine.read("c.txt", on=gone)
+  went = await engine.jump(on=gone)
   await engine.bash("echo hi", on=root)
   for path in ("a.txt", "x://y", "bash1/stdout", "d/"):
     engine.read(path, on=root)
   engine.read("a.txt", on=two)
   engine.write(Text("b.txt", "b\n"), on=two)
-  sand.files.update({"/w/a.txt": "one\nthree\n", "x://y": "z\n", "/w/b.txt": "c\n", "/w/d/": "b.txt"})
+  sand.files.update(
+    {"/w/a.txt": "one\nthree\n", "x://y": "z\n", "/w/b.txt": "c\n", "/w/c.txt": "C\n", "/w/d/": "b.txt"}
+  )
   calls = len(sand.calls)
   engine.stand(engine.ROOT)
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [
     (root, "/w/a.txt"),
     (two, "/w/b.txt"),
     (two, "/w/a.txt"),
+    (went, "/w/c.txt"),
   ]
   assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'three'}}"]
   assert caught(engine.turns(on=two), two) == [
     f"#{two} caught up\n{two}_changed = {{'/w/b.txt': {{1: 'c'}}, '/w/a.txt': {{2: 'three'}}}}"
   ]
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")] == []
-  watchers = [a[1] for a in said(log, "catchup")]
+  (watcher,) = [a[1] for a in said(log, "catchup")]
   assert [a for a in said(log, "tell") if a[1] in (root, two) and "caught up" in a[3][0]] == [
-    ("tell", root, watchers[0], caught(engine.turns(on=root), root)),
-    ("tell", two, watchers[1], caught(engine.turns(on=two), two)),
+    ("tell", root, watcher, caught(engine.turns(on=root), root)),
+    ("tell", two, watcher, caught(engine.turns(on=two), two)),
   ]
-  assert [engine.peek(one, "open") for one in watchers] == ["open", "open"]
+  assert engine.peek(watcher, "open") == "open"
 
 
 async def test_the_paragraph_binds_changed_to_the_paths_that_changed() -> None:
@@ -132,6 +143,25 @@ async def test_a_chain_where_nothing_changed_tells_nothing_at_a_stand() -> None:
   assert [engine.turns(on=one) for one in (root, two)] == was
 
 
+async def test_a_chain_whose_last_text_of_a_path_is_the_text_that_the_catch_up_read_again_makes_no_read_of_it() -> None:
+  """A chain whose last text of a path is the text that the catch-up read again at the same stand on a chain before it makes no read of that path and is told nothing of it, so a file that many chains read is read once at each stand."""
+  sand, _, root = await caught_up()
+  engine.read("a.txt", on=root)
+  two = await chained("two")
+  three = await chained("three")
+  for one in (two, three):
+    engine.read("a.txt", on=one)
+  calls = len(sand.calls)
+  engine.stand(engine.ROOT)
+  assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(root, "/w/a.txt")]
+  sand.files["/w/a.txt"] = "one\nthree\n"
+  engine.read("a.txt", on=three)
+  calls = len(sand.calls)
+  engine.stand(engine.ROOT)
+  assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(root, "/w/a.txt"), (two, "/w/a.txt")]
+  assert [len(caught(engine.turns(on=one), one)) for one in (root, two, three)] == [1, 1, 0]
+
+
 async def test_the_journal_keeps_each_read_and_each_clock_of_a_catch_up() -> None:
   """The journal keeps each read and each clock of a catch-up, so a later life on the same record tells the same catch-up at the same place."""
   sand, _, root = await caught_up()
@@ -149,20 +179,24 @@ async def test_the_journal_keeps_each_read_and_each_clock_of_a_catch_up() -> Non
 
 
 async def test_it_hears_no_control() -> None:
-  """It hears no control, as the chain that it serves hears none, so a pause of the chain holds no catch-up."""
+  """It hears no control, as the root hears none, so a pause of the root or of a chain holds no catch-up."""
   sand, log, root = await caught_up()
   engine.read("a.txt", on=root)
+  two = await chained("two")
+  engine.write(Text("b.txt", "b\n"), on=two)
   (watcher,) = [a[1] for a in said(log, "catchup") if a[3] == root]
   engine.pause(root)
+  engine.pause(two)
   engine.cancel(watcher)
-  sand.files["/w/a.txt"] = "one\nTWO\n"
+  sand.files.update({"/w/a.txt": "one\nTWO\n", "/w/b.txt": "B\n"})
   engine.stand(engine.ROOT)
   assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'TWO'}}"]
+  assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/b.txt': {{1: 'B'}}}}"]
   assert engine.peek(watcher, "open") == "open"
 
 
-async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> None:
-  """It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself, so a new chain makes no read on the chains that live."""
+async def test_it_catches_each_chain_up_at_each_stand_from_outside_an_act() -> None:
+  """It catches each chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself, so a new chain makes no read on the chains that live."""
   sand, log, root = await caught_up()
   two = await chained("two")
   engine.read("a.txt", on=two)
@@ -176,13 +210,11 @@ async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> No
   engine.stand(engine.ROOT)
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(two, "/w/a.txt")]
   assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
-  assert [a[3] for a in said(log, "catchup")] == [root, two, three]
+  assert [a[3] for a in said(log, "catchup")] == [root]
 
 
-async def test_a_word_of_the_chain_that_binds_a_name_of_the_engine_that_the_catch_up_reads_changes_no_catch_up() -> (
-  None
-):
-  """A word of the chain that binds a name of the engine that the catch-up reads, as picked or peek, changes no catch-up, since the word of the extension runs in the module of the extensions of the chain."""
+async def test_a_word_of_the_root_that_binds_a_name_of_the_engine_that_the_catch_up_reads_changes_no_catch_up() -> None:
+  """A word of the root that binds a name of the engine that the catch-up reads, as picked or peek, changes no catch-up, since the word of the extension runs in the module of the extensions of the root."""
   sand, _, root = await caught_up()
   engine.read("a.txt", on=root)
   await engine.rung('picked = "x"\npeek = "y"', on=root)
