@@ -140,8 +140,8 @@ impl Quiet {
   /// One act as it stands after a fact. For the life, a new fact is a fact of an act that no
   /// message of the watch made, and, while the prompt of its message is open, of an act on another
   /// chain than its own, since the actor that the message woke works there. For a chain, a new
-  /// fact is a fact of an act on it that no message of the watch made. A chain that ends, and an
-  /// act of a message that ends, leave the watch.
+  /// fact is a fact of an act on it that no message of the watch made. The move of the state of a
+  /// chain is no new fact. A chain that ends, and an act of a message that ends, leave the watch.
   fn act(&mut self, act: &Act) {
     let done = matches!(act.phase, Phase::Done(_));
     // An act that asked the operator ends: each act that waited on it stops waiting now, so the
@@ -170,7 +170,10 @@ impl Quiet {
         self.acts.push(act.clone());
       }
     }
-    let ours = self.ours.contains(&*act.id);
+    // A chain moves only as the acts on it move, each of which the watch hears for itself, so the
+    // move of its state is no fact of its own.
+    let moved = act.kind == Kind::Chain && !done && self.chains.contains_key(&*act.id);
+    let ours = self.ours.contains(&*act.id) || moved;
     match &self.told {
       Told::Asking { prompt, .. } if *prompt == *act.id && done => self.told = Told::Said,
       _ if ours => {}
