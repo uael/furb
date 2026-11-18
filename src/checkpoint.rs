@@ -31,7 +31,12 @@
 //! takes none that does not agree, and the open then replays those segments again, to the same
 //! carry.
 
-use std::{fs, path::Path, slice};
+use std::{
+  fs::{self, File},
+  io::{BufWriter, Write},
+  path::Path,
+  slice,
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -241,10 +246,25 @@ impl Crossed {
   /// Keeps the carry beside the record at a path, as [`keep`] keeps the carry of a replay, once the
   /// fact made of the crossing ends the record. A record that holds another entry after it keeps
   /// nothing, and the next open replays.
+  /// The record is read one entry at a time, since a large record held whole as values takes
+  /// more memory than the life itself.
   pub fn keep(self, path: &Path) -> Result<(), Fault> {
-    let record = world::kept(path)?;
-    if let Some(at) = crossings(&record).last().filter(|at| **at + 1 == record.len()) {
-      keep(path, &record, *at, self.0);
+    let (mut hashed, mut was, mut crosses, mut unread) = (Hashed::new(), None, false, None);
+    world::each_but_checkpoints(path, &mut |taken, _| match taken.entry() {
+      Ok(entry) => {
+        let engine = world::made(slice::from_ref(&entry));
+        crosses = engine.as_ref().is_some_and(|one| was.as_ref().is_some_and(|was| was != one));
+        was = engine.or(was.take());
+        hashed.take(&entry);
+      }
+      Err(no) => unread = unread.or(Some(no)),
+    })?;
+    if let Some(no) = unread {
+      return Err(Fault::refused(no.to_string()));
+    }
+    let at = hashed.entries.checked_sub(1);
+    if let (true, Some(at), Some(entries)) = (crosses, at, hashed.digest()) {
+      written(path, at, entries, self.0);
     }
     Ok(())
   }
@@ -268,12 +288,40 @@ struct Kept {
   carry: Object,
 }
 
-/// The digest of entries, as JSON, hashed as JSON writes it, with no copy of that text: the entries
-/// up to a crossing are most of a large record.
+/// The digest of entries, as JSON.
 fn digest(entries: &[Object]) -> Option<String> {
-  let mut hash = Sha256::new();
-  serde_json::to_writer(&mut hash, entries).ok()?;
-  Some(format!("{:x}", hash.finalize()))
+  let mut hashed = Hashed::new();
+  for one in entries {
+    hashed.take(one);
+  }
+  hashed.digest()
+}
+
+/// The digest of entries taken one at a time, as the JSON of their list, hashed as JSON writes it
+/// with no copy of that text: the entries up to a crossing are most of a large record.
+struct Hashed {
+  hash: Sha256,
+  entries: usize,
+  /// Whether an entry had no JSON, which leaves no digest.
+  failed: bool,
+}
+
+impl Hashed {
+  fn new() -> Self {
+    Self { hash: Sha256::new(), entries: 0, failed: false }
+  }
+
+  fn take(&mut self, entry: &Object) {
+    self.hash.update(if self.entries == 0 { "[" } else { "," });
+    self.failed |= serde_json::to_writer(&mut self.hash, entry).is_err();
+    self.entries += 1;
+  }
+
+  fn digest(self) -> Option<String> {
+    let Self { mut hash, entries, failed } = self;
+    hash.update(if entries == 0 { "[]" } else { "]" });
+    (!failed).then(|| format!("{:x}", hash.finalize()))
+  }
 }
 
 /// The carry kept beside the record at a path, with the place of its crossing, when its key agrees
@@ -289,11 +337,19 @@ pub(crate) fn kept(path: &Path, record: &[Object]) -> Option<(usize, Object)> {
 /// The carry at the crossing at `at` of the entries of the record at a path, kept beside it. A
 /// cache that does not land costs the next open a replay, and nothing else.
 pub(crate) fn keep(path: &Path, record: &[Object], at: usize, carry: Object) {
-  let Some(entries) = record.get(..=at).and_then(digest) else { return };
-  let kept = Kept { version: KEPT, replays: engine::replays(), at, entries, carry };
-  if let Ok(bytes) = serde_json::to_vec(&kept) {
-    fs::write(world::beside(path, ".carry"), bytes).ok();
+  if let Some(entries) = record.get(..=at).and_then(digest) {
+    written(path, at, entries, carry);
   }
+}
+
+/// The carry at the crossing at `at`, whose entries up to it have the digest `entries`, written
+/// beside the record at a path as JSON writes it, with no copy of its text: a carry can hold
+/// each turn of a long life. A write that fails leaves a carry that no read takes.
+fn written(path: &Path, at: usize, entries: String, carry: Object) {
+  let kept = Kept { version: KEPT, replays: engine::replays(), at, entries, carry };
+  let Ok(file) = File::create(world::beside(path, ".carry")) else { return };
+  let mut out = BufWriter::new(file);
+  serde_json::to_writer(&mut out, &kept).ok().and_then(|()| out.flush().ok());
 }
 
 /// The highest number that each kind took in the entries that a life boots on, as a map. A later
