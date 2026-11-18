@@ -156,6 +156,9 @@ furb-wire = { path = "crates/wire", version = "0.4.2" }
 # released, and a revision reads the same interpreter at every build.
 monty = { git = "https://github.com/uael/monty", rev = "7ea4fd44" }
 monty-types = { git = "https://github.com/uael/monty", rev = "7ea4fd44" }
+# A map of a file into memory, by which the session of an image reaches monty as the system reads
+# it, with no buffer of the process: a session is as large as the life.
+memmap2 = "0.9"
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models

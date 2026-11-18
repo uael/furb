@@ -42,6 +42,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use memmap2::{Mmap, MmapOptions};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -136,11 +137,10 @@ pub(crate) struct Image {
 }
 
 impl Image {
-  /// The session of the image, as monty loads it.
-  pub(crate) fn session(&self) -> io::Result<Vec<u8>> {
-    let mut session = Vec::new();
-    self.part(&self.session)?.read_to_end(&mut session)?;
-    Ok(session)
+  /// The session of the image, as monty loads it, mapped from its file, so the process holds no
+  /// copy of it: a session is as large as the life, and its load holds the life beside it.
+  pub(crate) fn session(&self) -> io::Result<Mmap> {
+    mapped(&self.file, &self.session)
   }
 
   /// The part of the host of the life, as that host gave it to [`keep`]. It is read whole, since a
@@ -157,6 +157,20 @@ impl Image {
     file.seek(SeekFrom::Start(part.start))?;
     Ok(file.take(part.end - part.start))
   }
+}
+
+/// The bytes of a part of a file, mapped into memory, which the system reads as they are read.
+#[expect(
+  unsafe_code,
+  reason = "the standard library maps no file, and memmap2 maps one only unsafely"
+)]
+fn mapped(file: &File, part: &Range<u64>) -> io::Result<Mmap> {
+  let len = usize::try_from(part.end.saturating_sub(part.start)).map_err(io::Error::other)?;
+  // SAFETY: the map reads the file as long as the map lives, so a write of the file in that time
+  // would change the bytes under it. No build writes an image in place: each write lands in a part
+  // file of its own, which takes the place of the image by a rename, and a removal or a rename
+  // leaves the file that a map reads as it was, until the map goes.
+  unsafe { MmapOptions::new().offset(part.start).len(len).map(file) }
 }
 
 /// Where the image of a record stands.
@@ -333,3 +347,7 @@ impl<W: Write> Write for Summed<W> {
     self.to.flush()
   }
 }
+
+#[cfg(test)]
+#[path = "image.test.rs"]
+mod test;
