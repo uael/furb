@@ -1,10 +1,12 @@
 //! The file of lines, where no door reaches it: the read that a store takes from the open of a
-//! life, which only that open hands over; the heads of the lines, whose law is what a read parses;
-//! and a line that a write left torn, which only a write that failed midway leaves. The suite of
-//! the stores proves the rest.
+//! life, which only that open hands over, and what that read holds; the heads of the lines, whose
+//! law is what a read parses; and a line that a write left torn, which only a write that failed
+//! midway leaves. The suite of the stores proves the rest.
 #![expect(clippy::string_slice, reason = "a panic is how a test fails")]
 
 use std::{fs, io::Write};
+
+use sha2::{Digest, Sha256};
 
 use super::{HEAD, Last, Lines, heads, last};
 use crate::testing::Yard;
@@ -34,6 +36,30 @@ fn parted() -> (String, u64) {
 /// The entries that a read gave, as python shows them.
 fn shown(entries: &[Object]) -> Vec<String> {
   entries.iter().map(|one| one.as_ref().py_repr()).collect()
+}
+
+#[test]
+fn a_read_for_a_life_holds_as_values_only_the_entries_from_the_last_crossing_with_the_digest_before_it()
+ {
+  let at = place("segment");
+  let large = "x".repeat(1 << 20);
+  let made = |engine: &str| format!("[[\"made\",\"chain1\",\"store\",\"{engine}\",1]]\n");
+  let done = |n: usize| format!("[[\"done\",\"bash{n}\",\"bash\",\"{large}\"],{n}]\n");
+  let before: String = [made("abc")].into_iter().chain((1..=8).map(done)).collect();
+  let after = format!("{}{}", made("abd"), done(9));
+  fs::write(&at, format!("{before}{after}")).unwrap();
+  let read = last(&at, &mut |_| {}).unwrap();
+  assert_eq!((read.from, read.entries.len(), read.count()), (9, 2, 11));
+  let held: usize = read.entries.iter().map(|one| serde_json::to_vec(one).unwrap().len()).sum();
+  // An entry holds its fact with the words that a read adds, a few bytes past its line.
+  assert!(
+    held < after.len() + 1024,
+    "the read holds {held} bytes, past the {} of the segment",
+    after.len()
+  );
+  let all = kept(&at).unwrap();
+  let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&all[..=9]).unwrap()));
+  assert_eq!(read.crossings, [(9, Some(digest))], "a carry kept before keeps its key");
 }
 
 #[test]

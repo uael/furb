@@ -51,7 +51,7 @@ use crate::{
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::{beside, kept, store::MADE},
+  world::{Last, beside, each_before, kept, store::MADE},
 };
 use serde::de;
 use std::fs;
@@ -111,17 +111,15 @@ impl<'a> Line<'a> {
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
 pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
-  logging(record, held, None)
+  heard(Log::open(record.as_ref(), held, None), 0)
 }
 
-/// The ear of [`log`] for the entries of a record whose last segment starts at a place, when it
-/// crossed: the life says again only the carry and that segment.
-pub(crate) fn logging(
-  record: impl AsRef<Path>,
-  held: &[Object],
-  tip: Option<usize>,
-) -> Box<dyn Ear> {
-  heard(Log::open(record.as_ref(), held, tip), 0)
+/// The ear of [`log`] for the entries of a record that a read for a life gave, whose last segment
+/// starts at its last crossing when it crossed: the life says again only the carry and that
+/// segment. It takes the names of the questions before that segment from the read.
+pub(crate) fn logging(record: impl AsRef<Path>, last: &mut Last) -> Box<dyn Ear> {
+  let before = last.crossings.last().map(|one| (one.0, mem::take(&mut last.asked)));
+  heard(Log::open(record.as_ref(), &last.entries, before), 0)
 }
 
 /// The ear of [`log`] for a life that opens from its image, which reads no entry before it: the
@@ -302,48 +300,56 @@ fn named_act(name: &str) -> bool {
 
 /// The entries of a record about each act that an ear of the outside made, which a later life does not say again
 /// unless that ear makes the act again.
-fn owed<'a>(held: impl Iterator<Item = &'a Object>) -> Vec<(String, Value)> {
-  let mut theirs = HashSet::new();
-  let mut owed = Vec::new();
-  for entry in held {
-    let Some(fact) = Fact::of_entry(entry) else {
-      continue;
-    };
+#[derive(Default)]
+struct Owed {
+  /// The name of each act that an ear of the outside made.
+  theirs: HashSet<String>,
+  owed: Vec<(String, Value)>,
+}
+
+impl Owed {
+  fn take(&mut self, entry: &Object) {
+    let Some(fact) = Fact::of_entry(entry) else { return };
     if fact.question() && outside(fact.by()) {
-      theirs.insert(fact.about().to_owned());
+      self.theirs.insert(fact.about().to_owned());
     }
-    if theirs.contains(fact.about()) {
-      owed.push((fact.about().to_owned(), outward(fact.object().as_ref())));
+    if self.theirs.contains(fact.about()) {
+      self.owed.push((fact.about().to_owned(), outward(fact.object().as_ref())));
     }
   }
-  owed
 }
 
 impl Log {
   /// The log of the record at a path, which holds these entries, written again from its first
-  /// line, or, when the last segment starts at a place, from the lines of the log before it that
-  /// come before that place, while they agree with the record.
-  fn open(record: &Path, held: &[Object], tip: Option<usize>) -> Self {
+  /// line, or, when the entries are the last segment, which starts at a place after the names of
+  /// the questions before it, from the lines of the log before it that come before that place,
+  /// while they agree with the record.
+  fn open(record: &Path, held: &[Object], before: Option<(usize, HashSet<String>)>) -> Self {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
-    let earlier = tip.and_then(|at| {
-      let facts = held.iter().take(at).filter_map(Fact::of_entry);
-      let asked = facts.filter(Fact::question).map(|one| one.about().to_owned()).collect();
-      earlier(&path, at, asked).map(|(text, seen)| (at, text, seen))
-    });
+    let tip = before.as_ref().map_or(0, |one| one.0);
+    let earlier =
+      before.and_then(|(at, asked)| earlier(&path, at, asked).map(|(text, seen)| (at, text, seen)));
     // A log that goes on from an earlier one shows each act of the entries before the last
-    // segment, and a new log each act of the record.
-    let from = earlier.as_ref().map_or(0, |one| one.0);
+    // segment, and a new log each act of the record, which is read again before that segment.
+    let mut owed = Owed::default();
+    // A read that fails leaves a log that lacks those acts, which the record holds.
+    if earlier.is_none() && tip > 0 {
+      each_before(record, tip, &mut |_, one| owed.take(&one)).ok();
+    }
+    for one in held {
+      owed.take(one);
+    }
     // A log that cannot be opened is not written: the record holds each fact, and a later life
     // writes the log again from it, so the life goes on with no log and loses nothing.
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
-    let entries = held.len();
+    let entries = tip + held.len();
     let mut log = Self {
       path,
       sink: Self::sink(file),
       fresh: Some(fresh),
       tip: Tip { entries, ..Tip::default() },
-      owed: owed(held.iter().skip(from)),
+      owed: owed.owed,
     };
     match earlier {
       Some((at, mut text, seen)) => {

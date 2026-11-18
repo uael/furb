@@ -9,7 +9,9 @@
 //! host opens in another.
 
 use std::{
-  fs, panic,
+  fs,
+  ops::Range,
+  panic,
   path::{Path, PathBuf},
   slice,
   sync::Arc,
@@ -289,7 +291,7 @@ impl Opening {
   fn parted(self, mut prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
     let keeps = self.keeps != Some(false) && self.works();
     // A life that keeps its record holds its lease, which its store takes.
-    let (last, store) = match (&self.record, prepared.last.take(), prepared.lease.take()) {
+    let (mut last, store) = match (&self.record, prepared.last.take(), prepared.lease.take()) {
       (Some(path), read, Some(lease)) => {
         let (path, bytes) = (Path::new(path), size(path));
         let mut reads = |at| (told.0)(Stage::Read, at, bytes);
@@ -302,12 +304,9 @@ impl Opening {
     };
     // The log takes the place where the last segment starts, so a life after a crossing writes on
     // after the log of the lives before it.
-    let tip = checkpoint::crossings(&last.entries).last().copied();
     let logs = self.record.as_ref().filter(|_| keeps);
-    let logs = logs.map(|path| world::logging(path, &last.entries, tip));
-    let mut entries = last.entries;
-    let record: Vec<Object> =
-      prepared.carry.into_iter().chain(entries.drain(tip.unwrap_or(0)..)).collect();
+    let logs = logs.map(|path| world::logging(path, &mut last));
+    let record: Vec<Object> = prepared.carry.into_iter().chain(last.entries).collect();
     let mut ears = self.eared(prepared.waited, Some(&record), checkpoint::stood(&record))?;
     ears.extend(store.map(|store| (world::STORE.to_owned(), store)));
     ears.extend(logs.map(|log| ("log".to_owned(), log)));
@@ -428,7 +427,7 @@ impl Opening {
       .collect();
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
     let stood = match &last {
-      Some(last) => last.entries.iter().rev().find_map(world::stood),
+      Some(last) => last.stood.clone(),
       None => image.as_ref().map(|image| image.half.stood.clone()),
     };
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
@@ -449,9 +448,7 @@ impl Opening {
     let Some(path) = self.record.as_deref().map(Path::new).filter(|one| one.exists()) else {
       return Ok(None);
     };
-    let held = world::last(path, passed)?;
-    world::readable(&held.entries)?;
-    Ok(Some(held))
+    Ok(Some(world::last(path, passed)?))
   }
 
   /// The carry that the last engine of a record boots on, and nothing when the record never
@@ -460,9 +457,12 @@ impl Opening {
   /// next fact made names, as [`checkpoint::carried`] says. So each engine replays only what it
   /// made, and the record stays the one truth of the life. A life that keeps its record starts
   /// from the carry that it kept beside it, as [`checkpoint::kept`] says, and keeps the carry of
-  /// the last crossing there, so each segment replays on its engine once.
-  fn carried(&self, record: &[Object]) -> Result<Option<Object>, Fault> {
-    let crossings = checkpoint::crossings(record);
+  /// the last crossing there, so each segment replays on its engine once. A read holds the last
+  /// segment alone, so each segment before it is read again, one at a time. A fact made `next`
+  /// after the entries is one more crossing, across which the last segment replays too.
+  fn carried(&self, record: &world::Last, next: Option<&Object>) -> Result<Option<Object>, Fault> {
+    let mut crossings: Vec<usize> = record.crossings.iter().map(|one| one.0).collect();
+    crossings.extend(next.map(|_| record.count()));
     if crossings.is_empty() {
       return Ok(None);
     }
@@ -478,21 +478,48 @@ impl Opening {
       Self { inspecting: Some(true), keeps: Some(false), record: None, ..self.clone() };
     let waited = inspects.prepared(&Progress::default(), Taken::Parts, None)?.waited;
     for at in left {
-      let missing = || Fault::refused(format!("the record holds no crossing at {at}"));
-      let segment = record.get(from..at).ok_or_else(missing)?;
-      let entries: Vec<Object> = carry.into_iter().chain(segment.iter().cloned()).collect();
+      let (mut entries, made) = self.segment(record, from..at, next)?;
+      entries.splice(0..0, carry);
       let ears = inspects.eared(waited.clone(), Some(&entries), checkpoint::stood(&entries))?;
       let mut engine = Engine::boot(entries, ears)?;
       if let Some(no) = engine.raised() {
         return Err(no.clone());
       }
-      carry = Some(checkpoint::carried(&mut engine, record.get(at).ok_or_else(missing)?)?);
+      carry = Some(checkpoint::carried(&mut engine, &made)?);
       from = at;
     }
-    if let (Some(path), Some(carry)) = (path, &carry) {
-      checkpoint::keep(path, record, from, carry.clone());
+    if let (Some(path), Some(carry), Some(entries)) = (path, &carry, record.digest(from, next)) {
+      checkpoint::keep(path, from, entries, carry.clone());
     }
     Ok(carry)
+  }
+
+  /// The entries of the record in a span, which ends at a crossing, with the fact made of that
+  /// crossing: from the entries that a read holds, or else read again from the record, or `next`
+  /// past its last entry.
+  fn segment(
+    &self,
+    record: &world::Last,
+    Range { start: from, end: at }: Range<usize>,
+    next: Option<&Object>,
+  ) -> Result<(Vec<Object>, Object), Fault> {
+    let missing = || Fault::refused(format!("the record holds no crossing at {at}"));
+    let held =
+      |place: usize| place.checked_sub(record.from).and_then(|one| record.entries.get(one));
+    if from >= record.from {
+      let segment = (from..at).map(held).collect::<Option<Vec<_>>>().ok_or_else(missing)?;
+      let made = held(at).or(next.filter(|_| at == record.count())).ok_or_else(missing)?;
+      return Ok((segment.into_iter().cloned().collect(), made.clone()));
+    }
+    let path = self.record.as_deref().map(Path::new).ok_or_else(missing)?;
+    let mut entries = Vec::new();
+    world::each_before(path, at + 1, &mut |place, one| {
+      if place >= from {
+        entries.push(one);
+      }
+    })?;
+    let made = entries.pop().filter(|_| entries.len() == at - from).ok_or_else(missing)?;
+    Ok((entries, made))
   }
 
   /// A report of the life that no model reads, to the log of the host, or else to stderr.
@@ -528,18 +555,17 @@ impl Opening {
     let crossing = lease.filter(|_| taken != Taken::Open);
     let build = Self::texts(None, None)?;
     let Some(lease) = crossing.filter(|_| texts != build) else {
-      let carry = last.as_ref().map(|last| self.carried(&last.entries)).transpose()?.flatten();
+      let carry = last.as_ref().map(|last| self.carried(last, None)).transpose()?.flatten();
       return Ok((image, last, carry));
     };
     (told.0)(Stage::Cross, 0, 0);
     // The record crosses only when it carries to this build, so a record that does not replay
     // stays as it was.
-    let mut read = match last {
+    let read = match last {
       Some(last) => last,
       None => self.last(&mut |_| {})?.unwrap_or_default(),
     };
-    read.entries.push(world::running(&[]));
-    let carry = self.carried(&read.entries)?;
+    let carry = self.carried(&read, Some(&world::running(&[])))?;
     self.crossed(lease, &read)?;
     Ok((None, self.last(&mut |_| {})?, carry))
   }
@@ -750,8 +776,8 @@ impl Opening {
   /// the stage seed.
   fn reread(&self, mut prepared: Prepared) -> Result<Prepared, Fault> {
     prepared.last = self.last(&mut |_| {})?;
-    let entries = prepared.last.as_ref().map(|last| last.entries.as_slice());
-    prepared.carry = self.carried(entries.unwrap_or_default())?;
+    let last = prepared.last.as_ref();
+    prepared.carry = last.map(|one| self.carried(one, None)).transpose()?.flatten();
     Ok(prepared)
   }
 

@@ -168,14 +168,14 @@ pub(super) fn each_but(
 /// Each entry of the file of lines at a path, with the byte where the last of them ends and how the
 /// last line ends. The bytes of the file that the read passed are told after each line.
 pub(super) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, StoreError> {
-  let (mut entries, mut end) = (Vec::new(), 0);
+  let mut last = Last::default();
   let mut take = |one, at| {
-    entries.push(one);
-    end = at;
+    last.take(one);
+    last.end = at;
     reached(at);
   };
   let tail = parsing(path, 0, &mut take)?;
-  Ok(Last { entries, end, tail })
+  Ok(Last { tail, ..last })
 }
 
 /// Where the last line that starts with a head starts, of the lines that start before a byte. The

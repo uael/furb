@@ -7,10 +7,11 @@ pub(super) mod schema;
 mod sqlite;
 
 use std::{
-  collections::VecDeque,
+  collections::{HashSet, VecDeque},
   ffi::OsStr,
   fs::{self, File, OpenOptions, TryLockError, create_dir_all},
   io::{BufRead, BufReader, Read, Seek, SeekFrom},
+  mem,
   path::Path,
   slice,
   sync::Arc,
@@ -96,13 +97,112 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
   keeping(Format::of(path).open(path)?)
 }
 
-/// The entries of a record that a life opens on: each entry that it holds.
+/// The entries of a record that a life opens on: those of its last segment, which starts at its
+/// last crossing, or each entry when it never crossed, with what an open needs of the entries
+/// before them. A long life holds most of the bytes of its record before its last crossing, so a
+/// read holds none of those entries.
 #[derive(Default)]
 pub(crate) struct Last {
   pub entries: Vec<Object>,
+  /// The place of the first of `entries` among the entries of the record.
+  pub from: usize,
+  /// The place of each crossing of the record, as [`checkpoint::crossings`] says, with the digest
+  /// of the entries up to it, which names a carry kept at it.
+  pub crossings: Vec<(usize, Option<String>)>,
+  /// The name of each question before `entries`.
+  pub asked: HashSet<String>,
+  /// The standing that the last stand of the root that the record answered gave, as [`stood`] says.
+  pub stood: Option<Object>,
+  /// Why a fact made of the record refuses a life, as [`readable`] says.
+  refused: Option<SchemaError>,
+  /// The engine that the last fact made names.
+  engine: Option<String>,
+  hashed: Hashed,
   /// The byte of the file of lines where the read ended, and how the last line ends there.
   end: u64,
   tail: Tail,
+}
+
+impl Last {
+  /// The entries of a record, as [`Last`] holds them, taken one at a time.
+  fn of(entries: Vec<Object>) -> Self {
+    let mut last = Self::default();
+    for one in entries {
+      last.take(one);
+    }
+    last
+  }
+
+  /// Takes the next entry of the record, as a read gives it. A crossing lets go of each entry
+  /// before it.
+  fn take(&mut self, entry: Object) {
+    let entry = streamed(entry);
+    self.hashed.take(&entry);
+    if let Some(engine) = made(slice::from_ref(&entry)) {
+      if let Err(no) = readable(slice::from_ref(&entry)) {
+        self.refused.get_or_insert(no);
+      }
+      if self.engine.replace(engine.clone()).is_some_and(|was| was != engine) {
+        let at = self.count();
+        self.crossings.push((at, self.hashed.now()));
+        let before = mem::take(&mut self.entries);
+        let questions = before.iter().filter_map(Fact::of_entry).filter(Fact::question);
+        self.asked.extend(questions.map(|one| one.about().to_owned()));
+        self.from = at;
+      }
+    }
+    if let Some(one) = stood(&entry) {
+      self.stood = Some(one);
+    }
+    self.entries.push(entry);
+  }
+
+  /// The count of the entries of the record.
+  pub(crate) fn count(&self) -> usize {
+    self.from + self.entries.len()
+  }
+
+  /// The digest of the entries of the record up to the crossing at a place, or, past its last
+  /// entry, with one more entry after them, which names a carry kept at that place.
+  pub(crate) fn digest(&self, at: usize, next: Option<&Object>) -> Option<String> {
+    match next.filter(|_| at == self.count()) {
+      Some(next) => {
+        let mut hashed = self.hashed.clone();
+        hashed.take(next);
+        hashed.digest()
+      }
+      None => self.crossings.iter().find(|one| one.0 == at)?.1.clone(),
+    }
+  }
+}
+
+/// The digest of entries taken one at a time, as the JSON of their list, hashed as JSON writes it
+/// with no copy of that text: the entries up to a crossing are most of a large record.
+#[derive(Clone, Default)]
+pub(crate) struct Hashed {
+  hash: Sha256,
+  entries: usize,
+  /// Whether an entry had no JSON, which leaves no digest.
+  failed: bool,
+}
+
+impl Hashed {
+  pub(crate) fn take(&mut self, entry: &Object) {
+    self.hash.update(if self.entries == 0 { "[" } else { "," });
+    self.failed |= serde_json::to_writer(&mut self.hash, entry).is_err();
+    self.entries += 1;
+  }
+
+  /// The digest of the entries taken so far, which takes more after it.
+  fn now(&self) -> Option<String> {
+    self.clone().digest()
+  }
+
+  pub(crate) fn digest(self) -> Option<String> {
+    let Self { mut hash, entries, failed } = self;
+    hash.update(if entries == 0 { "[]" } else { "]" });
+    (!failed).then(|| format!("{:x}", hash.finalize()))
+  }
 }
 
 /// Keeps one entry after the entries of the record at a path that a read gave, under a lease of it
@@ -118,7 +218,7 @@ pub(crate) fn appended(
     Format::Sqlite => Sqlite::under(path, lease)?.keep(entry),
     Format::Lines => {
       let mut store = Lines::under(path, lease)?;
-      let ended = Last { entries: Vec::new(), end: read.end, tail: read.tail };
+      let ended = Last { end: read.end, tail: read.tail, ..Last::default() };
       store.last(Some(ended), &mut |_| {})?;
       store.keep(entry)
     }
@@ -138,13 +238,13 @@ pub(crate) fn stored(
   match Format::of(path) {
     Format::Sqlite => {
       let (entries, ear) = keeping(Sqlite::under(path, lease)?)?;
-      Ok((Last { entries, ..Last::default() }, ear))
+      Ok((Last::of(entries), ear))
     }
     Format::Lines => {
       let mut store = Lines::under(path, lease)?;
-      let Last { entries, end, tail } = store.last(read, reached)?;
-      let (entries, ear) = kept_by(store, Some(entries));
-      Ok((Last { entries, end, tail }, ear))
+      let mut last = store.last(read, reached)?;
+      let (entries, ear) = kept_by(store, Some(mem::take(&mut last.entries)));
+      Ok((Last { entries, ..last }, ear))
     }
   }
 }
@@ -235,14 +335,35 @@ pub(crate) struct After {
 
 /// The last entries of the record at a path, read with no lease and changed in nothing, as a later
 /// life would open on them, with the bytes of a file of lines that the read passed told after each
-/// line.
+/// line. A record of another major of its schema is refused, as [`readable`] says.
 pub(crate) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, Fault> {
   let format = Format::of(path);
-  let last = match format {
-    Format::Sqlite => Last { entries: format.kept(path)?, ..Last::default() },
+  let mut last = match format {
+    Format::Sqlite => Last::of(format.kept(path)?),
     Format::Lines => lines::last(path, reached)?,
   };
-  Ok(Last { entries: last.entries.into_iter().map(streamed).collect(), ..last })
+  last.refused.take().map_or(Ok(last), |no| Err(no.into()))
+}
+
+/// Each entry of the record at a path before a place, in order, with its place, as a read for a
+/// life gives it, read with no lease and changed in nothing, one at a time.
+pub(crate) fn each_before(
+  path: &Path,
+  to: usize,
+  take: &mut dyn FnMut(usize, Object),
+) -> Result<(), Fault> {
+  let mut at = 0;
+  let mut taken = |one: Object| {
+    if at < to {
+      take(at, streamed(one));
+    }
+    at += 1;
+  };
+  match Format::of(path) {
+    Format::Lines => lines::each(path, &mut taken)?,
+    Format::Sqlite => sqlite::each(path, &mut taken)?,
+  }
+  Ok(())
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open

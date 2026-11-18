@@ -57,8 +57,7 @@ pub(crate) use provider::{Mode, Systems};
 pub use reader::{Retold, retold, retold_live, retold_with};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::{
-  After, Format, Last, STORE, appended, each_but_checkpoints, goes_after, last, stored,
-  stored_after,
+  After, Format, Last, STORE, appended, each_before, goes_after, last, stored, stored_after,
 };
 pub use store::{
   CHECKPOINT_SCHEMA, Lease, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, Tip,
