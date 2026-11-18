@@ -366,7 +366,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           rung(words)
 
     if source or copied:
-      kin = {source, id, *[n for one in ([x[1] for x in t] if kept is None else kept) for n in lineage(one)]}
+      kin = {*lineage(source), id, *[n for one in ([x[1] for x in t] if kept is None else kept) for n in lineage(one)]}
       bound = len(
         (
           yield (
@@ -447,8 +447,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           waiting.pop(a[1], None)
         if a[0] == "rung":
           did[a[1]] = set()
-        if a[0] == "done" and r[0] == "rung" and (p := r[2]) in barren and not isinstance(a[3], CancelledError):
-          broke, waited, word = isinstance(a[3], Exception), "wants" in did[a[1]], ladder.get(a[1])
+        if a[0] == "done" and a[1] in did and (p := r[2]) in barren and not isinstance(a[3], CancelledError):
+          broke, waited, word = isinstance(a[3], Exception), "wants" in (acted := did[a[1]]), ladder.get(a[1])
           written = wrote.setdefault(p, [])
           barren[p] = (barren[p] + 1) * bool(
             broke
@@ -456,12 +456,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
               not waited
               and (
                 word in written
-                or (did[a[1]] <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(p) == module())
+                or (acted <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(p) == module())
               )
             )
           )
           written.append(word)
-          if not barren[p] // 3 and (broke or waited or "tell" in did[a[1]] or p not in held.values()):
+          if not barren[p] // 3 and (broke or waited or "tell" in acted or p not in held.values()):
             due.add(p)
         match a:
           case ("jump", leap, _, _, list(out), str()):
@@ -497,7 +497,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             bound = len(transcript(id)) - next(
               (n for n, x in enumerate(reversed(a[3])) if x[0] == "reply" or (x[0] == "tell" and not heard(x))), 0
             )
-          case ("done", about, *_) if about == note and step in waiting:
+          case ("done", about, *_) if about == note and not over(step):
             if (p := get(step)[2]) in barren:
               due.discard(p)
               seen[p] = {**module()}
@@ -515,8 +515,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             for fold in (barren, wrote, seen):
               fold.pop(about, None)
             thread(r[2]) != r[3] and heed(r[3])
-        if r[0] == "wants":
-          rid = get(r[2])[4]
+        if r[0] == "wants" and (rid := get(r[2])[4]) in did:
           running.discard(rid) if a[0] == "started" else running.add(rid)
           if a[0] == "wants" and not over(r[4]):
             awaited[r[4]] = rid
@@ -536,13 +535,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           for leap in leaps:
             with site.set(leap):
               get(leap)[5] and rung(get(leap)[5])
+            yield "done", leap, j
           for rid in waiting:
             cancel(rid)
           for p in barren:
             with site.set(p):
               rung(to=get(p)[6])
-          for leap in leaps:
-            yield "done", leap, j
           return
         if (step not in waiting or paused(step)) and (
           got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")

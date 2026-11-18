@@ -64,7 +64,7 @@ async def test_the_chain_that_a_jump_makes_keeps_each_stand_and_each_cd() -> Non
 
 
 async def test_after_a_jump_each_act_that_names_the_chain_is_on_the_chain_that_it_jumped_to() -> None:
-  """After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says, so its threads, its messages and the next ask of its model are there."""
+  """After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says whatever it drops, so its threads, its messages, its pauses and the next ask of its model are there."""
   _, _, root = born()
   new = await engine.jump(on=root)
   later = engine.rung("x = 1", on=root)
@@ -81,6 +81,23 @@ async def test_after_a_jump_each_act_that_names_the_chain_is_on_the_chain_that_i
   engine.wake(went)
   await settle(300)
   assert (engine.scope(root), engine.peek(asked, ...)) == ("chain3", 7)
+  # A wake of the chain by its first name ends the pause of a thread, and a later jump drops each act under that name,
+  # as a compaction does: the thread stays awake there, and a message on it asks its model with no wake.
+  sand, _, root = born(*["await wait(600, 'prompt1')"] * 3)
+  sand.script.update(
+    {"chain2": ["await wait(600, 'prompt1')"] * 3, "chain3": ["await wait(600, 'prompt1')", "close(8)"]}
+  )
+  asked = engine.prompt(int, "the k", on=root)
+  await settle()
+  engine.pause(asked)
+  engine.wake(root)
+  await engine.jump(on=root)
+  await settle()
+  went = [x[1] for x in engine.transcript(engine.scope(root)) if engine.question(x) and engine.under(x[1], root)]
+  await engine.jump(went, on=root)
+  told = engine.prompt(int, "the n", on=asked)
+  await settle(300)
+  assert (engine.scope(root), engine.paused(asked), engine.peek(told, ...)) == ("chain3", False, 8)
 
 
 async def test_each_open_thread_of_the_chain_is_asked_again_on_the_chain_that_it_jumped_to() -> None:
@@ -121,10 +138,12 @@ async def test_a_word_that_jumps_its_own_chain_ends_first() -> None:
   new = engine.scope(root)
   assert new != root and engine.module(new)["z"] == 3
   sand, log, root = born(auto=False)
-  waits = engine.rung("x = await bash('slow')\ny = x.code", on=root)
+  waits = engine.rung("x = await bash('slow')\ny = (await bash('more')).code", on=root)
   await settle()
   new = await engine.jump(on=root)
   sand.exits(said(log, "bash")[0][1], 0)
+  await settle()
+  sand.exits(said(log, "bash")[1][1], 0)
   assert await waits is None
   assert (engine.module(root)["y"], "y" in engine.module(new), engine.scope(waits)) == (0, False, new)
 

@@ -1100,7 +1100,7 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
+  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept or the origin, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
   _, log, root = born("x = bash('echo hi')", "close(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
@@ -1117,6 +1117,14 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   got = engine.turns(on=twin)
   assert [role for role, *_ in got] == ["user", "assistant", "user"]
   assert got[0][1].endswith(f"#{command[2]} advance on {one}")
+  # A fact that names a chain that made the origin, as the name that a jump went on from, stands in the new chain.
+  _, _, root = born()
+  went = await engine.jump(on=root)
+  engine.pause(root)
+  engine.wake(root)
+  twin = engine.chain("twin", source=went, filter=[])
+  await settle()
+  assert [a[:2] for a in engine.transcript(twin) if a[0] in ("pause", "wake")] == [("pause", root), ("wake", root)]
 
 
 async def test_the_filter_is_given_every_act_what_the_operator_asked_among_them() -> None:

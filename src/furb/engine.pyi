@@ -343,7 +343,7 @@ def jump(drop: list[str] = [], word: str = "", on: str = "") -> Act[str]:
   jump makes, once no step of a word of the chain runs and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain, while a word or a task that awaits an act goes on.
   Each jump of a chain that comes before the chain jumps makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps.
   The chain that a jump makes keeps each stand and each cd of the chain whatever drop names, so it stands where the chain stood and works in its directory.
-  After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says, so its threads, its messages and the next ask of its model are there.
+  After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says whatever it drops, so its threads, its messages, its pauses and the next ask of its model are there.
   Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled.
   The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it.
   The step of a word that jumps its own chain ends first, and a word that awaits across a jump binds each later name in the module of the chain that it ran on: the chain that the jump made holds its later facts and the names that its told runs bind, so a model that names another of its names there meets a NameError.
@@ -595,7 +595,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   It holds the transcript of its origin first and tells its own open after it, and the rungs it runs again tell nothing, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   Every done it holds answers a question it holds, since it holds every question made on it, the ones it made itself among them.
-  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
+  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept or the origin, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
   The filter is given every act, what the operator asked among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.
   The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
